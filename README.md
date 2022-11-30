@@ -1,6 +1,6 @@
 # Keypoint MoSeq
 
-Motion Sequencing ([MoSeq](https://www.cell.com/neuron/fulltext/S0896-6273(15)01037-5?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS0896627315010375%3Fshowall%3Dtrue)) for keypoint tracking data. Check out our [colab notebook](https://colab.research.google.com/github/calebweinreb/keypointMoSeq/blob/user_friendly_pipeline/examples/keypointMoSeq_demo_colab.ipynb) for a tutorial. 
+Motion Sequencing ([MoSeq](https://www.cell.com/neuron/fulltext/S0896-6273(15)01037-5?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS0896627315010375%3Fshowall%3Dtrue)) for keypoint tracking data. Check out our [colab notebook](https://github.com/dattalab/keypoint-moseq/blob/main/examples/keypointMoSeq_demo_colab.ipynb) for a tutorial. 
 
 ## Installation
 
@@ -33,8 +33,8 @@ pip install jax https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.2
 
 4. Clone or download the this github repo and pip install:
 ```
-git clone -b user_friendly_pipeline https://github.com/calebweinreb/keypointMoSeq.git
-pip install -e keypointMoSeq/
+git clone https://github.com/dattalab/keypoint-moseq.git
+pip install -e keypoint-moseq/
 ```
 
 5. Make the new environment accessible in jupyter 
