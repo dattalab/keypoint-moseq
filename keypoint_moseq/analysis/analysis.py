@@ -73,17 +73,17 @@ def compute_moseq_df(results_dict, *, use_bodyparts, smooth_heading=True, **kwar
     return moseq_df
 
 def compute_stats_df(moseq_df, threshold=0.005, groupby=['group','uuid', 'session_name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
-    raw_usage = (moseq_df.groupby('syllable').count()['frame_index']/moseq_df.shape[0]).reset_index().rename(columns={'frame_index':'counts'})
-    syll_include = raw_usage[raw_usage['counts'] > threshold]['syllable']
+    raw_frequency = (moseq_df.groupby('syllable').count()['frame_index']/moseq_df.shape[0]).reset_index().rename(columns={'frame_index':'counts'})
+    syll_include = raw_frequency[raw_frequency['counts'] > threshold]['syllable']
     filtered_df = moseq_df[moseq_df['syllable'].isin(syll_include)].copy()
 
-    usages = (filtered_df.groupby(groupby)[syll_key]
+    frequencies = (filtered_df.groupby(groupby)[syll_key]
                   .value_counts(normalize=normalize)
                   .unstack(fill_value=0)
                   .reset_index()
                   .melt(id_vars = groupby)
                   .set_index(groupby + [syll_key]))
-    usages.columns = ['usage']
+    frequencies.columns = ['frequency']
 
     # TODO: hard-coded heading for now, could add other scalars
     features = filtered_df.groupby(groupby + [syll_key])[['heading', 'velocity_px_s']].agg(['mean', 'std', 'min', 'max'])
@@ -99,7 +99,7 @@ def compute_stats_df(moseq_df, threshold=0.005, groupby=['group','uuid', 'sessio
     durations.name = 'duration'
     durations.fillna(0)
     
-    stats_df = usages.join(durations).join(features).reset_index()
+    stats_df = frequencies.join(durations).join(features).reset_index()
     stats_df = stats_df.rename(columns={'syllables_reindexed':'syllable'})
     return stats_df
 
@@ -132,7 +132,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=10
         mean_df[vel_cols_stats] *=30
     
     # pivot mean_df to be groupby x syllable
-    syll_summary = mean_df.pivot_table(index=groupby_list, values='usage', columns='syllable')
+    syll_summary = mean_df.pivot_table(index=groupby_list, values='frequency', columns='syllable')
     syll_summary.columns = pd.MultiIndex.from_arrays([['MoSeq'] * syll_summary.shape[1], syll_summary.columns])
     min_p = syll_summary.min().min()
     max_p = syll_summary.max().max()
@@ -264,8 +264,8 @@ def plotting_fingerprint(summary,range_dict, preprocessor_type='minmax', num_lev
     else:
         cb.set_xlabel('Percentage Usage')
 
-## usage plot stuff
-def sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, max_sylls=None, stat='usage'):
+## frequency plot stuff
+def sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, max_sylls=None, stat='frequency'):
     if max_sylls is not None:
         complete_df = complete_df[complete_df.syllable < max_sylls]
 
@@ -276,13 +276,13 @@ def sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, max_sy
     control_df = mutation_df.loc[ctrl_group]
     exp_df = mutation_df.loc[exp_group]
 
-    # compute mean difference at each syll usage and reorder based on difference
+    # compute mean difference at each syll frequency and reorder based on difference
     ordering = (exp_df[stat] - control_df[stat]).sort_values(ascending=False).index
 
     return list(ordering)
 
 
-def sort_syllables_by_stat(complete_df, stat='usage', max_sylls=None):
+def sort_syllables_by_stat(complete_df, stat='frequency', max_sylls=None):
     if max_sylls is not None:
         complete_df = complete_df[complete_df.syllable < max_sylls]
 
@@ -296,7 +296,7 @@ def sort_syllables_by_stat(complete_df, stat='usage', max_sylls=None):
 
     return ordering, relabel_mapping
     
-def _validate_and_order_syll_stats_params(complete_df, stat='usage', ordering='stat', max_sylls=40, groups=None, ctrl_group=None, exp_group=None, colors=None, figsize=(10, 5)):
+def _validate_and_order_syll_stats_params(complete_df, stat='frequency', ordering='stat', max_sylls=40, groups=None, ctrl_group=None, exp_group=None, colors=None, figsize=(10, 5)):
 
     if not isinstance(figsize, (tuple, list)):
         print('Invalid figsize. Input a integer-tuple or list of len(figsize) = 2. Setting figsize to (10, 5)')
@@ -333,7 +333,7 @@ def _validate_and_order_syll_stats_params(complete_df, stat='usage', ordering='s
 
     return ordering, groups, colors, figsize
 
-def plot_syll_stats_with_sem(scalar_df, syll_info=None, sig_sylls=None, stat='usage', ordering='stat', max_sylls=40,
+def plot_syll_stats_with_sem(scalar_df, syll_info=None, sig_sylls=None, stat='frequency', ordering='stat', max_sylls=40,
                              groups=None, ctrl_group=None, exp_group=None, colors=None, join=False, figsize=(8, 4)):
 
     xlabel = f'Syllables sorted by {stat}'
@@ -397,18 +397,18 @@ def get_transitions(label_sequence):
 
     return transitions, locs
 
-def get_syllable_statistics(data, fill_value=-5, max_syllable=100, count='usage'):
-    usages = defaultdict(int)
+def get_syllable_statistics(data, fill_value=-5, max_syllable=100, count='frequency'):
+    frequencies = defaultdict(int)
     durations = defaultdict(list)
 
-    use_usage = count == 'usage'
-    if not use_usage and count != 'frames':
-        print('Inputted count is incorrect or not supported. Use "usage" or "frames".')
-        print('Calculating statistics by syllable usage')
-        use_usage = True
+    use_frequency = count == 'frequency'
+    if not use_frequency and count != 'frames':
+        print('Inputted count is incorrect or not supported. Use "frequency" or "frames".')
+        print('Calculating statistics by syllable frequency')
+        use_frequency = True
 
     for s in range(max_syllable):
-        usages[s] = 0
+        frequencies[s] = 0
         durations[s] = []
 
     if isinstance(data, list) or (isinstance(data, np.ndarray) and data.dtype == np.object):
@@ -423,10 +423,10 @@ def get_syllable_statistics(data, fill_value=-5, max_syllable=100, count='usage'
             durs = np.diff(np.insert(locs, len(locs), len(v)))
 
             for s, d in zip(seq_array, durs):
-                if use_usage:
-                    usages[s] = usages[s] + 1
+                if use_frequency:
+                    frequencies[s] = frequencies[s] + 1
                 else:
-                    usages[s] = usages[s] + d
+                    frequencies[s] = frequencies[s] + d
                 durations[s].append(d)
 
     else:#elif type(data) is np.ndarray and data.dtype == 'int16':
@@ -439,16 +439,16 @@ def get_syllable_statistics(data, fill_value=-5, max_syllable=100, count='usage'
         durs = np.diff(np.insert(locs, len(locs), len(data)))
 
         for s, d in zip(seq_array, durs):
-            if use_usage:
-                usages[s] = usages[s] + 1
+            if use_frequency:
+                frequencies[s] = frequencies[s] + 1
             else:
-                usages[s] = usages[s] + d
+                frequencies[s] = frequencies[s] + d
             durations[s].append(d)
 
 
-    usages = OrderedDict(sorted(usages.items())[:max_syllable])
+    frequencies = OrderedDict(sorted(frequencies.items())[:max_syllable])
     durations = OrderedDict(sorted(durations.items())[:max_syllable])
-    return usages, durations
+    return frequencies, durations
 
 def n_gram_transition_matrix(labels, n=2, max_label=99):
     trans_mat = np.zeros((max_label, ) * n, dtype='float')
@@ -506,7 +506,7 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
 
 def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigram'):
     trans_mats = []
-    usages = []
+    frequencies = []
 
     # Computing transition matrices for each given group
     for plt_group in group:
@@ -517,6 +517,6 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
                                                 combine=True,
                                                 max_syllable=max_sylls))
 
-        # Getting usage information for node scaling
-        usages.append(get_syllable_statistics(use_labels, max_syllable=max_sylls)[0])
-    return trans_mats, usages
+        # Getting frequency information for node scaling
+        frequencies.append(get_syllable_statistics(use_labels, max_syllable=max_sylls)[0])
+    return trans_mats, frequencies

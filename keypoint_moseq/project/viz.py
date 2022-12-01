@@ -71,13 +71,13 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap,
 
 def plot_progress(model, data, history, iteration, path=None,
                   project_dir=None, name=None, savefig=True,
-                  fig_size=None, seq_length=600, min_usage=.001, 
+                  fig_size=None, seq_length=600, min_frequency=.001, 
                   **kwargs):
     
     z = np.array(model['states']['z'])
     mask = np.array(data['mask'])
     durations = get_durations(z,mask)
-    usages = get_usages(z,mask)
+    frequencies = get_frequencies(z,mask)
     
     history_iters = sorted(history.keys())
     past_stateseqs = [history[i]['states']['z'] 
@@ -91,8 +91,8 @@ def plot_progress(model, data, history, iteration, path=None,
         fig,axs = plt.subplots(1,2)
         if fig_size is None: fig_size=(4,2.5)
 
-    usages = np.sort(usages[usages>min_usage])[::-1]
-    axs[0].bar(range(len(usages)),usages,width=1)
+    frequencies = np.sort(frequencies[frequencies>min_frequency])[::-1]
+    axs[0].bar(range(len(frequencies)),frequencies,width=1)
     axs[0].set_ylabel('probability')
     axs[0].set_xlabel('syllable rank')
     axs[0].set_title('Usage distribution')
@@ -217,7 +217,7 @@ def write_video_clip(frames, path, fps=30, quality=7):
 def generate_crowd_movies(
     results=None, output_dir=None, name=None, project_dir=None,
     results_path=None, video_dir=None, rows=4, cols=6, filter_size=9, 
-    pre=30, post=60, min_usage=0.005, min_duration=3, dot_radius=4, 
+    pre=30, post=60, min_frequency=0.005, min_duration=3, dot_radius=4, 
     dot_color=(255,255,255), window_size=112, plot_keypoints=False, 
     use_reindexed=True, sampling_options={}, coordinates=None, 
     bodyparts=None, use_bodyparts=None, quality=7, **kwargs):
@@ -238,6 +238,9 @@ def generate_crowd_movies(
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     print(f'Writing crowd movies to {output_dir}')
     
+    if not (bodyparts is None or use_bodyparts is None or coordinates is None):
+        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+
     if results is None: results = load_results(
         name=name, project_dir=project_dir, path=results_path)
     
@@ -250,17 +253,17 @@ def generate_crowd_movies(
     centroids = {k:v['centroid'] for k,v in results.items()}
     headings = {k:v['heading'] for k,v in results.items()}
     
-    centroids,headings = filter_centroids_headings(
-        centroids, headings, filter_size=filter_size)
-    
+
     syllable_instances = get_syllable_instances(
         syllables, pre=pre, post=post, min_duration=min_duration,
-        min_usage=min_usage, min_instances=rows*cols)
-    
+        min_frequency=min_frequency, min_instances=rows*cols)
+
     sampled_instances = sample_instances(
         syllable_instances, rows*cols, coordinates=coordinates, 
-        bodyparts=bodyparts, use_bodyparts=use_bodyparts,
-        **sampling_options)
+        centroids=centroids, headings=headings, **sampling_options)
+
+    centroids,headings = filter_centroids_headings(
+        centroids, headings, filter_size=filter_size)
     
     for syllable,instances in tqdm.tqdm(
         sampled_instances.items(), desc='Generating crowd movies'):
@@ -365,7 +368,7 @@ def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False,
 def generate_trajectory_plots(
     coordinates, results=None, output_dir=None, name=None, 
     project_dir=None, results_path=None, pre=5, post=15, 
-    min_usage=0.005, min_duration=3, use_reindexed=True, 
+    min_frequency=0.005, min_duration=3, use_reindexed=True, 
     skeleton=None, bodyparts=None, use_bodyparts=None,  
     n_neighbors=40, keypoint_colormap='autumn', fig_size=4,
     grid_cols=5, grid_margin=(-.2,-.2), plot_options={}, 
@@ -393,13 +396,16 @@ def generate_trajectory_plots(
         
     syllable_instances = get_syllable_instances(
         syllables, pre=pre, post=post, min_duration=min_duration,
-        min_usage=min_usage, min_instances=n_neighbors)
+        min_frequency=min_frequency, min_instances=n_neighbors)
     
-    trajectories = sample_instances(
+    sampled_instances = sample_instances(
         syllable_instances, n_neighbors, coordinates=coordinates, 
-        centroids=centroids, headings=headings, bodyparts=bodyparts, 
-        use_bodyparts=use_bodyparts, n_neighbors=n_neighbors, 
-        return_trajectories=True, **sampling_options)[1]
+        centroids=centroids, headings=headings, n_neighbors=n_neighbors, 
+        **sampling_options)
+
+    trajectories = get_trajectories(
+        sampled_instances, coordinates, pre=pre, post=post, 
+        centroids=centroids, headings=headings)
 
     if skeleton is None: edges = []
     else: edges = get_edges(use_bodyparts, skeleton)

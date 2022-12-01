@@ -71,7 +71,7 @@ def generate_config(project_dir, **kwargs):
         'keypoint_colormap': 'autumn',
         'latent_dimension': 10,
         'whiten': True,
-        'batch_length': 10000 })
+        'seg_length': 10000 })
        
     fitting = update_dict(kwargs, {
         'added_noise_level': 0.1,
@@ -93,7 +93,7 @@ def generate_config(project_dir, **kwargs):
         'use_bodyparts': 'determines the subset of bodyparts to use for modeling and the order in which they are represented',
         'anterior_bodyparts': 'used to initialize heading',
         'posterior_bodyparts': 'used to initialize heading',
-        'batch_length': 'data are broken up into batches to parallelize fitting',
+        'seg_length': 'data are broken up into segments to parallelize fitting',
         'trans_hypparams': 'transition hyperparameters',
         'ar_hypparams': 'autoregressive hyperparameters',
         'obs_hypparams': 'keypoint observation hyperparameters',
@@ -229,13 +229,15 @@ def setup_project(project_dir, deeplabcut_config=None,
             
     
 def format_data(coordinates, *, confidences=None, keys=None, 
-                batch_length, bodyparts, use_bodyparts,
+                seg_length, bodyparts, use_bodyparts,
                 conf_pseudocount=1e-3, added_noise_level=0.1, **kwargs):
     """
-    Reshapes variable-length time-series of keypoint coordinates
-    and neural net `likelihoods` by breaking into batches of fixed 
-    length and subsetting/reordering based on ``use_bodyparts``. 
-    Batches that include the end of a session are 0-padded. 
+    Stacks variable-length time-series of keypoint coordinates into a
+    single array for batch processing, optionally breaking each one into
+    segments of fixed length. The is done for keypoint confidences if
+    they are provided. Keypoints are also subsetted/reordered based on 
+    ``use_bodyparts``. 0-padding ensures that the resulting arrays are
+    not ragged. 
     
     Parameters
     ----------
@@ -260,34 +262,35 @@ def format_data(coordinates, *, confidences=None, keys=None,
         ``bodyparts``.
         
     keys: list, default=None
-        Specifies a subset of sessions to include and their order in the 
-        final batched array. If ``keys=None``, all sessions will be used 
-        and ordered using ``sorted``.
+        Specifies a subset of sessions to include and the order in which
+        to stack them. If ``keys=None``, all sessions will be used and 
+        ordered using ``sorted``.
         
     conf_pseudocount: float, default=1e-3
         Pseudocount neural network confidences.
     
-    batch_length: int, default=None
-        Length of each batch. If ``None``, a length is chosen so that
-        no time-series are broken across batches. 
+    seg_length: int, default=None
+        Length of each segment. If ``seg_length=None``, a length is 
+        chosen so that no time-series are broken into multiple segments.
         
     Returns
     -------
     data: dict with the following items
     
-        Y: numpy array with shape (n_batches, batch_length, K, D)
-            Keypoint coordinates from all sessions broken into batches.
+        Y: numpy array with shape (n_segs, seg_length, K, D)
+            Keypoint coordinates from all sessions broken into segments.
             
-        conf: numpy array with shape (n_batches, batch_length, K)
-            Neural net confidences from all sessions broken into batches.
-            If no input is provided for ``confidences``, will be ``None``. 
-            Confidences are increased by ``conf_pseudocount``.
+        conf: numpy array with shape (n_segs, seg_length, K)
+            Confidences from all sessions broken into segments. If no 
+            input is provided for ``confidences``, ``conf`` will be set
+            to ``None``. Note that confidences are increased by 
+            ``conf_pseudocount``.
         
-        mask: numpy array with shape (n_batches, batch_length)
+        mask: numpy array with shape (n_segs, seg_length)
             Binary array where 0 indicates areas of padding.
             
-        batch_info: list of tuples (object, int, int)
-            The location in ``data_dict`` that each batch came from
+        labels: list of tuples (object, int, int)
+            The location in ``data_dict`` that each segment came from
             in the form of tuples (key, start, end).
     """    
     
@@ -295,10 +298,10 @@ def format_data(coordinates, *, confidences=None, keys=None,
     coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
     confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
     
-    Y,mask,batch_info = batch(coordinates, batch_length=batch_length, keys=keys)
+    Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
     
     if confidences is not None:
-        conf = batch(confidences, batch_length=batch_length, keys=keys)[0]
+        conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
         if conf.min() < 0: 
             conf = np.maximum(conf,0) 
             warnings.warn(fill(
@@ -308,7 +311,7 @@ def format_data(coordinates, *, confidences=None, keys=None,
     if added_noise_level>0: 
         Y += np.random.uniform(-added_noise_level,added_noise_level,Y.shape)
         
-    return jax.device_put({'mask':mask, 'Y':Y, 'conf':conf}), batch_info
+    return jax.device_put({'mask':mask, 'Y':Y, 'conf':conf}), labels
 
 
 def save_pca(pca, project_dir, pca_path=None):
@@ -349,7 +352,7 @@ def load_checkpoint(project_dir=None, name=None, path=None):
     return joblib.load(path)
 
 
-def save_checkpoint(model, data, history, batch_info, iteration, 
+def save_checkpoint(model, data, history, labels, iteration, 
                     path=None, name=None, project_dir=None,
                     save_history=True, save_states=True, save_data=True):
     
@@ -364,7 +367,7 @@ def save_checkpoint(model, data, history, batch_info, iteration,
         os.makedirs(dirname)
     
     save_dict = {
-        'batch_info': batch_info,
+        'labels': labels,
         'iteration' : iteration,
         'hypparams' : jax.device_get(model['hypparams']),
         'params'    : jax.device_get(model['params']), 

@@ -41,7 +41,7 @@ def resample_location(seed, *, mask, Y, h, x, s, Cd, sigmasq, sigmasq_loc, **kwa
     Gamma = center_embedding(k)
     gammasq = 1/(1/(s*sigmasq)).sum(-1)
     Ybar = Gamma @ (pad_affine(x)@Cd.T).reshape(*Y.shape[:-2],k-1,d)
-    rot_matrix = angle_to_rotation_matrix(h, keypoint_dim=d)
+    rot_matrix = angle_to_rotation_matrix(h, d=d)
     mu = ((Y - (rot_matrix[...,na,:,:]*Ybar[...,na,:]).sum(-1)) \
           *(gammasq[...,na]/(s*sigmasq))[...,na]).sum(-2)
 
@@ -146,12 +146,12 @@ def resample_ar_params(seed, *, nlags, num_states, mask, x, z, nu_0, S_0, M_0, K
 
 
 def resample_hdp_transitions(seed, *, z, mask, betas, alpha, kappa, gamma, num_states, **kwargs):
-    counts = jax_io(count_transitions)(num_states, mask, z)
+    counts = jax_io(count_transitions)(num_states, z, mask)
     betas, pi = sample_hdp_transitions(seed, counts, betas, alpha, kappa, gamma)
     return betas, pi
 
 def resample_transitions(seed, *, z, mask, alpha, kappa, num_states, **kwargs):
-    counts = jax_io(count_transitions)(num_states, mask, z)
+    counts = jax_io(count_transitions)(num_states, z, mask)
     pi = sample_transitions(seed, counts, alpha, kappa)
     return pi
 

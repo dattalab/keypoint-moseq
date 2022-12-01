@@ -10,7 +10,7 @@ from datetime import datetime
 from keypoint_moseq.model.gibbs import resample_model
 from keypoint_moseq.model.initialize import initialize_model
 from keypoint_moseq.project.viz import plot_progress
-from keypoint_moseq.util import get_durations, batch, unbatch, estimate_coordinates, get_usages
+from keypoint_moseq.util import get_durations, batch, unbatch, estimate_coordinates, get_frequencies, pad_along_axis
 from keypoint_moseq.project.io import save_checkpoint, format_data, save_hdf5
     
 
@@ -30,7 +30,7 @@ def update_history(history, iteration, model, include_states=True):
 
 def fit_model(model,
               data,
-              batch_info,
+              labels,
               start_iter=0,
               history=None,
               verbose=True,
@@ -73,7 +73,7 @@ def fit_model(model,
                           savefig=save_progress_figs, project_dir=project_dir)
 
         if save_every_n_iters>0 and (iteration%save_every_n_iters)==0:
-            save_checkpoint(model, data, history, batch_info, iteration, name=name,
+            save_checkpoint(model, data, history, labels, iteration, name=name,
                             project_dir=project_dir,save_history=save_history, 
                             save_states=save_states, save_data=save_data)
             
@@ -83,7 +83,7 @@ def fit_model(model,
     return model, history, name
     
     
-def resume_fitting(*, params, hypparams, batch_info, iteration, mask,
+def resume_fitting(*, params, hypparams, labels, iteration, mask,
                    conf, Y, seed, noise_prior=None, states=None, **kwargs):
     
     model = initialize_model(
@@ -93,20 +93,20 @@ def resume_fitting(*, params, hypparams, batch_info, iteration, mask,
     
     data = jax.device_put({'Y':Y, 'conf':conf, 'mask':mask})
     
-    return fit_model(model, data, batch_info, start_iter=iteration+1, **kwargs)
+    return fit_model(model, data, labels, start_iter=iteration+1, **kwargs)
 
 
 def apply_model(*, params, coordinates, confidences=None,
                 num_iters=5, use_saved_states=True, states=None, 
-                mask=None, batch_info=None, ar_only=False, 
-                random_seed=0, batch_length=None, save_results=True,
+                mask=None, labels=None, ar_only=False, 
+                random_seed=0, seg_length=None, save_results=True,
                 project_dir=None, name=None, results_path=None, 
                 Y=None, conf=None, noise_prior=None, **kwargs):   
     
     
-    data,new_batch_info = format_data(
-        coordinates, confidences=confidences, batch_length=None, **kwargs)
-    session_names = [key for key,start,end in new_batch_info]
+    data,new_labels = format_data(
+        coordinates, confidences=confidences, seg_length=None, **kwargs)
+    session_names = [key for key,start,end in new_labels]
 
     if save_results:
         if results_path is None: 
@@ -116,15 +116,16 @@ def apply_model(*, params, coordinates, confidences=None,
             results_path = os.path.join(project_dir,name,'results.h5')
      
     if use_saved_states:
-        assert not (states is None or mask is None or batch_info is None), fill(
+        assert not (states is None or mask is None or labels is None), fill(
             'The ``use_saved_states`` option requires the additional '
-            'arguments ``states``, ``mask`` and ``batch_info``')   
+            'arguments ``states``, ``mask`` and ``labels``')   
         
         new_states = {}
         for k,v in jax.device_get(states).items():
-            new_states[k] = batch(
-                unbatch(v, mask, batch_info), 
-                keys=session_names)[0]
+            padding = mask.shape[1] - v.shape[1]
+            v = pad_along_axis(v, (padding, 0), axis=1, value=1)
+            v = batch(unbatch(v, labels), keys=session_names)[0]
+            new_states[k] = v[:,padding:]
         states = new_states
     else: states = None
     
@@ -142,8 +143,8 @@ def apply_model(*, params, coordinates, confidences=None,
         **model['states'], **model['params'], **data))
     
     mask = np.array(data['mask'])
-    usage = get_usages(states['z'], mask)
-    reindex = np.argsort(np.argsort(usage)[::-1])
+    frequency = get_frequencies(states['z'], mask)
+    reindex = np.argsort(np.argsort(frequency)[::-1])
     z_reindexed = reindex[states['z']]
     
     results_dict = {
