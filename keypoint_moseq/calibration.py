@@ -3,7 +3,7 @@ import tqdm
 import os
 from textwrap import fill
 from vidio.read import OpenCVReader
-from keypoint_moseq.project.io import update_config
+from keypoint_moseq.io import update_config
 from keypoint_moseq.util import find_matching_videos
 
 def sample_error_frames(confidences, bodyparts, use_bodyparts,

@@ -151,6 +151,7 @@ def check_config_validity(config):
     for msg in error_messages: 
         print(fill(msg, width=70, subsequent_indent='  '), end='\n\n')
             
+
 def load_config(project_dir, check_if_valid=True):
     """
     Load config.yml from ``project_dir`` and return
@@ -159,6 +160,9 @@ def load_config(project_dir, check_if_valid=True):
     config_path = os.path.join(project_dir,'config.yml')
     with open(config_path, 'r') as stream:  config = yaml.safe_load(stream)
     if check_if_valid: check_config_validity(config)
+
+    config['anterior_idxs'] = jnp.array([config['use_bodyparts'].index(bp) for bp in config['anterior_bodyparts']])
+    config['posterior_idxs'] = jnp.array([config['use_bodyparts'].index(bp) for bp in config['posterior_bodyparts']])
     return config
 
 def update_config(project_dir, **kwargs):

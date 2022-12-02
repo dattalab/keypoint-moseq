@@ -4,11 +4,10 @@ with open("README.md", 'r') as f:
     long_description = f.read()
 
 setuptools.setup(
-    name='keypointMoSeq',
+    name='keypoint-moseq',
     version='0.0.0',
     author='Caleb Weinreb',
     author_email='calebsw@gmail.com',
-    description='Motion Sequencing (MoSeq) for keypoint data',
     include_package_data=True,
     packages=setuptools.find_packages(),
     classifiers=[
@@ -17,8 +16,6 @@ setuptools.setup(
     ],
     python_requires='>=3.7',
     install_requires=[
-        'tfp-nightly[jax]',
-        'numba',
         'numpy',
         'seaborn',
         'cytoolz',
@@ -36,5 +33,5 @@ setuptools.setup(
         'pandas',
         'tables'
     ], 
-    url='https://github.com/calebweinreb/keypointMoSeq'
+    url='https://github.com/dattalab/keypoint-moseq'
 )

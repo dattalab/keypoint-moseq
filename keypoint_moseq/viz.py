@@ -9,8 +9,14 @@ plt.rcParams['figure.dpi'] = 100
 from vidio.read import OpenCVReader
 from textwrap import fill
 
-from keypoint_moseq.util import *
-from keypoint_moseq.project.io import load_results
+from keypoint_moseq.util import (
+    get_edges, get_durations, get_frequencies, reindex_by_bodyparts,
+    find_matching_videos, get_syllable_instances, sample_instances,
+    filter_centroids_headings, get_trajectories,
+)
+from keypoint_moseq.io import load_results
+from jax_moseq.models.keypoint_slds import center_embedding
+
 
 
 

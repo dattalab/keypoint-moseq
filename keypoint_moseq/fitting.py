@@ -7,12 +7,11 @@ import warnings
 warnings.formatwarning = lambda msg, *a: str(msg)
 from textwrap import fill
 from datetime import datetime
-from keypoint_moseq.model.gibbs import resample_model
-from keypoint_moseq.model.initialize import initialize_model
-from keypoint_moseq.project.viz import plot_progress
-from keypoint_moseq.util import get_durations, batch, unbatch, estimate_coordinates, get_frequencies, pad_along_axis
-from keypoint_moseq.project.io import save_checkpoint, format_data, save_hdf5
-    
+
+from keypoint_moseq.viz import plot_progress
+from keypoint_moseq.io import save_checkpoint, format_data, save_hdf5
+from keypoint_moseq.util import get_durations, batch, unbatch, get_frequencies, pad_along_axis
+from jax_moseq.models.keypoint_slds import estimate_coordinates, resample_model, init_model
 
 def update_history(history, iteration, model, include_states=True): 
     
@@ -86,7 +85,7 @@ def fit_model(model,
 def resume_fitting(*, params, hypparams, labels, iteration, mask,
                    conf, Y, seed, noise_prior=None, states=None, **kwargs):
     
-    model = initialize_model(
+    model = init_model(
         states=states, params=params, hypparams=hypparams,
         noise_prior=noise_prior, seed=seed, Y=Y, mask=mask,
         conf=conf, **kwargs)
@@ -129,7 +128,7 @@ def apply_model(*, params, coordinates, confidences=None,
         states = new_states
     else: states = None
     
-    model = initialize_model(
+    model = init_model(
         states=states, params=params, 
         **jax.device_put(data), **kwargs)
     
