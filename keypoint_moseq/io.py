@@ -151,17 +151,25 @@ def check_config_validity(config):
         print(fill(msg, width=70, subsequent_indent='  '), end='\n\n')
             
 
-def load_config(project_dir, check_if_valid=True):
+def load_config(project_dir, check_if_valid=True, build_indexes=True):
     """
     Load config.yml from ``project_dir`` and return
     the resulting dict. Optionally check if the config is valid. 
     """
     config_path = os.path.join(project_dir,'config.yml')
-    with open(config_path, 'r') as stream:  config = yaml.safe_load(stream)
-    if check_if_valid: check_config_validity(config)
-
-    config['anterior_idxs'] = jnp.array([config['use_bodyparts'].index(bp) for bp in config['anterior_bodyparts']])
-    config['posterior_idxs'] = jnp.array([config['use_bodyparts'].index(bp) for bp in config['posterior_bodyparts']])
+    
+    with open(config_path, 'r') as stream:  
+        config = yaml.safe_load(stream)
+        
+    if check_if_valid: 
+        check_config_validity(config)
+        
+    if build_indexes:
+        config['anterior_idxs'] = jnp.array(
+            [config['use_bodyparts'].index(bp) for bp in config['anterior_bodyparts']])
+        config['posterior_idxs'] = jnp.array(
+            [config['use_bodyparts'].index(bp) for bp in config['posterior_bodyparts']])
+        
     return config
 
 def update_config(project_dir, **kwargs):
@@ -169,7 +177,7 @@ def update_config(project_dir, **kwargs):
     Update config.yml from ``project_dir`` to include
     all the key/value pairs in **kwargs.
     """
-    config = load_config(project_dir, check_if_valid=False)
+    config = load_config(project_dir, check_if_valid=False, build_indexes=False)
     config.update(kwargs)
     generate_config(project_dir, **config)
     
