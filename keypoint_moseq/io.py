@@ -317,6 +317,7 @@ def format_data(coordinates, *, confidences=None, keys=None,
             warnings.warn(fill(
                 'Negative confidence values are not allowed and will be set to 0.'))
         conf = conf + conf_pseudocount
+    else: conf = None
   
     if added_noise_level>0: 
         Y += np.random.uniform(-added_noise_level,added_noise_level,Y.shape)
