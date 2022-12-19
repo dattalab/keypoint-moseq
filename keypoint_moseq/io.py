@@ -52,7 +52,7 @@ def generate_config(project_dir, **kwargs):
     hypperams = {k: update_dict(kwargs,v) for k,v in {
         'error_estimator': {'slope':1, 'intercept':1},
         'obs_hypparams': {'sigmasq_0':0.1, 'sigmasq_C':.1, 'nu_sigma':1e5, 'nu_s':5},
-        'ar_hypparams': {'nlags': 3, 'S_0_scale': 0.01, 'K_0_scale': 10.0},
+        'ar_hypparams': {'latent_dim': 10, 'nlags': 3, 'S_0_scale': 0.01, 'K_0_scale': 10.0},
         'trans_hypparams': {'num_states': 100, 'gamma': 1e3, 'alpha': 5.7, 'kappa': 1e6},
         'cen_hypparams': {'sigmasq_loc': 0.5}
     }.items()}
@@ -69,7 +69,6 @@ def generate_config(project_dir, **kwargs):
         'conf_pseudocount': 1e-3,
         'video_dir': '',
         'keypoint_colormap': 'autumn',
-        'latent_dimension': 10,
         'whiten': True,
         'seg_length': 10000 })
        

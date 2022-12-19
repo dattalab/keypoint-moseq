@@ -85,13 +85,11 @@ def fit_model(model,
 def resume_fitting(*, params, hypparams, labels, iteration, mask,
                    conf, Y, seed, noise_prior=None, states=None, **kwargs):
     
-    model = init_model(
-        states=states, params=params, hypparams=hypparams,
-        noise_prior=noise_prior, seed=seed, Y=Y, mask=mask,
-        conf=conf, **kwargs)
-    
     data = jax.device_put({'Y':Y, 'conf':conf, 'mask':mask})
     
+    model = init_model(data, states, params, hypparams,
+                       noise_prior, seed, **kwargs)
+
     return fit_model(model, data, labels, start_iter=iteration+1, **kwargs)
 
 
@@ -103,7 +101,7 @@ def apply_model(*, params, coordinates, confidences=None,
                 Y=None, conf=None, noise_prior=None, **kwargs):   
     
     
-    data,new_labels = format_data(
+    data, new_labels = format_data(
         coordinates, confidences=confidences, seg_length=None, **kwargs)
     session_names = [key for key,start,end in new_labels]
 
@@ -128,14 +126,12 @@ def apply_model(*, params, coordinates, confidences=None,
         states = new_states
     else: states = None
     
-    model = init_model(
-        states=states, params=params, 
-        **jax.device_put(data), **kwargs)
+    model = init_model(data, states, params, **kwargs)
     
     if num_iters>0:
         for iteration in tqdm.trange(num_iters, desc='Applying model'):
             model = resample_model(data, **model, ar_only=ar_only, states_only=True)
-        
+
     nlags = model['hypparams']['ar_hypparams']['nlags']
     states = jax.device_get(model['states'])                     
     estimated_coords = jax.device_get(estimate_coordinates(
@@ -211,8 +207,8 @@ def update_hypparams(model_dict, **kwargs):
                                      
                     model_dict['hypparams'][hypparms_group][k] = type(old_value)(v)
                     not_updated.remove(k)
-                    
+
     if len(not_updated)>0: warnings.warn(fill(
         f'The following hypparams were not found {not_updated}'))
-        
+
     return model_dict

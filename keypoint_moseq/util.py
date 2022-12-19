@@ -12,6 +12,7 @@ from scipy.ndimage import median_filter
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 from jaxlib.xla_extension import DeviceArray as jax_array
+from jax_moseq.models.keypoint_slds import inverse_rigid_transform
 na = jnp.newaxis
 
 
@@ -536,7 +537,7 @@ def get_trajectories(syllable_instances, coordinates, pre=0, post=None,
         if post is None:
             X = [coordinates[key][s-pre:e] for key,s,e in instances]
             if centroids is not None and headings is not None:
-                X = [np_io(inverse_affine_transform)(
+                X = [np_io(inverse_rigid_transform)(
                         x,centroids[key][s],headings[key][s]
                      ) for x,(key,s,e) in zip(X,instances)]
         else:
@@ -544,7 +545,7 @@ def get_trajectories(syllable_instances, coordinates, pre=0, post=None,
             if centroids is not None and headings is not None:
                 c = np.array([centroids[key][s] for key,s,e in instances])[:,None]
                 h = np.array([headings[key][s] for key,s,e in instances])[:,None]
-                X = np_io(inverse_affine_transform)(X,c,h)
+                X = np_io(inverse_rigid_transform)(X,c,h)
         trajectories[syllable] = X
 
     return trajectories
