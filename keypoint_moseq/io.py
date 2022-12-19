@@ -307,11 +307,10 @@ def format_data(coordinates, *, confidences=None, keys=None,
     
     if keys is None: keys = sorted(coordinates.keys()) 
     coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
-    confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
-    
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
     
     if confidences is not None:
+        confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
         conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
         if conf.min() < 0: 
             conf = np.maximum(conf,0) 
