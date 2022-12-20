@@ -436,7 +436,7 @@ def generate_trajectory_plots(
             plt.close(fig=fig)
 
         # grid plot
-        fig,ax = plot_trajectories(titles, Xs, edges, lims, **plot_options)
+        fig,ax = plot_trajectories(titles, Xs, edges, lims, n_cols=grid_cols, **plot_options)
         path = os.path.join(output_dir, 'all_trajectories.pdf')
         plt.savefig(path)
         plt.show()
