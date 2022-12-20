@@ -222,14 +222,15 @@ def write_video_clip(frames, path, fps=30, quality=7):
 
 def generate_crowd_movies(
     results=None, output_dir=None, name=None, project_dir=None,
-    results_path=None, video_dir=None, rows=4, cols=6, filter_size=9, 
-    pre=30, post=60, min_frequency=0.005, min_duration=3, dot_radius=4, 
+    results_path=None, video_dir=None, video_paths=None, 
+    rows=4, cols=6, filter_size=9, pre=30, post=60, 
+    min_frequency=0.005, min_duration=3, dot_radius=4, 
     dot_color=(255,255,255), window_size=112, plot_keypoints=False, 
     use_reindexed=True, sampling_options={}, coordinates=None, 
     bodyparts=None, use_bodyparts=None, quality=7, **kwargs):
     
-    assert video_dir is not None, fill(
-        'The ``video_dir`` argument is required')
+    assert (video_dir is not None) or (video_paths is not None), fill(
+        'You must provide either ``video_dir`` or ``video_paths``')
             
     if plot_keypoints:
         raise NotImplementedError()
@@ -250,7 +251,8 @@ def generate_crowd_movies(
     if results is None: results = load_results(
         name=name, project_dir=project_dir, path=results_path)
     
-    video_paths = find_matching_videos(results.keys(), video_dir, as_dict=True)
+    if video_paths is None:
+        video_paths = find_matching_videos(results.keys(), video_dir, as_dict=True)
     videos = {k: OpenCVReader(path) for k,path in video_paths.items()}
     fps = list(videos.values())[0].fps
     

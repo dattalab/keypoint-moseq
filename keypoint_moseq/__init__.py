@@ -3,23 +3,23 @@ from .util import *
 from .io import *
 
 from .calibration import (
-	noise_calibration,
+    noise_calibration,
 )
 
 from .fitting import (
-	revert, 
-	fit_model, 
-	apply_model, 
-	resume_fitting, 	
-	update_hypparams,
+    revert, 
+    fit_model, 
+    apply_model, 
+    resume_fitting, 
+    update_hypparams,
 )
 
 from .viz import (
-	plot_pcs, 
-	plot_scree, 
-	plot_progress, 
-	generate_crowd_movies, 
-	generate_trajectory_plots,
+    plot_pcs, 
+    plot_scree, 
+    plot_progress, 
+    generate_crowd_movies, 
+    generate_trajectory_plots,
 )
 
 from .analysis import (
@@ -32,6 +32,6 @@ from .analysis import (
 )
 
 from jax_moseq.models.keypoint_slds import (
-	fit_pca, 
-	init_model
+    fit_pca, 
+    init_model
 )
