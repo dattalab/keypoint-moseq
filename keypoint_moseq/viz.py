@@ -21,6 +21,21 @@ from jax_moseq.models.keypoint_slds import center_embedding
 
 
 def plot_scree(pca, savefig=True, project_dir=None):
+    """
+    Plot explained variance as a function of the number of PCs.
+
+    Parameters
+    ----------
+    pca : :py:func:`sklearn.decomposition.PCA`
+        Fitted PCA model
+
+    savefig : bool, True
+        Whether to save the figure to a file. If true, the figure is 
+        saved to ``{project_dir}/pca_scree.pdf``.
+
+    project_dir : str, default=None
+        Path to the project directory. Required if ``savefig`` is True.
+    """
     fig = plt.figure()
     plt.plot(np.arange(len(pca.mean_))+1,np.cumsum(pca.explained_variance_ratio_))
     plt.xlabel('PCs')
@@ -37,10 +52,54 @@ def plot_scree(pca, savefig=True, project_dir=None):
         plt.savefig(os.path.join(project_dir,'pca_scree.pdf'))
     plt.show()
           
-def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap,
+def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
              savefig=True, project_dir=None, scale=10, plot_n_pcs=10, 
              axis_size=(2,1.5), ncols=5, node_size=20, **kwargs):
-    
+    """
+    Visualize the components of a fitted PCA model.
+
+    For each PC, a subplot shows the mean pose (semi-transparent) along
+    with a perturbation of the mean pose in the direction of the PC. 
+
+    Parameters
+    ----------
+    pca : :py:func:`sklearn.decomposition.PCA`
+        Fitted PCA model
+
+    use_bodyparts : list of str
+        List of bodyparts to that are used in the model; used to index
+        bodypart names in the skeleton.
+
+    skeleton : list
+        List of edges that define the skeleton, where each edge is a
+        pair of bodypart names.
+
+    keypoint_colormap : str
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    savefig : bool, True
+        Whether to save the figure to a file. If true, the figure is
+        saved to ``{project_dir}/pcs-{xy/yz}.pdf`` (``yz`` is only 
+        included for 3D data).
+
+    project_dir : str, default=None
+        Path to the project directory. Required if ``savefig`` is True.
+
+    scale : float, default=10
+        Scale factor for the perturbation of the mean pose.
+
+    plot_n_pcs : int, default=10
+        Number of PCs to plot. 
+
+    axis_size : tuple of float, default=(2,1.5)
+        Size of each subplot in inches.
+
+    ncols : int, default=5
+        Number of columns in the figure.
+
+    node_size : int, default=20
+        Size of the keypoints in the figure.
+    """
     k = len(use_bodyparts)
     d = len(pca.mean_)//(k-1)  
     Gamma = np.array(center_embedding(k))
@@ -79,7 +138,55 @@ def plot_progress(model, data, history, iteration, path=None,
                   project_dir=None, name=None, savefig=True,
                   fig_size=None, seq_length=600, min_frequency=.001, 
                   **kwargs):
-    
+    """
+    Plot the progress of the model during fitting.
+
+    The figure shows the following plots:
+        - Duration distribution: 
+            The distribution of state durations for the most recent
+            iteration of the model.
+        - Frequency distribution:
+            The distribution of state frequencies for the most recent
+            iteration of the model.
+        - Median duration:
+            The median state duration across iterations.
+        - State sequence history
+            The state sequence across iterations in a random window 
+            (a new window is selected each time the progress is plotted). 
+
+    Parameters
+    ----------
+    model : dict
+        Model dictionary containing ``states``
+
+    data : dict
+        Data dictionary containing ``mask``
+
+    history : dict
+        Dictionary mapping iteration number to saved model dictionaries
+
+    iteration : int
+        Current iteration of model fitting
+
+    savefig : bool, default=True
+        Whether to save the figure to a file. If true, the figure is
+        either saved to ``path`` or, to ``{project_dir}/{name}-progress.pdf``
+        if ``path`` is None.
+
+    fig_size : tuple of float, default=None
+        Size of the figure in inches. 
+        
+    seq_length : int, default=600
+        Length of the state sequence history plot.
+
+    min_frequency : float, default=.001
+        Minimum frequency for including a state in the frequency 
+        distribution plot.
+
+    project_dir : str, default=None
+    name : str, default=None
+    path : str, default=None
+    """
     z = np.array(model['states']['z'])
     mask = np.array(data['mask'])
     durations = get_durations(z,mask)
@@ -101,7 +208,7 @@ def plot_progress(model, data, history, iteration, path=None,
     axs[0].bar(range(len(frequencies)),frequencies,width=1)
     axs[0].set_ylabel('probability')
     axs[0].set_xlabel('syllable rank')
-    axs[0].set_title('Usage distribution')
+    axs[0].set_title('Frequency distribution')
     axs[0].set_yticks([])
     
     lim = int(np.percentile(durations, 95))
@@ -121,7 +228,7 @@ def plot_progress(model, data, history, iteration, path=None,
         axs[2].set_ylim([-1,np.max(med_durs)*1.1])
         axs[2].set_xlabel('iteration')
         axs[2].set_ylabel('duration')
-        axs[2].set_title('median duration')
+        axs[2].set_title('Median duration')
         
         nz = np.stack(np.array(mask[:,seq_length:]).nonzero(),axis=1)
         batch_ix,start = nz[np.random.randint(nz.shape[0])]
@@ -129,7 +236,7 @@ def plot_progress(model, data, history, iteration, path=None,
         axs[3].imshow(seq_hist, cmap=plt.cm.jet, aspect='auto', interpolation='nearest')
         axs[3].set_xlabel('Time (frames)')
         axs[3].set_ylabel('Iterations')
-        axs[3].set_title('Stateseq history')
+        axs[3].set_title('State sequence history')
         
     fig.suptitle(f'Iteration {iteration}')
     fig.set_size_inches(fig_size)
@@ -143,13 +250,9 @@ def plot_progress(model, data, history, iteration, path=None,
             path = os.path.join(project_dir,name,'fitting_progress.pdf')
         plt.savefig(path)  
     plt.show()
-    
-    
-    
 
 
-
-def crowd_movie_tile(key, start, end, videos, centroids, headings, 
+def _crowd_movie_tile(key, start, end, videos, centroids, headings, 
                      dot_color=(255,255,255), window_size=112,
                      pre=30, post=60, dot_radius=4):
             
@@ -171,10 +274,15 @@ def crowd_movie_tile(key, start, end, videos, centroids, headings,
     
     
 def crowd_movie(instances, rows, cols, videos, centroids, headings,
-                dot_color=(255,255,255), window_size=112, 
-                pre=30, post=60, dot_radius=4):
+                dot_color=(255,255,255), dot_radius=4, window_size=112, 
+                pre=30, post=60):
     
-    """Generate a crowd movie
+    """Generate a crowd movie and return it as an array of frames.
+
+    Crowd movies show many instances of a syllable. Each instance
+    shows a snippet of a video, centered on the animal and synchronized
+    to the onset of the syllable. A dot appears at syllable onset and 
+    disappears at syllable offset.
 
     Parameters
     ----------
@@ -184,23 +292,43 @@ def crowd_movie(instances, rows, cols, videos, centroids, headings,
         name, start frame and end frame. The list must have length
         ``rows*cols``. The video names must also be keys in ``videos``.
         
-    rows: int
-        Number of rows in the crowd movie grid
-        
-    cols: int
-        Number of columns in the crowd movie grid
-        
+    rows: int, cols : int
+        Number of rows and columns in the crowd movie grid
+    
     videos: dict
         Dictionary mapping video names to video readers. Frames from
-        each reader should be accessible via __getitem__(int or slice).
+        each reader should be accessible via ``__getitem__(int or slice)``
+
+    centroids: dict
+        Dictionary mapping video names to arrays of shape ``(n_frames, 2)``
+        with the x,y coordinates of animal centroid on each frame
+
+    headings: dict
+        Dictionary mapping video names to arrays of shape ``(n_frames,)``
+        with the heading of the animal on each frame (in radians)
+
+    dot_color: tuple of ints, default=(255,255,255)
+        RGB color of the dot indicating syllable onset and offset
+
+    dot_radius: int, default=4
+        Radius of the dot indicating syllable onset and offset
+
+    window_size: int, default=112
+        Size of the window around the animal
+
+    pre: int, default=30
+        Number of frames before syllable onset to include in the movie
+
+    post: int, default=60
+        Number of frames after syllable onset to include in the movie
 
     Returns
     -------
-
+    frames: array of shape ``(rows, cols, post+pre, window_size, window_size, 3)``
+        Array of frames in the crowd movie
     """
-
     tiles = np.stack([
-        crowd_movie_tile(
+        _crowd_movie_tile(
             key, start, end, videos, centroids, headings, 
             dot_color=dot_color, window_size=window_size,
             pre=pre, post=post, dot_radius=dot_radius
@@ -211,11 +339,11 @@ def crowd_movie(instances, rows, cols, videos, centroids, headings,
 
     
 def write_video_clip(frames, path, fps=30, quality=7):
-            
+    """Write a video clip to a file.
+    """
     with imageio.get_writer(
         path, pixelformat='yuv420p', 
         fps=fps, quality=quality) as writer:
-
         for frame in frames: 
             writer.append_data(frame)
 
@@ -225,17 +353,105 @@ def generate_crowd_movies(
     results_path=None, video_dir=None, video_paths=None, 
     rows=4, cols=6, filter_size=9, pre=30, post=60, 
     min_frequency=0.005, min_duration=3, dot_radius=4, 
-    dot_color=(255,255,255), window_size=112, plot_keypoints=False, 
-    use_reindexed=True, sampling_options={}, coordinates=None, 
-    bodyparts=None, use_bodyparts=None, quality=7, **kwargs):
+    dot_color=(255,255,255), window_size=112, use_reindexed=True, 
+    sampling_options={}, coordinates=None, bodyparts=None, 
+    use_bodyparts=None, quality=7, **kwargs):
     
+    """
+    Generate crowd movies for a modeled dataset.
+
+    Crowd movies show many instances of a syllable and are useful in
+    figuring out what behavior the syllable captures 
+    (see :py:func:`keypoint_moseq.viz.crowd_movie`). This method
+    generates a crowd movie for each syllable that is used sufficiently
+    often (i.e. has at least ``rows_cols`` instances with duration
+    of at least ``min_duration`` and an overall frequency of at least
+    ``min_frequency``). The crowd movies are saved to ``output_dir`` if 
+    specified, or else to ``{project_dir}/{name}/crowd_movies``.
+
+    Parameters
+    ----------
+    results: dict, default=None
+        Dictionary containing modeling results for a dataset. Must 
+        contain syllable sequences, centroids and headings (see
+        :py:func:`keypoint_moseq.fitting.apply_model`). If None,
+        results will be loaded using either ``results_path`` or 
+        ``project_dir`` and ``name``.
+
+    output_dir: str, default=None
+        Directory where crowd movies should be saved. If None, crowd
+        movies will be saved to ``{project_dir}/{name}/crowd_movies``.
+
+    name: str, default=None
+        Name of the model. Required to load results if ``results`` is 
+        None and ``results_path`` is None. Required to save crowd movies 
+        if ``output_dir`` is None.
+        
+    project_dir: str, default=None
+        Project directory. Required to load results if ``results`` is 
+        None and ``results_path`` is None. Required to save crowd movies 
+        if ``output_dir`` is None.
+
+    results_path: str, default=None
+        Path to a results file. If None, results will be loaded from
+        ``{project_dir}/{name}/results.h5``.
+
+    video_dir: str, default=None
+        Directory containing videos of the modeled data (see 
+        :py:func:`keypoint_moseq.io.find_matching_videos`). If None,
+        a dictionary of ``video_paths`` must be provided.
+
+    video_paths: dict, default=None
+        Dictionary mapping session names to video paths. The session 
+        names must correspond to keys in ``results['syllables']``. If
+        None, a ``video_dir`` must be provided.
+
+    filter_size: int, default=9
+        Size of the median filter applied to centroids and headings
+
+    min_frequency: float, default=0.005
+        Minimum frequency of a syllable to be included in the crowd movies.
+
+    min_duration: int, default=3
+        Minimum duration of a syllable instance to be included in the 
+        crowd movie for that syllable. 
+
+    use_reindexed: bool, default=True
+        Determines the naming of syllables (``results["syllables"]`` if 
+        False, or ``results["syllables_reindexed"]`` if True). The
+        reindexed naming corresponds to the rank order of syllable
+        frequency (e.g. "0" for the most frequent syllable).
+
+    sampling_options: dict, default={}
+        Dictionary of options for sampling syllable instances (see
+        :py:func:`keypoint_moseq.util.sample_instances`).
+    
+    coordinates: dict, default=None
+        Dictionary mapping session names to keypoint coordinates as 
+        ndarrays of shape (n_frames, n_bodyparts, 2). Required
+        for density-based sampling (i.e. when 
+        ``sampling_options['mode']=='density'``; see 
+        :py:func:`keypoint_moseq.util.sample_instances`).
+
+    bodyparts: list of str, default=None
+        List of bodypart names in ``coordinates``. Required when 
+        ``coordinates`` is provided and bodyparts were reindexed 
+        for modeling. 
+
+    use_bodyparts: list of str, default=None
+        Ordered list of bodyparts used for modeling. Required when 
+        ``coordinates`` is provided and bodyparts were reindexed 
+        for modeling. 
+
+    quality: int, default=7
+        Quality of the crowd movies. Higher values result in higher
+        quality movies but larger file sizes.
+
+    rows, cols, pre, post, dot_radius, dot_color, window_size
+        See :py:func:`keypoint_moseq.viz.crowd_movie`
+    """
     assert (video_dir is not None) or (video_paths is not None), fill(
-        'You must provide either ``video_dir`` or ``video_paths``')
-            
-    if plot_keypoints:
-        raise NotImplementedError()
-        assert coordinates is not None, fill(
-            '``coordinates`` are required when ``plot_keypoints==True``')        
+        'You must provide either ``video_dir`` or ``video_paths``')      
     
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
@@ -260,7 +476,6 @@ def generate_crowd_movies(
     syllables = {k:v[syllable_key] for k,v in results.items()}
     centroids = {k:v['centroid'] for k,v in results.items()}
     headings = {k:v['heading'] for k,v in results.items()}
-    
 
     syllable_instances = get_syllable_instances(
         syllables, pre=pre, post=post, min_duration=min_duration,
@@ -287,7 +502,7 @@ def generate_crowd_movies(
         
         
 
-def pad_limits(limits, left=0.1, right=0.1, top=0.1, bottom=0.1):
+def _pad_limits(limits, left=0.1, right=0.1, top=0.1, bottom=0.1):
     
     xmin,ymin = limits[0]
     xmax,ymax = limits[1]
@@ -306,9 +521,63 @@ def pad_limits(limits, left=0.1, right=0.1, top=0.1, bottom=0.1):
 
         
 def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False, 
-                      cmap='autumn', node_size=50, linewidth=3, 
-                      fig_width=4, overlap=(0.2,0)):
-    
+                      keypoint_colormap='autumn', node_size=50, linewidth=3, 
+                      plot_width=4, overlap=(0.2,0)):
+    """
+    Plot one or more pose trajectories on a common axis and return
+    the axis.
+
+    (See :py:func:`keypoint_moseq.viz.generate_trajectory_plots`)
+
+    Parameters
+    ----------
+    titles: list of str
+        List of titles for each trajectory plot.
+
+    Xs: list of ndarray
+        List of pose trajectories as ndarrays of shape
+        (n_frames, n_keypoints, 2).
+
+    edges: list of tuples
+        List of edges, where each edge is a tuple of two integers
+
+    lims: ndarray
+        Axis limits used for all the trajectory plots. The limits 
+        should be provided as an array of shape (2,2) with the format
+        ``[[xmin,ymin],[xmax,ymax]]``.
+
+    n_cols: int, default=4
+        Number of columns in the figure (used when plotting multiple
+        trajectories).
+
+    invert: bool, default=False
+        Determines the background color of the figure. If ``True``,
+        the background will be black.
+
+    keypoint_colormap : str
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    node_size: int, default=50
+        Size of each keypoint.
+
+    linewidth: int, default=3
+        Width of the lines connecting keypoints.
+
+    plot_width: int, default=4
+        Width of each trajectory plot in inches. The height  is 
+        determined by the aspect ratio of ``lims``. The final figure 
+        width is ``fig_width * min(n_cols, len(X))``.
+
+    overlap: tuple of float, default=(0.2,0)
+        Amount of overlap between each trajectory plot as a tuple 
+        with the format ``(x_overlap, y_overlap)``. The values should
+        be between 0 and 1.
+
+    Returns
+    -------
+    ax: matplotlib.axes.Axes
+        Axis containing the trajectory plots.
+    """
     num_timesteps = Xs[0].shape[0]
     num_keypoints = Xs[0].shape[1]
 
@@ -362,8 +631,10 @@ def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False,
         ax.text(*xy, text, c=title_color, ha='center', 
                 va='top', zorder=plot_frames.max()*4+4)
         
-    aspect = (ymax-ymin)/(xmax-xmin)
-    fig.set_size_inches((fig_width*n_cols, fig_width*aspect*n_cols*1.1))
+    plot_height = plot_width*(ymax-ymin)/(xmax-xmin)*1.1
+    fig_width = plot_width*n_cols - (n_cols-1)*plot_width*overlap[0]
+    fig_height = plot_height*n_rows - (n_rows-1)*plot_height*overlap[1]
+    fig.set_size_inches((fig_width, fig_height))
     ax.set_xlim(xmin,xmax)
     ax.set_ylim(ymin,ymax)
     ax.set_aspect('equal')
@@ -378,10 +649,94 @@ def generate_trajectory_plots(
     project_dir=None, results_path=None, pre=5, post=15, 
     min_frequency=0.005, min_duration=3, use_reindexed=True, 
     skeleton=None, bodyparts=None, use_bodyparts=None,  
-    n_neighbors=40, keypoint_colormap='autumn', fig_size=4,
-    grid_cols=5, grid_margin=(-.2,-.2), plot_options={}, 
-    sampling_options={}, **kwargs):
+    num_samples=40, keypoint_colormap='autumn',
+    plot_options={}, sampling_options={'mode':'density'}, **kwargs):
+    """
+    Generate trajectory plots for a modeled dataset.
 
+    Each trajectory plot shows a sequence of poses along the average
+    trajectory through latent space associated with a given syllable.
+    A separate figure is saved for each syllable, along with a single
+    figure showing all syllables in a grid. The plots are saved to
+    ``{output_dir}`` if it is provided, otherwise they are saved to
+    ``{project_dir}/{name}/trajectory_plots``.
+
+    Parameters
+    ----------
+    coordinates : dict
+        Dictionary mapping session names to keypoint coordinates as 
+        ndarrays of shape (n_frames, n_bodyparts, 2). 
+
+    results: dict, default=None
+        Dictionary containing modeling results for a dataset. Must 
+        contain syllable sequences, centroids and headings (see
+        :py:func:`keypoint_moseq.fitting.apply_model`). If None,
+        results will be loaded using either ``results_path`` or 
+        ``project_dir`` and ``name``.
+
+    output_dir: str, default=None
+        Directory where trajectory plots should be saved. If None, 
+        plots will be saved to ``{project_dir}/{name}/trajectory_plots``.
+
+    name: str, default=None
+        Name of the model. Required to load results if ``results`` is 
+        None and ``results_path`` is None. Required to save trajectory
+        plots if ``output_dir`` is None.
+
+    project_dir: str, default=None
+       Project directory. Required to load results if ``results`` is 
+        None and ``results_path`` is None. Required to save trajectory
+        plots if ``output_dir`` is None.
+
+    results_path: str, default=None
+        Path to a results file. If None, results will be loaded from
+        ``{project_dir}/{name}/results.h5``.
+
+    pre: int, default=5, post: int, default=15
+        Defines the temporal window around syllable onset for 
+        computing the average trajectory. Note that the window is 
+        independent of the actual duration of the syllable.
+
+    min_frequency: float, default=0.005
+        Minimum frequency of a syllable to plotted.
+
+    min_duration: float, default=3
+        Minimum duration of a syllable instance to be included in the
+        trajectory average.
+
+    use_reindexed: bool, default=True
+        Determines the naming of syllables (``results["syllables"]`` if 
+        False, or ``results["syllables_reindexed"]`` if True). The
+        reindexed naming corresponds to the rank order of syllable
+        frequency (e.g. "0" for the most frequent syllable).
+
+    bodyparts: list of str, default=None
+        List of bodypart names in ``coordinates``. 
+
+    use_bodyparts: list of str, default=None
+        Ordered list of bodyparts that were used for modeling.
+
+    skeleton : list
+        List of edges that define the skeleton, where each edge is a
+        pair of bodypart names.
+
+    num_samples: int, default=40
+        Number of samples to used to compute the average trajectory.
+        Also used to set ``n_neighbors`` when sampling syllable instances
+        in ``density`` mode. 
+
+    keypoint_colormap : str
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    plot_options: dict, default={}
+        Dictionary of options for trajectory plots (see
+        :py:func:`keypoint_moseq.util.plot_trajectories`).
+
+    sampling_options: dict, default={'mode':'density'}
+        Dictionary of options for sampling syllable instances (see
+        :py:func:`keypoint_moseq.util.sample_instances`).
+
+    """
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
             'Either specify the ``output_dir`` where trajectory plots '
@@ -400,43 +755,45 @@ def generate_trajectory_plots(
     syllables = {k:v[syllable_key] for k,v in results.items()}
     centroids = {k:v['centroid'] for k,v in results.items()}
     headings = {k:v['heading'] for k,v in results.items()}
-    plot_options = {**plot_options, 'cmap':keypoint_colormap}
-        
+    plot_options.update({'keypoint_colormap':keypoint_colormap})
+            
     syllable_instances = get_syllable_instances(
         syllables, pre=pre, post=post, min_duration=min_duration,
-        min_frequency=min_frequency, min_instances=n_neighbors)
+        min_frequency=min_frequency, min_instances=num_samples)
     
+    sampling_options['n_neighbors'] = num_samples
     sampled_instances = sample_instances(
-        syllable_instances, n_neighbors, coordinates=coordinates, 
-        centroids=centroids, headings=headings, n_neighbors=n_neighbors, 
-        **sampling_options)
+        syllable_instances, num_samples, coordinates=coordinates, 
+        centroids=centroids, headings=headings, **sampling_options)
 
     trajectories = get_trajectories(
         sampled_instances, coordinates, pre=pre, post=post, 
         centroids=centroids, headings=headings)
 
-    if skeleton is None: edges = []
-    else: edges = get_edges(use_bodyparts, skeleton)
+    edges = []
+    if skeleton is not None: 
+        assert use_bodyparts is not None, fill(
+            'To plot skeleton edges, ``use_bodyparts`` must be specified')
+        edges = get_edges(use_bodyparts, skeleton)
 
     syllables = sorted(trajectories.keys())
     titles = [f'Syllable {syllable}' for syllable in syllables]
     Xs = np.array([trajectories[syllable] for syllable in syllables]).mean(1)
     
     lims = np.stack([Xs.min((0,1,2)),Xs.max((0,1,2))])
-    lims = pad_limits(lims, left=0.1, right=0.1, top=0.2, bottom=0.2)
+    lims = _pad_limits(lims, left=0.1, right=0.1, top=0.2, bottom=0.2)
 
-        
     if Xs.shape[-1]==2:
         
         # individual plots
         for title,X in zip(titles,Xs):
-            fig,ax = plot_trajectories([title], X[None], edges, lims, **plot_options)
+            ax = plot_trajectories([title], X[None], edges, lims, **plot_options)
             path = os.path.join(output_dir, f'{title}.pdf')
             plt.savefig(path)
-            plt.close(fig=fig)
+            plt.close(fig=ax.fig)
 
         # grid plot
-        fig,ax = plot_trajectories(titles, Xs, edges, lims, **plot_options)
+        ax = plot_trajectories(titles, Xs, edges, lims, **plot_options)
         path = os.path.join(output_dir, 'all_trajectories.pdf')
         plt.savefig(path)
         plt.show()

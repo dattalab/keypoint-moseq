@@ -63,7 +63,6 @@ def print_dims_to_explain_variance(pca, f):
     ----------  
     pca: sklearn.decomposition._pca.PCA, A fit PCA model
     f: float, Target variance fraction
-
     """
     cs = np.cumsum(pca.explained_variance_ratio_)
     if cs[-1] < f: print(f'All components together only explain {cs[-1]*100}% of variance.')
@@ -76,12 +75,12 @@ def concatenate_stateseqs(stateseqs, mask=None):
 
     Parameters
     ----------
-    stateseqs: dict or ndarray, shape (*dims, t)
+    stateseqs: dict or ndarray, shape (..., t)
         Dictionary mapping names to 1d arrays, or a single
         multi-dimensional array representing a batch of state sequences
         where the last dim indexes time
 
-    mask: ndarray, shape (*dims, >=t), default=None
+    mask: ndarray, shape (..., >=t), default=None
         Binary indicator for which elements of ``stateseqs`` are valid,
         e.g. when state sequences of different lengths have been padded.
         If ``mask`` contains more time-points than ``stateseqs``, the
@@ -184,7 +183,6 @@ def find_matching_videos(keys, video_dir, as_dict=False):
     Returns
     -------
     video_paths: list or dict (depending on `as_dict`)
-
     """  
     video_to_path = {
         name : os.path.join(video_dir,name+ext) 
@@ -229,7 +227,7 @@ def unbatch(data, labels):
  
     Parameters
     -------
-    data: ndarray, shape (num_segs, seg_length, *dims)
+    data: ndarray, shape (num_segs, seg_length, ...)
         Stack of segmented time-series
 
     labels: tuples (str,int,int)
@@ -240,7 +238,6 @@ def unbatch(data, labels):
     -------
     data_dict: dict
         Dictionary mapping names to reconstructed time-series
-
     """     
     data_dict = {}
     keys = sorted(set([key for key,start,end in labels]))    
@@ -284,7 +281,7 @@ def batch(data_dict, keys=None, seg_length=None, seg_overlap=30):
 
     Returns
     -------
-    data: ndarray, shape (N, seg_length, *dims)
+    data: ndarray, shape (N, seg_length, ...)
         Stacked data array
 
     mask: ndarray, shape (N, seg_length)
@@ -331,7 +328,6 @@ def filter_angle(angles, size=9, axis=0):
     Returns
     -------
     filtered_angles: ndarray
-
     """
     kernel = np.where(np.arange(len(angles.shape))==axis, size, 1)
     return np.arctan2(median_filter(np.sin(angles), kernel),
@@ -359,7 +355,6 @@ def filter_centroids_headings(centroids, headings, filter_size=9):
     -------
     filtered_centroids: dict
     filtered_headings: dict
-
     """    
     centroids = {k:median_filter(v,(filter_size,1)) for k,v in centroids.items()}
     headings = {k:filter_angle(v, size=filter_size) for k,v in headings.items()}  
@@ -404,7 +399,6 @@ def get_syllable_instances(stateseqs, min_duration=3, pre=30, post=60,
         Dictionary mapping each syllable to a list of instances. Each
         instance is a tuple (name,start,end) representing subsequence
         ``stateseqs[name][start:end]``.
-    
     """
     num_syllables = int(max(map(max,stateseqs.values()))+1)
     syllable_instances = [[] for syllable in range(num_syllables)]
@@ -439,7 +433,6 @@ def get_edges(use_bodyparts, skeleton):
     -------
     edges: list
         Pairs of indexes representing the enties of ``skeleton``
-
     """
     edges = []
     for bp1,bp2 in skeleton:
@@ -473,7 +466,6 @@ def reindex_by_bodyparts(data, bodyparts, use_bodyparts, axis=1):
     reindexed_data: ndarray or dict
         Keypoint coordinates in the same form as ``data`` with
         reindexing applied
-
     """
     ix = np.array([bodyparts.index(bp) for bp in use_bodyparts])
     if isinstance(data, np.ndarray): return np.take(data, ix, axis)
@@ -525,9 +517,7 @@ def get_trajectories(syllable_instances, coordinates, pre=0, post=None,
         Dictionary similar to ``syllable_instances``, but now mapping
         each syllable to a list or array of trajectories (a list is used
         when ``post=None``, else an array)
-
     """
-
     if centroids is not None and headings is not None:
         centroids,headings = filter_centroids_headings(
             centroids, headings, filter_size=filter_size)
@@ -560,7 +550,7 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     Sample a fixed number of instances for each syllable.
 
     Parameters
-    -------
+    ----------
     syllable_instances: dict
         Mapping from each syllable to a list of instances, where each
         instance is a tuple of the form (name,start,end)
@@ -568,18 +558,15 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     num_samples: int
         Number of samples return for each syllable
 
-    mode: str
-        One of the following sampling methods
-
-        'random'
-            Instances are chosen randomly (without replacement)
-
-        'density'
-            For each syllable, a syllable-specific density function is
-            computed in trajectory space and compared to the overall
-            density across all syllables. An exemplar instance that 
-            maximizes this ratio is chosen for each syllable, and
-            its nearest neighbors are randomly sampled. 
+    mode: str, {'random', 'density'}, default='random'
+        Sampling method to use. Options are:
+        
+        - 'random': Instances are chosen randomly (without replacement)
+        - 'density': For each syllable, a syllable-specific density function is
+          computed in trajectory space and compared to the overall
+          density across all syllables. An exemplar instance that 
+          maximizes this ratio is chosen for each syllable, and
+          its nearest neighbors are randomly sampled. 
 
     pca_samples: int, default=50000
         Number of trajectories to sample when fitting a PCA model for 
@@ -594,32 +581,30 @@ def sample_instances(syllable_instances, num_samples, mode='random',
         sampling the neighbors of the examplar syllable instance
         (used when ``mode='density'``)
 
-    The remaining parameters are passed to :py:func:`keypoint_moseq.util.get_trajectories`
+    coordinates, pre, pos, centroids, heading, filter_size
+        Passed to :py:func:`keypoint_moseq.util.get_trajectories`
 
     Returns
     -------
     sampled_instances: dict
         Dictionary in the same format as ``syllable_instances`` mapping
         each syllable to a list of sampled instances.
-
     """
     assert mode in ['random','density']
     assert all([len(v)>=num_samples for v in syllable_instances.values()])
     assert n_neighbors>=num_samples
-    
-    if mode=='density': 
-        assert not (coordinates is None or headings is None or centroids is None), fill(
-            '``coordinates``, ``headings`` and ``centroids`` are required when '
-            '``mode == "density"``')
-    
+
     if mode=='random':
         sampled_instances = {syllable: [instances[i] for i in np.random.choice(
             len(instances), num_samples, replace=False
         )] for syllable,instances in syllable_instances.items()}
         return sampled_instances
     
-    
-    else:
+    elif mode=='density':
+        assert not (coordinates is None or headings is None or centroids is None), fill(
+            '``coordinates``, ``headings`` and ``centroids`` are required when '
+            '``mode == "density"``')
+
         trajectories = get_trajectories(
             syllable_instances, coordinates, pre=pre, post=post, 
             centroids=centroids, headings=headings, filter_size=filter_size)
@@ -649,4 +634,7 @@ def sample_instances(syllable_instances, num_samples, mode='random',
             sampled_trajectories[syllable] = [syllable_trajectories[syllable][i] for i in samples]
         
         return sampled_instances
+
+    else:
+        raise ValueError('Invalid mode: {}'.format(mode))
 

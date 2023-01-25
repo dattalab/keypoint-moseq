@@ -13,7 +13,7 @@ from keypoint_moseq.io import save_checkpoint, format_data, save_hdf5
 from keypoint_moseq.util import get_durations, batch, unbatch, get_frequencies, pad_along_axis
 from jax_moseq.models.keypoint_slds import estimate_coordinates, resample_model, init_model
 
-def update_history(history, iteration, model, include_states=True): 
+def _update_history(history, iteration, model, include_states=True): 
     
     model_snapshot = {
         'params': jax.device_get(model['params']),
@@ -46,8 +46,97 @@ def fit_model(model,
               plot_every_n_iters=10,  
               save_progress_figs=True,
               **kwargs):
+
+    """
+    Fit a model to data.
     
-    
+    This method optionally:
+        - saves checkpoints of the model and data at regular intervals
+          (see :py:func:`jax_moseq.io.save_checkpoint`)
+        - plots of the model's progress during fitting (see 
+          :py:func:`jax_moseq.viz.plot_progress`)
+        - saves a history of the model's states and parameters at 
+          regular intervals
+
+    Parameters
+    ----------
+    model : dict
+        Model dictionary containing states, parameters, hyperparameters, 
+        noise prior, and random seed. 
+
+    data: dict, labels: list of tuples
+        See :py:func:`keypoint_moseq.io.format_data`
+
+    start_iter : int, default=0
+        Index of the starting iteration, which is non-zero when continuing
+        a previous fit.
+
+    history : dict, default=None
+        Dictionary containing the history of the model's states and
+        parameters, (see Returns for the format). If None, a new empty
+        history is created.
+
+    verbose : bool, default=True
+        If True, print the model's progress during fitting.
+
+    num_iters : int, default=50
+        Number of Gibbs sampling iterations to run.
+
+    ar_only : bool, default=False
+        If True, fit an AR-HMM model using the latent trajectory
+        defined by ``model['states']['x']`` (see 
+        :py:func:`jax_moseq.models.arhmm.resample_model`).
+        Otherwise fit a full keypoint-SLDS model
+        (see :py:func:`jax_moseq.models.keypoint_slds.resample_model`)
+
+    name : str, default=None
+        Name of the model. If None, rhe model is named using the current
+        date and time.
+
+    project_dir : str, default=None
+        Project directory; required if ``save_every_n_iters>0`` or
+        ``save_progress_figs=True``.
+
+    save_data : bool, default=True
+        If True, include the data in the checkpoint.
+
+    save_states : bool, default=True
+        If True, include the model's states in the checkpoint.
+
+    save_history : bool, default=True
+        If True, include the model's history in the checkpoint.
+
+    save_every_n_iters : int, default=10
+        Save a checkpoint every ``save_every_n_iters``
+
+    history_every_n_iters : int, default=10
+        Update the model's history every ``history_every_n_iters``. E.g.,
+        if ``history_every_n_iters=10``, the history will contain snapshots 
+        from iterations 0, 10, 20, etc.
+
+    states_in_history : bool, default=True
+        If True, include the model's states in the history.
+
+    plot_every_n_iters : int, default=10
+        Plot the model's progress every ``plot_every_n_iters``.
+
+    save_progress_figs : bool, default=True
+        If True, save the progress plots to disk.
+        
+    Returns
+    -------
+    model : dict
+        Model dictionary containing states, parameters, hyperparameters,
+        noise prior, and random seed.
+
+    history : dict
+        Snapshots of the model over the course of fitting, represented as
+        a dictionary with keys corresponding to the iteration number and
+        values corresponding to copies of the ``model`` dictionary.
+
+    name : str
+        Name of the model.
+    """
     if save_every_n_iters>0 or save_progress_figs:
         assert project_dir, fill(
             'To save checkpoints or progress plots during fitting, provide '
@@ -64,7 +153,7 @@ def fit_model(model,
 
     for iteration in tqdm.trange(start_iter, num_iters+1):
         if history_every_n_iters>0 and (iteration%history_every_n_iters)==0:
-            history = update_history(history, iteration, model, 
+            history = _update_history(history, iteration, model, 
                                      include_states=states_in_history)
             
         if plot_every_n_iters>0 and (iteration%plot_every_n_iters)==0:
@@ -84,7 +173,7 @@ def fit_model(model,
     
 def resume_fitting(*, params, hypparams, labels, iteration, mask,
                    conf, Y, seed, noise_prior=None, states=None, **kwargs):
-    
+    """Resume fitting a model from a checkpoint."""
     data = jax.device_put({'Y':Y, 'conf':conf, 'mask':mask})
     
     model = init_model(data, states, params, hypparams,
@@ -93,14 +182,92 @@ def resume_fitting(*, params, hypparams, labels, iteration, mask,
     return fit_model(model, data, labels, start_iter=iteration+1, **kwargs)
 
 
-def apply_model(*, params, coordinates, confidences=None,
-                num_iters=5, use_saved_states=True, states=None, 
-                mask=None, labels=None, ar_only=False, 
-                random_seed=0, seg_length=None, save_results=True,
-                project_dir=None, name=None, results_path=None, 
-                Y=None, conf=None, noise_prior=None, **kwargs):   
-    
-    
+def apply_model(*, params, coordinates, confidences=None, num_iters=5, 
+                use_saved_states=True, states=None, mask=None, labels=None, 
+                ar_only=False, save_results=True, project_dir=None, 
+                name=None, results_path=None, **kwargs):   
+    """
+    Apply a model to data.
+
+    There are two scenarios for applying this function:
+        - The model is being applied to the same data it was fit to.
+            This would useful if the the data was chunked into segments
+            to allow parallelization during fitting. In this case,
+            set ``use_saved_states=True`` and provide ``states``.
+        - The model is being applied to new data. In this case,
+            set ``use_saved_states=False``.
+
+    Model outputs are saved to disk as a .h5 file, either at ``results_path``
+    if it is specified, or at ``{project_dir}/{name}/results.h5`` if it is not.
+    The results have the following structure::
+
+        results.h5
+        ├──session_name1
+        │  ├──syllables             # model state sequence (z), shape=(T,)
+        │  ├──syllables_reindexed   # states reindexed by frequency, shape=(T,)
+        │  ├──estimated_coordinates # model predicted coordinates, shape=(T,n_keypoints,2)
+        │  ├──latent_state          # model latent state (x), shape=(T,latent_dim)
+        │  ├──centroid              # model centroid (v), shape=(T,2)
+        │  └──heading               # model heading (h), shape=(T,)
+        ⋮
+
+    Parameters
+    ----------
+    params : dict
+        Model parameters.
+
+    coordinates: dict
+        Dictionary mapping filenames to keypoint coordinates as ndarrays
+        of shape (n_frames, n_bodyparts, 2)
+
+    confidences: dict, default=None
+        Dictionary mapping filenames to keypoint confidences as ndarrays
+        of shape (n_frames, n_bodyparts)
+
+    num_iters : int, default=5
+        Number of iterations to run the model. We recommend 5 iterations
+        for data the model has already been fit to, and a higher number
+        (e.g. 10-20) for new data.
+
+    use_saved_states : bool, default=True
+        If True, and ``states`` is provided, the model will be initialized
+        with the saved states. 
+
+    states : dict, default=None
+        Dictionary of saved states. 
+
+    mask: ndarray, default=None
+        Binary mask indicating areas of padding in ``states``
+        (see :py:func:`keypoint_moseq.util.batch`).
+
+    labels: list
+        Row labels ``states``
+        (see :py:func:`keypoint_moseq.util.batch`).
+
+    ar_only : bool, default=False
+        See :py:func:`keypoint_moseq.fitting.fit_model`.
+
+    save_results : bool, default=True
+        If True, the model outputs will be saved to disk.
+
+    project_dir : str, default=None
+        Path to the project directory. Required if ``save_results=True``
+        and ``results_path=None``.
+
+    name : str, default=None
+        Name of the model. Required if ``save_results=True``
+        and ``results_path=None``.
+
+    results_path : str, default=None
+        Optional path for saving model outputs.
+
+    Returns
+    -------
+    results_dict : dict
+        Dictionary of model outputs with the same structure as the
+        results ``.h5`` file.
+    """
+
     data, new_labels = format_data(
         coordinates, confidences=confidences, seg_length=None, **kwargs)
     session_names = [key for key,start,end in new_labels]
@@ -139,8 +306,8 @@ def apply_model(*, params, coordinates, confidences=None,
     
     mask = np.array(data['mask'])
     frequency = get_frequencies(states['z'], mask)
-    reindex = np.argsort(np.argsort(frequency)[::-1])
-    z_reindexed = reindex[states['z']]
+    new_index = np.argsort(np.argsort(frequency)[::-1])
+    z_reindexed = new_index[states['z']]
     
     results_dict = {
         session_name : {
@@ -160,7 +327,28 @@ def apply_model(*, params, coordinates, confidences=None,
 
 
 def revert(checkpoint, iteration):
-    
+    """
+    Revert a checkpoint to an earlier iteration.
+
+    The checkpoint will revert to latest iteration stored in the 
+    fitting history that is less than or equal to ``iteration``.
+    The model parameters, seed, and iteration number will be updated
+    accordingly. The fitting history will be truncated to remove
+    all iterations after the reverted iteration.
+
+    Parameters
+    ----------
+    checkpoint : dict
+        See :py:func:`keypoint_moseq.io.save_checkpoint`.
+
+    iteration : int
+        Iteration to revert to.
+
+    Returns
+    -------
+    checkpoint : dict
+        Reverted checkpoint.
+    """
     assert len(checkpoint['history'])>0, fill(
         'No history was saved during fitting')
     
@@ -183,7 +371,29 @@ def revert(checkpoint, iteration):
     
     
 def update_hypparams(model_dict, **kwargs):
-    
+    """
+    Edit the hyperparameters of a model.
+
+    Hyperparameters are stored as a nested dictionary in the
+    ``hypparams`` key of the model dictionary. This function
+    allows the user to update the hyperparameters of a model
+    by passing in keyword arguments with the same name as the
+    hyperparameter. The hyperparameter will be updated if it
+    is a scalar value.
+
+    Parameters
+    ----------
+    model_dict : dict
+        Model dictionary.
+
+    kwargs : dict
+        Keyword arguments mapping hyperparameter names to new values.
+
+    Returns
+    -------
+    model_dict : dict
+        Model dictionary with updated hyperparameters.
+    """
     assert 'hypparams' in model_dict, fill(
         'The inputted model/checkpoint does not contain any hyperparams')
     
@@ -191,7 +401,7 @@ def update_hypparams(model_dict, **kwargs):
     
     for hypparms_group in model_dict['hypparams']:
         for k,v in kwargs.items():
-            
+    
             if k in model_dict['hypparams'][hypparms_group]:
                 
                 old_value = model_dict['hypparams'][hypparms_group][k]
