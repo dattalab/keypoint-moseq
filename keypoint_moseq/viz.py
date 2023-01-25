@@ -965,7 +965,7 @@ def overlay_keypoints_on_video(
             output_path, pixelformat='yuv420p', 
             fps=fps, quality=quality) as writer:
 
-            for frame in frames:
+            for frame in tqdm.tqdm(frames):
                 image = reader.get_data(frame)
 
                 image = overlay_keypoints(
