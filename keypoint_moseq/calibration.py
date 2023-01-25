@@ -8,7 +8,41 @@ from keypoint_moseq.util import find_matching_videos
 
 def sample_error_frames(confidences, bodyparts, use_bodyparts,
                         num_bins=10, num_samples=100, num_videos=10):
-    
+    """
+    Randomly sample frames, enriching for those with low confidence 
+    keypoint detections.
+
+    Parameters
+    ----------
+    confidences: dict
+        Keypoint detection confidences for a collection of sessions 
+
+    bodyparts: list
+        Label for each keypoint represented in ``confidences``
+
+    use_bodyparts: list
+        Ordered subset of keypoint labels to be used for modeling
+
+    num_bins: int, default=10
+        Number of bins to use for enriching low-confidence keypoint
+        detections. Confidence values for all used keypoints are 
+        divided into log-spaced bins and an equal number of instances
+        are sampled from each bin.
+
+    num_samples: int, default=100
+        Total number of frames to sample
+
+    num_videos: int, default=10
+        Maximum number of videos to use. Fewer videos helps with
+        faster frame loading.
+        
+    Returns
+    -------
+    sample_keys: list of tuples
+        List of sampled frames as tuples with format 
+        (key, frame_number, bodypart)
+
+    """
     all_videos = sorted(confidences.keys())
     num_videos = min(num_videos, len(all_videos))
     use_videos = np.random.choice(all_videos, num_videos, replace=False)
@@ -34,7 +68,27 @@ def sample_error_frames(confidences, bodyparts, use_bodyparts,
     sample_keys = [sample_keys[i] for i in np.random.permutation(len(sample_keys))]    
     return sample_keys
 
-def load_sample_images(sample_keys, video_dir):
+
+def load_sampled_frames(sample_keys, video_dir):
+    """
+    Load sampled frames from a directory of videos.
+
+    Parameters
+    ----------
+    sample_keys: list of tuples
+        List of sampled frames as tuples with format 
+        (key, frame_number, bodypart)
+
+    video_dir: str
+        Path to directory containing videos
+
+    Returns
+    -------
+    sample_keys: dict
+        Dictionary mapping elements from ``sample_keys`` to the
+        corresponding videos frames.
+
+    """
     keys = sorted(set([k[0] for k in sample_keys]))
     videos = find_matching_videos(keys,video_dir)
     key_to_video = dict(zip(keys,videos))
@@ -44,6 +98,21 @@ def load_sample_images(sample_keys, video_dir):
 
 
 def load_annotations(project_dir):
+    """
+    Reload saved calibration annotations.
+
+    Parameters
+    ----------
+    project_dir: str
+        Load annotations from ``{project_dir}/error_annotations.csv``
+
+    Returns
+    -------
+    annotations: dict
+        Dictionary mapping sample keys to annotated keypoint 
+        coordinates. (See :py:func:`keypoint_moseq.calibration.sample_error_frames` 
+        for format of sample keys)
+    """   
     annotations = {}
     annotations_path = os.path.join(
         project_dir,'error_annotations.csv')
@@ -55,6 +124,19 @@ def load_annotations(project_dir):
     return annotations
         
 def save_annotations(project_dir, annotations): 
+    """
+    Save calibration annotations to a csv file
+
+    Parameters
+    ----------
+    project_dir: str
+        Save annotations to ``{project_dir}/error_annotations.csv`` 
+
+    annotations: dict
+        Dictionary mapping sample keys to annotated keypoint 
+        coordinates. (See :py:func:`keypoint_moseq.calibration.sample_error_frames` 
+        for format of sample keys)
+    """
     output = ['key,frame,bodypart,x,y']
     for (key,frame,bodypart),(x,y) in annotations.items():
         output.append(f'{key},{frame},{bodypart},{x},{y}')
@@ -63,14 +145,25 @@ def save_annotations(project_dir, annotations):
     print(fill(f'Annotations saved to {path}'))
     
 def save_params(project_dir, estimator):
+    """
+    Save config parameters learned via calibration
+
+    Parameters
+    ----------
+    project_dir: str
+        Save parameters ``{project_dir}/config.yml`` 
+
+    estimator: :py:func:`holoviews.streams.Stream`
+        Stream object with fields ``conf_threshold``, ``slope``, ``intercept``
+    """
     update_config(project_dir, 
                   conf_threshold=float(estimator.conf_threshold),
                   slope=float(estimator.slope), 
                   intercept=float(estimator.intercept))
 
 
-def confs_and_dists_from_annotations(coordinates, confidences, 
-                                     annotations, bodyparts):
+def _confs_and_dists_from_annotations(coordinates, confidences, 
+                                      annotations, bodyparts):
     confs,dists = [],[]
     for (key,frame,bodypart),xy in annotations.items():
         k = bodyparts.index(bodypart)
@@ -79,11 +172,11 @@ def confs_and_dists_from_annotations(coordinates, confidences,
     return confs,dists
 
 
-def noise_calibration_widget(project_dir, coordinates, confidences,
-                             sample_keys, sample_images, annotations, *, 
-                             keypoint_colormap, bodyparts, skeleton, 
-                             error_estimator, conf_threshold, 
-                             conf_pseudocount, **kwargs):
+def _noise_calibration_widget(project_dir, coordinates, confidences,
+                              sample_keys, sample_images, annotations, *, 
+                              keypoint_colormap, bodyparts, skeleton, 
+                              error_estimator, conf_threshold, 
+                              conf_pseudocount, **kwargs):
     
     from scipy.stats import linregress
     from holoviews.streams import Tap, Stream
@@ -111,7 +204,7 @@ def noise_calibration_widget(project_dir, coordinates, confidences,
     
     def update_scatter(x,y, annotations):
         
-        confs,dists = confs_and_dists_from_annotations(
+        confs,dists = _confs_and_dists_from_annotations(
             coordinates, confidences, annotations, bodyparts)
         
         log_dists = np.log10(np.array(dists)+1)
@@ -249,13 +342,66 @@ def noise_calibration_widget(project_dir, coordinates, confidences,
 
 def noise_calibration(project_dir, coordinates, confidences, *, 
                       bodyparts, use_bodyparts, video_dir, **kwargs):
+    """
+    Perform manual annotation to calibrate the relationship between
+    keypoint error and neural network confidence. 
 
+    This function creates a widget for interactive annotation in a 
+    jupyter notebook. Users mark correct keypoint locations for a 
+    sequence of frames, and a regression line is fit to the 
+    ``log(confidence), log(error)`` pairs obtained through annotation.
+    The regression coefficients are used during modeling to set a 
+    prior on the noise level for each keypoint on each frame. 
+
+    Follow these steps to use the widget:
+        - After executing this function, a widget should appear with a 
+          video frame in the center.
+        - Annotate the labeled bodypart in each frame by left-clicking 
+          at the correct location. An "X" should appear there.
+        - Use the arrow buttons and/or sample slider on the left to 
+          annotate additional frames.
+        - Each annotation adds a point to the right-hand scatter plot. 
+          Continue until the regression line stabilizes.
+        - At any point, adjust the confidence threshold by clicking on 
+          the scatter plot. The confidence threshold is used to define 
+          outlier keypoints for PCA and model initialization.
+        - Use the "save" button to store your annotations to disk and 
+          save ``slope``, ``intercept``, and ``confidence_threshold``
+          to the config.
+
+
+    Parameters
+    ----------
+    project_dir: str
+        Project directory. Must contain a ``config.yml`` file.
+
+    coordinates: dict
+        Keypoint coordinates for a collection of sessions. Values
+        must be numpy arrays of shape (T,K,D) where K is the number
+        of keypoints and D={2 or 3}. Keys can be any unique str,
+        but must start with the name of a videofile in ``video_dir``. 
+
+    confidences: dict
+        Nonnegative confidence values for the keypoints in 
+        ``coordinates`` as numpy arrays of shape (T,K).
+
+    bodyparts: list
+        Label for each keypoint represented in ``coordinates``
+
+    use_bodyparts: list
+        Ordered subset of keypoint labels to be used for modeling
+
+    video_dir: str
+        Path to directory containing videos. Each video should
+        correspond to a key in ``coordinates``. The key must
+        contain the videoname as a prefix. 
+    """
     sample_keys = sample_error_frames(confidences, bodyparts, use_bodyparts)
     annotations = load_annotations(project_dir)
     sample_keys.extend(annotations.keys())
-    sample_images = load_sample_images(sample_keys, video_dir)
+    sample_images = load_sampled_frames(sample_keys, video_dir)
 
-    return noise_calibration_widget(
+    return _noise_calibration_widget(
         project_dir, coordinates, confidences, sample_keys, 
         sample_images, annotations, bodyparts=bodyparts, **kwargs)
 

@@ -18,7 +18,7 @@ from vidio.read import OpenCVReader
 from keypoint_moseq.util import batch, reindex_by_bodyparts
 warnings.formatwarning = lambda msg, *a: str(msg)
 
-def build_yaml(sections, comments):
+def _build_yaml(sections, comments):
     text_blocks = []
     for title,data in sections:
         centered_title = f' {title} '.center(50, '=')
@@ -32,24 +32,22 @@ def build_yaml(sections, comments):
 
 def generate_config(project_dir, **kwargs):
     """
-    Generate a config.yml file with project settings.
-    Default settings will be used unless overriden by 
-    a keywork argument.
+    Generate a ``config.yml`` file with project settings. Default 
+    settings will be used unless overriden by a keywork argument.
     
     Parameters
     ----------
     project_dir: str 
         A file ``config.yml`` will be generated in this directory.
     
-    **kwargs
-        Custom project settings.
-        
+    kwargs
+        Custom project settings.  
     """
     
-    def update_dict(new, original):
+    def _update_dict(new, original):
         return {k:new[k] if k in new else v for k,v in original.items()} 
     
-    hypperams = {k: update_dict(kwargs,v) for k,v in {
+    hypperams = {k: _update_dict(kwargs,v) for k,v in {
         'error_estimator': {'slope':1, 'intercept':1},
         'obs_hypparams': {'sigmasq_0':0.1, 'sigmasq_C':.1, 'nu_sigma':1e5, 'nu_s':5},
         'ar_hypparams': {'latent_dim': 10, 'nlags': 3, 'S_0_scale': 0.01, 'K_0_scale': 10.0},
@@ -57,14 +55,14 @@ def generate_config(project_dir, **kwargs):
         'cen_hypparams': {'sigmasq_loc': 0.5}
     }.items()}
 
-    anatomy = update_dict(kwargs, {
+    anatomy = _update_dict(kwargs, {
         'bodyparts': ['BODYPART1','BODYPART2','BODYPART3'],
         'use_bodyparts': ['BODYPART1','BODYPART2','BODYPART3'],
         'skeleton': [['BODYPART1','BODYPART2'], ['BODYPART2','BODYPART3']],
         'anterior_bodyparts': ['BODYPART1'],
         'posterior_bodyparts': ['BODYPART3']})
         
-    other = update_dict(kwargs, {
+    other = _update_dict(kwargs, {
         'verbose':True,
         'conf_pseudocount': 1e-3,
         'video_dir': '',
@@ -72,7 +70,7 @@ def generate_config(project_dir, **kwargs):
         'whiten': True,
         'seg_length': 10000 })
        
-    fitting = update_dict(kwargs, {
+    fitting = _update_dict(kwargs, {
         'added_noise_level': 0.1,
         'PCA_fitting_num_frames': 1000000,
         'conf_threshold': 0.5,
@@ -113,14 +111,35 @@ def generate_config(project_dir, **kwargs):
     ]
 
     with open(os.path.join(project_dir,'config.yml'),'w') as f: 
-        f.write(build_yaml(sections, comments))
+        f.write(_build_yaml(sections, comments))
                           
         
 def check_config_validity(config):
+    """
+    Check if the config is valid.
+
+    To be valid, the config must satisfy the following criteria:
+        - All the elements of ``config["use_bodyparts"]`` are 
+          also in ``config["bodyparts"]`` 
+        - All the elements of ``config["anterior_bodyparts"]`` are
+          also in ``config["bodyparts"]`` 
+        - All the elements of ``config["anterior_bodyparts"]`` are
+          also in ``config["bodyparts"]`` 
+        - For each pair in ``config["skeleton"]``, both elements 
+          also in ``config["bodyparts"]`` 
+
+    Parameters
+    ----------
+    config: dict 
+
+    Returns
+    -------
+    validity: bool
+    """
+
     error_messages = []
     
     # check anatomy
-    
     for bodypart in config['use_bodyparts']:
         if not bodypart in config['bodyparts']:
             error_messages.append(           
@@ -147,14 +166,35 @@ def check_config_validity(config):
 
     if len(error_messages)>0: 
         print('')
+        return True
     for msg in error_messages: 
         print(fill(msg, width=70, subsequent_indent='  '), end='\n\n')
+        return False
             
 
 def load_config(project_dir, check_if_valid=True, build_indexes=True):
     """
-    Load config.yml from ``project_dir`` and return
-    the resulting dict. Optionally check if the config is valid. 
+    Load a project config file.
+
+    Parameters
+    ----------
+    project_dir: str
+        Directory containing the config file
+        
+    check_if_valid: bool, default=True
+        Check if the config is valid using 
+        :py:func:`keypoint_moseq.io.check_config_validity`
+        
+    build_indexes: bool, default=True
+        Add keys ``"anterior_idxs"`` and ``"posterior_idxs"`` to the 
+        config. Each maps to a jax array indexing the elements of 
+        ``config["anterior_bodyparts"]`` and 
+        ``config["posterior_bodyparts"]`` by their order in 
+        ``config["use_bodyparts"]``
+
+    Returns
+    -------
+    config: dict
     """
     config_path = os.path.join(project_dir,'config.yml')
     
@@ -174,8 +214,8 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
 
 def update_config(project_dir, **kwargs):
     """
-    Update config.yml from ``project_dir`` to include
-    all the key/value pairs in **kwargs.
+    Update ``config.yml`` from ``project_dir`` to include
+    all the key/value pairs in ``kwargs``.
     """
     config = load_config(project_dir, check_if_valid=False, build_indexes=False)
     config.update(kwargs)
@@ -185,11 +225,10 @@ def update_config(project_dir, **kwargs):
 def setup_project(project_dir, deeplabcut_config=None, 
                   overwrite=False, **options):
     """
-    Setup a project directory with the following structure
-    ```
+    Setup a project directory with the following structure::
+
         project_dir
         └── config.yml
-    ```
     
     Parameters
     ----------
@@ -199,18 +238,20 @@ def setup_project(project_dir, deeplabcut_config=None,
     deeplabcut_config: str, default=None
         Path to a deeplabcut config file. Relevant settings will be
         imported and used to initialize the keypoint MoSeq config.
-        (overrided by **kwargs)
+        (overrided by kwargs)
         
     overwrite: bool, default=False
         Overwrite any config.yml that already exists at the path
-        ``[project_dir]/config.yml``
+        ``{project_dir}/config.yml``
         
-    **options
-        Used to initialize config file
+    options
+        Used to initialize config file. Overrides default settings
     """
 
     if os.path.exists(project_dir) and not overwrite:
-        print(fill(f'The directory `{project_dir}` already exists. Use `overwrite=True` or pick a different name for the project directory'))
+        print(fill(
+            f'The directory `{project_dir}` already exists. Use '
+            '`overwrite=True` or pick a different name'))
         return
         
     if deeplabcut_config is not None: 
@@ -220,12 +261,13 @@ def setup_project(project_dir, deeplabcut_config=None,
             
             if dlc_config is None:
                 raise RuntimeError(
-                    f'{deeplabcut_config} does not exists or is not a valid yaml file')
+                    f'{deeplabcut_config} does not exists or is not a'
+                    ' valid yaml file')
                 
             if 'multianimalproject' in dlc_config and dlc_config['multianimalproject']:
                 raise NotImplementedError(
-                    'Config initialization from multi-animal deeplabcut '
-                    'projects is not yet supported')
+                    'Config initialization from multi-animal deeplabcut'
+                    ' projects is not yet supported')
                 
             dlc_options['bodyparts'] = dlc_config['bodyparts']
             dlc_options['use_bodyparts'] = dlc_config['bodyparts']
@@ -243,42 +285,44 @@ def format_data(coordinates, *, confidences=None, keys=None,
                 seg_length, bodyparts, use_bodyparts,
                 conf_pseudocount=1e-3, added_noise_level=0.1, **kwargs):
     """
-    Stacks variable-length time-series of keypoint coordinates into a
-    single array for batch processing, optionally breaking each one into
-    segments of fixed length. The is done for keypoint confidences if
-    they are provided. Keypoints are also subsetted/reordered based on 
-    ``use_bodyparts``. 0-padding ensures that the resulting arrays are
-    not ragged. 
+    Format keypoint coordinates and confidences for inference.
+
+    Data are transformed as follows:
+        1. Coordinates and confidences are each merged into a single 
+           array using :py:func:`keypoint_moseq.util.batch`. 
+        2. The keypoints axis is reindexed according to the order
+           of elements in ``use_bodyparts`` with respect to their 
+           initial orer in ``bodyparts``.
+        3. Uniform noise proportional to ``added_noise_level`` is
+           added to the keypoint coordinates to prevent degenerate
+           solutions during fitting. 
+        4. Keypoint confidences are augmented by ``conf_pseudocount``.
     
     Parameters
     ----------
     coordinates: dict
         Keypoint coordinates for a collection of sessions. Values
         must be numpy arrays of shape (T,K,D) where K is the number
-        of keypoints and D={2 or 3}. Keys can be any unique str,
-        but must the name of a videofile to enable downstream analyses
-        such as crowd movies. 
+        of keypoints and D={2 or 3}. 
         
     confidences: dict, default=None
-        Neural network confidences for a collection of sessions. Values
-        must be numpy arrays of shape (T,K) that match the corresponding 
-        arrays in ``coordinates``. 
+        Nonnegative confidence values for the keypoints in 
+        ``coordinates`` as numpy arrays of shape (T,K).
         
-    bodyparts: list of str
-        Name of each keypoint. Should have length K corresponding to
-        the shape of arrays in ``coordinates``.
+    keys: list of str, default=None
+        (See :py:func:`keypoint_moseq.util.batch`)
         
-    use_bodyparts: list of str
-        Names of keypoints to use for modeling. Should be a subset of 
-        ``bodyparts``.
+    seg_length: int
+        (See :py:func:`keypoint_moseq.util.batch`)
         
-    keys: list, default=None
-        Specifies a subset of sessions to include and the order in which
-        to stack them. If ``keys=None``, all sessions will be used and 
-        ordered using ``sorted``.
+    bodyparts: list
+        Label for each keypoint represented in ``coordinates``
+
+    use_bodyparts: list
+        Ordered subset of keypoint labels to be used for modeling
         
     conf_pseudocount: float, default=1e-3
-        Pseudocount neural network confidences.
+        Pseudocount used to augment keypoint confidences.
     
     seg_length: int, default=None
         Length of each segment. If ``seg_length=None``, a length is 
@@ -289,22 +333,22 @@ def format_data(coordinates, *, confidences=None, keys=None,
     data: dict with the following items
     
         Y: numpy array with shape (n_segs, seg_length, K, D)
-            Keypoint coordinates from all sessions broken into segments.
+            Keypoint coordinates from all sessions broken into 
+            fixed-length segments.
             
         conf: numpy array with shape (n_segs, seg_length, K)
-            Confidences from all sessions broken into segments. If no 
-            input is provided for ``confidences``, ``conf`` will be set
-            to ``None``. Note that confidences are increased by 
-            ``conf_pseudocount``.
+            Confidences from all sessions broken into fixed-length 
+            segments. If no input is provided for ``confidences``, 
+            then ``data["conf"]=None``.
         
         mask: numpy array with shape (n_segs, seg_length)
-            Binary array where 0 indicates areas of padding.
+            Binary array where 0 indicates areas of padding 
+            (see :py:func:`keypoint_moseq.util.batch`).
             
         labels: list of tuples (object, int, int)
-            The location in ``data_dict`` that each segment came from
-            in the form of tuples (key, start, end).
+            Label for each row of ``Y`` and ``conf`` 
+            (see :py:func:`keypoint_moseq.util.batch`).
     """    
-    
     if keys is None: keys = sorted(coordinates.keys()) 
     coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
@@ -326,11 +370,38 @@ def format_data(coordinates, *, confidences=None, keys=None,
 
 
 def save_pca(pca, project_dir, pca_path=None):
+    """
+    Save a PCA model to disk.
+
+    The model is saved to ``pca_path`` or else to 
+    ``{project_dir}/pca.p``.
+    
+    Parameters
+    ----------
+    pca: :py:class:`sklearn.decomposition.PCA`
+    project_dir: str
+    pca_path: str, default=None
+    """
     if pca_path is None: 
         pca_path = os.path.join(project_dir,'pca.p')
     joblib.dump(pca, pca_path)
     
 def load_pca(project_dir, pca_path=None):
+    """
+    Load a PCA model from disk.
+
+    The model is loaded from ``pca_path`` or else from 
+    ``{project_dir}/pca.p``.
+
+    Parameters
+    ----------
+    project_dir: str
+    pca_path: str, default=None
+
+    Returns
+    -------
+    pca: :py:class:`sklearn.decomposition.PCA`
+    """ 
     if pca_path is None:
         pca_path = os.path.join(project_dir,'pca.p')
         assert os.path.exists(pca_path), fill(
@@ -339,6 +410,28 @@ def load_pca(project_dir, pca_path=None):
 
 
 def load_last_checkpoint(project_dir):
+    """
+    Load checkpoint for the most recent model.
+
+    This method assumes the following directory structure for saved
+    model checkpoints::
+
+        project_dir
+        ├──YYYY_MM_DD-HH_MM_SS
+        │  └checkpoint.p
+        ⋮
+        └──YYYY_MM_DD-HH_MM_SS
+           └checkpoint.p
+
+    Parameters
+    ----------
+    project_dir: str
+
+    Returns
+    -------
+    checkpoint: dict
+        (See :py:func:`keypoint_moseq.io.load_checkpoint`)
+    """ 
     pattern = re.compile(r'(\d{4}_\d{1,2}_\d{1,2}-\d{2}_\d{2}_\d{2})')
     paths = list(filter(lambda p: pattern.search(p), os.listdir(project_dir)))
     assert len(paths)>0, fill(
@@ -354,8 +447,24 @@ def load_last_checkpoint(project_dir):
     return load_checkpoint(path=path), name
 
 
-
 def load_checkpoint(project_dir=None, name=None, path=None):
+    """
+    Load model fitting checkpoint.
+
+    The checkpoint path can be specified directly via ``path``.
+    Othewise is assumed to be ``{project_dir}/<name>/checkpoint.p``.
+
+    Parameters
+    ----------
+    project_dir: str, default=None
+    name: str, default=None
+    path: str, default=None
+
+    Returns
+    -------
+    checkpoint: dict
+        See :py:func:`keypoint_moseq.io.save_checkpoint`
+    """
     if path is None: 
         assert project_dir is not None and name is not None, fill(
             '``name`` and ``project_dir`` are required if no ``path`` is given.')
@@ -366,6 +475,57 @@ def load_checkpoint(project_dir=None, name=None, path=None):
 def save_checkpoint(model, data, history, labels, iteration, 
                     path=None, name=None, project_dir=None,
                     save_history=True, save_states=True, save_data=True):
+    """
+    Save a checkpoint during model fitting.
+
+    A single checkpoint file contains model snapshots from the full history
+    of model fitting. To restart fitting from an iteration earlier than the
+    last iteration, use :py:func:`keypoint_moseq.fitting.revert``.
+
+    The checkpoint path can be specified directly via ``path``.
+    Otherwise is assumed to be ``{project_dir}/<name>/checkpoint.p``. See
+    :py:func:`keypoint_moseq.fitting.fit_model` for a more detailed
+    description of the checkpoint contents.
+
+    Parameters
+    ----------
+    model: dict, history: dict
+        See :py:func:`keypoint_moseq.fitting.fit_model`
+
+    data: dict, labels: list of tuples
+        See :py:func:`keypoint_moseq.io.format_data`
+
+    iteration: int
+        Current iteration of model fitting
+
+    save_history: bool, default=True
+        Whether to include ``history`` in the checkpoint
+
+    save_states: bool, default=True
+        Whether to include ``states`` in the checkpoint
+
+    save_data: bool, default=True
+        Whether to include ``Y``, ``conf``, and ``mask`` in the checkpoint
+    
+    project_dir: str, default=None
+        Project directory; used in conjunction with ``name`` to determine
+        the checkpoint path if ``path`` is not specified.
+
+    name: str, default=None
+        Model name; used in conjunction with ``project_dir`` to determine
+        the checkpoint path if ``path`` is not specified.
+
+    path: str, default=None
+        Checkpoint path; if not specified, the checkpoint path is determined
+        from ``project_dir`` and ``name``.
+
+
+    Returns
+    -------
+    checkpoint: dict
+        Dictionary containing ``history``, ``labels`` and ``name`` as 
+        well as the key/value pairs from ``model`` and ``data``.
+    """
     
     if path is None: 
         assert project_dir is not None and name is not None, fill(
@@ -399,9 +559,27 @@ def save_checkpoint(model, data, history, labels, iteration,
         save_dict['history'] = history
         
     joblib.dump(save_dict, path)
+    return save_dict
 
     
 def load_results(project_dir=None, name=None, path=None):
+    """
+    Load the results from a modeled dataset.
+
+    The results path can be specified directly via ``path``. Otherwise
+    it is assumed to be ``{project_dir}/<name>/results.h5``.
+    
+    Parameters
+    ----------
+    project_dir: str, default=None
+    name: str, default=None
+    path: str, default=None
+
+    Returns
+    -------
+    results: dict
+        See :py:func:`keypoint_moseq.fitting.apply_model`
+    """
     if path is None: 
         assert project_dir is not None and name is not None, fill(
             '``name`` and ``project_dir`` are required if no ``path`` is given.')
@@ -409,7 +587,8 @@ def load_results(project_dir=None, name=None, path=None):
     return load_hdf5(path)
 
 
-def load_keypoints_from_deeplabcut_file(filepath, *, bodyparts, **kwargs):
+def _load_keypoints_from_deeplabcut_file(filepath, *, bodyparts, **kwargs):
+
     ext = os.path.splitext(filepath)[1]
     assert ext in ['.csv','.h5']
     if ext=='.h5': df = pd.read_hdf(filepath)
@@ -425,17 +604,41 @@ def load_keypoints_from_deeplabcut_file(filepath, *, bodyparts, **kwargs):
     return coordinates,confidences
 
 
-def load_keypoints_from_deeplabcut_list(paths, **kwargs): 
+def _load_keypoints_from_deeplabcut_list(paths, **kwargs): 
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(paths, desc='Loading from deeplabcut'):
         filename = os.path.basename(filepath)
         coordinates[filename],confidences[filename] = \
-            load_keypoints_from_deeplabcut_file(filepath, **kwargs)
+            _load_keypoints_from_deeplabcut_file(filepath, **kwargs)
     return coordinates,confidences
         
     
-def load_keypoints_from_deeplabcut(*, video_dir, directory=None, **kwargs):
+def load_keypoints_from_deeplabcut(video_dir=None, directory=None, **kwargs):
+    """
+    Load keypoints from a directory of deeplabcut csv or hdf5 files.
+
+    Parameters
+    ----------
+    directory: str, default=None
+        Path to the directory containing the deeplabcut csv or hdf5 files
+        (the ``video_dir`` argument can also be used for the same purpose)
+    
+    video_dir: str, default=None
+        Same as ``directory`` (used if ``directory`` is not specified)
+
+    Returns
+    -------
+    coordinates: dict
+        Dictionary mapping filenames to keypoint coordinates as ndarrays
+        of shape (n_frames, n_bodyparts, 2)
+
+    confidences: dict
+        Dictionary mapping filenames to ``likelihood`` scores as ndarrays
+        of shape (n_frames, n_bodyparts)
+    """
     if directory is None:
+        assert video_dir is not None, fill(
+            'Either ``directory`` or ``video_dir`` must be specified.')
         directory = video_dir
         print(fill(f'Searching in {directory}. Use the ``directory`` '
               'argument to specify another search location'))
@@ -443,26 +646,44 @@ def load_keypoints_from_deeplabcut(*, video_dir, directory=None, **kwargs):
         os.path.join(directory,f) 
         for f in os.listdir(directory)
         if os.path.splitext(f)[1] in ['.csv','.h5']]
-    return load_keypoints_from_deeplabcut_list(filepaths, **kwargs)
+    return _load_keypoints_from_deeplabcut_list(filepaths, **kwargs)
 
 
 # hdf5 save/load routines modified from
 # https://gist.github.com/nirum/b119bbbd32d22facee3071210e08ecdf
 
 def save_hdf5(filepath, save_dict):
-    """Saves a pytree with a dict at the root to an hdf5 file
-    Args:
-        filepath: str, Path of the hdf5 file to create.
-        tree: pytree, Recursive collection of tuples, lists, dicts, 
-        numpy arrays to store. The root is assumed to be a dict. """
+    """
+    Save a dict of pytrees to an hdf5 file.
+    
+    Parameters
+    ----------
+    filepath: str
+        Path of the hdf5 file to create.
+
+    save_dict: dict
+        Dictionary where the values are pytrees, i.e. recursive 
+        collections of tuples, lists, dicts, and numpy arrays.
+    """
     with h5py.File(filepath, 'a') as f:
         for k,tree in save_dict.items():
             _savetree_hdf5(jax.device_get(tree), f, k)
 
 def load_hdf5(filepath):
-    """Loads a pytree with a dict at the root from an hdf5 file.
-    Args:
-        filepath: str, Path of the hdf5 file to load."""
+    """
+    Load a dict of pytrees from an hdf5 file.
+
+    Parameters
+    ----------
+    filepath: str
+        Path of the hdf5 file to load.
+            
+    Returns
+    -------
+    save_dict: dict
+        Dictionary where the values are pytrees, i.e. recursive
+        collections of tuples, lists, dicts, and numpy arrays.
+    """
     with h5py.File(filepath, 'r') as f:
         return {k:_loadtree_hdf5(f[k]) for k in f}
 
