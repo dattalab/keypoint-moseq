@@ -4,6 +4,7 @@ import tqdm
 import imageio
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.ndimage import gaussian_filter1d
 plt.rcParams['figure.dpi'] = 100
 
 from vidio.read import OpenCVReader
@@ -12,7 +13,7 @@ from textwrap import fill
 from keypoint_moseq.util import (
     get_edges, get_durations, get_frequencies, reindex_by_bodyparts,
     find_matching_videos, get_syllable_instances, sample_instances,
-    filter_centroids_headings, get_trajectories,
+    filter_centroids_headings, get_trajectories, interpolate_keypoints
 )
 from keypoint_moseq.io import load_results
 from jax_moseq.models.keypoint_slds import center_embedding
@@ -799,3 +800,185 @@ def generate_trajectory_plots(
         plt.show()
             
     else: raise NotImplementedError()
+
+
+def overlay_keypoints(
+    image, coordinates, skeleton_idx=[], keypoint_colormap='autumn',
+    node_size=10, line_width=2, copy=False):
+    """
+    Overlay keypoints on an image.
+
+    Parameters
+    ----------
+    image: ndarray of shape (height, width, 3)
+        Image to overlay keypoints on.
+    
+    coordinates: ndarray of shape (num_keypoints, 2)
+        Array of keypoint coordinates.
+
+    skeleton_idx: list of tuples, default=[]
+        List of edges that define the skeleton, where each edge is a
+        pair of indexes.
+
+    keypoint_colormap: str, default='autumn'
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    node_size: int, default=10
+        Size of the keypoints.
+
+    line_width: int, default=2
+        Width of the skeleton lines.
+
+    copy: bool, default=False
+        Whether to copy the image before overlaying keypoints.
+
+    Returns
+    -------
+    image: ndarray of shape (height, width, 3)
+        Image with keypoints overlayed.
+    """
+    if copy: image = image.copy()
+
+    # get colors from matplotlib and convert to 0-255 range for openc
+    colors = plt.get_cmap(keypoint_colormap)(np.linspace(0,1,coordinates.shape[0]))
+    colors = (colors[:,:3]*255).astype(np.uint8)
+
+    # overlay skeleton
+    for i, j in skeleton_idx:
+        if np.isnan(coordinates[i,0]) or np.isnan(coordinates[j,0]): continue
+        pos1 = tuple(coordinates[i].astype(int))
+        pos2 = tuple(coordinates[j].astype(int))
+        image = cv2.line(image, pos1, pos2, colors[i], line_width, cv2.LINE_AA)
+
+    # overlay keypoints
+    for i, (x,y) in enumerate(coordinates):
+        if np.isnan(x): continue
+        pos = (int(x), int(y))
+        image = cv2.circle(image, pos, node_size, colors[i], -1, cv2.LINE_AA)
+
+    return image
+
+def crop_image(image, centroid, crop_size):
+    """
+    Crop an image around a centroid.
+
+    Parameters
+    ----------
+    image: ndarray of shape (height, width, 3)
+        Image to crop.
+
+    centroid: tuple of int
+        (x,y) coordinates of the centroid.
+
+    crop_size: int
+        Size of the crop around the centroid.
+
+    Returns
+    -------
+    image: ndarray of shape (crop_size, crop_size, 3)
+        Cropped image.
+    """
+    x, y = centroid
+    x = int(np.clip(x, crop_size, image.shape[1]-crop_size))
+    y = int(np.clip(y, crop_size, image.shape[0]-crop_size))
+    crop_size = int(crop_size)
+    return image[y-crop_size:y+crop_size, x-crop_size:x+crop_size]
+
+
+
+
+def overlay_keypoints_on_video(
+    video_path, coordinates, skeleton=[], bodyparts=None, use_bodyparts=None, 
+    output_path=None, show_frame_numbers=True, text_color=(255,255,255), 
+    crop_size=None, frames=None, quality=7, centroid_smoothing_filter=10, 
+    plot_options={}):
+    """
+    Overlay keypoints on a video.
+
+    Parameters
+    ----------
+    video_path: str
+        Path to a video file.
+
+    coordinates: ndarray of shape (num_frames, num_keypoints, 2)
+        Array of keypoint coordinates.
+
+    skeleton: list of tuples, default=[]
+        List of edges that define the skeleton, where each edge is a
+        pair of bodypart names or a pair of indexes.
+
+    bodyparts: list of str, default=None
+        List of bodypart names in ``coordinates``. Required if
+        ``skeleton`` is defined using bodypart names.
+
+    use_bodyparts: list of str, default=None
+        Subset of bodyparts to plot. If None, all bodyparts are plotted.
+
+    output_path: str, default=None
+        Path to save the video. If None, the video is saved to
+        ``video_path`` with the suffix ``_keypoints``.
+
+    show_frame_numbers: bool, default=True
+        Whether to overlay the frame number in the video.
+
+    text_color: tuple of int, default=(255,255,255)
+        Color for the frame number overlay.
+
+    crop_size: int, default=None
+        Size of the crop around the keypoints to overlay on the video.
+        If None, the entire video is used. 
+
+    frames: iterable of int, default=None
+        Frames to overlay keypoints on. If None, all frames are used.
+
+    quality: int, default=7
+        Quality of the output video.
+
+    centroid_smoothing_filter: int, default=10
+        Amount of smoothing to determine cropping centroid.
+
+    plot_options: dict, default={}
+        Additional keyword arguments to pass to
+        :py:func:`keypoint_moseq.viz.overlay_keypoints`.
+    """
+    if output_path is None: 
+        output_path = os.basepath(video_path) + '_keypoints.mp4'
+
+    if bodyparts is not None:
+        if use_bodyparts is not None:
+            coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+        else: use_bodyparts = bodyparts
+        skeleton_idx = get_edges(use_bodyparts, skeleton)
+    else: skeleton_idx = skeleton
+
+    if crop_size is not None:
+        outliers = np.any(np.isnan(coordinates), axis=2)
+        interpolated_coordinates = interpolate_keypoints(coordinates, outliers)
+        crop_centroid = np.nanmedian(interpolated_coordinates, axis=1)
+        crop_centroid = gaussian_filter1d(centroid, centroid_smoothing_filter, axis=0)
+
+    with imageio.get_reader(video_path) as reader:
+        fps = reader.get_meta_data()['fps']
+        if frames is None: frames = range(len(reader))
+
+        with imageio.get_writer(
+            output_path, pixelformat='yuv420p', 
+            fps=fps, quality=quality) as writer:
+
+            for frame in frames:
+                image = reader.get_data(frame)
+
+                image = overlay_keypoints(
+                    image, coordinates[frame], skeleton_idx=skeleton_idx, 
+                    keypoint_colormap=keypoint_colormap, node_size=node_size, 
+                    line_width=line_width)
+
+                if crop_size is not None:
+                    image = crop_image(image, crop_centroid[frame], crop_size)
+
+                if show_frame_numbers:
+                    image = cv2.putText(
+                        image, f'Frame {frame}', (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 
+                        0.5, text_color, 1, cv2.LINE_AA)
+
+                writer.append_data(image)

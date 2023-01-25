@@ -638,3 +638,29 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     else:
         raise ValueError('Invalid mode: {}'.format(mode))
 
+def interpolate_keypoints(coordinates, outliers):
+    """
+    Use linear interpolation to impute the coordinates of outliers.
+    
+    Parameters
+    ----------
+    coordinates : ndarray of shape (num_frames, num_keypoints, 2)
+        Keypoint observations.
+    outliers : ndarray of shape (num_frames, num_keypoints)
+        Binary indicator whose true entries are outlier points.
+        
+    Returns
+    -------
+    interpolated_coordinates : ndarray with same shape as ``coordinates``
+        Keypoint observations with outliers imputed.
+    """  
+
+    interpolated_coordinates = np.zeros_like(coordinates)
+    for i in range(coordinates.shape[1]):
+        x = np.arange(coordinates.shape[0])
+        xp = x[~outliers[:,i]]
+        for j in range(2):
+            fp = coordinates[:,i,j][~outliers[:,i]]
+            interpolated_coordinates[:,i,j] = np.interp(x,xp,fp)
+
+    return interpolated_coordinates
