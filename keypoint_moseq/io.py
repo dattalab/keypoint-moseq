@@ -136,7 +136,6 @@ def check_config_validity(config):
     -------
     validity: bool
     """
-
     error_messages = []
     
     # check anatomy
@@ -164,18 +163,17 @@ def check_config_validity(config):
                 f'ACTION REQUIRED: `posterior_bodyparts` contains {bodypart} '
                 'which is not one of the options in `bodyparts`.')
 
-    if len(error_messages)>0: 
-        print('')
+    if len(error_messages)==0: 
         return True
     for msg in error_messages: 
         print(fill(msg, width=70, subsequent_indent='  '), end='\n\n')
-        return False
+    return False
             
 
 def load_config(project_dir, check_if_valid=True, build_indexes=True):
     """
     Load a project config file.
-
+    
     Parameters
     ----------
     project_dir: str
@@ -200,7 +198,7 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
     
     with open(config_path, 'r') as stream:  
         config = yaml.safe_load(stream)
-        
+
     if check_if_valid: 
         check_config_validity(config)
         
@@ -360,7 +358,7 @@ def format_data(coordinates, confidences=None, keys=None,
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
     
     if confidences is not None:
-        
+
         if bodyparts is not None and use_bodyparts is not None:
             confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
 
