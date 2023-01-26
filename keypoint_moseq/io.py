@@ -356,6 +356,7 @@ def format_data(coordinates, confidences=None, keys=None,
         coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
 
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
+    Y = Y.astype(float)
     
     if confidences is not None:
 

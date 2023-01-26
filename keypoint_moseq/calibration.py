@@ -422,7 +422,6 @@ def noise_calibration(project_dir, coordinates, confidences, *,
     annotations = load_annotations(project_dir)
     sample_keys.extend(annotations.keys())
 
-    if verbose: print('Loading sample frames')
     sample_images = load_sampled_frames(
         sample_keys, video_dir, video_extension=video_extension)
 

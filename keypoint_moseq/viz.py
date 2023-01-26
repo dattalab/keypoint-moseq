@@ -21,7 +21,8 @@ from jax_moseq.models.keypoint_slds import center_embedding
 
 
 
-def plot_scree(pca, savefig=True, project_dir=None):
+def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3,2),
+              ):
     """
     Plot explained variance as a function of the number of PCs.
 
@@ -36,14 +37,20 @@ def plot_scree(pca, savefig=True, project_dir=None):
 
     project_dir : str, default=None
         Path to the project directory. Required if ``savefig`` is True.
+
+    fig_size : tuple, (2.5,2)
+        Size of the figure in inches.
+
+    Returns 
+    -------
+    fig : :py:class:`matplotlib.figure.Figure`
+        Figure handle
     """
     fig = plt.figure()
     plt.plot(np.arange(len(pca.mean_))+1,np.cumsum(pca.explained_variance_ratio_))
     plt.xlabel('PCs')
     plt.ylabel('Explained variance')
-    plt.yticks(np.arange(0.5,1.01,.1))
-    plt.xticks(range(0,len(pca.mean_)+2,2))
-    plt.gcf().set_size_inches((2.5,2))
+    plt.gcf().set_size_inches(fig_size)
     plt.grid()
     plt.tight_layout()
     
@@ -52,6 +59,7 @@ def plot_scree(pca, savefig=True, project_dir=None):
             'The ``savefig`` option requires a ``project_dir``')
         plt.savefig(os.path.join(project_dir,'pca_scree.pdf'))
     plt.show()
+    return fig
           
 def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
              savefig=True, project_dir=None, scale=10, plot_n_pcs=10, 
@@ -475,7 +483,7 @@ def generate_crowd_movies(
         video_paths = find_matching_videos(
             results.keys(), video_dir, as_dict=True, 
             video_extension=video_extension)
-            
+
     videos = {k: OpenCVReader(path) for k,path in video_paths.items()}
     fps = list(videos.values())[0].fps
     
