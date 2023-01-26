@@ -356,7 +356,7 @@ def generate_crowd_movies(
     min_frequency=0.005, min_duration=3, dot_radius=4, 
     dot_color=(255,255,255), window_size=112, use_reindexed=True, 
     sampling_options={}, coordinates=None, bodyparts=None, 
-    use_bodyparts=None, quality=7, **kwargs):
+    use_bodyparts=None, quality=7, video_extension=None, **kwargs):
     
     """
     Generate crowd movies for a modeled dataset.
@@ -450,6 +450,9 @@ def generate_crowd_movies(
 
     rows, cols, pre, post, dot_radius, dot_color, window_size
         See :py:func:`keypoint_moseq.viz.crowd_movie`
+
+    video_extension: str, default=None
+        Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
     """
     assert (video_dir is not None) or (video_paths is not None), fill(
         'You must provide either ``video_dir`` or ``video_paths``')      
@@ -469,7 +472,10 @@ def generate_crowd_movies(
         name=name, project_dir=project_dir, path=results_path)
     
     if video_paths is None:
-        video_paths = find_matching_videos(results.keys(), video_dir, as_dict=True)
+        video_paths = find_matching_videos(
+            results.keys(), video_dir, as_dict=True, 
+            video_extension=video_extension)
+            
     videos = {k: OpenCVReader(path) for k,path in video_paths.items()}
     fps = list(videos.values())[0].fps
     

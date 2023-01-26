@@ -69,7 +69,7 @@ def sample_error_frames(confidences, bodyparts, use_bodyparts,
     return sample_keys
 
 
-def load_sampled_frames(sample_keys, video_dir):
+def load_sampled_frames(sample_keys, video_dir, video_extension=None):
     """
     Load sampled frames from a directory of videos.
 
@@ -81,6 +81,9 @@ def load_sampled_frames(sample_keys, video_dir):
 
     video_dir: str
         Path to directory containing videos
+
+    video_extension: str, default=None
+        Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
 
     Returns
     -------
@@ -341,7 +344,8 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
 
 
 def noise_calibration(project_dir, coordinates, confidences, *, 
-                      bodyparts, use_bodyparts, video_dir, **kwargs):
+                      bodyparts, use_bodyparts, video_dir, 
+                      video_extension=None, **kwargs):
     """
     Perform manual annotation to calibrate the relationship between
     keypoint error and neural network confidence. 
@@ -395,11 +399,19 @@ def noise_calibration(project_dir, coordinates, confidences, *,
         Path to directory containing videos. Each video should
         correspond to a key in ``coordinates``. The key must
         contain the videoname as a prefix. 
+
+    video_extension: str, default=None
+        Preferred video extension (used in :py:func:`keypoint_moseq.util.find_matching_videos`)
+
     """
-    sample_keys = sample_error_frames(confidences, bodyparts, use_bodyparts)
+    sample_keys = sample_error_frames(
+        confidences, bodyparts, use_bodyparts)
+
     annotations = load_annotations(project_dir)
     sample_keys.extend(annotations.keys())
-    sample_images = load_sampled_frames(sample_keys, video_dir)
+
+    sample_images = load_sampled_frames(
+        sample_keys, video_dir, video_extension=video_extension)
 
     return _noise_calibration_widget(
         project_dir, coordinates, confidences, sample_keys, 
