@@ -149,7 +149,7 @@ def get_frequencies(stateseqs, mask=None):
     return np.bincount(stateseq_flat)/len(stateseq_flat)
 
 
-def find_matching_videos(keys, video_dir, as_dict=False):
+def find_matching_videos(keys, video_dir, as_dict=False, extension=None):
     """
     Find video files for a set of session names. The filename of each
     video is assumed to be a prefix within the session name. For example
@@ -173,8 +173,11 @@ def find_matching_videos(keys, video_dir, as_dict=False):
         Session names (as strings)
 
     video_dir: str
-        Path to the video directory. Videos are assumed to have the 
-        one of the following extensions: "mp4", "avi", "mov"
+        Path to the video directory. 
+        
+    extension: str, default=None
+        Extension of the video files. If None, videos are assumed to 
+        have the one of the following extensions: "mp4", "avi", "mov"
 
     as_dict: bool, default=False
         Determines whether to return a dict mapping session names to 
@@ -184,10 +187,13 @@ def find_matching_videos(keys, video_dir, as_dict=False):
     -------
     video_paths: list or dict (depending on `as_dict`)
     """  
+    extensions = ['.mp4','.avi','.mov'] if extension is None else [extension]
+
     video_to_path = {
         name : os.path.join(video_dir,name+ext) 
         for name,ext in map(os.path.splitext,os.listdir(video_dir)) 
-        if ext in ['.mp4','.avi','.mov']}
+        if ext in extensions}
+        
     video_paths = []
     for key in keys:
         matches = [path for video,path in video_to_path.items() 
