@@ -190,7 +190,10 @@ def find_matching_videos(keys, video_dir, as_dict=False, video_extension=None):
 
     if video_extension is None:
         extensions = ['.mp4','.avi','.mov']
-    else: extensions = [video_extension]
+    else: 
+        if video_extension[0] != '.': 
+            video_extension = '.'+video_extension
+        extensions = [video_extension]
 
     video_to_path = {
         name : os.path.join(video_dir,name+ext) 

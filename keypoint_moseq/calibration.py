@@ -4,7 +4,7 @@ import os
 from textwrap import fill
 from vidio.read import OpenCVReader
 from keypoint_moseq.io import update_config
-from keypoint_moseq.util import find_matching_videos
+from keypoint_moseq.util import find_matching_videos, get_edges
 
 def sample_error_frames(confidences, bodyparts, use_bodyparts,
                         num_bins=10, num_samples=100, num_videos=10):
@@ -178,8 +178,7 @@ def _confs_and_dists_from_annotations(coordinates, confidences,
 def _noise_calibration_widget(project_dir, coordinates, confidences,
                               sample_keys, sample_images, annotations, *, 
                               keypoint_colormap, bodyparts, skeleton, 
-                              error_estimator, conf_threshold, 
-                              conf_pseudocount, **kwargs):
+                              error_estimator, conf_threshold, **kwargs):
     
     from scipy.stats import linregress
     from holoviews.streams import Tap, Stream
@@ -188,8 +187,8 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
     hv.extension('bokeh')
 
     h,w = sample_images[sample_keys[0]].shape[:2] 
-    edges = np.array([[bodyparts.index(bp) for bp in edge] for edge in skeleton])
-    confidences = {k:v+conf_pseudocount for k,v in confidences.items()}
+
+    edges = np.array(get_edges(bodyparts,skeleton))
     conf_vals = np.hstack([v.flatten() for v in confidences.values()])
     min_conf,max_conf = np.percentile(conf_vals, .01),conf_vals.max()
     
@@ -269,16 +268,20 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
             color='bodypart', cmap='autumn', size=15, framewise=True, marker='x', line_width=3)
         
         sizes = np.where(np.arange(len(xys))==keypoint_ix, 10, 6)
-        nodes = hv.Nodes((*xys.T, np.arange(len(bodyparts)), bodyparts, sizes), vdims=['name','size'])
-        graph = hv.Graph(((*edges.T, colorvals[edges[:,0]]), nodes), vdims='ecolor').opts(
-            node_color='name', node_cmap=keypoint_colormap, tools=[],
-            edge_color='ecolor', edge_cmap=keypoint_colormap, node_size='size')
-
         label = f'{bodypart}, confidence = {confs[keypoint_ix]:.5f}'
         rgb = hv.RGB(img, bounds=(0,0,w,h), label=label).opts(framewise=True)
 
         xlim = (xys[keypoint_ix,0]-crop_size/2,xys[keypoint_ix,0]+crop_size/2)
         ylim = (xys[keypoint_ix,1]-crop_size/2,xys[keypoint_ix,1]+crop_size/2)
+
+        if len(edges)>0: edge_data = (*edges.T, colorvals[edges[:,0]])
+        else: edge_data = ((),(),())
+
+        nodes = hv.Nodes((*xys.T, np.arange(len(bodyparts)), bodyparts, sizes), vdims=['name','size'])
+        graph = hv.Graph((edge_data, nodes), vdims='ecolor').opts(
+            node_color='name', node_cmap=keypoint_colormap, tools=[],
+            edge_color='ecolor', edge_cmap=keypoint_colormap, node_size='size')
+
         return (rgb*graph*hv_point).opts(data_aspect=1, xlim=xlim, ylim=ylim, toolbar=None)
     
     
@@ -345,7 +348,8 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
 
 def noise_calibration(project_dir, coordinates, confidences, *, 
                       bodyparts, use_bodyparts, video_dir, 
-                      video_extension=None, **kwargs):
+                      video_extension=None, conf_pseudocount=0.001, 
+                      verbose=False, **kwargs):
     """
     Perform manual annotation to calibrate the relationship between
     keypoint error and neural network confidence. 
@@ -403,16 +407,26 @@ def noise_calibration(project_dir, coordinates, confidences, *,
     video_extension: str, default=None
         Preferred video extension (used in :py:func:`keypoint_moseq.util.find_matching_videos`)
 
+    conf_pseudocount: float, default=0.001
+        Pseudocount added to confidence values to avoid log(0) errors.
+
+    verbose: bool, default=False
+        Print progress.
     """
+    confidences = {k:v+conf_pseudocount for k,v in confidences.items()}
+    
+    if verbose: print('Sampling error frames')
     sample_keys = sample_error_frames(
         confidences, bodyparts, use_bodyparts)
 
     annotations = load_annotations(project_dir)
     sample_keys.extend(annotations.keys())
 
+    if verbose: print('Loading sample frames')
     sample_images = load_sampled_frames(
         sample_keys, video_dir, video_extension=video_extension)
 
+    if verbose: print('Launching calibration widget')
     return _noise_calibration_widget(
         project_dir, coordinates, confidences, sample_keys, 
         sample_images, annotations, bodyparts=bodyparts, **kwargs)
