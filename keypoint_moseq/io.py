@@ -360,7 +360,10 @@ def format_data(coordinates, confidences=None, keys=None,
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
     
     if confidences is not None:
-        confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
+        
+        if bodyparts is not None and use_bodyparts is not None:
+            confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
+
         conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
         if conf.min() < 0: 
             conf = np.maximum(conf,0) 
