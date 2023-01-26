@@ -281,8 +281,8 @@ def setup_project(project_dir, deeplabcut_config=None,
     generate_config(project_dir, **options)
             
     
-def format_data(coordinates, *, confidences=None, keys=None, 
-                seg_length, bodyparts, use_bodyparts,
+def format_data(coordinates, confidences=None, keys=None, 
+                seg_length=None, bodyparts=None, use_bodyparts=None,
                 conf_pseudocount=1e-3, added_noise_level=0.1, **kwargs):
     """
     Format keypoint coordinates and confidences for inference.
@@ -312,15 +312,17 @@ def format_data(coordinates, *, confidences=None, keys=None,
     keys: list of str, default=None
         (See :py:func:`keypoint_moseq.util.batch`)
         
-    seg_length: int
+    seg_length: int default=None
         (See :py:func:`keypoint_moseq.util.batch`)
         
-    bodyparts: list
-        Label for each keypoint represented in ``coordinates``
+    bodyparts: list, default=None
+        Label for each keypoint represented in ``coordinates``. Required
+        to reindex coordinates and confidences according to ``use_bodyparts``.
 
-    use_bodyparts: list
-        Ordered subset of keypoint labels to be used for modeling
-        
+    use_bodyparts: list, default=None
+        Ordered subset of keypoint labels to be used for modeling.
+        If ``use_bodyparts=None``, then all keypoints are used.
+
     conf_pseudocount: float, default=1e-3
         Pseudocount used to augment keypoint confidences.
     
@@ -332,25 +334,29 @@ def format_data(coordinates, *, confidences=None, keys=None,
     -------
     data: dict with the following items
     
-        Y: numpy array with shape (n_segs, seg_length, K, D)
+        Y: jax array with shape (n_segs, seg_length, K, D)
             Keypoint coordinates from all sessions broken into 
             fixed-length segments.
             
-        conf: numpy array with shape (n_segs, seg_length, K)
+        conf: jax array with shape (n_segs, seg_length, K)
             Confidences from all sessions broken into fixed-length 
             segments. If no input is provided for ``confidences``, 
             then ``data["conf"]=None``.
         
-        mask: numpy array with shape (n_segs, seg_length)
+        mask: jax array with shape (n_segs, seg_length)
             Binary array where 0 indicates areas of padding 
             (see :py:func:`keypoint_moseq.util.batch`).
             
-        labels: list of tuples (object, int, int)
-            Label for each row of ``Y`` and ``conf`` 
-            (see :py:func:`keypoint_moseq.util.batch`).
+    labels: list of tuples (object, int, int)
+        Label for each row of ``Y`` and ``conf`` 
+        (see :py:func:`keypoint_moseq.util.batch`).
     """    
-    if keys is None: keys = sorted(coordinates.keys()) 
-    coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+    if keys is None: 
+        keys = sorted(coordinates.keys()) 
+
+    if bodyparts is not None and use_bodyparts is not None:
+        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
     
     if confidences is not None:
