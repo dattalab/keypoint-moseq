@@ -267,7 +267,10 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         Dictionary of model outputs with the same structure as the
         results ``.h5`` file.
     """
+    
     kwargs['seg_length'] = None # dont separate the data into segments
+
+
     data, new_labels = format_data(
         coordinates, confidences=confidences, **kwargs)
     session_names = [key for key,start,end in new_labels]
@@ -291,7 +294,9 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
             v = batch(unbatch(v, labels), keys=session_names)[0]
             new_states[k] = v[:,padding:]
         states = new_states
-    else: states = None
+    else: 
+        states = None
+        kwargs['noise_prior'] = None
     
     model = init_model(data, states, params, **kwargs)
     
