@@ -239,6 +239,10 @@ def plot_progress(model, data, history, iteration, path=None,
         axs[2].set_ylabel('duration')
         axs[2].set_title('Median duration')
         
+        yticks = axs[2].get_yticks()
+        yticklabels = history_iters[yticks.astype(int)]
+        axs[2].set_yticklabels(yticklabels)
+        
         nz = np.stack(np.array(mask[:,seq_length:]).nonzero(),axis=1)
         batch_ix,start = nz[np.random.randint(nz.shape[0])]
         seq_hist = np.stack([z[batch_ix,start:start+seq_length] for z in past_stateseqs])
