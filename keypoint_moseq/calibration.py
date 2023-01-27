@@ -228,7 +228,8 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         
             
         scatter = hv.Scatter(zip(log_confs,log_dists)).opts(
-            color='k', size=6, xlim=xlim, ylim=ylim, axiswise=True, default_tools=[])
+            color='k', size=6, xlim=xlim, ylim=ylim, axiswise=True, 
+            frame_width=250, default_tools=[])
         
         curve = hv.Curve([(xlim[0],xlim[0]*m+b),(xlim[1],xlim[1]*m+b)]).opts(
             xlim=xlim, ylim=ylim, axiswise=True, default_tools=[])  
@@ -269,7 +270,8 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         
         sizes = np.where(np.arange(len(xys))==keypoint_ix, 10, 6)
         label = f'{bodypart}, confidence = {confs[keypoint_ix]:.5f}'
-        rgb = hv.RGB(img, bounds=(0,0,w,h), label=label).opts(framewise=True)
+        rgb = hv.RGB(img, bounds=(0,0,w,h), label=label).opts(
+            framewise=True, xaxis='bare', yaxis='bare', frame_width=250)
 
         xlim = (xys[keypoint_ix,0]-crop_size/2,xys[keypoint_ix,0]+crop_size/2)
         ylim = (xys[keypoint_ix,1]-crop_size/2,xys[keypoint_ix,1]+crop_size/2)
@@ -293,11 +295,11 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
     
 
                
-    prev_button = pn.widgets.Button(name='\u25c0', width=50, height=30)
-    next_button = pn.widgets.Button(name='\u25b6', width=50, height=30)
-    save_button = pn.widgets.Button(name='Save', width=100, align='center')
-    sample_slider = pn.widgets.IntSlider(name='sample', value=0, start=0, end=len(sample_keys), width=120, align='center')
-    zoom_slider = pn.widgets.IntSlider(name='Zoom', value=200, start=1, end=max(w,h), width=120, align='center')
+    prev_button = pn.widgets.Button(name='\u25c0', width=50, align='center')
+    next_button = pn.widgets.Button(name='\u25b6', width=50, align='center')
+    save_button = pn.widgets.Button(name='Save:', width=100, align='center')
+    sample_slider = pn.widgets.IntSlider(name='sample', value=0, start=0, end=len(sample_keys), width=100, align='center')
+    zoom_slider = pn.widgets.IntSlider(name='Zoom', value=200, start=1, end=max(w,h), width=100, align='center')
     estimator_textbox = pn.widgets.StaticText(align='center')
     
     def next_sample(event):
@@ -332,18 +334,24 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
     scatter_dmap = hv.DynamicMap(
         update_scatter, streams=[annotations_stream, vline_tap],
     ).opts(framewise=True, axiswise=True)
-                    
-    controls = pn.Column(
-        pn.Row(prev_button, next_button, align='center'), 
-        sample_slider,
-        zoom_slider,
-        pn.layout.Divider(),
-        estimator_textbox,
-        pn.layout.Divider(),
-        save_button,
-        width=170)
 
-    return pn.Row(controls, img_dmap, scatter_dmap)
+    controls = pn.Row(
+        prev_button, next_button,
+        # sample_slider,
+        pn.Spacer(sizing_mode='stretch_width'),
+        zoom_slider, 
+        pn.Spacer(sizing_mode='stretch_width'),
+        save_button,   
+        pn.Spacer(sizing_mode='stretch_width'),
+        estimator_textbox
+    )
+
+    plots = pn.Row(
+        img_dmap, 
+        scatter_dmap
+    )
+
+    return pn.Column(controls, plots)
 
 
 def noise_calibration(project_dir, coordinates, confidences, *, 
