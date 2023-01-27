@@ -423,7 +423,6 @@ def noise_calibration(project_dir, coordinates, confidences, *,
     """
     confidences = {k:v+conf_pseudocount for k,v in confidences.items()}
     
-    if verbose: print('Sampling error frames')
     sample_keys = sample_error_frames(
         confidences, bodyparts, use_bodyparts)
 
@@ -433,7 +432,6 @@ def noise_calibration(project_dir, coordinates, confidences, *,
     sample_images = load_sampled_frames(
         sample_keys, video_dir, video_extension=video_extension)
 
-    if verbose: print('Launching calibration widget')
     return _noise_calibration_widget(
         project_dir, coordinates, confidences, sample_keys, 
         sample_images, annotations, bodyparts=bodyparts, **kwargs)

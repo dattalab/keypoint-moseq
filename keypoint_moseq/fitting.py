@@ -267,9 +267,9 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         Dictionary of model outputs with the same structure as the
         results ``.h5`` file.
     """
-
+    kwargs['seg_length'] = None # dont separate the data into segments
     data, new_labels = format_data(
-        coordinates, confidences=confidences, seg_length=None, **kwargs)
+        coordinates, confidences=confidences, **kwargs)
     session_names = [key for key,start,end in new_labels]
 
     if save_results:
