@@ -620,16 +620,17 @@ def sample_instances(syllable_instances, num_samples, mode='random',
         trajectories = get_trajectories(
             syllable_instances, coordinates, pre=pre, post=post, 
             centroids=centroids, headings=headings, filter_size=filter_size)
-            
         X = np.vstack(list(trajectories.values()))
-        if n>pca_samples: X = X[np.random.choice(n, pca_samples, replace=False)]
+
+        if X.shape[0]>pca_samples: 
+            X = X[np.random.choice(X.shape[0], pca_samples, replace=False)]
+
         pca = PCA(n_components=pca_dim).fit(X.reshape(X.shape[0],-1))
-        Xpca = pca.transform(flatten(X))
+        Xpca = pca.transform(X.reshape(X.shape[0],-1))
         all_nbrs = NearestNeighbors(n_neighbors=n_neighbors).fit(Xpca)
         
-        sampled_instances = {}
-        sampled_trajectories = {}
-        
+        sampled_instances = {} 
+               
         for syllable,X in trajectories.items():
             
             Xpca = pca.transform(X.reshape(X.shape[0],-1))
@@ -640,15 +641,14 @@ def sample_instances(syllable_instances, num_samples, mode='random',
             distances, _ = all_nbrs.kneighbors(Xpca)
             global_density = 1/distances.mean(1)
             exemplar = np.argmax(local_density/global_density)  
-            samples = np.random.choice(indices[exemplar], num_samples, replace=False)
-            
+            samples = np.random.choice(indices[exemplar], num_samples, replace=False)      
             sampled_instances[syllable] = [syllable_instances[syllable][i] for i in samples]
-            sampled_trajectories[syllable] = [syllable_trajectories[syllable][i] for i in samples]
-        
+         
         return sampled_instances
 
     else:
         raise ValueError('Invalid mode: {}'.format(mode))
+
 
 def interpolate_keypoints(coordinates, outliers):
     """

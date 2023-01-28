@@ -238,7 +238,7 @@ def plot_progress(model, data, history, iteration, path=None,
         axs[2].set_xlabel('iteration')
         axs[2].set_ylabel('duration')
         axs[2].set_title('Median duration')
-        
+
         yticks = axs[2].get_yticks()
         yticklabels = history_iters[yticks.astype(int)]
         axs[2].set_yticklabels(yticklabels)
@@ -594,6 +594,9 @@ def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False,
 
     Returns
     -------
+    fig : :py:class:`matplotlib.figure.Figure`
+        Figure handle
+        
     ax: matplotlib.axes.Axes
         Axis containing the trajectory plots.
     """
@@ -602,7 +605,7 @@ def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False,
 
     interval = int(np.floor(num_timesteps/10))
     plot_frames = np.arange(0,num_timesteps,interval)
-    colors = plt.cm.get_cmap(cmap)(np.linspace(0,1,num_keypoints))
+    colors = plt.cm.get_cmap(keypoint_colormap)(np.linspace(0,1,num_keypoints))
     fill_color = 'k' if invert else 'w'
 
     n_cols = min(n_cols, len(Xs))
@@ -658,7 +661,7 @@ def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False,
     ax.set_ylim(ymin,ymax)
     ax.set_aspect('equal')
     ax.axis('off')
-    return ax
+    return fig,ax
     
     
 
@@ -805,14 +808,15 @@ def generate_trajectory_plots(
     if Xs.shape[-1]==2:
         
         # individual plots
-        for title,X in zip(titles,Xs):
-            ax = plot_trajectories([title], X[None], edges, lims, **plot_options)
+        desc = 'Generating trajectory plots'
+        for title,X in tqdm.tqdm(zip(titles,Xs), desc=desc, total=len(titles)):
+            fig,ax = plot_trajectories([title], X[None], edges, lims, **plot_options)
             path = os.path.join(output_dir, f'{title}.pdf')
             plt.savefig(path)
-            plt.close(fig=ax.fig)
+            plt.close(fig=fig)
 
         # grid plot
-        ax = plot_trajectories(titles, Xs, edges, lims, **plot_options)
+        fig,ax = plot_trajectories(titles, Xs, edges, lims, **plot_options)
         path = os.path.join(output_dir, 'all_trajectories.pdf')
         plt.savefig(path)
         plt.show()
