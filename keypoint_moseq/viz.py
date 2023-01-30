@@ -596,7 +596,7 @@ def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False,
     -------
     fig : :py:class:`matplotlib.figure.Figure`
         Figure handle
-        
+
     ax: matplotlib.axes.Axes
         Axis containing the trajectory plots.
     """
@@ -964,7 +964,7 @@ def overlay_keypoints_on_video(
         :py:func:`keypoint_moseq.viz.overlay_keypoints`.
     """
     if output_path is None: 
-        output_path = os.basepath(video_path) + '_keypoints.mp4'
+        output_path = os.path.splitext(video_path) + '_keypoints.mp4'
 
     if bodyparts is not None:
         if use_bodyparts is not None:
