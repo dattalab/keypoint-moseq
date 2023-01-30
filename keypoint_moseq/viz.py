@@ -863,7 +863,7 @@ def overlay_keypoints(
 
     # get colors from matplotlib and convert to 0-255 range for openc
     colors = plt.get_cmap(keypoint_colormap)(np.linspace(0,1,coordinates.shape[0]))
-    colors = (colors[:,:3]*255).astype(np.uint8)
+    colors = [tuple([int(c) for c in cs[:3]*255]) for cs in colors]
 
     # overlay skeleton
     for i, j in skeleton_idx:
@@ -981,7 +981,7 @@ def overlay_keypoints_on_video(
 
     with imageio.get_reader(video_path) as reader:
         fps = reader.get_meta_data()['fps']
-        if frames is None: frames = range(len(reader))
+        if frames is None: frames = np.arange(reader.count_frames())
 
         with imageio.get_writer(
             output_path, pixelformat='yuv420p', 
@@ -989,11 +989,9 @@ def overlay_keypoints_on_video(
 
             for frame in tqdm.tqdm(frames):
                 image = reader.get_data(frame)
-
+                
                 image = overlay_keypoints(
-                    image, coordinates[frame], skeleton_idx=skeleton_idx, 
-                    keypoint_colormap=keypoint_colormap, node_size=node_size, 
-                    line_width=line_width)
+                    image, coordinates[frame], skeleton_idx=skeleton_idx, **plot_options)
 
                 if crop_size is not None:
                     image = crop_image(image, crop_centroid[frame], crop_size)
