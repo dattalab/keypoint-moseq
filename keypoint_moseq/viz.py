@@ -989,7 +989,7 @@ def overlay_keypoints_on_video(
 
             for frame in tqdm.tqdm(frames):
                 image = reader.get_data(frame)
-
+                print(skeleton_idx)
                 image = overlay_keypoints(
                     image, coordinates[frame], skeleton_idx=skeleton_idx, 
                     keypoint_colormap=keypoint_colormap, node_size=node_size, 
