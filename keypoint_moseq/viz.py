@@ -201,7 +201,7 @@ def plot_progress(model, data, history, iteration, path=None,
     durations = get_durations(z,mask)
     frequencies = get_frequencies(z,mask)
     
-    history_iters = sorted(history.keys())
+    history_iters = np.sort(history.keys())
     past_stateseqs = [history[i]['states']['z'] 
                       for i in history_iters 
                       if 'states' in history[i]]
