@@ -977,7 +977,7 @@ def overlay_keypoints_on_video(
         outliers = np.any(np.isnan(coordinates), axis=2)
         interpolated_coordinates = interpolate_keypoints(coordinates, outliers)
         crop_centroid = np.nanmedian(interpolated_coordinates, axis=1)
-        crop_centroid = gaussian_filter1d(centroid, centroid_smoothing_filter, axis=0)
+        crop_centroid = gaussian_filter1d(crop_centroid, centroid_smoothing_filter, axis=0)
 
     with imageio.get_reader(video_path) as reader:
         fps = reader.get_meta_data()['fps']
