@@ -251,7 +251,9 @@ def plot_progress(model, data, history, iteration, path=None,
         axs[3].set_ylabel('Iterations')
         axs[3].set_title('State sequence history')
         
-    fig.suptitle(f'Iteration {iteration}')
+    title = f'Iteration {iteration}'
+    if name is not None: title = f'{name}: {title}'
+    fig.suptitle(title)
     fig.set_size_inches(fig_size)
     plt.tight_layout()
     
