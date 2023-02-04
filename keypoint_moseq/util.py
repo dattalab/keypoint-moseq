@@ -630,7 +630,7 @@ def sample_instances(syllable_instances, num_samples, mode='random',
         all_nbrs = NearestNeighbors(n_neighbors=n_neighbors).fit(Xpca)
         
         sampled_instances = {} 
-               
+
         for syllable,X in trajectories.items():
             
             Xpca = pca.transform(X.reshape(X.shape[0],-1))
@@ -656,7 +656,7 @@ def interpolate_keypoints(coordinates, outliers):
     
     Parameters
     ----------
-    coordinates : ndarray of shape (num_frames, num_keypoints, 2)
+    coordinates : ndarray of shape (num_frames, num_keypoints, dim)
         Keypoint observations.
     outliers : ndarray of shape (num_frames, num_keypoints)
         Binary indicator whose true entries are outlier points.
@@ -671,7 +671,7 @@ def interpolate_keypoints(coordinates, outliers):
     for i in range(coordinates.shape[1]):
         x = np.arange(coordinates.shape[0])
         xp = x[~outliers[:,i]]
-        for j in range(2):
+        for j in range(coordinates.shape[2]):
             fp = coordinates[:,i,j][~outliers[:,i]]
             interpolated_coordinates[:,i,j] = np.interp(x,xp,fp)
 
