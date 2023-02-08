@@ -1,6 +1,6 @@
 # Keypoint MoSeq
 
-Motion Sequencing ([MoSeq](https://www.cell.com/neuron/fulltext/S0896-6273(15)01037-5?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS0896627315010375%3Fshowall%3Dtrue)) for keypoint tracking data. Check out our [colab notebook](https://github.com/dattalab/keypoint-moseq/blob/main/examples/keypointMoSeq_demo_colab.ipynb) for a tutorial. 
+Motion Sequencing ([MoSeq](https://www.cell.com/neuron/fulltext/S0896-6273(15)01037-5?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS0896627315010375%3Fshowall%3Dtrue)) for keypoint tracking data. 
 
 ## Installation
 
