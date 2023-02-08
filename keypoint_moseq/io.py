@@ -596,7 +596,7 @@ def load_results(project_dir=None, name=None, path=None):
     return load_hdf5(path)
 
     
-def load_deeplabcut_results(directory, recursive=True):
+def load_deeplabcut_results(directory, recursive=True, return_labels=False):
     """
     Load tracking results from a directory containing deeplabcut csv or 
     hdf5 files.
@@ -608,6 +608,9 @@ def load_deeplabcut_results(directory, recursive=True):
 
     recursive: bool, default=True
         Whether to search recursively for deeplabcut csv or hdf5 files.
+
+    return_labels: bool, default=False
+        Whether to return a list of bodypart names.
     
     Returns
     -------
@@ -618,9 +621,14 @@ def load_deeplabcut_results(directory, recursive=True):
     confidences: dict
         Dictionary mapping filenames to ``likelihood`` scores as ndarrays
         of shape (n_frames, n_bodyparts)
+
+    labels: list of str
+        List of bodypart names. Only returned if ``return_labels`` is True.
     """
     filepaths = list_files_with_exts(
         directory, ['.csv','.h5','.hdf5'], recursive=recursive)
+    assert len(filepaths)>0, fill(
+        f'No deeplabcut csv or hdf5 files found in {directory}')
 
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(filepaths, desc='Loading from deeplabcut'):
@@ -628,17 +636,20 @@ def load_deeplabcut_results(directory, recursive=True):
             filename = os.path.basename(filepath)
             ext = os.path.splitext(filepath)[1]
             if ext=='.h5': df = pd.read_hdf(filepath)
-            if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0)            
+            if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0)   
+            labels = list(zip(*df.columns.to_list()))[1][::3]         
             arr = df.to_numpy().reshape(len(df), -1, 3)
             coordinates[filename] = arr[:,:,:-1]
             confidences[filename] = arr[:,:,-1]
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
-    return coordinates,confidences
+    if return_labels: 
+        return coordinates,confidences,labels
+    else: return coordinates,confidences
 
 
 
-def load_sleap_results(directory, recursive=True):
+def load_sleap_results(directory, recursive=True, return_labels=False):
     """
     Load keypoints from a directory of sleap hdf5 files.
 
@@ -650,6 +661,9 @@ def load_sleap_results(directory, recursive=True):
     recursive: bool, default=True
         Whether to search recursively for sleap hdf5 files.
     
+    return_labels: bool, default=False
+        Whether to return a list of bodypart names.
+
     Returns
     -------
     coordinates: dict
@@ -659,9 +673,15 @@ def load_sleap_results(directory, recursive=True):
     confidences: dict
         Dictionary mapping filenames to ``likelihood`` scores as ndarrays
         of shape (n_frames, n_bodyparts)
+
+    labels: list of str
+        List of bodypart names. Only returned if ``return_labels`` is True.
     """
+
     filepaths = list_files_with_exts(
         directory, ['.h5','.hdf5'], recursive=recursive)
+    assert len(filepaths)>0, fill(
+        f'No sleap hdf5 files found in {directory}.')
 
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(filepaths, desc='Loading from sleap'):
@@ -670,6 +690,7 @@ def load_sleap_results(directory, recursive=True):
             with h5py.File(filepath, 'r') as f:
                 coords = f['tracks'][()]
                 confs = f['point_scores'][()]
+                labels = [name.decode('utf-8') for name in f['node_names']]
                 if coords.shape[0] == 1: 
                     coordinates[filename] = coords[0].T
                     confidences[filename] = confs[0].T
@@ -679,8 +700,9 @@ def load_sleap_results(directory, recursive=True):
                         confidences[f'{filename}_track{i}'] = coords[i].T
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
-    return coordinates,confidences
-
+    if return_labels: 
+        return coordinates,confidences,labels
+    else: return coordinates,confidences
 
 # hdf5 save/load routines modified from
 # https://gist.github.com/nirum/b119bbbd32d22facee3071210e08ecdf
