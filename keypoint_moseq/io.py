@@ -643,7 +643,7 @@ def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False):
             confidences[filename] = arr[:,:,-1]
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
-    if return_labels: 
+    if return_bodyparts: 
         return coordinates,confidences,bodyparts
     else: return coordinates,confidences
 
@@ -675,7 +675,7 @@ def load_sleap_results(directory, recursive=True, return_bodyparts=False):
         of shape (n_frames, n_bodyparts)
 
     bodyparts: list of str
-        List of bodypart names. Only returned if ``return_labels`` is True.
+        List of bodypart names. Only returned if ``return_bodyparts`` is True.
     """
 
     filepaths = list_files_with_exts(
@@ -700,7 +700,7 @@ def load_sleap_results(directory, recursive=True, return_bodyparts=False):
                         confidences[f'{filename}_track{i}'] = coords[i].T
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
-    if return_labels: 
+    if return_bodyparts: 
         return coordinates,confidences,bodyparts
     else: return coordinates,confidences
 
