@@ -15,7 +15,7 @@ import pandas as pd
 from datetime import datetime
 from textwrap import fill
 from vidio.read import OpenCVReader
-from keypoint_moseq.util import batch, reindex_by_bodyparts
+from keypoint_moseq.util import batch, reindex_by_bodyparts, list_files_with_exts
 warnings.formatwarning = lambda msg, *a: str(msg)
 
 def _build_yaml(sections, comments):
@@ -234,9 +234,10 @@ def setup_project(project_dir, deeplabcut_config=None,
         Path to the project directory (relative or absolute)
         
     deeplabcut_config: str, default=None
-        Path to a deeplabcut config file. Relevant settings will be
-        imported and used to initialize the keypoint MoSeq config.
-        (overrided by kwargs)
+        Path to a deeplabcut config file. Relevant settings, including
+        ``'bodyparts'``, ``'skeleton'``, ``'use_bodyparts'``, and 
+        ``'video_dir'`` will be imported and used to initialize the 
+        keypoint MoSeq config. (overrided by kwargs). 
         
     overwrite: bool, default=False
         Overwrite any config.yml that already exists at the path
@@ -594,46 +595,20 @@ def load_results(project_dir=None, name=None, path=None):
         path = os.path.join(project_dir,name,'results.h5')
     return load_hdf5(path)
 
-
-def _load_keypoints_from_deeplabcut_file(filepath, *, bodyparts, **kwargs):
-
-    ext = os.path.splitext(filepath)[1]
-    assert ext in ['.csv','.h5']
-    if ext=='.h5': df = pd.read_hdf(filepath)
-    if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0)
-        
-    dlc_bodyparts = list(zip(*df.columns.to_list()))[1][::3]
-    assert dlc_bodyparts==tuple(bodyparts), fill(
-        f'{os.path.basename(filepath)} contains bodyparts'
-        f'\n\n{dlc_bodyparts}\n\nbut expected\n\n{bodyparts}')
     
-    arr = df.to_numpy().reshape(-1, len(bodyparts), 3)
-    coordinates,confidences = arr[:,:,:-1],arr[:,:,-1]
-    return coordinates,confidences
-
-
-def _load_keypoints_from_deeplabcut_list(paths, **kwargs): 
-    coordinates,confidences = {},{}
-    for filepath in tqdm.tqdm(paths, desc='Loading from deeplabcut'):
-        filename = os.path.basename(filepath)
-        coordinates[filename],confidences[filename] = \
-            _load_keypoints_from_deeplabcut_file(filepath, **kwargs)
-    return coordinates,confidences
-        
-    
-def load_keypoints_from_deeplabcut(video_dir=None, directory=None, **kwargs):
+def load_deeplabcut_results(directory, recursive=True):
     """
-    Load keypoints from a directory of deeplabcut csv or hdf5 files.
+    Load tracking results from a directory containing deeplabcut csv or 
+    hdf5 files.
 
     Parameters
     ----------
     directory: str, default=None
-        Path to the directory containing the deeplabcut csv or hdf5 files
-        (the ``video_dir`` argument can also be used for the same purpose)
-    
-    video_dir: str, default=None
-        Same as ``directory`` (used if ``directory`` is not specified)
+        Path to the directory containing the deeplabcut csv or hdf5 files.
 
+    recursive: bool, default=True
+        Whether to search recursively for deeplabcut csv or hdf5 files.
+    
     Returns
     -------
     coordinates: dict
@@ -644,17 +619,67 @@ def load_keypoints_from_deeplabcut(video_dir=None, directory=None, **kwargs):
         Dictionary mapping filenames to ``likelihood`` scores as ndarrays
         of shape (n_frames, n_bodyparts)
     """
-    if directory is None:
-        assert video_dir is not None, fill(
-            'Either ``directory`` or ``video_dir`` must be specified.')
-        directory = video_dir
-        print(fill(f'Searching in {directory}. Use the ``directory`` '
-              'argument to specify another search location'))
-    filepaths = [
-        os.path.join(directory,f) 
-        for f in os.listdir(directory)
-        if os.path.splitext(f)[1] in ['.csv','.h5']]
-    return _load_keypoints_from_deeplabcut_list(filepaths, **kwargs)
+    filepaths = list_files_with_exts(
+        directory, ['.csv','.h5','.hdf5'], recursive=recursive)
+
+    coordinates,confidences = {},{}
+    for filepath in tqdm.tqdm(filepaths, desc='Loading from deeplabcut'):
+        try: 
+            filename = os.path.basename(filepath)
+            ext = os.path.splitext(filepath)[1]
+            if ext=='.h5': df = pd.read_hdf(filepath)
+            if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0)            
+            arr = df.to_numpy().reshape(len(df), -1, 3)
+            coordinates[filename] = arr[:,:,:-1]
+            confidences[filename] = arr[:,:,-1]
+        except Exception as e: 
+            print(fill(f'Error loading {filepath}: {e}'))
+    return coordinates,confidences
+
+
+
+def load_sleap_results(directory, recursive=True):
+    """
+    Load keypoints from a directory of sleap hdf5 files.
+
+    Parameters
+    ----------
+    directory: str, default=None
+        Path to the directory containing the sleap hdf5 files.
+
+    recursive: bool, default=True
+        Whether to search recursively for sleap hdf5 files.
+    
+    Returns
+    -------
+    coordinates: dict
+        Dictionary mapping filenames to keypoint coordinates as ndarrays
+        of shape (n_frames, n_bodyparts, 2)
+
+    confidences: dict
+        Dictionary mapping filenames to ``likelihood`` scores as ndarrays
+        of shape (n_frames, n_bodyparts)
+    """
+    filepaths = list_files_with_exts(
+        directory, ['.h5','.hdf5'], recursive=recursive)
+
+    coordinates,confidences = {},{}
+    for filepath in tqdm.tqdm(filepaths, desc='Loading from sleap'):
+        try: 
+            filename = os.path.basename(filepath)
+            with h5py.File(filepath, 'r') as f:
+                coords = f['tracks'][()]
+                confs = f['point_scores'][()]
+                if coords.shape[0] == 1: 
+                    coordinates[filename] = coords[0].T
+                    confidences[filename] = confs[0].T
+                else:
+                    for i in range(coords.shape[0]):
+                        coordinates[f'{filename}_track{i}'] = coords[i].T
+                        confidences[f'{filename}_track{i}'] = coords[i].T
+        except Exception as e: 
+            print(fill(f'Error loading {filepath}: {e}'))
+    return coordinates,confidences
 
 
 # hdf5 save/load routines modified from

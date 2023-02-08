@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import glob
 import tqdm
 from textwrap import fill
 from jax.config import config
@@ -149,13 +150,46 @@ def get_frequencies(stateseqs, mask=None):
     return np.bincount(stateseq_flat)/len(stateseq_flat)
 
 
-def find_matching_videos(keys, video_dir, as_dict=False, video_extension=None):
+def list_files_with_exts(dir_path, ext_list, recursive=True):
+    """
+    This function lists all the files in a directory with one of the
+    specified extensions.
+
+    Parameters
+    ----------
+    dir_path : str
+        The directory path to search.
+
+    ext_list : list of str
+        A list of file extensions to search for, including the dot 
+        (e.g., '.txt').
+
+    recursive : bool, default=True
+        Whether to search for files recursively.
+
+    Returns
+    -------
+    list
+        A list of file paths.
+    """
+    ext_list += [ext.upper() for ext in ext_list]
+    if recursive: return [
+        os.path.join(root, name)
+        for root, dirs, files in os.walk(dir_path)
+        for name in files if os.path.splitext(name)[1] in ext_list]
+    else: return [
+        os.path.join(dir_path, name)
+        for name in os.listdir(dir_path)
+        if os.path.splitext(name)[1] in ext_list]
+
+def find_matching_videos(keys, video_dir, as_dict=False, 
+                         video_extension=None, recursive=True):
     """
     Find video files for a set of session names. The filename of each
     video is assumed to be a prefix within the session name. For example
     given the following video directory::
 
-        videodirectory
+        video_dir
         ├─ videoname1.avi
         └─ videoname2.avi
  
@@ -164,8 +198,8 @@ def find_matching_videos(keys, video_dir, as_dict=False, video_extension=None):
         >>> keys = ['videoname1blahblah','videoname2yadayada']
         >>> find_matching_videos(keys, video_dir, as_dict=True)
 
-        {'videoname1blahblah': 'videodirectory/videoname1.avi',
-         'videoname2blahblah': 'videodirectory/videoname2.avi'}
+        {'videoname1blahblah': 'video_dir/videoname1.avi',
+         'videoname2blahblah': 'video_dir/videoname2.avi'}
  
     Parameters
     -------
@@ -178,6 +212,10 @@ def find_matching_videos(keys, video_dir, as_dict=False, video_extension=None):
     video_extension: str, default=None
         Extension of the video files. If None, videos are assumed to 
         have the one of the following extensions: "mp4", "avi", "mov"
+
+    recursive: bool, default=True
+        If True, search recursively for videos in subdirectories of
+        `video_dir`.
 
     as_dict: bool, default=False
         Determines whether to return a dict mapping session names to 
@@ -195,14 +233,12 @@ def find_matching_videos(keys, video_dir, as_dict=False, video_extension=None):
             video_extension = '.'+video_extension
         extensions = [video_extension]
 
-    video_to_path = {
-        name : os.path.join(video_dir,name+ext) 
-        for name,ext in map(os.path.splitext,os.listdir(video_dir)) 
-        if ext in extensions}
+    videos = list_files_with_exts(video_dir, extensions, recursive=recursive)
+    videos_to_paths = {os.path.splitext(os.path.basename(f))[0]:f for f in videos}
 
     video_paths = []
     for key in keys:
-        matches = [path for video,path in video_to_path.items() 
+        matches = [path for video,path in videos_to_paths.items() 
                    if os.path.basename(key).startswith(video)]
         assert len(matches)>0, fill(f'No matching videos found for {key}')
         assert len(matches)<2, fill(f'More than one video matches {key} ({matches})')
