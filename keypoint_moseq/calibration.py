@@ -195,7 +195,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
 
     edges = np.array(get_edges(bodyparts,skeleton))
     conf_vals = np.hstack([v.flatten() for v in confidences.values()])
-    min_conf,max_conf = np.percentile(conf_vals, .01),conf_vals.max()
+    min_conf,max_conf = np.nanpercentile(conf_vals, .01),np.nanmax(conf_vals)
     
     annotations_stream = Stream.define('Annotations', annotations=annotations)()
     current_sample = Stream.define('Current sample', sample_ix=0)()
@@ -213,7 +213,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         
         confs,dists = _confs_and_dists_from_annotations(
             coordinates, confidences, annotations, bodyparts)
-        
+ 
         log_dists = np.log10(np.array(dists)+1)
         log_confs = np.log10(np.maximum(confs, min_conf))
         max_dist = np.log10(np.sqrt(h**2+w**2)+1)
@@ -221,7 +221,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         xspan = np.log10(max_conf)-np.log10(min_conf)
         xlim = (np.log10(min_conf)-xspan/10, np.log10(max_conf)+xspan/10)
         ylim = (-max_dist/50,max_dist)
-
+        
         if len(log_dists)>1:
             m,b = linregress(log_confs,log_dists)[:2]
             estimator.event(slope=m, intercept=b)
@@ -230,8 +230,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         if x is None: x = np.log10(conf_threshold)
         else: estimator.event(conf_threshold=10**x)
         passing_percent = (conf_vals>10**x).mean()*100
-        
-            
+                    
         scatter = hv.Scatter(zip(log_confs,log_dists)).opts(
             color='k', size=6, xlim=xlim, ylim=ylim, axiswise=True, 
             frame_width=250, default_tools=[])
@@ -257,7 +256,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         key,frame,bodypart = sample_key = sample_keys[sample_ix]
         keypoint_ix = bodyparts.index(bodypart)
         xys = coordinates[key][frame]
-        use_nodes = np.nonzero(~np.isnan(xys).any(1))[0]
+        masked_nodes = np.nonzero(~np.isnan(xys).any(1))[0]
         confs = confidences[key][frame]
         
         if x and y:
@@ -274,7 +273,6 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         hv_point = hv.Points(pt_data, vdims=['bodypart']).opts(
             color='bodypart', cmap='autumn', size=15, framewise=True, marker='x', line_width=3)
         
-        sizes = np.where(np.arange(len(xys))==keypoint_ix, 10, 6)
         label = f'{bodypart}, confidence = {confs[keypoint_ix]:.5f}'
         rgb = hv.RGB(img, bounds=(0,0,w,h), label=label).opts(
             framewise=True, xaxis='bare', yaxis='bare', frame_width=250)
@@ -283,11 +281,13 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         ylim = (xys[keypoint_ix,1]-crop_size/2,xys[keypoint_ix,1]+crop_size/2)
          
         if len(edges)>0: 
-            use_edges = edges[np.isin(edges,use_nodes)]
-            edge_data = (*use_edges.T, colorvals[use_edges[:,0]])
+            masked_edges = edges[np.isin(edges,masked_nodes)]
+            edge_data = (*masked_edges.T, colorvals[masked_edges[:,0]])
         else: edge_data = ((),(),())
-            
-        nodes = hv.Nodes((*xys[use_nodes].T, use_nodes, bodyparts, sizes), vdims=['name','size'])        
+                    
+        sizes = np.where(np.arange(len(xys))==keypoint_ix, 10, 6)[masked_nodes]
+        masked_bodyparts = [bodyparts[i] for i in masked_nodes]
+        nodes = hv.Nodes((*xys[masked_nodes].T, masked_nodes, masked_bodyparts, sizes), vdims=['name','size'])        
         graph = hv.Graph((edge_data, nodes), vdims='ecolor').opts(
             node_color='name', node_cmap=keypoint_colormap, tools=[],
             edge_color='ecolor', edge_cmap=keypoint_colormap, node_size='size')
@@ -356,6 +356,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         scatter_dmap
     )
     return pn.Column(controls, plots)
+
 
 def noise_calibration(project_dir, coordinates, confidences, *, 
                       bodyparts, use_bodyparts, video_dir, 
