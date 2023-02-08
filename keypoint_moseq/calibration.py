@@ -257,6 +257,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         key,frame,bodypart = sample_key = sample_keys[sample_ix]
         keypoint_ix = bodyparts.index(bodypart)
         xys = coordinates[key][frame]
+        use_nodes = np.nonzero(~np.isnan(xys).any(1))[0]
         confs = confidences[key][frame]
         
         if x and y:
@@ -280,11 +281,13 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
 
         xlim = (xys[keypoint_ix,0]-crop_size/2,xys[keypoint_ix,0]+crop_size/2)
         ylim = (xys[keypoint_ix,1]-crop_size/2,xys[keypoint_ix,1]+crop_size/2)
-
-        if len(edges)>0: edge_data = (*edges.T, colorvals[edges[:,0]])
+         
+        if len(edges)>0: 
+            use_edges = edges[np.isin(edges,use_nodes)]
+            edge_data = (*use_edges.T, colorvals[use_edges[:,0]])
         else: edge_data = ((),(),())
-
-        nodes = hv.Nodes((*xys.T, np.arange(len(bodyparts)), bodyparts, sizes), vdims=['name','size'])
+            
+        nodes = hv.Nodes((*xys[use_nodes].T, use_nodes, bodyparts, sizes), vdims=['name','size'])        
         graph = hv.Graph((edge_data, nodes), vdims='ecolor').opts(
             node_color='name', node_cmap=keypoint_colormap, tools=[],
             edge_color='ecolor', edge_cmap=keypoint_colormap, node_size='size')
@@ -297,8 +300,6 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
                  f'intercept: {intercept:.6f}',
                  f'conf_threshold: {conf_threshold:.6f}']
         estimator_textbox.value='<br>'.join(lines)
-    
-
                
     prev_button = pn.widgets.Button(name='\u25c0', width=50, align='center')
     next_button = pn.widgets.Button(name='\u25b6', width=50, align='center')
@@ -350,14 +351,11 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         pn.Spacer(sizing_mode='stretch_width'),
         estimator_textbox
     )
-
     plots = pn.Row(
         img_dmap, 
         scatter_dmap
     )
-
     return pn.Column(controls, plots)
-
 
 def noise_calibration(project_dir, coordinates, confidences, *, 
                       bodyparts, use_bodyparts, video_dir, 
