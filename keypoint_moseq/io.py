@@ -365,7 +365,7 @@ def format_data(coordinates, confidences=None, keys=None,
             confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
 
         conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
-        if conf.min() < 0: 
+        if np.nanmin(conf) < 0: 
             conf = np.maximum(conf,0) 
             warnings.warn(fill(
                 'Negative confidence values are not allowed and will be set to 0.'))
@@ -596,7 +596,7 @@ def load_results(project_dir=None, name=None, path=None):
     return load_hdf5(path)
 
     
-def load_deeplabcut_results(directory, recursive=True, return_labels=False):
+def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False):
     """
     Load tracking results from a directory containing deeplabcut csv or 
     hdf5 files.
@@ -609,7 +609,7 @@ def load_deeplabcut_results(directory, recursive=True, return_labels=False):
     recursive: bool, default=True
         Whether to search recursively for deeplabcut csv or hdf5 files.
 
-    return_labels: bool, default=False
+    return_bodyparts: bool, default=False
         Whether to return a list of bodypart names.
     
     Returns
@@ -622,8 +622,8 @@ def load_deeplabcut_results(directory, recursive=True, return_labels=False):
         Dictionary mapping filenames to ``likelihood`` scores as ndarrays
         of shape (n_frames, n_bodyparts)
 
-    labels: list of str
-        List of bodypart names. Only returned if ``return_labels`` is True.
+    bodyparts: list of str
+        List of bodypart names. Only returned if ``return_bodyparts`` is True.
     """
     filepaths = list_files_with_exts(
         directory, ['.csv','.h5','.hdf5'], recursive=recursive)
@@ -637,19 +637,19 @@ def load_deeplabcut_results(directory, recursive=True, return_labels=False):
             ext = os.path.splitext(filepath)[1]
             if ext=='.h5': df = pd.read_hdf(filepath)
             if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0)   
-            labels = list(zip(*df.columns.to_list()))[1][::3]         
+            bodyparts = list(list(zip(*df.columns.to_list()))[1][::3])      
             arr = df.to_numpy().reshape(len(df), -1, 3)
             coordinates[filename] = arr[:,:,:-1]
             confidences[filename] = arr[:,:,-1]
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
     if return_labels: 
-        return coordinates,confidences,labels
+        return coordinates,confidences,bodyparts
     else: return coordinates,confidences
 
 
 
-def load_sleap_results(directory, recursive=True, return_labels=False):
+def load_sleap_results(directory, recursive=True, return_bodyparts=False):
     """
     Load keypoints from a directory of sleap hdf5 files.
 
@@ -661,7 +661,7 @@ def load_sleap_results(directory, recursive=True, return_labels=False):
     recursive: bool, default=True
         Whether to search recursively for sleap hdf5 files.
     
-    return_labels: bool, default=False
+    return_bodyparts: bool, default=False
         Whether to return a list of bodypart names.
 
     Returns
@@ -674,7 +674,7 @@ def load_sleap_results(directory, recursive=True, return_labels=False):
         Dictionary mapping filenames to ``likelihood`` scores as ndarrays
         of shape (n_frames, n_bodyparts)
 
-    labels: list of str
+    bodyparts: list of str
         List of bodypart names. Only returned if ``return_labels`` is True.
     """
 
@@ -690,7 +690,7 @@ def load_sleap_results(directory, recursive=True, return_labels=False):
             with h5py.File(filepath, 'r') as f:
                 coords = f['tracks'][()]
                 confs = f['point_scores'][()]
-                labels = [name.decode('utf-8') for name in f['node_names']]
+                bodyparts = [name.decode('utf-8') for name in f['node_names']]
                 if coords.shape[0] == 1: 
                     coordinates[filename] = coords[0].T
                     confidences[filename] = confs[0].T
@@ -701,7 +701,7 @@ def load_sleap_results(directory, recursive=True, return_labels=False):
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
     if return_labels: 
-        return coordinates,confidences,labels
+        return coordinates,confidences,bodyparts
     else: return coordinates,confidences
 
 # hdf5 save/load routines modified from
