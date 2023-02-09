@@ -201,7 +201,7 @@ def plot_progress(model, data, history, iteration, path=None,
     durations = get_durations(z,mask)
     frequencies = get_frequencies(z,mask)
     
-    history_iters = np.sort(history.keys())
+    history_iters = np.array(sorted(history.keys()))
     past_stateseqs = [history[i]['states']['z'] 
                       for i in history_iters 
                       if 'states' in history[i]]
@@ -238,10 +238,6 @@ def plot_progress(model, data, history, iteration, path=None,
         axs[2].set_xlabel('iteration')
         axs[2].set_ylabel('duration')
         axs[2].set_title('Median duration')
-
-        yticks = axs[2].get_yticks()
-        yticklabels = history_iters[yticks.astype(int)]
-        axs[2].set_yticklabels(yticklabels)
         
         nz = np.stack(np.array(mask[:,seq_length:]).nonzero(),axis=1)
         batch_ix,start = nz[np.random.randint(nz.shape[0])]
@@ -251,9 +247,14 @@ def plot_progress(model, data, history, iteration, path=None,
         axs[3].set_ylabel('Iterations')
         axs[3].set_title('State sequence history')
         
+        yticks = [int(y) for y in axs[3].get_yticks() if y < len(history_iters) and y > 0]
+        yticklabels = history_iters[yticks]
+        axs[3].set_yticks(yticks)
+        axs[3].set_yticklabels(yticklabels)
+
     title = f'Iteration {iteration}'
     if name is not None: title = f'{name}: {title}'
-    fig.suptitle(title)
+    fig.suptitle(title)        
     fig.set_size_inches(fig_size)
     plt.tight_layout()
     
