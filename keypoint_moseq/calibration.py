@@ -359,6 +359,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
 
 
 
+
 def noise_calibration(project_dir, coordinates, confidences, *, 
                       bodyparts, use_bodyparts, video_dir, 
                       video_extension=None, conf_pseudocount=0.001, 
