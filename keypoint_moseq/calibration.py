@@ -191,7 +191,9 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
     import panel as pn
     hv.extension('bokeh')
 
-    h,w = sample_images[sample_keys[0]].shape[:2] 
+    max_height = np.max([sample_images[k].shape[0] for k in sample_keys]) 
+    max_width = np.max([sample_images[k].shape[1] for k in sample_keys]) 
+    max_zoom = int(max(max_width,max_height))
 
     edges = np.array(get_edges(bodyparts,skeleton))
     conf_vals = np.hstack([v.flatten() for v in confidences.values()])
@@ -205,9 +207,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
     
     img_tap = Tap(transient=True)
     vline_tap = Tap(transient=True)
-    crop_size = hv.Dimension('Crop size', range=(0,max(w,h)), default=200)
-    img = hv.RGB(sample_images[sample_keys[0]], bounds=(0,0,w,h))
-        
+    crop_size = hv.Dimension('Crop size', range=(0,max_zoom), default=200)
     
     def update_scatter(x,y, annotations):
         
@@ -216,7 +216,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
  
         log_dists = np.log10(np.array(dists)+1)
         log_confs = np.log10(np.maximum(confs, min_conf))
-        max_dist = np.log10(np.sqrt(h**2+w**2)+1)
+        max_dist = np.log10(np.sqrt(max_height**2+max_width**2)+1)
 
         xspan = np.log10(max_conf)-np.log10(min_conf)
         xlim = (np.log10(min_conf)-xspan/10, np.log10(max_conf)+xspan/10)
@@ -262,7 +262,6 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         if x and y:
             annotations_stream.annotations.update({sample_key:(x,y)})
             annotations_stream.event()
-        else: img.data = sample_images[sample_key][::-1] 
 
         if sample_key in annotations_stream.annotations: 
             point = np.array(annotations_stream.annotations[sample_key])
@@ -274,7 +273,8 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
             color='bodypart', cmap='autumn', size=15, framewise=True, marker='x', line_width=3)
         
         label = f'{bodypart}, confidence = {confs[keypoint_ix]:.5f}'
-        rgb = hv.RGB(img, bounds=(0,0,w,h), label=label).opts(
+        h,w = sample_images[sample_key].shape[:2]
+        rgb = hv.RGB(sample_images[sample_key][::-1], bounds=(0,0,w,h), label=label).opts(
             framewise=True, xaxis='bare', yaxis='bare', frame_width=250)
 
         xlim = (xys[keypoint_ix,0]-crop_size/2,xys[keypoint_ix,0]+crop_size/2)
@@ -305,7 +305,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
     next_button = pn.widgets.Button(name='\u25b6', width=50, align='center')
     save_button = pn.widgets.Button(name='Save:', width=100, align='center')
     sample_slider = pn.widgets.IntSlider(name='sample', value=0, start=0, end=len(sample_keys), width=100, align='center')
-    zoom_slider = pn.widgets.IntSlider(name='Zoom', value=200, start=1, end=max(w,h), width=100, align='center')
+    zoom_slider = pn.widgets.IntSlider(name='Zoom', value=200, start=1, end=max_zoom, width=100, align='center')
     estimator_textbox = pn.widgets.StaticText(align='center')
     
     def next_sample(event):
@@ -356,6 +356,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         scatter_dmap
     )
     return pn.Column(controls, plots)
+
 
 
 def noise_calibration(project_dir, coordinates, confidences, *, 
