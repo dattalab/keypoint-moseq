@@ -280,10 +280,12 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         xlim = (xys[keypoint_ix,0]-crop_size/2,xys[keypoint_ix,0]+crop_size/2)
         ylim = (xys[keypoint_ix,1]-crop_size/2,xys[keypoint_ix,1]+crop_size/2)
          
+        edge_data = ((),(),())
         if len(edges)>0: 
-            masked_edges = edges[np.isin(edges,masked_nodes)]
-            edge_data = (*masked_edges.T, colorvals[masked_edges[:,0]])
-        else: edge_data = ((),(),())
+            masked_edges = edges[np.isin(edges,masked_nodes).all(1)]
+            if len(masked_edges)>0:
+                edge_data = (*masked_edges.T, colorvals[masked_edges[:,0]])
+
                     
         sizes = np.where(np.arange(len(xys))==keypoint_ix, 10, 6)[masked_nodes]
         masked_bodyparts = [bodyparts[i] for i in masked_nodes]
