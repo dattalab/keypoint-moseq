@@ -220,7 +220,7 @@ def update_config(project_dir, **kwargs):
     generate_config(project_dir, **config)
     
         
-def setup_project(project_dir, deeplabcut_config=None, 
+def setup_project(project_dir, deeplabcut_config=None, sleap_file=None,
                   overwrite=False, **options):
     """
     Setup a project directory with the following structure::
@@ -236,8 +236,14 @@ def setup_project(project_dir, deeplabcut_config=None,
     deeplabcut_config: str, default=None
         Path to a deeplabcut config file. Relevant settings, including
         ``'bodyparts'``, ``'skeleton'``, ``'use_bodyparts'``, and 
-        ``'video_dir'`` will be imported and used to initialize the 
-        keypoint MoSeq config. (overrided by kwargs). 
+        ``'video_dir'`` will be imported from the deeplabcut config and 
+        used to initialize the keypoint MoSeq config. (overrided by kwargs). 
+
+    sleap_file: str, default=None
+        Path to a sleap hdf5 file for one of the recordings to be modeled. 
+        Relevant settings, including ``'bodyparts'``, ``'skeleton'``, 
+        and ``'use_bodyparts'`` will be imported from the sleap file and used 
+        to initialize the keypoint MoSeq config. (overrided by kwargs). 
         
     overwrite: bool, default=False
         Overwrite any config.yml that already exists at the path
@@ -272,8 +278,21 @@ def setup_project(project_dir, deeplabcut_config=None,
             dlc_options['use_bodyparts'] = dlc_config['bodyparts']
             dlc_options['skeleton'] = dlc_config['skeleton']
             dlc_options['video_dir'] = os.path.join(dlc_config['project_path'],'videos')
-                
+
         options = {**dlc_options, **options}
+
+    elif sleap_file is not None:
+        sleap_options = {}
+        with h5py.File(sleap_file, 'r') as f:
+
+            node_names = [n.decode('utf-8') for n in f['node_names']]
+            edge_names = [[n.decode('utf-8') for n in edge] for edge in f['edge_names']]
+            
+            sleap_options['bodyparts'] = node_names
+            sleap_options['use_bodyparts'] = node_names
+            sleap_options['skeleton'] = edge_names
+            
+        options = {**sleap_options, **options}
     
     if not os.path.exists(project_dir):
         os.makedirs(project_dir)
