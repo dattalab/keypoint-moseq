@@ -68,7 +68,15 @@ nb_execution_mode = "off"
 # a list of builtin themes.
 #
 html_theme = 'sphinx_rtd_theme'
-html_show_sourcelink = False
+html_show_sourcelink = True
+
+html_context = {
+    "display_github": True, # Integrate GitHub
+    "github_user": "dattalab", # Username
+    "github_repo": "keypoint-moseq", # Repo name
+    "github_version": "main", # Version
+    "conf_py_path": "/docs/source/", # Path in the checkout to the docs root
+}
 
 
 autosummary_generate = True
