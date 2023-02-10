@@ -15,8 +15,15 @@ import pandas as pd
 from datetime import datetime
 from textwrap import fill
 from vidio.read import OpenCVReader
-from keypoint_moseq.util import batch, reindex_by_bodyparts, list_files_with_exts
 warnings.formatwarning = lambda msg, *a: str(msg)
+
+from keypoint_moseq.util import (
+    batch, 
+    reindex_by_bodyparts, 
+    list_files_with_exts, 
+    interpolate_keypoints,
+)
+
 
 def _build_yaml(sections, comments):
     text_blocks = []
@@ -315,6 +322,9 @@ def format_data(coordinates, confidences=None, keys=None,
            added to the keypoint coordinates to prevent degenerate
            solutions during fitting. 
         4. Keypoint confidences are augmented by ``conf_pseudocount``.
+        5. Wherever NaNs occur in the coordinates, they are replaced
+           by values imputed using linear interpolation, and the
+           corresponding confidences are set to ``conf_pseudocount``.
     
     Parameters
     ----------
@@ -375,11 +385,15 @@ def format_data(coordinates, confidences=None, keys=None,
     if bodyparts is not None and use_bodyparts is not None:
         coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
 
+    for key in keys:
+        outliers = np.isnan(coordinates[key]).any(-1)
+        coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
+        confidences[key] = np.where(outliers, 0, confidences[key])
+
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
     Y = Y.astype(float)
     
     if confidences is not None:
-
         if bodyparts is not None and use_bodyparts is not None:
             confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
 
