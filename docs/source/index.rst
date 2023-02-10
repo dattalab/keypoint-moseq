@@ -4,6 +4,8 @@ Keypoint MoSeq
 .. image:: logo.jpg
    :align: center
 
+Motion Sequencing (MoSeq) is an unsupervised machine learning method for animal behavior analysis `(Wiltschko et al., 2015) <http://datta.hms.harvard.edu/wp-content/uploads/2018/01/pub_23.pdf>`_. Given behavioral recordings, MoSeq learns a set of stereotyped movement patterns and when they occur over time. This package provides tools for fitting a MoSeq model to keypoint tracking data. We also provide a `pipeline <https://dattalab.github.io/moseq2-website/index.html#about>`_ for fitting to depth data.
+
 
 Installation
 ------------
