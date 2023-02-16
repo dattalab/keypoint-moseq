@@ -384,6 +384,8 @@ def format_data(coordinates, confidences=None, keys=None,
 
     if bodyparts is not None and use_bodyparts is not None:
         coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+        if confidences is not None:
+            confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
 
     for key in keys:
         outliers = np.isnan(coordinates[key]).any(-1)
@@ -394,9 +396,6 @@ def format_data(coordinates, confidences=None, keys=None,
     Y = Y.astype(float)
     
     if confidences is not None:
-        if bodyparts is not None and use_bodyparts is not None:
-            confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
-
         conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
         if np.nanmin(conf) < 0: 
             conf = np.maximum(conf,0) 
