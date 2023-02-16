@@ -18,9 +18,6 @@ To use a GPU (recommended), install the appropriate driver and CUDA version. CUD
    conda create -n keypoint_moseq python=3.9
    conda activate keypoint_moseq
 
-   # make te environment available to jupyter
-   python -m ipykernel install --user --name=keypoint_moseq
-
    # Include the following line if installing on Windows
    # conda install -c conda-forge pytables
 
@@ -47,6 +44,12 @@ Install `jax-moseq <https://github.com/dattalab/jax-moseq>`_ followed by `keypoi
 
    pip install -U git+https://github.com/dattalab/jax-moseq
    pip install -U git+https://github.com/dattalab/keypoint-moseq
+
+Make the environment available to jupyter
+
+.. code-block::
+   
+   python -m ipykernel install --user --name=keypoint_moseq
 
 
 
