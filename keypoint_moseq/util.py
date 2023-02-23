@@ -712,3 +712,5 @@ def interpolate_keypoints(coordinates, outliers):
             interpolated_coordinates[:,i,j] = np.interp(x,xp,fp)
 
     return interpolated_coordinates
+
+

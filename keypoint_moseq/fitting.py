@@ -205,9 +205,9 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         ├──session_name1
         │  ├──syllables             # model state sequence (z), shape=(T,)
         │  ├──syllables_reindexed   # states reindexed by frequency, shape=(T,)
-        │  ├──estimated_coordinates # model predicted coordinates, shape=(T,n_keypoints,2)
+        │  ├──estimated_coordinates # model predicted coordinates, shape=(T,n_keypoints,dim)
         │  ├──latent_state          # model latent state (x), shape=(T,latent_dim)
-        │  ├──centroid              # model centroid (v), shape=(T,2)
+        │  ├──centroid              # model centroid (v), shape=(T,dim)
         │  └──heading               # model heading (h), shape=(T,)
         ⋮
 

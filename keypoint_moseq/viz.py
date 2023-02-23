@@ -2,10 +2,12 @@ import os
 import cv2
 import tqdm
 import imageio
+import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 plt.rcParams['figure.dpi'] = 100
+warnings.formatwarning = lambda msg, *a: str(msg)
 
 from vidio.read import OpenCVReader
 from textwrap import fill
@@ -13,7 +15,7 @@ from textwrap import fill
 from keypoint_moseq.util import (
     get_edges, get_durations, get_frequencies, reindex_by_bodyparts,
     find_matching_videos, get_syllable_instances, sample_instances,
-    filter_centroids_headings, get_trajectories, interpolate_keypoints
+    filter_centroids_headings, get_trajectories, interpolate_keypoints,
 )
 from keypoint_moseq.io import load_results
 from jax_moseq.models.keypoint_slds import center_embedding
@@ -268,7 +270,7 @@ def plot_progress(model, data, history, iteration, path=None,
     plt.show()
 
 
-def _crowd_movie_tile(key, start, end, videos, centroids, headings, 
+def _grid_movie_tile(key, start, end, videos, centroids, headings, 
                      dot_color=(255,255,255), window_size=112,
                      pre=30, post=60, dot_radius=4):
             
@@ -289,27 +291,27 @@ def _crowd_movie_tile(key, start, end, videos, centroids, headings,
         return np.stack(tile)
     
     
-def crowd_movie(instances, rows, cols, videos, centroids, headings,
+def grid_movie(instances, rows, cols, videos, centroids, headings,
                 dot_color=(255,255,255), dot_radius=4, window_size=112, 
                 pre=30, post=60):
     
-    """Generate a crowd movie and return it as an array of frames.
+    """Generate a grid movie and return it as an array of frames.
 
-    Crowd movies show many instances of a syllable. Each instance
-    shows a snippet of a video, centered on the animal and synchronized
+    Grid movies show many instances of a syllable. Each instance
+    contains a snippet of a video, centered on the animal and synchronized
     to the onset of the syllable. A dot appears at syllable onset and 
     disappears at syllable offset.
 
     Parameters
     ----------
     instances: list of tuples ``(key, start, end)``
-        List of syllable instances to include in the crowd movie,
+        List of syllable instances to include in the grid movie,
         where each instance is specified as a tuple with the video 
         name, start frame and end frame. The list must have length
         ``rows*cols``. The video names must also be keys in ``videos``.
         
     rows: int, cols : int
-        Number of rows and columns in the crowd movie grid
+        Number of rows and columns in the grid movie grid
     
     videos: dict
         Dictionary mapping video names to video readers. Frames from
@@ -341,10 +343,10 @@ def crowd_movie(instances, rows, cols, videos, centroids, headings,
     Returns
     -------
     frames: array of shape ``(rows, cols, post+pre, window_size, window_size, 3)``
-        Array of frames in the crowd movie
+        Array of frames in the grid movie
     """
     tiles = np.stack([
-        _crowd_movie_tile(
+        _grid_movie_tile(
             key, start, end, videos, centroids, headings, 
             dot_color=dot_color, window_size=window_size,
             pre=pre, post=post, dot_radius=dot_radius
@@ -364,7 +366,7 @@ def write_video_clip(frames, path, fps=30, quality=7):
             writer.append_data(frame)
 
 
-def generate_crowd_movies(
+def generate_grid_movies(
     results=None, output_dir=None, name=None, project_dir=None,
     results_path=None, video_dir=None, video_paths=None, 
     rows=4, cols=6, filter_size=9, pre=30, post=60, 
@@ -374,38 +376,54 @@ def generate_crowd_movies(
     use_bodyparts=None, quality=7, video_extension=None, **kwargs):
     
     """
-    Generate crowd movies for a modeled dataset.
+    Generate grid movies for a modeled dataset.
 
-    Crowd movies show many instances of a syllable and are useful in
+    Grid movies show many instances of a syllable and are useful in
     figuring out what behavior the syllable captures 
-    (see :py:func:`keypoint_moseq.viz.crowd_movie`). This method
-    generates a crowd movie for each syllable that is used sufficiently
-    often (i.e. has at least ``rows_cols`` instances with duration
+    (see :py:func:`keypoint_moseq.viz.grid_movie`). This method
+    generates a grid movie for each syllable that is used sufficiently
+    often (i.e. has at least ``rows*cols`` instances with duration
     of at least ``min_duration`` and an overall frequency of at least
-    ``min_frequency``). The crowd movies are saved to ``output_dir`` if 
-    specified, or else to ``{project_dir}/{name}/crowd_movies``.
+    ``min_frequency``). The grid movies are saved to ``output_dir`` if 
+    specified, or else to ``{project_dir}/{name}/grid_movies``.
 
     Parameters
     ----------
     results: dict, default=None
-        Dictionary containing modeling results for a dataset. Must 
-        contain syllable sequences, centroids and headings (see
-        :py:func:`keypoint_moseq.fitting.apply_model`). If None,
-        results will be loaded using either ``results_path`` or 
-        ``project_dir`` and ``name``.
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.apply_model`). Must have
+        the format::
+
+            {
+                session_name1: {
+                    'syllables':              array of shape (n_frames,),
+                    'syllables_reindexed':    array of shape (n_frames,),
+                    'centroid':               array of shape (n_frames, dim),
+                    'heading' :               array of shape (n_frames,), 
+                },
+                ...  
+            }
+            
+        - ``syllables`` is required if ``use_reindexed=False``
+        - ``syllables_reindexed`` is required if ``use_reindexed=True``
+        - ``centroid`` is always required
+        - ``heading`` is always required
+
+        If ``results=None``, results will be loaded using either 
+        ``results_path`` or  ``project_dir`` and ``name``.
 
     output_dir: str, default=None
-        Directory where crowd movies should be saved. If None, crowd
-        movies will be saved to ``{project_dir}/{name}/crowd_movies``.
+        Directory where grid movies should be saved. If None, grid
+        movies will be saved to ``{project_dir}/{name}/grid_movies``.
 
     name: str, default=None
         Name of the model. Required to load results if ``results`` is 
-        None and ``results_path`` is None. Required to save crowd movies 
+        None and ``results_path`` is None. Required to save grid movies 
         if ``output_dir`` is None.
         
     project_dir: str, default=None
         Project directory. Required to load results if ``results`` is 
-        None and ``results_path`` is None. Required to save crowd movies 
+        None and ``results_path`` is None. Required to save grid movies 
         if ``output_dir`` is None.
 
     results_path: str, default=None
@@ -426,11 +444,11 @@ def generate_crowd_movies(
         Size of the median filter applied to centroids and headings
 
     min_frequency: float, default=0.005
-        Minimum frequency of a syllable to be included in the crowd movies.
+        Minimum frequency of a syllable to be included in the grid movies.
 
     min_duration: int, default=3
         Minimum duration of a syllable instance to be included in the 
-        crowd movie for that syllable. 
+        grid movie for that syllable. 
 
     use_reindexed: bool, default=True
         Determines the naming of syllables (``results["syllables"]`` if 
@@ -460,11 +478,11 @@ def generate_crowd_movies(
         for modeling. 
 
     quality: int, default=7
-        Quality of the crowd movies. Higher values result in higher
+        Quality of the grid movies. Higher values result in higher
         quality movies but larger file sizes.
 
     rows, cols, pre, post, dot_radius, dot_color, window_size
-        See :py:func:`keypoint_moseq.viz.crowd_movie`
+        See :py:func:`keypoint_moseq.viz.grid_movie`
 
     video_extension: str, default=None
         Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
@@ -474,11 +492,11 @@ def generate_crowd_movies(
     
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
-            'Either specify the ``output_dir`` where crowd movies should '
+            'Either specify the ``output_dir`` where grid movies should '
             'be saved or include a ``project_dir`` and ``name``')
-        output_dir = os.path.join(project_dir,name, 'crowd_movies')
+        output_dir = os.path.join(project_dir,name, 'grid_movies')
     if not os.path.exists(output_dir): os.makedirs(output_dir)
-    print(f'Writing crowd movies to {output_dir}')
+    print(f'Writing grid movies to {output_dir}')
     
     if not (bodyparts is None or use_bodyparts is None or coordinates is None):
         coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
@@ -511,9 +529,9 @@ def generate_crowd_movies(
         centroids, headings, filter_size=filter_size)
     
     for syllable,instances in tqdm.tqdm(
-        sampled_instances.items(), desc='Generating crowd movies'):
+        sampled_instances.items(), desc='Generating grid movies'):
         
-        frames = crowd_movie(
+        frames = grid_movie(
             instances, rows, cols, videos, centroids, headings, 
             window_size=window_size, dot_color=dot_color, 
             dot_radius=dot_radius, pre=pre, post=post)
@@ -540,10 +558,52 @@ def _pad_limits(limits, left=0.1, right=0.1, top=0.1, bottom=0.1):
         [xmin,ymin],
         [xmax,ymax]])
 
+def get_limits(coordinates, padding=0.2, pctl=1, blocksize=16):
+    """
+    Get axis limits based on the coordinates of all keypoints.
+
+    For each axis, limits are determined using the percentiles
+    ``pctl`` and ``100-pctl`` and then padded by ``padding``.
+
+    Parameters
+    ----------
+    coordinates: dict
+        Dictionary mapping session names to keypoint coordinates as
+        ndarrays of shape (n_frames, n_bodyparts, dim).
+
+    padding: float, default=0.2
+        Fraction of the axis range to pad on each side.
+
+    pctl: float, default=1
+        Percentile to use for determining the axis limits.
+
+    blocksize: int, default=16
+        Axis limits are further padded to be multiples of ``blocksize``.
+
+    Returns
+    -------
+    lims: ndarray of shape (2,dim)
+        Axis limits, in the format ``[[xmin,ymin,...],[xmax,ymax,...]]``.
+    """
+    X = np.vstack(list(coordinates.values()))
+    lims = np.percentile(X, [pctl,100-pctl], axis=(0,1))
+    lims = (lims-lims.mean(0))*(1+padding) + lims.mean(0)
+    lims = np.array([
+        np.floor(lims[0]/blocksize)*blocksize,
+        np.ceil(lims[1]/blocksize)*blocksize
+    ])
+    return lims
+
+
+def _get_limits(coordinates, padding=0.1, pctl=1):
+    X = np.vstack(list(coordinates.values()))
+    lims = np.percentile(X, [pctl,100-pctl], axis=(0,1))
+    lims = (lims-lims.mean(0))*(1+padding) + lims.mean(0)
+    return lims
 
         
-def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False, 
-                      keypoint_colormap='autumn', node_size=50, linewidth=3, 
+def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False, 
+                      keypoint_colormap='autumn', node_size=50, line_width=3, 
                       plot_width=4, overlap=(0.2,0)):
     """
     Plot one or more pose trajectories on a common axis and return
@@ -560,7 +620,7 @@ def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False,
         List of pose trajectories as ndarrays of shape
         (n_frames, n_keypoints, 2).
 
-    edges: list of tuples
+    edges: list of tuples, default=[]
         List of edges, where each edge is a tuple of two integers
 
     lims: ndarray
@@ -582,7 +642,7 @@ def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False,
     node_size: int, default=50
         Size of each keypoint.
 
-    linewidth: int, default=3
+    line_width: int, default=3
         Width of the lines connecting keypoints.
 
     plot_width: int, default=4
@@ -634,11 +694,11 @@ def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False,
         for X,offset in zip(Xs,offsets):
             for ii,jj in edges: 
                 ax.plot(*X[i,(ii,jj)].T, c='k', zorder=i*4, 
-                        linewidth=linewidth, clip_on=False)
+                        linewidth=line_width, clip_on=False)
         
             for ii,jj in edges: 
                 ax.plot(*X[i,(ii,jj)].T, c=colors[ii], zorder=i*4+1, 
-                        linewidth=linewidth*.9, clip_on=False)
+                        linewidth=line_width*.9, clip_on=False)
 
             ax.scatter(*X[i].T, c=colors, zorder=i*4+2, edgecolor='k', 
                        linewidth=0.4, s=node_size, clip_on=False)
@@ -670,11 +730,11 @@ def plot_trajectories(titles, Xs, edges, lims, n_cols=4, invert=False,
 
 
 def generate_trajectory_plots(
-    coordinates, results=None, output_dir=None, name=None, 
+    coordinates=None, results=None, output_dir=None, name=None, 
     project_dir=None, results_path=None, pre=5, post=15, 
     min_frequency=0.005, min_duration=3, use_reindexed=True, 
-    skeleton=None, bodyparts=None, use_bodyparts=None,  
-    num_samples=40, keypoint_colormap='autumn',
+    use_estimated_coords=False, skeleton=[], bodyparts=None, 
+    use_bodyparts=None, num_samples=40, keypoint_colormap='autumn',
     plot_options={}, sampling_options={'mode':'density'}, **kwargs):
     """
     Generate trajectory plots for a modeled dataset.
@@ -688,16 +748,35 @@ def generate_trajectory_plots(
 
     Parameters
     ----------
-    coordinates : dict
+    coordinates : dict, default=None
         Dictionary mapping session names to keypoint coordinates as 
-        ndarrays of shape (n_frames, n_bodyparts, 2). 
+        ndarrays of shape (n_frames, n_bodyparts, 2). Required if
+        ``use_estimated_coords=False``.
 
     results: dict, default=None
-        Dictionary containing modeling results for a dataset. Must 
-        contain syllable sequences, centroids and headings (see
-        :py:func:`keypoint_moseq.fitting.apply_model`). If None,
-        results will be loaded using either ``results_path`` or 
-        ``project_dir`` and ``name``.
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.apply_model`). Must have
+        the format::
+
+            {
+                session_name1: {
+                    'syllables':              array of shape (n_frames,),
+                    'estimated_coordinates' : array of shape (n_frames, n_bodyparts, dim)
+                    'syllables_reindexed':    array of shape (n_frames,),
+                    'centroid':               array of shape (n_frames, dim),
+                    'heading' :               array of shape (n_frames,), 
+                },
+                ...  
+            }
+            
+        - ``syllables`` is required if ``use_reindexed=False``
+        - ``syllables_reindexed`` is required if ``use_reindexed=True``
+        - ``centroid`` is always required
+        - ``heading`` is always required
+        - ``estimated_coordinates`` is required if ``use_estimated_coords=True``
+
+        If ``results=None``, results will be loaded using either 
+        ``results_path`` or  ``project_dir`` and ``name``.
 
     output_dir: str, default=None
         Directory where trajectory plots should be saved. If None, 
@@ -739,11 +818,12 @@ def generate_trajectory_plots(
         List of bodypart names in ``coordinates``. 
 
     use_bodyparts: list of str, default=None
-        Ordered list of bodyparts that were used for modeling.
+        Ordered list of bodyparts to include in trajectory plot.
+        If None, all bodyparts will be included.
 
-    skeleton : list
+    skeleton : list, default=[]
         List of edges that define the skeleton, where each edge is a
-        pair of bodypart names.
+        pair of bodypart names or a pair of indexes.
 
     num_samples: int, default=40
         Number of samples to used to compute the average trajectory.
@@ -769,12 +849,14 @@ def generate_trajectory_plots(
         output_dir = os.path.join(project_dir,name, 'trajectory_plots')
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     print(f'Saving trajectory plots to {output_dir}')
-    
-    if not (bodyparts is None or use_bodyparts is None):
-        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
-    
+        
     if results is None: results = load_results(
         name=name, project_dir=project_dir, path=results_path)
+
+    if use_estimated_coords:
+        coordinates = {k:v['estimated_coordinates'] for k,v in results.items()}
+    elif bodyparts is not None and use_bodyparts is not None:
+        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
 
     syllable_key = 'syllables' + ('_reindexed' if use_reindexed else '')
     syllables = {k:v[syllable_key] for k,v in results.items()}
@@ -796,10 +878,13 @@ def generate_trajectory_plots(
         centroids=centroids, headings=headings)
 
     edges = []
-    if skeleton is not None: 
-        assert use_bodyparts is not None, fill(
-            'To plot skeleton edges, ``use_bodyparts`` must be specified')
-        edges = get_edges(use_bodyparts, skeleton)
+    if len(skeleton)>0: 
+        if isinstance(skeleton[0][0],str):
+            assert use_bodyparts is not None, fill(
+                'If skeleton edges are specified using bodypart names, '
+                '``use_bodyparts`` must be specified')
+            edges = get_edges(use_bodyparts, skeleton)
+        else: edges = skeleton
 
     syllables = sorted(trajectories.keys())
     titles = [f'Syllable {syllable}' for syllable in syllables]
@@ -827,9 +912,9 @@ def generate_trajectory_plots(
     else: raise NotImplementedError()
 
 
-def overlay_keypoints(
-    image, coordinates, skeleton_idx=[], keypoint_colormap='autumn',
-    node_size=10, line_width=2, copy=False):
+def overlay_keypoints_on_image(
+    image, coordinates, edges=[], keypoint_colormap='autumn',
+    node_size=10, line_width=2, copy=False, opacity=1.0):
     """
     Overlay keypoints on an image.
 
@@ -841,7 +926,7 @@ def overlay_keypoints(
     coordinates: ndarray of shape (num_keypoints, 2)
         Array of keypoint coordinates.
 
-    skeleton_idx: list of tuples, default=[]
+    edges: list of tuples, default=[]
         List of edges that define the skeleton, where each edge is a
         pair of indexes.
 
@@ -856,31 +941,38 @@ def overlay_keypoints(
 
     copy: bool, default=False
         Whether to copy the image before overlaying keypoints.
+    
+    opacity: float, default=1.0
+        Opacity of the overlay graphics (0.0-1.0).
 
     Returns
     -------
     image: ndarray of shape (height, width, 3)
         Image with keypoints overlayed.
     """
-    if copy: image = image.copy()
+    if copy or opacity<1.0: 
+        canvas = image.copy()
+    else: canvas = image
 
     # get colors from matplotlib and convert to 0-255 range for openc
     colors = plt.get_cmap(keypoint_colormap)(np.linspace(0,1,coordinates.shape[0]))
     colors = [tuple([int(c) for c in cs[:3]*255]) for cs in colors]
 
     # overlay skeleton
-    for i, j in skeleton_idx:
+    for i, j in edges:
         if np.isnan(coordinates[i,0]) or np.isnan(coordinates[j,0]): continue
         pos1 = tuple(coordinates[i].astype(int))
         pos2 = tuple(coordinates[j].astype(int))
-        image = cv2.line(image, pos1, pos2, colors[i], line_width, cv2.LINE_AA)
+        canvas = cv2.line(canvas, pos1, pos2, colors[i], line_width, cv2.LINE_AA)
 
     # overlay keypoints
     for i, (x,y) in enumerate(coordinates):
         if np.isnan(x): continue
         pos = (int(x), int(y))
-        image = cv2.circle(image, pos, node_size, colors[i], -1, cv2.LINE_AA)
+        canvas = cv2.circle(canvas, pos, node_size, colors[i], -1, cv2.LINE_AA)
 
+    if opacity<1.0:
+        image = cv2.addWeighted(image, 1-opacity, canvas, opacity, 0)
     return image
 
 def crop_image(image, centroid, crop_size):
@@ -908,8 +1000,6 @@ def crop_image(image, centroid, crop_size):
     y = int(np.clip(y, crop_size, image.shape[0]-crop_size))
     crop_size = int(crop_size)
     return image[y-crop_size:y+crop_size, x-crop_size:x+crop_size]
-
-
 
 
 def overlay_keypoints_on_video(
@@ -973,8 +1063,8 @@ def overlay_keypoints_on_video(
         if use_bodyparts is not None:
             coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
         else: use_bodyparts = bodyparts
-        skeleton_idx = get_edges(use_bodyparts, skeleton)
-    else: skeleton_idx = skeleton
+        edges = get_edges(use_bodyparts, skeleton)
+    else: edges = skeleton
 
     if crop_size is not None:
         outliers = np.any(np.isnan(coordinates), axis=2)
@@ -993,8 +1083,8 @@ def overlay_keypoints_on_video(
             for frame in tqdm.tqdm(frames):
                 image = reader.get_data(frame)
 
-                image = overlay_keypoints(
-                    image, coordinates[frame], skeleton_idx=skeleton_idx, **plot_options)
+                image = overlay_keypoints_on_image(
+                    image, coordinates[frame], edges=edges, **plot_options)
 
                 if crop_size is not None:
                     image = crop_image(image, crop_centroid[frame], crop_size)
@@ -1005,3 +1095,260 @@ def overlay_keypoints_on_video(
                         0.5, text_color, 1, cv2.LINE_AA)
 
                 writer.append_data(image)
+
+
+
+
+def crowd_movie(
+    instances, coordinates, lims, pre=30, post=60,
+    edges=[], node_size=3, line_width=2,
+    keypoint_colormap='autumn', opacity=0.3):
+    """
+    Generate a crowd movie.
+
+    Crowd movies show many instances of a syllable by animating
+    their keypoint trajectories in a common coordinate system.
+    The trajectories are synchronized to syllable onset. The opacity 
+    of each instance increases at syllable onset and decreases at
+    syllable offset.
+
+    Parameters
+    ----------
+    instances: list of tuples ``(key, start, end)``
+        List of syllable instances to include in the grid movie,
+        where each instance is specified as a tuple with the session
+        name, start frame and end frame. 
+    
+    coordinates: dict of ndarray of shape (num_frames, num_keypoints, dim)
+        Dictionary of keypoint coordinates, where each key is a session name.
+
+    lims: array of shape (2, dim)
+        Axis limits for plotting keypoints in the crowd movies. 
+
+    pre: int, default=30
+        Number of frames before syllable onset to include in the movie
+
+    post: int, default=60
+        Number of frames after syllable onset to include in the movie
+
+    edges: list of tuples, default=[]
+        List of edges, where each edge is a tuple of two integers
+
+    keypoint_colormap: str, default='autumn'
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    node_size: int, default=5
+        Size of each keypoint.
+
+    line_width: int, default=2
+        Width of the lines connecting keypoints.
+
+    opacity: float, default=0.8
+        Opacity of keypoints before syllable onset and after syllable offset.
+
+    Returns
+    -------
+    frames: array of shape ``(post+pre, height, width, 3)``
+        Array of frames in the grid movie. ``width`` and 
+        ``height`` are determined by ``lims``.
+    """
+    dim = coordinates[instances[0][0]].shape[2]
+    if dim == 3: warnings.warn(fill(
+        'Crowd movies are only supported for 2D keypoints. '
+        'Only the X and Y coordinates will be used.'))
+
+    h, w = (lims[1]-lims[0]).astype(int)
+    frames = np.zeros((post+pre, w, h, 3), dtype=np.uint8)
+
+    for key, start, end in instances:
+        xy = coordinates[key][start-pre:start+post,:,:2]
+        xy = (np.clip(xy, *lims[:,:2]) - lims[0,:2]).astype(int)
+
+        for i in range(pre+post):
+            if i >= pre and i < pre+end-start: alpha = 1
+            else: alpha = opacity
+            frames[i] = overlay_keypoints_on_image(
+                frames[i], xy[i], edges=edges, keypoint_colormap=keypoint_colormap,
+                node_size=node_size, line_width=line_width, opacity=alpha)
+    return frames
+
+
+def generate_crowd_movies(
+    coordinates, results=None, output_dir=None, name=None, 
+    project_dir=None, results_path=None, pre=30, post=60,
+    min_frequency=0.005, min_duration=3, num_instances=15,
+    use_reindexed=True, use_estimated_coords=False, skeleton=[], 
+    bodyparts=None, use_bodyparts=None, keypoint_colormap='autumn', 
+    fps=30, limits=None, plot_options={}, sampling_options={}, 
+    quality=7, **kwargs):
+    """
+    Generate crowd movies for a modeled dataset.
+
+    Crowd movies show many instances of a syllable and are useful in
+    figuring out what behavior the syllable captures 
+    (see :py:func:`keypoint_moseq.viz.crowd_movie`). This method
+    generates a crowd movie for each syllable that is used sufficiently
+    often (i.e. has at least ``num_instances`` instances with duration
+    of at least ``min_duration`` and an overall frequency of at least
+    ``min_frequency``). The crowd movies are saved to ``output_dir`` if 
+    specified, or else to ``{project_dir}/{name}/crowd_movies``.
+
+    Parameters
+    ----------
+    coordinates: dict, default=None
+        Dictionary mapping session names to keypoint coordinates as 
+        ndarrays of shape (n_frames, n_bodyparts, 2). Required if
+        ``use_estimated_coords=False``.
+
+    results: dict, default=None
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.apply_model`). Must have
+        the format::
+
+            {
+                session_name1: {
+                    'syllables':              array of shape (n_frames,),
+                    'estimated_coordinates' : array of shape (n_frames, n_bodyparts, dim)
+                    'syllables_reindexed':    array of shape (n_frames,),
+                    'centroid':               array of shape (n_frames, dim),
+                    'heading' :               array of shape (n_frames,), 
+                },
+                ...  
+            }
+            
+        - ``syllables`` is required if ``use_reindexed=False``
+        - ``syllables_reindexed`` is required if ``use_reindexed=True``
+        - ``centroid`` is required if the sampling mode is 'density'
+        - ``heading`` is required if the sampling mode is 'density'
+        - ``estimated_coordinates`` is required if ``use_estimated_coords=True``
+        
+
+        If ``results=None``, results will be loaded using either 
+        ``results_path`` or  ``project_dir`` and ``name``.
+
+    output_dir: str, default=None
+        Directory where crowd movies should be saved. If None, 
+        movies will be saved to ``{project_dir}/{name}/crowd_movies``.
+
+    name: str, default=None
+        Name of the model. Required to load results if ``results`` is 
+        None and ``results_path`` is None. Required to save crowd
+        movies if ``output_dir`` is None.
+
+    project_dir: str, default=None
+        Project directory. Required to load results if ``results`` is 
+        None and ``results_path`` is None. Required to save crowd
+        movies if ``output_dir`` is None.
+
+    results_path: str, default=None
+        Path to a results file. If None, results will be loaded from
+        ``{project_dir}/{name}/results.h5``.
+
+    num_instances: int, default=15
+        Number of syllable instances per crowd movie.
+
+    min_frequency: float, default=0.005
+        Minimum frequency of a syllable to be included in the crowd movies.
+
+    min_duration: int, default=3
+        Minimum duration of a syllable instance to be included in the 
+        crowd movie for that syllable. 
+
+    use_reindexed: bool, default=True
+        Determines the naming of syllables (``results["syllables"]`` if 
+        False, or ``results["syllables_reindexed"]`` if True). The
+        reindexed naming corresponds to the rank order of syllable
+        frequency (e.g. "0" for the most frequent syllable).
+    
+    bodyparts: list of str, default=None
+        List of bodypart names in ``coordinates``. 
+
+    use_bodyparts: list of str, default=None
+        Ordered list of bodyparts to include in the crowd
+        movies. If None, all bodyparts will be included.
+        
+    skeleton: list, default=[]
+        List of edges that define the skeleton, where each edge is a
+        pair of bodypart names or a pair of indexes.
+        
+    keypoint_colormap: str, default='autumn'
+        Name of a matplotlib colormap to use for coloring the keypoints.
+        
+    fps: int, default=30
+        Frames per second of the crowd movies.
+
+    limits: array, default=None
+        Axis limits for plotting keypoints in the crowd movies. If None,
+        limits will be inferred automatically from ``coordinates``.
+        
+    plot_options: dict, default={}
+        Dictionary of additional options for rendering crowd
+        movies (see :py:func:`keypoint_moseq.util.crowd_movie`).
+        
+    sampling_options: dict, default={}
+        Dictionary of options for sampling syllable instances (see
+        :py:func:`keypoint_moseq.util.sample_instances`).
+
+    quality: int, default=7
+        Quality of the crowd movies. Higher values result in higher
+        quality movies but larger file sizes.
+    """    
+    if output_dir is None:
+        assert project_dir is not None and name is not None, fill(
+            'Either specify the ``output_dir`` where crowd movies should '
+            'be saved or include a ``project_dir`` and ``name``')
+        output_dir = os.path.join(project_dir,name, 'crowd_movies')
+    if not os.path.exists(output_dir): os.makedirs(output_dir)
+    print(f'Writing crowd movies to {output_dir}')
+
+    if results is None: results = load_results(
+        name=name, project_dir=project_dir, path=results_path)
+        
+    if use_estimated_coords:
+        coordinates = {k:v['estimated_coordinates'] for k,v in results.items()}
+    elif bodyparts is not None and use_bodyparts is not None:
+        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+
+    syllable_key = 'syllables' + ('_reindexed' if use_reindexed else '')
+    syllables = {k:v[syllable_key] for k,v in results.items()}
+    plot_options.update({'keypoint_colormap':keypoint_colormap})
+
+    if limits is None: 
+        limits = get_limits(coordinates)
+
+    centroids,headings = None,None
+    k = list(results.keys())[0]
+    if 'centroid' in results[k]:
+        centroids = {k:v['centroid'] for k,v in results.items()}
+    if 'heading' in results[k]:
+        headings = {k:v['heading'] for k,v in results.items()}
+
+    edges = []
+    if len(skeleton)>0: 
+        if isinstance(skeleton[0][0],str):
+            assert use_bodyparts is not None, fill(
+                'If skeleton edges are specified using bodypart names, '
+                '``use_bodyparts`` must be specified')
+            edges = get_edges(use_bodyparts, skeleton)
+        else: edges = skeleton
+
+    syllable_instances = get_syllable_instances(
+        syllables, pre=pre, post=post, min_duration=min_duration,
+        min_frequency=min_frequency, min_instances=num_instances)
+
+    sampled_instances = sample_instances(
+        syllable_instances, num_instances, coordinates=coordinates, 
+        centroids=centroids, headings=headings, **sampling_options)
+
+    for syllable,instances in tqdm.tqdm(
+        sampled_instances.items(), desc='Generating crowd movies'):
+        
+        frames = crowd_movie(
+            instances, coordinates, pre=pre, post=post,
+            edges=edges, lims=limits, **plot_options)
+
+        path = os.path.join(output_dir, f'syllable{syllable}.mp4')
+        
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            write_video_clip(frames, path, fps=fps, quality=quality)
