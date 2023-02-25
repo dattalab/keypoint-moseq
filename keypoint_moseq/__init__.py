@@ -19,6 +19,7 @@ from .viz import (
     plot_scree, 
     plot_progress, 
     generate_crowd_movies, 
+    generate_grid_movies,
     generate_trajectory_plots,
 )
 
