@@ -112,13 +112,15 @@ def fit_model(model,
     history_every_n_iters : int, default=10
         Update the model's history every ``history_every_n_iters``. E.g.,
         if ``history_every_n_iters=10``, the history will contain snapshots 
-        from iterations 0, 10, 20, etc.
+        from iterations 0, 10, 20, etc. If ``history_every_n_iters=0``, no
+        history is saved.
 
     states_in_history : bool, default=True
         If True, include the model's states in the history.
 
     plot_every_n_iters : int, default=10
-        Plot the model's progress every ``plot_every_n_iters``.
+        Plot the model's progress every ``plot_every_n_iters``. If 
+        ``plot_every_n_iters=0``, no plots are generated.
 
     save_progress_figs : bool, default=True
         If True, save the progress plots to disk.
