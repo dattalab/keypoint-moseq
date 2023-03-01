@@ -456,7 +456,7 @@ def get_syllable_instances(stateseqs, min_duration=3, pre=30, post=60,
         starts = np.insert(transitions,0,0)
         ends = np.append(transitions,len(stateseq))
         for (s,e,syllable) in zip(starts,ends,stateseq[starts]):
-            if (e-s > min_duration and s>=pre and s<len(stateseq)-post): 
+            if (e-s >= min_duration and s>=pre and s<len(stateseq)-post): 
                 syllable_instances[syllable].append((key,s,e))
                 
     frequencies_filter = get_frequencies(stateseqs) >= min_frequency
