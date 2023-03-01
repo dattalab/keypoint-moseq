@@ -10,7 +10,7 @@ from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_checkpoint, format_data, save_hdf5
-from keypoint_moseq.util import get_durations, batch, unbatch, get_frequencies, pad_along_axis
+from keypoint_moseq.util import get_durations, batch, unbatch, get_frequencies, pad_along_axis, reindex_by_frequency
 from jax_moseq.models.keypoint_slds import estimate_coordinates, resample_model, init_model
 
 def _update_history(history, iteration, model, include_states=True): 
@@ -313,11 +313,8 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
     states = jax.device_get(model['states'])                     
     estimated_coords = jax.device_get(estimate_coordinates(
         **model['states'], **model['params'], **data))
-    
-    mask = np.array(data['mask'])
-    frequency = get_frequencies(states['z'], mask)
-    new_index = np.argsort(np.argsort(frequency)[::-1])
-    z_reindexed = new_index[states['z']]
+    z_reindexed = reindex_by_frequency(states['z'], np.array(data['mask']))
+
     
     results_dict = {
         session_name : {
@@ -334,6 +331,7 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         print(fill(f'Saved results to {results_path}'))
         
     return results_dict
+
 
 
 def revert(checkpoint, iteration):
