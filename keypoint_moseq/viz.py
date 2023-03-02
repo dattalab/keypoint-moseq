@@ -974,7 +974,6 @@ def overlay_keypoints_on_image(
     if opacity<1.0:
         image = cv2.addWeighted(image, 1-opacity, canvas, opacity, 0)
     return image
-
 def crop_image(image, centroid, crop_size):
     """
     Crop an image around a centroid.
@@ -987,19 +986,32 @@ def crop_image(image, centroid, crop_size):
     centroid: tuple of int
         (x,y) coordinates of the centroid.
 
-    crop_size: int
-        Size of the crop around the centroid.
+    crop_size: int or tuple(int,int)
+        Size of the crop around the centroid. Either a single int for
+        a square crop, or a tuple of ints (w,h) for a rectangular crop.
+
 
     Returns
     -------
     image: ndarray of shape (crop_size, crop_size, 3)
         Cropped image.
     """
-    x, y = centroid
-    x = int(np.clip(x, crop_size, image.shape[1]-crop_size))
-    y = int(np.clip(y, crop_size, image.shape[0]-crop_size))
-    crop_size = int(crop_size)
-    return image[y-crop_size:y+crop_size, x-crop_size:x+crop_size]
+    if isinstance(crop_size,tuple): w,h = crop_size
+    else: w,h = crop_size,crop_size
+    x,y = int(centroid[0]),int(centroid[1])
+
+    x_min = max(0, x - w//2)
+    y_min = max(0, y - h//2)
+    x_max = min(image.shape[1], x + w//2)
+    y_max = min(image.shape[0], y + h//2)
+
+    cropped = image[y_min:y_max, x_min:x_max]
+    padded = np.zeros((h,w,*image.shape[2:]), dtype=image.dtype)
+    pad_x = (w - cropped.shape[1]) // 2
+    pad_y = (h - cropped.shape[0]) // 2
+    padded[pad_y:pad_y+cropped.shape[0], pad_x:pad_x+cropped.shape[1]] = cropped
+    return padded
+
 
 
 def overlay_keypoints_on_video(
