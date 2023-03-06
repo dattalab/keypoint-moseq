@@ -594,14 +594,41 @@ def get_limits(coordinates, padding=0.2, pctl=1, blocksize=16):
     ])
     return lims
 
+import os
+import cv2
+import tqdm
+import imageio
+import warnings
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.ndimage import gaussian_filter1d
 
-def _get_limits(coordinates, padding=0.1, pctl=1):
-    X = np.vstack(list(coordinates.values()))
-    lims = np.percentile(X, [pctl,100-pctl], axis=(0,1))
-    lims = (lims-lims.mean(0))*(1+padding) + lims.mean(0)
-    return lims
+from keypoint_moseq.util import (
+    get_edges, get_durations, get_frequencies, reindex_by_bodyparts,
+    find_matching_videos, get_syllable_instances, sample_instances,
+    filter_centroids_headings, get_trajectories, interpolate_keypoints,
+)
+from keypoint_moseq.io import load_results
+from keypoint_moseq.viz import get_limits
 
-        
+
+def _pad_limits(limits, left=0.1, right=0.1, top=0.1, bottom=0.1):
+    
+    xmin,ymin = limits[0]
+    xmax,ymax = limits[1]
+    width = xmax-xmin
+    height = ymax-ymin
+    
+    xmin -= width*left
+    xmax += width*right
+    ymin -= height*bottom
+    ymax += height*top
+    
+    return np.array([
+        [xmin,ymin],
+        [xmax,ymax]])
+
+
 def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False, 
                       keypoint_colormap='autumn', node_size=50, line_width=3, 
                       plot_width=4, overlap=(0.2,0)):
@@ -636,8 +663,9 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
         Determines the background color of the figure. If ``True``,
         the background will be black.
 
-    keypoint_colormap : str
-        Name of a matplotlib colormap to use for coloring the keypoints.
+    keypoint_colormap : str or list
+        Name of a matplotlib colormap or a list of colors as (r,b,g) 
+        tuples in the same order as as the keypoints.
 
     node_size: int, default=50
         Size of each keypoint.
@@ -668,8 +696,11 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
 
     interval = int(np.floor(num_timesteps/10))
     plot_frames = np.arange(0,num_timesteps,interval)
-    colors = plt.cm.get_cmap(keypoint_colormap)(np.linspace(0,1,num_keypoints))
     fill_color = 'k' if invert else 'w'
+    
+    if isinstance(keypoint_colormap, list): colors = keypoint_colormap
+    else: colors = plt.cm.get_cmap(keypoint_colormap)(np.linspace(0,1,num_keypoints))
+    
 
     n_cols = min(n_cols, len(Xs))
     n_rows = np.ceil(len(Xs)/n_cols)
@@ -735,7 +766,9 @@ def generate_trajectory_plots(
     min_frequency=0.005, min_duration=3, use_reindexed=True, 
     use_estimated_coords=False, skeleton=[], bodyparts=None, 
     use_bodyparts=None, num_samples=40, keypoint_colormap='autumn',
-    plot_options={}, sampling_options={'mode':'density'}, **kwargs):
+    plot_options={}, sampling_options={'mode':'density'},
+    padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2},
+    **kwargs):
     """
     Generate trajectory plots for a modeled dataset.
 
@@ -840,7 +873,12 @@ def generate_trajectory_plots(
     sampling_options: dict, default={'mode':'density'}
         Dictionary of options for sampling syllable instances (see
         :py:func:`keypoint_moseq.util.sample_instances`).
-
+        
+    padding: dict, default={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2}
+        Padding around trajectory plots. Controls the the distance
+        between trajectories (when multiple are shown in one figure)
+        as well as the title offset. 
+    
     """
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
@@ -888,28 +926,29 @@ def generate_trajectory_plots(
 
     syllables = sorted(trajectories.keys())
     titles = [f'Syllable {syllable}' for syllable in syllables]
-    Xs = np.array([trajectories[syllable] for syllable in syllables]).mean(1)
+    Xs = np.nanmean(np.array([trajectories[syllable] for syllable in syllables]),axis=1)
     
     lims = np.stack([Xs.min((0,1,2)),Xs.max((0,1,2))])
-    lims = _pad_limits(lims, left=0.1, right=0.1, top=0.2, bottom=0.2)
-
+    lims = _pad_limits(lims, **padding)
+    
     if Xs.shape[-1]==2:
         
         # individual plots
         desc = 'Generating trajectory plots'
         for title,X in tqdm.tqdm(zip(titles,Xs), desc=desc, total=len(titles)):
-            fig,ax = plot_trajectories([title], X[None], edges, lims, **plot_options)
+            fig,ax = plot_trajectories([title], X[None], lims, edges=edges, **plot_options)
             path = os.path.join(output_dir, f'{title}.pdf')
             plt.savefig(path)
             plt.close(fig=fig)
 
         # grid plot
-        fig,ax = plot_trajectories(titles, Xs, edges, lims, **plot_options)
+        fig,ax = plot_trajectories(titles, Xs, lims, edges=edges, **plot_options)
         path = os.path.join(output_dir, 'all_trajectories.pdf')
         plt.savefig(path)
         plt.show()
             
     else: raise NotImplementedError()
+
 
 
 def overlay_keypoints_on_image(
@@ -974,6 +1013,8 @@ def overlay_keypoints_on_image(
     if opacity<1.0:
         image = cv2.addWeighted(image, 1-opacity, canvas, opacity, 0)
     return image
+
+
 def crop_image(image, centroid, crop_size):
     """
     Crop an image around a centroid.

@@ -691,6 +691,10 @@ def sample_instances(syllable_instances, num_samples, mode='random',
             '``coordinates``, ``headings`` and ``centroids`` are required when '
             '``mode == "density"``')
 
+        for key in coordinates.keys():
+            outliers = np.isnan(coordinates[key]).any(-1)
+            coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
+
         trajectories = get_trajectories(
             syllable_instances, coordinates, pre=pre, post=post, 
             centroids=centroids, headings=headings, filter_size=filter_size)
