@@ -1,17 +1,15 @@
 name: keypoint_moseq
 
 channels:
-  - defaults
   - conda-forge
   - nvidia
+  - defaults
 
 dependencies:
   - python=3.9
   - pytables
-  - cudatoolkit=11.2
-  - cudnn=8.2
-  - conda-forge::jax=0.3.22
-  - conda-forge::jaxlib=0.3.22=*cuda*
+  - jaxlib=0.3.22=*cuda*
+  - jax
   - cuda-nvcc
   - pip
   - pip:
