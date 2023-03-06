@@ -102,8 +102,14 @@ def concatenate_stateseqs(stateseqs, mask=None):
 
 def get_durations(stateseqs, mask=None):
     """
-    Get durations for a batch of state sequences. For a description of 
-    the inputs, see :py:func:`keypoint_moseq.util.concatenate_stateseqs`
+    Get durations for a batch of state sequences. For a more detailed 
+    description of the function parameters, see 
+    :py:func:`keypoint_moseq.util.concatenate_stateseqs`
+
+    Parameters
+    ----------
+    stateseqs: dict or ndarray of shape (..., t)
+    mask: ndarray of shape (..., >=t), default=None
 
     Returns
     -------
@@ -125,11 +131,19 @@ def get_durations(stateseqs, mask=None):
     return changepoints[1:]-changepoints[:-1]
 
 
-def get_frequencies(stateseqs, mask=None):
+def get_frequencies(stateseqs, mask=None, num_states=None):
     """
     Get state frequencies for a batch of state sequences. Each frame is
-    counted separately. For a description of the inputs, see 
-    :py:func:`keypoint_moseq.util.concatenate_stateseqs`
+    counted separately. For a more detailed  description of the function 
+    parameters, see :py:func:`keypoint_moseq.util.concatenate_stateseqs`
+
+    Parameters
+    ----------
+    stateseqs: dict or ndarray of shape (..., t)
+    mask: ndarray of shape (..., >=t), default=None
+    num_states: int, default=None
+        Number of different states. If None, the number of states will
+        be set to ``max(stateseqs)+1``.
 
     Returns
     -------
@@ -147,7 +161,31 @@ def get_frequencies(stateseqs, mask=None):
 
     """    
     stateseq_flat = concatenate_stateseqs(stateseqs, mask=mask).astype(int)
-    return np.bincount(stateseq_flat)/len(stateseq_flat)
+    return np.bincount(stateseq_flat, minlength=num_states)/len(stateseq_flat)
+
+def reindex_by_frequency(stateseqs, mask=None):
+    """
+    Reindex a sequence of syllables by frequency. The most frequent
+    syllable will be assigned 0, the second most frequent 1, etc.
+    For a more detailed  description of the function parameters, 
+    see :py:func:`keypoint_moseq.util.concatenate_stateseqs`
+
+    Parameters
+    ----------
+    stateseqs: dict or ndarray of shape (..., t)
+    mask: ndarray of shape (..., >=t), default=None
+
+    Returns
+    -------
+    stateseqs_reindexed: ndarray
+        The reindexed state sequences in the same format as ``stateseqs``
+    """
+    frequency = get_frequencies(stateseqs, mask=mask)
+    o = np.argsort(np.argsort(frequency)[::-1])
+    if isinstance(stateseqs, dict):
+        stateseqs_reindexed = {k: o[seq] for k,seq in stateseqs.items()}
+    else: stateseqs_reindexed = o[stateseqs]
+    return stateseqs_reindexed
 
 
 def list_files_with_exts(dir_path, ext_list, recursive=True):
@@ -456,7 +494,7 @@ def get_syllable_instances(stateseqs, min_duration=3, pre=30, post=60,
         starts = np.insert(transitions,0,0)
         ends = np.append(transitions,len(stateseq))
         for (s,e,syllable) in zip(starts,ends,stateseq[starts]):
-            if (e-s > min_duration and s>=pre and s<len(stateseq)-post): 
+            if (e-s >= min_duration and s>=pre and s<len(stateseq)-post): 
                 syllable_instances[syllable].append((key,s,e))
                 
     frequencies_filter = get_frequencies(stateseqs) >= min_frequency
@@ -652,6 +690,10 @@ def sample_instances(syllable_instances, num_samples, mode='random',
         assert not (coordinates is None or headings is None or centroids is None), fill(
             '``coordinates``, ``headings`` and ``centroids`` are required when '
             '``mode == "density"``')
+
+        for key in coordinates.keys():
+            outliers = np.isnan(coordinates[key]).any(-1)
+            coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
 
         trajectories = get_trajectories(
             syllable_instances, coordinates, pre=pre, post=post, 
