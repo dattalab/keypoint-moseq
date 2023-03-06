@@ -8,16 +8,13 @@ channels:
 dependencies:
   - python=3.9
   - pytables
-  # - jaxlib=*=*cuda*
-  # - jax
-  # - cudatoolkit=11
-  # - cudnn=8.2
-  # - cuda-nvcc
+  - cudatoolkit=11.1
+  - cudnn=8.2
+  - cuda-nvcc
   - pip
   - pip:
     - jax==0.3.22
-    # - "https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl"
-    - "https://whls.blob.core.windows.net/unstable/cpu/jaxlib-0.3.22-cp39-cp39-win_amd64.whl"
+    - "https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl"
     - "git+https://github.com/dattalab/jax-moseq.git@32c5286b5f11e260cb95840572beea736c3d1a0f#egg=jax-moseq"
     - "--editable=."
     - jupyterlab
