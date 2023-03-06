@@ -219,8 +219,25 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
 
 def update_config(project_dir, **kwargs):
     """
-    Update ``config.yml`` from ``project_dir`` to include
-    all the key/value pairs in ``kwargs``.
+    Update the config file stored at ``project_dir/config.yml``.
+     
+    Use keyword arguments to update key/value pairs in the config.
+    To update model hyperparameters, just use the name of the 
+    hyperparameter as the keyword argument. 
+
+    Examples
+    --------
+    To update ``video_dir`` to ``/path/to/videos``::
+
+    >>> update_config(project_dir, video_dir='/path/to/videos')
+    >>> print(load_config(project_dir)['video_dir'])
+    /path/to/videos
+
+    To update ``trans_hypparams['kappa']`` to ``100``::
+
+    >>> update_config(project_dir, kappa=100)
+    >>> print(load_config(project_dir)['trans_hypparams']['kappa'])
+    100
     """
     config = load_config(project_dir, check_if_valid=False, build_indexes=False)
     config.update(kwargs)
@@ -729,7 +746,7 @@ def load_sleap_results(directory, recursive=True, return_bodyparts=False):
                 else:
                     for i in range(coords.shape[0]):
                         coordinates[f'{filename}_track{i}'] = coords[i].T
-                        confidences[f'{filename}_track{i}'] = confs[i].T
+                        confidences[f'{filename}_track{i}'] = coords[i].T
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
     if return_bodyparts: 
