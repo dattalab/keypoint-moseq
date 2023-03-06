@@ -59,6 +59,14 @@ conda env create -f environment.win64_cpu.yml
 ```
 conda env create -f environment.win64_gpu.yml
 ```
+**Linux (CPU-only):**
+```
+conda env create -f environment.linux_cpu.yml
+```
+**Linux (GPU):**
+```
+conda env create -f environment.linux_gpu.yml
+```
 
 3. Activate the new environment:
 ```
