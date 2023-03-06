@@ -324,7 +324,7 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
             'latent_state' : states['x'][i][m>0],
             'centroid' : states['v'][i][m>0],
             'heading' : states['h'][i][m>0],
-        } for i,(m,session_name) in enumerate(zip(mask,session_names))}
+        } for i,(m,session_name) in enumerate(zip(data['mask'],session_names))}
     
     if save_results: 
         save_hdf5(results_path, results_dict)
