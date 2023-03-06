@@ -1,0 +1,16 @@
+name: keypoint_moseq
+
+channels:
+  - defaults
+  - conda-forge
+
+dependencies:
+  - python=3.9
+  - pytables
+  - conda-forge::jax=0.3.22
+  - conda-forge::jaxlib=0.3.22=*cpu*
+  - pip
+  - pip:
+    - "git+https://github.com/dattalab/jax-moseq.git@32c5286b5f11e260cb95840572beea736c3d1a0f#egg=jax-moseq"
+    - "--editable=."
+    - jupyterlab
