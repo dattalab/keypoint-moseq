@@ -64,8 +64,8 @@ def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3,2),
     return fig
           
 def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
-             savefig=True, project_dir=None, scale=10, plot_n_pcs=10, 
-             axis_size=(2,1.5), ncols=5, node_size=20, **kwargs):
+             savefig=True, project_dir=None, scale=1, plot_n_pcs=10, 
+             axis_size=(2,1.5), ncols=5, node_size=30.0, linewidth=2.0, **kwargs):
     """
     Visualize the components of a fitted PCA model.
 
@@ -96,7 +96,7 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
     project_dir : str, default=None
         Path to the project directory. Required if ``savefig`` is True.
 
-    scale : float, default=10
+    scale : float, default=0.5
         Scale factor for the perturbation of the mean pose.
 
     plot_n_pcs : int, default=10
@@ -108,8 +108,11 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
     ncols : int, default=5
         Number of columns in the figure.
 
-    node_size : int, default=20
+    node_size : float, default=30.0
         Size of the keypoints in the figure.
+        
+    linewidth: float, default=2.0
+        Width of edges in skeleton
     """
     k = len(use_bodyparts)
     d = len(pca.mean_)//(k-1)  
@@ -121,16 +124,27 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
     if d==2: dims_list,names = [[0,1]],['xy']
     if d==3: dims_list,names = [[0,1],[1,2]],['xy','yz']
     
+    magnitude = np.sqrt((pca.mean_**2).mean()) * scale
     for dims,name in zip(dims_list,names):
         nrows = int(np.ceil(plot_n_pcs/ncols))
         fig,axs = plt.subplots(nrows, ncols, sharex=True, sharey=True)
         for i,ax in enumerate(axs.flat):
             ymean = Gamma @ pca.mean_.reshape(k-1,d)[:,dims]
-            y = Gamma @ (pca.mean_ + scale*pca.components_[i]).reshape(k-1,d)[:,dims]
-            for e in edges: ax.plot(*ymean[e].T, color=cmap(e[0]/(k-1)), zorder=0, alpha=0.25)
-            ax.scatter(*ymean.T, c=np.arange(k), cmap=cmap, s=node_size, zorder=1, alpha=0.25, linewidth=0)
-            for e in edges: ax.plot(*y[e].T, color=cmap(e[0]/(k-1)), zorder=2)
-            ax.scatter(*y.T, c=np.arange(k), cmap=cmap, s=node_size, zorder=3)
+            y = Gamma @ (pca.mean_ + magnitude*pca.components_[i]).reshape(k-1,d)[:,dims]
+            
+            for e in edges:  
+                ax.plot(*ymean[e].T, color=cmap(e[0]/(k-1)), 
+                        zorder=0, alpha=0.25, linewidth=linewidth)
+                ax.plot(*y[e].T, color='k', 
+                        zorder=2, linewidth=linewidth+.2)
+                ax.plot(*y[e].T, color=cmap(e[0]/(k-1)), 
+                        zorder=3, linewidth=linewidth)
+                
+            ax.scatter(*ymean.T, c=np.arange(k), cmap=cmap, s=node_size, 
+                       zorder=1, alpha=0.25, linewidth=0)
+            ax.scatter(*y.T, c=np.arange(k), cmap=cmap, s=node_size, 
+                       zorder=4, edgecolor='k', linewidth=0.2)
+            
             ax.set_title(f'PC {i+1}', fontsize=10)
             ax.set_aspect('equal')
             ax.axis('off')
@@ -143,6 +157,7 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
                 'The ``savefig`` option requires a ``project_dir``')
             plt.savefig(os.path.join(project_dir,f'pcs-{name}.pdf'))
         plt.show()
+        
         
 
 def plot_progress(model, data, history, iteration, path=None,
