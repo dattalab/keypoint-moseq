@@ -746,7 +746,7 @@ def load_sleap_results(directory, recursive=True, return_bodyparts=False):
                 else:
                     for i in range(coords.shape[0]):
                         coordinates[f'{filename}_track{i}'] = coords[i].T
-                        confidences[f'{filename}_track{i}'] = coords[i].T
+                        confidences[f'{filename}_track{i}'] = confs[i].T
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
     if return_bodyparts: 
