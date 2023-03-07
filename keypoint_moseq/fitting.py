@@ -189,8 +189,8 @@ def resume_fitting(*, params, hypparams, labels, iteration, mask,
 
 def apply_model(*, params, coordinates, confidences=None, num_iters=5, 
                 use_saved_states=True, states=None, mask=None, labels=None, 
-                ar_only=False, save_results=True, project_dir=None, 
-                name=None, results_path=None, **kwargs):   
+                noise_prior=None, ar_only=False, save_results=True, 
+                project_dir=None, name=None, results_path=None, **kwargs): 
     """
     Apply a model to data.
 
@@ -249,6 +249,10 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         Row labels ``states``
         (see :py:func:`keypoint_moseq.util.batch`).
 
+    noise_prior : ndarray, default=None
+        Prior on the noise for each observation. Should be the same shape
+        as ``states['s']``.
+
     ar_only : bool, default=False
         See :py:func:`keypoint_moseq.fitting.fit_model`.
 
@@ -274,8 +278,7 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
     """
     
     kwargs['seg_length'] = None # dont separate the data into segments
-
-
+    
     data, new_labels = format_data(
         coordinates, confidences=confidences, **kwargs)
     session_names = [key for key,start,end in new_labels]
@@ -292,6 +295,11 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
             'The ``use_saved_states`` option requires the additional '
             'arguments ``states``, ``mask`` and ``labels``')   
         
+        if noise_prior is not None:
+            noise_prior = batch(
+                unbatch(noise_prior, labels),
+                keys=session_names)[0]   
+            
         new_states = {}
         for k,v in jax.device_get(states).items():
             padding = mask.shape[1] - v.shape[1]
@@ -299,11 +307,12 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
             v = batch(unbatch(v, labels), keys=session_names)[0]
             new_states[k] = v[:,padding:]
         states = new_states
+        
     else: 
         states = None
-        kwargs['noise_prior'] = None
+        noise_prior = None
     
-    model = init_model(data, states, params, **kwargs)
+    model = init_model(data, states, params, noise_prior=noise_prior, **kwargs)
     
     if num_iters>0:
         for iteration in tqdm.trange(num_iters, desc='Applying model'):
@@ -331,7 +340,6 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         print(fill(f'Saved results to {results_path}'))
         
     return results_dict
-
 
 
 def revert(checkpoint, iteration):
