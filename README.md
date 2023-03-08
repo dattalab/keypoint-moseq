@@ -2,7 +2,7 @@
 
 Motion Sequencing ([MoSeq](https://www.cell.com/neuron/fulltext/S0896-6273(15)01037-5?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS0896627315010375%3Fshowall%3Dtrue)) for keypoint tracking data. 
 
-## Installation
+## Option 1: Install using pip
 
 1. If you plan to use a GPU (recommended), install the appropriate driver and CUDA version. CUDA ≥11.1 and cuDNN ≥8.2 are required. [This section of the DeepLabCut docs](https://deeplabcut.github.io/DeepLabCut/docs/installation.html#gpu-support) may be helpful.
 
@@ -42,7 +42,7 @@ pip install -U git+https://github.com/dattalab/keypoint-moseq
 python -m ipykernel install --user --name=keypoint_moseq
 ```
 
-### Alternative: Conda environment installation
+### Option 2: Conda environment installation
 As an alternative, you can install directly from conda environment files. This will automatically install the appropriate GPU drivers and other dependencies.
 
 1. Clone the repository:
