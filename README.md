@@ -41,3 +41,49 @@ pip install -U git+https://github.com/dattalab/keypoint-moseq
 ```
 python -m ipykernel install --user --name=keypoint_moseq
 ```
+
+### Alternative: Conda environment installation
+As an alternative, you can install directly from conda environment files. This will automatically install the appropriate GPU drivers and other dependencies.
+
+1. Clone the repository:
+```
+git clone https://github.com/dattalab/keypoint-moseq && cd keypoint-moseq
+```
+
+2. Install the appropriate conda environment for your platform:
+**Windows (CPU-only):**
+```
+conda env create -f environment.win64_cpu.yml
+```
+**Windows (GPU):**
+```
+conda env create -f environment.win64_gpu.yml
+```
+**Linux (CPU-only):**
+```
+conda env create -f environment.linux_cpu.yml
+```
+**Linux (GPU):**
+```
+conda env create -f environment.linux_gpu.yml
+```
+
+3. Activate the new environment:
+```
+conda activate keypoint_moseq
+```
+
+### Troubleshooting
+#### `UNKNOWN: no kernel image is available for execution on the device`
+If you're running into issues when trying to use the GPU-accelerated version, you might see this error message:
+```
+jaxlib.xla_extension.XlaRuntimeError: UNKNOWN: no kernel image is available for execution on the device
+```
+First, check if Jax can detect your GPU:
+```
+(keypoint_moseq) λ python -c "import jax; print(jax.default_backend())"
+gpu
+```
+If it can't, then you might not be using the right version of `cudatoolkit` or `cudnn`. If you installed these via `conda`, you can check by doing a `conda list | grep cud`.
+
+If you are on the right versions, try [updating your GPU driver to the latest version](https://nvidia.com/drivers).
