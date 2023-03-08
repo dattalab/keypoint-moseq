@@ -601,47 +601,13 @@ def get_limits(coordinates, padding=0.2, pctl=1, blocksize=16):
         Axis limits, in the format ``[[xmin,ymin,...],[xmax,ymax,...]]``.
     """
     X = np.vstack(list(coordinates.values()))
-    lims = np.percentile(X, [pctl,100-pctl], axis=(0,1))
+    lims = np.nanpercentile(X, [pctl,100-pctl], axis=(0,1))
     lims = (lims-lims.mean(0))*(1+padding) + lims.mean(0)
     lims = np.array([
         np.floor(lims[0]/blocksize)*blocksize,
         np.ceil(lims[1]/blocksize)*blocksize
     ])
     return lims
-
-import os
-import cv2
-import tqdm
-import imageio
-import warnings
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.ndimage import gaussian_filter1d
-
-from keypoint_moseq.util import (
-    get_edges, get_durations, get_frequencies, reindex_by_bodyparts,
-    find_matching_videos, get_syllable_instances, sample_instances,
-    filter_centroids_headings, get_trajectories, interpolate_keypoints,
-)
-from keypoint_moseq.io import load_results
-from keypoint_moseq.viz import get_limits
-
-
-def _pad_limits(limits, left=0.1, right=0.1, top=0.1, bottom=0.1):
-    
-    xmin,ymin = limits[0]
-    xmax,ymax = limits[1]
-    width = xmax-xmin
-    height = ymax-ymin
-    
-    xmin -= width*left
-    xmax += width*right
-    ymin -= height*bottom
-    ymax += height*top
-    
-    return np.array([
-        [xmin,ymin],
-        [xmax,ymax]])
 
 
 def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False, 
@@ -1021,7 +987,7 @@ def overlay_keypoints_on_image(
 
     # overlay keypoints
     for i, (x,y) in enumerate(coordinates):
-        if np.isnan(x): continue
+        if np.isnan(x) or np.isnan(y): continue
         pos = (int(x), int(y))
         canvas = cv2.circle(canvas, pos, node_size, colors[i], -1, cv2.LINE_AA)
 
@@ -1230,7 +1196,7 @@ def crowd_movie(
 
     for key, start, end in instances:
         xy = coordinates[key][start-pre:start+post,:,:2]
-        xy = (np.clip(xy, *lims[:,:2]) - lims[0,:2]).astype(int)
+        xy = (np.clip(xy, *lims[:,:2]) - lims[0,:2])
 
         for i in range(pre+post):
             if i >= pre and i < pre+end-start: alpha = 1

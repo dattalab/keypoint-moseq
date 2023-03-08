@@ -297,7 +297,7 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         
         if noise_prior is not None:
             noise_prior = batch(unbatch(noise_prior, labels), keys=session_names)[0]
-            noise_prior = np.where(data['mask'], noise_prior, 1) 
+            noise_prior = np.where(data['mask'][...,None], noise_prior, 1) 
             
         new_states = {}
         for k,v in jax.device_get(states).items():
