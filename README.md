@@ -18,16 +18,16 @@ conda activate keypoint_moseq
 
 3. Install jax
 ```
-# MacOS and Linux users (CPU)
+# MacOS and Linux (CPU-only)
 pip install "jax[cpu]"
 
-# MacOS and Linux users (GPU)
+# MacOS and Linux (GPU)
 pip install "jax[cuda]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
-# Windows users (CPU)
+# Windows (CPU-only)
 pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cpu/jaxlib-0.3.22-cp39-cp39-win_amd64.whl
 
-# Windows users (GPU)
+# Windows (GPU)
 pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl
 ```
 
@@ -51,20 +51,18 @@ git clone https://github.com/dattalab/keypoint-moseq && cd keypoint-moseq
 ```
 
 2. Install the appropriate conda environment for your platform:
-**Windows (CPU-only):**
+
 ```
+# Windows (CPU-only)
 conda env create -f environment.win64_cpu.yml
-```
-**Windows (GPU):**
-```
+
+# Windows (GPU)
 conda env create -f environment.win64_gpu.yml
-```
-**Linux (CPU-only):**
-```
+
+# Linux (CPU-only)
 conda env create -f environment.linux_cpu.yml
-```
-**Linux (GPU):**
-```
+
+#Linux (GPU)
 conda env create -f environment.linux_gpu.yml
 ```
 
