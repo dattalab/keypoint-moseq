@@ -85,3 +85,7 @@ gpu
 If it can't, then you might not be using the right version of `cudatoolkit` or `cudnn`. If you installed these via `conda`, you can check by doing a `conda list | grep cud`.
 
 If you are on the right versions, try [updating your GPU driver to the latest version](https://nvidia.com/drivers).
+
+# License
+MoSeq is freely available for academic use under a license provided by Harvard University. Please refer to the license file for details. If you are interested in using MoSeq for commercial purposes please contact Bob Datta directly at srdatta@hms.harvard.edu, who will put you in touch with the appropriate people in the Harvard Technology Transfer office.
+
