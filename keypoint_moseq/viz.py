@@ -90,8 +90,8 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
 
     savefig : bool, True
         Whether to save the figure to a file. If true, the figure is
-        saved to ``{project_dir}/pcs-{xy/yz}.pdf`` (``yz`` is only 
-        included for 3D data).
+        saved to ``{project_dir}/pcs-{xy/xz/yz}.pdf`` (``xz`` and ``yz``
+        are only included for 3D data).
 
     project_dir : str, default=None
         Path to the project directory. Required if ``savefig`` is True.
@@ -122,7 +122,7 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
     plot_n_pcs = min(plot_n_pcs, pca.components_.shape[0])
     
     if d==2: dims_list,names = [[0,1]],['xy']
-    if d==3: dims_list,names = [[0,1],[1,2]],['xy','yz']
+    if d==3: dims_list,names = [[0,1],[0,2],[1,2]],['xy','xz','yz']
     
     magnitude = np.sqrt((pca.mean_**2).mean()) * scale
     for dims,name in zip(dims_list,names):
