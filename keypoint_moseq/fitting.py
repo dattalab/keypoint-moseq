@@ -174,13 +174,10 @@ def fit_model(model,
     
     
 def resume_fitting(*, params, hypparams, labels, iteration, mask,
-                   Y, seed, conf=None, noise_prior=None, states=None, **kwargs):
+                   Y, conf, seed, noise_prior=None, states=None, **kwargs):
     """Resume fitting a model from a checkpoint."""
     
-    data = {'Y':Y, 'mask':mask}
-    if conf is not None: data['conf'] = conf
-    data = jax.device_put(data)
-    
+    data = jax.device_put({'Y':Y, 'mask':mask, 'conf':conf})    
     model = init_model(data, states, params, hypparams,
                        noise_prior, seed, **kwargs)
 

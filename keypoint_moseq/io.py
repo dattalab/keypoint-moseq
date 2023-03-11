@@ -399,10 +399,12 @@ def format_data(coordinates, confidences=None, keys=None,
     if keys is None: 
         keys = sorted(coordinates.keys()) 
 
+    if confidences is None:
+        confidences = {key: np.ones_like(coordinates[key][...,0]) for key in keys}
+
     if bodyparts is not None and use_bodyparts is not None:
         coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
-        if confidences is not None:
-            confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
+        confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
 
     for key in keys:
         outliers = np.isnan(coordinates[key]).any(-1)
@@ -411,15 +413,13 @@ def format_data(coordinates, confidences=None, keys=None,
 
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
     Y = Y.astype(float)
-    
-    if confidences is not None:
-        conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
-        if np.nanmin(conf) < 0: 
-            conf = np.maximum(conf,0) 
-            warnings.warn(fill(
-                'Negative confidence values are not allowed and will be set to 0.'))
-        conf = conf + conf_pseudocount
-    else: conf = None
+
+    conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
+    if np.nanmin(conf) < 0: 
+        conf = np.maximum(conf,0) 
+        warnings.warn(fill(
+            'Negative confidence values are not allowed and will be set to 0.'))
+    conf = conf + conf_pseudocount
   
     if added_noise_level>0: 
         Y += np.random.uniform(-added_noise_level,added_noise_level,Y.shape)
