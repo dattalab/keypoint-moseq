@@ -16,6 +16,7 @@ from keypoint_moseq.util import (
     get_edges, get_durations, get_frequencies, reindex_by_bodyparts,
     find_matching_videos, get_syllable_instances, sample_instances,
     filter_centroids_headings, get_trajectories, interpolate_keypoints,
+    interpolate_along_axis
 )
 from keypoint_moseq.io import load_results
 from jax_moseq.models.keypoint_slds import center_embedding
@@ -676,7 +677,7 @@ def get_limits(coordinates, padding=0.2, pctl=1, blocksize=16):
 
 def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False, 
                       keypoint_colormap='autumn', node_size=50, line_width=3, 
-                      plot_width=4, overlap=(0.2,0)):
+                      num_timesteps=10, plot_width=4, overlap=(0.2,0)):
     """
     Plot one or more pose trajectories on a common axis and return
     the axis.
@@ -718,6 +719,11 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
     line_width: int, default=3
         Width of the lines connecting keypoints.
 
+    num_timesteps: int, default=10
+        Number of timesteps to plot for each trajectory. The pose 
+        at each timestep is determined by linearly interpolating
+        between the keypoints.
+
     plot_width: int, default=4
         Width of each trajectory plot in inches. The height  is 
         determined by the aspect ratio of ``lims``. The final figure 
@@ -736,16 +742,9 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
     ax: matplotlib.axes.Axes
         Axis containing the trajectory plots.
     """
-    num_timesteps = Xs[0].shape[0]
-    num_keypoints = Xs[0].shape[1]
-
-    interval = int(np.floor(num_timesteps/10))
-    plot_frames = np.arange(0,num_timesteps,interval)
     fill_color = 'k' if invert else 'w'
-    
     if isinstance(keypoint_colormap, list): colors = keypoint_colormap
-    else: colors = plt.cm.get_cmap(keypoint_colormap)(np.linspace(0,1,num_keypoints))
-    
+    else: colors = plt.cm.get_cmap(keypoint_colormap)(np.linspace(0,1,Xs[0].shape[1]))
 
     n_cols = min(n_cols, len(Xs))
     n_rows = np.ceil(len(Xs)/n_cols)
@@ -754,19 +753,20 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
         np.arange(n_rows)*np.diff(lims[:,1])*(overlap[1]-1)
     ),axis=-1).reshape(-1,2)[:len(Xs)]
     
-    Xs = np.array(Xs)+offsets[:,None,None]
+    Xs = interpolate_along_axis(
+        np.linspace(0,Xs[0].shape[0],num_timesteps), 
+        np.arange(Xs[0].shape[0]), np.array(Xs))
+
+    Xs = Xs+offsets[:,None,None]
     xmin,ymin = lims[0] + offsets.min(0)
     xmax,ymax = lims[1] + offsets.max(0)
-
     
     fig,ax = plt.subplots()
-
     ax.fill_between(
         [xmin,xmax], y1=[ymax,ymax], y2=[ymin,ymin], 
         facecolor=fill_color, zorder=0, clip_on=False)
         
     for i in plot_frames:
-        
         for X,offset in zip(Xs,offsets):
             for ii,jj in edges: 
                 ax.plot(*X[i,(ii,jj)].T, c='k', zorder=i*4, 

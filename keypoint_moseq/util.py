@@ -726,6 +726,36 @@ def sample_instances(syllable_instances, num_samples, mode='random',
         raise ValueError('Invalid mode: {}'.format(mode))
 
 
+def interpolate_along_axis(x, xp, fp, axis=0):
+    """
+    Linearly interpolate along a given axis.
+    
+    Parameters
+    ----------
+    x: 1D array
+        The x-coordinates of the interpolated values
+    xp: 1D array
+        The x-coordinates of the data points
+    fp: ndarray
+        The y-coordinates of the data points. fp.shape[axis] must 
+        be equal to the length of xp.
+    """
+    assert xp.dim==x.dim==1
+    assert fp.shape[axis]==len(xp)
+    
+    fp = np.moveaxis(fp, axis, 0)
+    shape = fp.shape[1:]
+    fp = fp.reshape(fp.shape[0],-1)
+
+    x_interp = np.zeros((len(x),fp.shape[1]))
+    for i in range(fp.shape[1]):
+        x_interp[:,i] = np.interp(x, xp, fp[:,i])
+    x_interp = x_interp.reshape(len(x),*shape)
+    x_interp = np.moveaxis(x_interp, 0, axis)
+    return x_interp
+
+
+
 def interpolate_keypoints(coordinates, outliers):
     """
     Use linear interpolation to impute the coordinates of outliers.
@@ -742,15 +772,12 @@ def interpolate_keypoints(coordinates, outliers):
     interpolated_coordinates : ndarray with same shape as ``coordinates``
         Keypoint observations with outliers imputed.
     """  
-
     interpolated_coordinates = np.zeros_like(coordinates)
     for i in range(coordinates.shape[1]):
-        x = np.arange(coordinates.shape[0])
-        xp = x[~outliers[:,i]]
-        for j in range(coordinates.shape[2]):
-            fp = coordinates[:,i,j][~outliers[:,i]]
-            interpolated_coordinates[:,i,j] = np.interp(x,xp,fp)
-
+        interpolated_coordinates[:,i,:] = interpolate_along_axis(
+            np.arange(coordinates.shape[0]),
+            x[~outliers[:,i]],
+            coordinates[:,i,:])
     return interpolated_coordinates
 
 
