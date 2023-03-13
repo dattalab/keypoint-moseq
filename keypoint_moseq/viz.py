@@ -766,7 +766,7 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
         [xmin,xmax], y1=[ymax,ymax], y2=[ymin,ymin], 
         facecolor=fill_color, zorder=0, clip_on=False)
         
-    for i in plot_frames:
+    for i in range(Xs.shape[1]):
         for X,offset in zip(Xs,offsets):
             for ii,jj in edges: 
                 ax.plot(*X[i,(ii,jj)].T, c='k', zorder=i*4, 
@@ -779,7 +779,7 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
             ax.scatter(*X[i].T, c=colors, zorder=i*4+2, edgecolor='k', 
                        linewidth=0.4, s=node_size, clip_on=False)
         
-        if i < plot_frames.max(): 
+        if i < Xs.shape[1]-1: 
             ax.fill_between(
                 [xmin,xmax], y1=[ymax,ymax], y2=[ymin,ymin], 
                 facecolor=fill_color, alpha=0.2, zorder=i*4+3, clip_on=False)
@@ -790,7 +790,7 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
 
     for xy,text in zip(offsets+title_xy,titles):
         ax.text(*xy, text, c=title_color, ha='center', 
-                va='top', zorder=plot_frames.max()*4+4)
+                va='top', zorder=Xs.shape[1]*4+4)
         
     plot_height = plot_width*(ymax-ymin)/(xmax-xmin)*1.1
     fig_width = plot_width*n_cols - (n_cols-1)*plot_width*overlap[0]
