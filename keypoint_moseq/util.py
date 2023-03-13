@@ -561,17 +561,18 @@ def reindex_by_bodyparts(data, bodyparts, use_bodyparts, axis=1):
 def get_trajectories(syllable_instances, coordinates, pre=0, post=None, 
                      centroids=None, headings=None, filter_size=9):
     """
-    Extract keypoint trajectories for a given collection of syllable
-    instances. If centroids and headings are provided, each trajectory
+    Extract keypoint trajectories for a collection of syllable instances. 
+    
+    If centroids and headings are provided, each trajectory
     is transformed into the ego-centric reference frame from the moment 
     of syllable onset. When ``post`` is not None, trajectories will 
     all terminate a fixed number of frames after syllable onset. 
 
     Parameters
     -------
-    syllable_instances: dict
-        Mapping from each syllable to a list of instances, where each
-        instance is a tuple of the form (name,start,end)
+    syllable_instances: list
+        List of syllable instances, where each instance is a tuple of 
+        the form (name,start,end)
 
     coordinates: dict
         Dictionary mapping names to coordinates, formatted as ndarrays
@@ -599,30 +600,26 @@ def get_trajectories(syllable_instances, coordinates, pre=0, post=None,
 
     Returns
     -------
-    trajectories: dict
-        Dictionary similar to ``syllable_instances``, but now mapping
-        each syllable to a list or array of trajectories (a list is used
-        when ``post=None``, else an array)
+    trajectories: list
+        List or array of trajectories (a list is used when ``post=None``, 
+        else an array)
     """
     if centroids is not None and headings is not None:
         centroids,headings = filter_centroids_headings(
             centroids, headings, filter_size=filter_size)
         
-    trajectories = {}
-    for syllable,instances in syllable_instances.items():
-        if post is None:
-            X = [coordinates[key][s-pre:e] for key,s,e in instances]
-            if centroids is not None and headings is not None:
-                X = [np_io(inverse_rigid_transform)(
-                        x,centroids[key][s],headings[key][s]
-                     ) for x,(key,s,e) in zip(X,instances)]
-        else:
-            X = np.array([coordinates[key][s-pre:s+post] for key,s,e in instances])
-            if centroids is not None and headings is not None:
-                c = np.array([centroids[key][s] for key,s,e in instances])[:,None]
-                h = np.array([headings[key][s] for key,s,e in instances])[:,None]
-                X = np_io(inverse_rigid_transform)(X,c,h)
-        trajectories[syllable] = X
+    if post is None:
+        trajectories = [coordinates[key][s-pre:e] for key,s,e in syllable_instances]
+        if centroids is not None and headings is not None:
+            trajectories = [np_io(inverse_rigid_transform)(
+                    x,centroids[key][s],headings[key][s]
+                    ) for x,(key,s,e) in zip(trajectories,syllable_instances)]
+    else:
+        trajectories = np.array([coordinates[key][s-pre:s+post] for key,s,e in syllable_instances])
+        if centroids is not None and headings is not None:
+            c = np.array([centroids[key][s] for key,s,e in syllable_instances])[:,None]
+            h = np.array([headings[key][s] for key,s,e in syllable_instances])[:,None]
+            trajectories = np_io(inverse_rigid_transform)(trajectories,c,h)
 
     return trajectories
 
@@ -695,9 +692,10 @@ def sample_instances(syllable_instances, num_samples, mode='random',
             outliers = np.isnan(coordinates[key]).any(-1)
             coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
 
-        trajectories = get_trajectories(
-            syllable_instances, coordinates, pre=pre, post=post, 
-            centroids=centroids, headings=headings, filter_size=filter_size)
+        trajectories = {syllable: get_trajectories(
+            instances, coordinates, pre=pre, post=post, 
+            centroids=centroids, headings=headings, filter_size=filter_size
+            ) for syllable,instances in syllable_instances.items()}
         X = np.vstack(list(trajectories.values()))
 
         if X.shape[0]>pca_samples: 

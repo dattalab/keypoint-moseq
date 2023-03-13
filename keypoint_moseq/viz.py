@@ -284,6 +284,16 @@ def plot_progress(model, data, history, iteration, path=None,
         plt.savefig(path)  
     plt.show()
 
+    
+def write_video_clip(frames, path, fps=30, quality=7):
+    """Write a video clip to a file.
+    """
+    with imageio.get_writer(
+        path, pixelformat='yuv420p', 
+        fps=fps, quality=quality) as writer:
+        for frame in frames: 
+            writer.append_data(frame)
+
 
 def _grid_movie_tile(key, start, end, videos, centroids, headings, 
                      dot_color=(255,255,255), window_size=112,
@@ -299,16 +309,18 @@ def _grid_movie_tile(key, start, end, videos, centroids, headings,
         frames = videos[key][start-pre:start+post]
         for ii,(frame,c) in enumerate(zip(frames,cs)):
             frame = cv2.warpAffine(frame,np.float32(M),(window_size,window_size))
-            if 0 <= ii-pre <= end-start:
+            if 0 <= ii-pre <= end-start and dot_radius>0:
                 pos = tuple([int(x) for x in M@np.append(c,1)])
                 cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
             tile.append(frame)  
         return np.stack(tile)
-    
+
+
     
 def grid_movie(instances, rows, cols, videos, centroids, headings,
-                dot_color=(255,255,255), dot_radius=4, window_size=112, 
-                pre=30, post=60):
+               dot_color=(255,255,255), dot_radius=4, window_size=112, 
+               pre=30, post=60, coordinates=None, overlay_trajectory=False,
+               plot_options={}, overlay_options={}):
     
     """Generate a grid movie and return it as an array of frames.
 
@@ -355,40 +367,63 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
     post: int, default=60
         Number of frames after syllable onset to include in the movie
 
+    coordinates: dict, default=None
+        Dictionary mapping session names to keypoint coordinates as 
+        ndarrays of shape (n_frames, n_bodyparts, 2). Required when
+        ``overlay_trajectory=True``
+
+    overlay_trajectory: bool, default=False
+        Whether to overlay trajectory of keypoints on the grid movie. 
+        If True, ``coordinates`` must be provided.
+
+    overlay_options: dict, default={}
+        Dictionary of options for overlaying trajectory (see
+        :py:func:`keypoint_moseq.viz.overlay_trajectory_on_video`).
+
+    plot_options: dict, default={}
+        Dictionary of options for overlaying trajectory (see 
+        :py:func:`keypoint_moseq.viz.overlay_keypoints_on_image`).
+
     Returns
     -------
     frames: array of shape ``(rows, cols, post+pre, window_size, window_size, 3)``
         Array of frames in the grid movie
     """
-    tiles = np.stack([
-        _grid_movie_tile(
+    if overlay_trajectory:
+        assert coordinates is not None, fill(
+            '``coordinates`` must be provided if ``overlay_trajectory`` is True')
+
+        trajectories = get_trajectories(
+            instances, coordinates, pre=pre, post=post, 
+            centroids=centroids, headings=headings)
+            
+    tiles = []
+    for i,(key,start,end) in enumerate(instances):
+        tile = _grid_movie_tile(
             key, start, end, videos, centroids, headings, 
             dot_color=dot_color, window_size=window_size,
-            pre=pre, post=post, dot_radius=dot_radius
-        ) for key, start, end in instances
-    ]).reshape(rows, cols, post+pre, window_size, window_size, 3)
-    return np.concatenate(np.concatenate(tiles,axis=2),axis=2)
+            pre=pre, post=post, dot_radius=dot_radius)
+        
+        if overlay_trajectory:
+            trajectory = trajectories[i] + window_size//2
+            tile = overlay_trajectory_on_video(
+                tile, trajectory, pre, plot_options=plot_options, **overlay_options)
+        tiles.append(tile)
 
-
-    
-def write_video_clip(frames, path, fps=30, quality=7):
-    """Write a video clip to a file.
-    """
-    with imageio.get_writer(
-        path, pixelformat='yuv420p', 
-        fps=fps, quality=quality) as writer:
-        for frame in frames: 
-            writer.append_data(frame)
+    tiles = np.stack(tiles).reshape(rows, cols, post+pre, window_size, window_size, 3)
+    frames = np.concatenate(np.concatenate(tiles,axis=2),axis=2)
+    return frames
 
 
 def generate_grid_movies(
     results=None, output_dir=None, name=None, project_dir=None,
-    results_path=None, video_dir=None, video_paths=None, 
-    rows=4, cols=6, filter_size=9, pre=30, post=60, 
-    min_frequency=0.005, min_duration=3, dot_radius=4, 
-    dot_color=(255,255,255), window_size=112, use_reindexed=True, 
-    sampling_options={}, coordinates=None, bodyparts=None, 
-    use_bodyparts=None, quality=7, video_extension=None, **kwargs):
+    results_path=None, video_dir=None, video_paths=None, rows=4, 
+    cols=6, filter_size=9, pre=30, post=60, min_frequency=0.005, 
+    min_duration=3, dot_radius=4, dot_color=(255,255,255), 
+    window_size=112, use_reindexed=True, coordinates=None, 
+    bodyparts=None, use_bodyparts=None, skeleton=[], quality=7, 
+    sampling_options={},  overlay_trajectory=False, plot_options={},
+    overlay_options={}, video_extension=None, **kwargs):
     
     """
     Generate grid movies for a modeled dataset.
@@ -477,9 +512,9 @@ def generate_grid_movies(
     
     coordinates: dict, default=None
         Dictionary mapping session names to keypoint coordinates as 
-        ndarrays of shape (n_frames, n_bodyparts, 2). Required
-        for density-based sampling (i.e. when 
-        ``sampling_options['mode']=='density'``; see 
+        ndarrays of shape (n_frames, n_bodyparts, 2). Required when
+        ``overlay_trajectory=True``, and for density-based sampling 
+        (i.e. when ``sampling_options['mode']=='density'``; see 
         :py:func:`keypoint_moseq.util.sample_instances`).
 
     bodyparts: list of str, default=None
@@ -492,6 +527,22 @@ def generate_grid_movies(
         ``coordinates`` is provided and bodyparts were reindexed 
         for modeling. 
 
+    skeleton : list, default=[]
+        List of edges that define the skeleton, where each edge is a
+        pair of bodypart names or a pair of indexes.
+
+    overlay_trajectory: bool, default=False
+        Whether to overlay trajectory of keypoints on the grid movie. 
+        If True, ``coordinates`` must be provided.
+
+    overlay_options: dict, default={}
+        Dictionary of options for overlaying trajectory (see
+        :py:func:`keypoint_moseq.viz.overlay_trajectory_on_video`).
+
+    plot_options: dict, default={}
+        Dictionary of options for overlaying trajectory (see 
+        :py:func:`keypoint_moseq.viz.overlay_keypoints_on_image`).
+
     quality: int, default=7
         Quality of the grid movies. Higher values result in higher
         quality movies but larger file sizes.
@@ -503,7 +554,11 @@ def generate_grid_movies(
         Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
     """
     assert (video_dir is not None) or (video_paths is not None), fill(
-        'You must provide either ``video_dir`` or ``video_paths``')      
+        'You must provide either ``video_dir`` or ``video_paths``') 
+
+    if overlay_trajectory:
+        assert coordinates is not None, fill(
+            '``coordinates`` must be provided if ``overlay_trajectory`` is True')     
     
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
@@ -543,13 +598,23 @@ def generate_grid_movies(
     centroids,headings = filter_centroids_headings(
         centroids, headings, filter_size=filter_size)
     
+    if len(skeleton)>0 and overlay_trajectory: 
+        if isinstance(skeleton[0][0],str):
+            assert use_bodyparts is not None, fill(
+                'If skeleton edges are specified using bodypart names, '
+                '``use_bodyparts`` must be specified')
+            plot_options['edges'] = get_edges(use_bodyparts, skeleton)
+        else: plot_options['edges'] = skeleton
+    
     for syllable,instances in tqdm.tqdm(
         sampled_instances.items(), desc='Generating grid movies'):
         
         frames = grid_movie(
-            instances, rows, cols, videos, centroids, headings, 
-            window_size=window_size, dot_color=dot_color, 
-            dot_radius=dot_radius, pre=pre, post=post)
+            instances, rows, cols, videos, centroids, headings,
+            window_size=window_size, dot_color=dot_color, pre=pre, post=post,
+            dot_radius=dot_radius, overlay_trajectory=overlay_trajectory,
+            coordinates=coordinates, plot_options=plot_options,
+            overlay_options=overlay_options)
 
         path = os.path.join(output_dir, f'syllable{syllable}.mp4')
         write_video_clip(frames, path, fps=fps, quality=quality)
@@ -558,7 +623,6 @@ def generate_grid_movies(
         
 
 def _pad_limits(limits, left=0.1, right=0.1, top=0.1, bottom=0.1):
-    
     xmin,ymin = limits[0]
     xmax,ymax = limits[1]
     width = xmax-xmin
@@ -739,6 +803,44 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
     return fig,ax
     
     
+def crop_image(image, centroid, crop_size):
+    """
+    Crop an image around a centroid.
+
+    Parameters
+    ----------
+    image: ndarray of shape (height, width, 3)
+        Image to crop.
+
+    centroid: tuple of int
+        (x,y) coordinates of the centroid.
+
+    crop_size: int or tuple(int,int)
+        Size of the crop around the centroid. Either a single int for
+        a square crop, or a tuple of ints (w,h) for a rectangular crop.
+
+
+    Returns
+    -------
+    image: ndarray of shape (crop_size, crop_size, 3)
+        Cropped image.
+    """
+    if isinstance(crop_size,tuple): w,h = crop_size
+    else: w,h = crop_size,crop_size
+    x,y = int(centroid[0]),int(centroid[1])
+
+    x_min = max(0, x - w//2)
+    y_min = max(0, y - h//2)
+    x_max = min(image.shape[1], x + w//2)
+    y_max = min(image.shape[0], y + h//2)
+
+    cropped = image[y_min:y_max, x_min:x_max]
+    padded = np.zeros((h,w,*image.shape[2:]), dtype=image.dtype)
+    pad_x = (w - cropped.shape[1]) // 2
+    pad_y = (h - cropped.shape[0]) // 2
+    padded[pad_y:pad_y+cropped.shape[0], pad_x:pad_x+cropped.shape[1]] = cropped
+    return padded
+
 
 
 def generate_trajectory_plots(
@@ -892,9 +994,10 @@ def generate_trajectory_plots(
         syllable_instances, num_samples, coordinates=coordinates, 
         centroids=centroids, headings=headings, **sampling_options)
 
-    trajectories = get_trajectories(
-        sampled_instances, coordinates, pre=pre, post=post, 
-        centroids=centroids, headings=headings)
+    trajectories = {syllable: get_trajectories(
+        instances, coordinates, pre=pre, post=post, 
+        centroids=centroids, headings=headings
+        ) for syllable,instances in sampled_instances.items()}
 
     edges = []
     if len(skeleton)>0: 
@@ -934,7 +1037,7 @@ def generate_trajectory_plots(
 
 def overlay_keypoints_on_image(
     image, coordinates, edges=[], keypoint_colormap='autumn',
-    node_size=10, line_width=2, copy=False, opacity=1.0):
+    node_size=3, line_width=2, copy=False, opacity=1.0):
     """
     Overlay keypoints on an image.
 
@@ -989,52 +1092,36 @@ def overlay_keypoints_on_image(
     for i, (x,y) in enumerate(coordinates):
         if np.isnan(x) or np.isnan(y): continue
         pos = (int(x), int(y))
-        canvas = cv2.circle(canvas, pos, node_size, colors[i], -1, cv2.LINE_AA)
+        canvas = cv2.circle(canvas, pos, node_size, colors[i], -1, lineType=cv2.LINE_AA)
 
     if opacity<1.0:
         image = cv2.addWeighted(image, 1-opacity, canvas, opacity, 0)
     return image
 
 
-def crop_image(image, centroid, crop_size):
+def overlay_trajectory_on_video(
+        frames, trajectory, smoothing_kernel=1, highlight=None, 
+        min_opacity=0.2, max_opacity=1, num_ghosts=10, interval=2, 
+        plot_options={}):
+    
     """
-    Crop an image around a centroid.
-
-    Parameters
-    ----------
-    image: ndarray of shape (height, width, 3)
-        Image to crop.
-
-    centroid: tuple of int
-        (x,y) coordinates of the centroid.
-
-    crop_size: int or tuple(int,int)
-        Size of the crop around the centroid. Either a single int for
-        a square crop, or a tuple of ints (w,h) for a rectangular crop.
-
-
-    Returns
-    -------
-    image: ndarray of shape (crop_size, crop_size, 3)
-        Cropped image.
+    Overlay a trajectory of keypoints on a video.
     """
-    if isinstance(crop_size,tuple): w,h = crop_size
-    else: w,h = crop_size,crop_size
-    x,y = int(centroid[0]),int(centroid[1])
-
-    x_min = max(0, x - w//2)
-    y_min = max(0, y - h//2)
-    x_max = min(image.shape[1], x + w//2)
-    y_max = min(image.shape[0], y + h//2)
-
-    cropped = image[y_min:y_max, x_min:x_max]
-    padded = np.zeros((h,w,*image.shape[2:]), dtype=image.dtype)
-    pad_x = (w - cropped.shape[1]) // 2
-    pad_y = (h - cropped.shape[0]) // 2
-    padded[pad_y:pad_y+cropped.shape[0], pad_x:pad_x+cropped.shape[1]] = cropped
-    return padded
-
-
+    if smoothing_kernel > 0:
+        trajectory = gaussian_filter1d(trajectory, smoothing_kernel, axis=0)
+        
+    opacities = np.repeat(np.linspace(max_opacity, min_opacity, num_ghosts+1), interval)  
+    for i in np.arange(0,trajectory.shape[0],interval):
+        for j,opacity in enumerate(opacities):
+            if i+j < frames.shape[0]:
+                plot_options['opacity'] = opacity
+                if highlight is not None:
+                    start,end,highlight_factor = highlight
+                    if i+j < start or i+j > end:
+                        plot_options['opacity'] *= highlight_factor
+                frames[i+j] = overlay_keypoints_on_image(
+                    frames[i+j], trajectory[i], **plot_options)
+    return frames
 
 def overlay_keypoints_on_video(
     video_path, coordinates, skeleton=[], bodyparts=None, use_bodyparts=None, 
@@ -1133,10 +1220,10 @@ def overlay_keypoints_on_video(
 
 
 
+
 def crowd_movie(
     instances, coordinates, lims, pre=30, post=60,
-    edges=[], node_size=3, line_width=2,
-    keypoint_colormap='autumn', opacity=0.3):
+    edges=[], plot_options={}):
     """
     Generate a crowd movie.
 
@@ -1165,20 +1252,9 @@ def crowd_movie(
     post: int, default=60
         Number of frames after syllable onset to include in the movie
 
-    edges: list of tuples, default=[]
-        List of edges, where each edge is a tuple of two integers
-
-    keypoint_colormap: str, default='autumn'
-        Name of a matplotlib colormap to use for coloring the keypoints.
-
-    node_size: int, default=5
-        Size of each keypoint.
-
-    line_width: int, default=2
-        Width of the lines connecting keypoints.
-
-    opacity: float, default=0.8
-        Opacity of keypoints before syllable onset and after syllable offset.
+    plot_options: dict, default={}
+        Dictionary of options for rendering keypoints in the crowd
+        movies (see :py:func:`keypoint_moseq.util.overlay_keypoints_on_image`).
 
     Returns
     -------
@@ -1197,13 +1273,16 @@ def crowd_movie(
     for key, start, end in instances:
         xy = coordinates[key][start-pre:start+post,:,:2]
         xy = (np.clip(xy, *lims[:,:2]) - lims[0,:2])
+        frames = overlay_trajectory_on_video(
+            frames, xy, plot_options=plot_options)
 
-        for i in range(pre+post):
-            if i >= pre and i < pre+end-start: alpha = 1
-            else: alpha = opacity
-            frames[i] = overlay_keypoints_on_image(
-                frames[i], xy[i], edges=edges, keypoint_colormap=keypoint_colormap,
-                node_size=node_size, line_width=line_width, opacity=alpha)
+        dot_radius=5
+        dot_color=(255,255,255)
+        centroids = gaussian_filter1d(xy.mean(1),1,axis=0)
+        for i in range(pre, min(end-start+pre,pre+post)):
+            pos = (int(centroids[i,0]),int(centroids[i,1]))
+            frames[i] = cv2.circle(frames[i], pos, dot_radius, dot_color, -1, cv2.LINE_AA)
+
     return frames
 
 
@@ -1316,8 +1395,8 @@ def generate_crowd_movies(
         limits will be inferred automatically from ``coordinates``.
         
     plot_options: dict, default={}
-        Dictionary of additional options for rendering crowd
-        movies (see :py:func:`keypoint_moseq.util.crowd_movie`).
+        Dictionary of options for rendering keypoints in the crowd
+        movies (see :py:func:`keypoint_moseq.util.overlay_keypoints_on_image`).
         
     sampling_options: dict, default={}
         Dictionary of options for sampling syllable instances (see
@@ -1379,10 +1458,11 @@ def generate_crowd_movies(
         
         frames = crowd_movie(
             instances, coordinates, pre=pre, post=post,
-            edges=edges, lims=limits, **plot_options)
+            edges=edges, lims=limits, plot_options=plot_options)
 
         path = os.path.join(output_dir, f'syllable{syllable}.mp4')
         
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             write_video_clip(frames, path, fps=fps, quality=quality)
+            
