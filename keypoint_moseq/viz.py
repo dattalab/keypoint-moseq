@@ -755,7 +755,7 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
     
     Xs = interpolate_along_axis(
         np.linspace(0,Xs[0].shape[0],num_timesteps), 
-        np.arange(Xs[0].shape[0]), np.array(Xs))
+        np.arange(Xs[0].shape[0]), np.array(Xs), axis=1)
 
     Xs = Xs+offsets[:,None,None]
     xmin,ymin = lims[0] + offsets.min(0)
