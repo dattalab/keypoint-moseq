@@ -725,7 +725,6 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     else:
         raise ValueError('Invalid mode: {}'.format(mode))
 
-
 def interpolate_along_axis(x, xp, fp, axis=0):
     """
     Linearly interpolate along a given axis.
@@ -739,8 +738,14 @@ def interpolate_along_axis(x, xp, fp, axis=0):
     fp: ndarray
         The y-coordinates of the data points. fp.shape[axis] must 
         be equal to the length of xp.
+
+    Returns
+    -------
+    x_interp: ndarray
+        The interpolated values, with the same shape as fp except
+        along the interpolation axis.
     """
-    assert xp.dim==x.dim==1
+    assert len(xp.shape)==len(x.shape)==1
     assert fp.shape[axis]==len(xp)
     
     fp = np.moveaxis(fp, axis, 0)
@@ -753,7 +758,6 @@ def interpolate_along_axis(x, xp, fp, axis=0):
     x_interp = x_interp.reshape(len(x),*shape)
     x_interp = np.moveaxis(x_interp, 0, axis)
     return x_interp
-
 
 
 def interpolate_keypoints(coordinates, outliers):
@@ -776,8 +780,6 @@ def interpolate_keypoints(coordinates, outliers):
     for i in range(coordinates.shape[1]):
         interpolated_coordinates[:,i,:] = interpolate_along_axis(
             np.arange(coordinates.shape[0]),
-            x[~outliers[:,i]],
-            coordinates[:,i,:])
+            np.nonzero(~outliers[:,i])[0],
+            coordinates[~outliers[:,i],i,:])
     return interpolated_coordinates
-
-
