@@ -677,7 +677,7 @@ def get_limits(coordinates, padding=0.2, pctl=1, blocksize=16):
 
 def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False, 
                       keypoint_colormap='autumn', node_size=50, line_width=3, 
-                      num_timesteps=10, plot_width=4, overlap=(0.2,0)):
+                      alpha=0.2, num_timesteps=10, plot_width=4, overlap=(0.2,0)):
     """
     Plot one or more pose trajectories on a common axis and return
     the axis.
@@ -718,6 +718,9 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
 
     line_width: int, default=3
         Width of the lines connecting keypoints.
+
+    alpha: float, default=0.2
+        Opacity of fade-out layers.
 
     num_timesteps: int, default=10
         Number of timesteps to plot for each trajectory. The pose 
@@ -782,7 +785,7 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
         if i < Xs.shape[1]-1: 
             ax.fill_between(
                 [xmin,xmax], y1=[ymax,ymax], y2=[ymin,ymin], 
-                facecolor=fill_color, alpha=0.2, zorder=i*4+3, clip_on=False)
+                facecolor=fill_color, alpha=alpha, zorder=i*4+3, clip_on=False)
 
             
     title_xy = (lims * np.array([[0.5,0.1],[0.5,0.9]])).sum(0)
@@ -851,7 +854,7 @@ def generate_trajectory_plots(
     use_bodyparts=None, num_samples=40, keypoint_colormap='autumn',
     plot_options={}, sampling_options={'mode':'density'},
     padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2},
-    **kwargs):
+    plot_syllables_individually=True, **kwargs):
     """
     Generate trajectory plots for a modeled dataset.
 
@@ -961,6 +964,10 @@ def generate_trajectory_plots(
         Padding around trajectory plots. Controls the the distance
         between trajectories (when multiple are shown in one figure)
         as well as the title offset. 
+
+    plot_syllables_individually: bool, default=True
+        If True, a separate figure is saved for each syllable (in
+        addition to the grid figure).
     
     """
     if output_dir is None:
@@ -1018,12 +1025,13 @@ def generate_trajectory_plots(
     if Xs.shape[-1]==2:
         
         # individual plots
-        desc = 'Generating trajectory plots'
-        for title,X in tqdm.tqdm(zip(titles,Xs), desc=desc, total=len(titles)):
-            fig,ax = plot_trajectories([title], X[None], lims, edges=edges, **plot_options)
-            path = os.path.join(output_dir, f'{title}.pdf')
-            plt.savefig(path)
-            plt.close(fig=fig)
+        if plot_syllables_individually:
+            desc = 'Generating trajectory plots'
+            for title,X in tqdm.tqdm(zip(titles,Xs), desc=desc, total=len(titles)):
+                fig,ax = plot_trajectories([title], X[None], lims, edges=edges, **plot_options)
+                path = os.path.join(output_dir, f'{title}.pdf')
+                plt.savefig(path)
+                plt.close(fig=fig)
 
         # grid plot
         fig,ax = plot_trajectories(titles, Xs, lims, edges=edges, **plot_options)
