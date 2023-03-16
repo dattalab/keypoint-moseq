@@ -43,16 +43,16 @@ As an alternative, you can install directly from conda environment files. This w
 Install the appropriate conda environment for your platform::
 
    # Windows (CPU-only)
-   conda env create -f environment.win64_cpu.yml
+   conda env create -f conda_envs/environment.win64_cpu.yml
 
    # Windows (GPU)
-   conda env create -f environment.win64_gpu.yml
+   conda env create -f conda_envs/environment.win64_gpu.yml
 
    # Linux (CPU-only)
-   conda env create -f environment.linux_cpu.yml
+   conda env create -f conda_envs/environment.linux_cpu.yml
 
    #Linux (GPU)
-   conda env create -f environment.linux_gpu.yml
+   conda env create -f conda_envs/environment.linux_gpu.yml
 
 Activate the new environment::
 
@@ -72,3 +72,9 @@ Troubleshooting
      python -c "import jax; print(jax.default_backend())
 
   The result should be "gpu". If it isn't, then you might not be using the right version of ``cudatoolkit`` or ``cudnn``. If you installed these via ``conda``, you can check by doing a ``conda list | grep cud``. If you are on the right versions, try `updating your GPU driver to the latest version <https://nvidia.com/drivers>`_.
+
+
+License
+-------
+
+MoSeq is freely available for academic use under a license provided by Harvard University. Please refer to the `license file <https://github.com/dattalab/keypoint-moseq/blob/main/LICENSE.md>`_ for details. If you are interested in using MoSeq for commercial purposes please contact Bob Datta directly at srdatta@hms.harvard.edu, who will put you in touch with the Harvard Technology Transfer office.

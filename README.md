@@ -54,16 +54,16 @@ git clone https://github.com/dattalab/keypoint-moseq && cd keypoint-moseq
 
 ```
 # Windows (CPU-only)
-conda env create -f environment.win64_cpu.yml
+conda env create -f conda_envs/environment.win64_cpu.yml
 
 # Windows (GPU)
-conda env create -f environment.win64_gpu.yml
+conda env create -f conda_envs/environment.win64_gpu.yml
 
 # Linux (CPU-only)
-conda env create -f environment.linux_cpu.yml
+conda env create -f conda_envs/environment.linux_cpu.yml
 
 #Linux (GPU)
-conda env create -f environment.linux_gpu.yml
+conda env create -f conda_envs/environment.linux_gpu.yml
 ```
 
 3. Activate the new environment:
