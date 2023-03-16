@@ -13,6 +13,6 @@ dependencies:
   - cuda-nvcc
   - pip
   - pip:
-    - "git+https://github.com/dattalab/jax-moseq.git@32c5286b5f11e260cb95840572beea736c3d1a0f#egg=jax-moseq"
+    - "jax-moseq==0.0.0"
     - "--editable=."
     - jupyterlab

@@ -24,10 +24,9 @@ Install jax using one of the lines below::
    pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl
 
 
-Install `jax-moseq <https://github.com/dattalab/jax-moseq>`_ followed by `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
+Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 
-   pip install -U git+https://github.com/dattalab/jax-moseq
-   pip install -U git+https://github.com/dattalab/keypoint-moseq
+   pip install keypoint-moseq
 
 Make the environment available to jupyter::
 

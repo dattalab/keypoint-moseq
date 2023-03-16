@@ -16,14 +16,10 @@ setuptools.setup(
     ],
     python_requires='>=3.7',
     install_requires=[
-        'numpy',
         'seaborn',
         'cytoolz',
         'matplotlib',
-        'scikit-learn',
-        'scipy',
         'tqdm',
-        'joblib',
         'ipykernel',
         'imageio[ffmpeg]',
         'pyyaml',
@@ -31,7 +27,8 @@ setuptools.setup(
         'holoviews[recommended]',
         'bokeh',
         'pandas',
-        'tables'
+        'tables',
+        'jax-moseq',
     ], 
     url='https://github.com/dattalab/keypoint-moseq'
 )

@@ -15,6 +15,6 @@ dependencies:
   - pip:
     - jax==0.3.22
     - "https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl"
-    - "git+https://github.com/dattalab/jax-moseq.git@32c5286b5f11e260cb95840572beea736c3d1a0f#egg=jax-moseq"
+    - "jax-moseq==0.0.0"
     - "--editable=."
     - jupyterlab
