@@ -22,6 +22,43 @@ from keypoint_moseq.io import load_results
 from jax_moseq.models.keypoint_slds import center_embedding
 
 
+def crop_image(image, centroid, crop_size):
+    """
+    Crop an image around a centroid.
+
+    Parameters
+    ----------
+    image: ndarray of shape (height, width, 3)
+        Image to crop.
+
+    centroid: tuple of int
+        (x,y) coordinates of the centroid.
+
+    crop_size: int or tuple(int,int)
+        Size of the crop around the centroid. Either a single int for
+        a square crop, or a tuple of ints (w,h) for a rectangular crop.
+
+
+    Returns
+    -------
+    image: ndarray of shape (crop_size, crop_size, 3)
+        Cropped image.
+    """
+    if isinstance(crop_size,tuple): w,h = crop_size
+    else: w,h = crop_size,crop_size
+    x,y = int(centroid[0]),int(centroid[1])
+
+    x_min = max(0, x - w//2)
+    y_min = max(0, y - h//2)
+    x_max = min(image.shape[1], x + w//2)
+    y_max = min(image.shape[0], y + h//2)
+
+    cropped = image[y_min:y_max, x_min:x_max]
+    padded = np.zeros((h,w,*image.shape[2:]), dtype=image.dtype)
+    pad_x = (w - cropped.shape[1]) // 2
+    pad_y = (h - cropped.shape[0]) // 2
+    padded[pad_y:pad_y+cropped.shape[0], pad_x:pad_x+cropped.shape[1]] = cropped
+    return padded
 
 
 def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3,2),
@@ -804,45 +841,6 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
     ax.set_aspect('equal')
     ax.axis('off')
     return fig,ax
-    
-    
-def crop_image(image, centroid, crop_size):
-    """
-    Crop an image around a centroid.
-
-    Parameters
-    ----------
-    image: ndarray of shape (height, width, 3)
-        Image to crop.
-
-    centroid: tuple of int
-        (x,y) coordinates of the centroid.
-
-    crop_size: int or tuple(int,int)
-        Size of the crop around the centroid. Either a single int for
-        a square crop, or a tuple of ints (w,h) for a rectangular crop.
-
-
-    Returns
-    -------
-    image: ndarray of shape (crop_size, crop_size, 3)
-        Cropped image.
-    """
-    if isinstance(crop_size,tuple): w,h = crop_size
-    else: w,h = crop_size,crop_size
-    x,y = int(centroid[0]),int(centroid[1])
-
-    x_min = max(0, x - w//2)
-    y_min = max(0, y - h//2)
-    x_max = min(image.shape[1], x + w//2)
-    y_max = min(image.shape[0], y + h//2)
-
-    cropped = image[y_min:y_max, x_min:x_max]
-    padded = np.zeros((h,w,*image.shape[2:]), dtype=image.dtype)
-    pad_x = (w - cropped.shape[1]) // 2
-    pad_y = (h - cropped.shape[0]) // 2
-    padded[pad_y:pad_y+cropped.shape[0], pad_x:pad_x+cropped.shape[1]] = cropped
-    return padded
 
 
 
@@ -1042,6 +1040,28 @@ def generate_trajectory_plots(
     else: raise NotImplementedError()
 
 
+def save_gif(frames, output_path, fps=15, dwell_time_at_end=.5):
+    """
+    Save a list of frames as a gif.
+
+    Parameters
+    ----------
+    frames: list of ndarrays
+        List of frames to save as a gif.
+
+    output_path: str
+        Path to save the gif to.
+
+    fps: int, default=15
+        Frames per second.
+
+    dwell_time_at_end: int, default=5
+        Number of seconds to dwell on the last frame.
+    """
+    if len(frames)==0: return
+    if not output_path.endswith('.gif'): output_path += '.gif'
+    frames += [frames[-1]]*int(dwell_time_at_end*fps)
+    imageio.mimsave(output_path, frames, fps=fps)
 
 def overlay_keypoints_on_image(
     image, coordinates, edges=[], keypoint_colormap='autumn',
