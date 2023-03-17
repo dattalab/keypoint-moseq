@@ -1049,7 +1049,7 @@ def generate_trajectory_plots(
     lims = np.stack([Xs.min((0,1,2)),Xs.max((0,1,2))])
     lims = _pad_limits(lims, **padding)
     
-    if Xs.shape[-1]:
+    if Xs.shape[-1]==2:
         
         # individual plots
         if save_individually:
@@ -1080,6 +1080,7 @@ def generate_trajectory_plots(
             gif_fps = len(rasters)/(pre+post)*fps
             path = os.path.join(output_dir, 'all_trajectories.gif')
             imageio.mimsave(path, rasters, fps=gif_fps) 
+            
     else: raise NotImplementedError()
 
 
