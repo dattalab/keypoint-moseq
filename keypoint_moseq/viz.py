@@ -711,10 +711,18 @@ def get_limits(coordinates, padding=0.2, pctl=1, blocksize=16):
     ])
     return lims
 
+def rasterize_figure(fig):
+    canvas = fig.canvas
+    canvas.draw()
+    width, height = canvas.get_width_height()
+    raster_flat = np.frombuffer(canvas.tostring_rgb(), dtype='uint8')
+    raster = raster_flat.reshape((height, width, 3))
+    return raster
 
 def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False, 
                       keypoint_colormap='autumn', node_size=50, line_width=3, 
-                      alpha=0.2, num_timesteps=10, plot_width=4, overlap=(0.2,0)):
+                      alpha=0.2, num_timesteps=10, plot_width=4, overlap=(0.2,0),
+                      return_rasters=False):
     """
     Plot one or more pose trajectories on a common axis and return
     the axis.
@@ -773,6 +781,11 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
         Amount of overlap between each trajectory plot as a tuple 
         with the format ``(x_overlap, y_overlap)``. The values should
         be between 0 and 1.
+        
+    return_rasters: bool, default=False
+        Rasterize the matplotlib canvas after plotting each step of
+        the trajecory. This is used to generate an animated gif
+        of the trajectory. 
 
     Returns
     -------
@@ -801,11 +814,34 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
     xmin,ymin = lims[0] + offsets.min(0)
     xmax,ymax = lims[1] + offsets.max(0)
     
-    fig,ax = plt.subplots()
+    fig,ax = plt.subplots(frameon=False)
     ax.fill_between(
         [xmin,xmax], y1=[ymax,ymax], y2=[ymin,ymin], 
         facecolor=fill_color, zorder=0, clip_on=False)
+    
+    title_xy = (lims * np.array([[0.5,0.1],[0.5,0.9]])).sum(0)
+    title_color = 'w' if invert else 'k'
+
+    for xy,text in zip(offsets+title_xy,titles):
+        ax.text(*xy, text, c=title_color, ha='center', 
+                va='top', zorder=Xs.shape[1]*4+4)
         
+    # final extents in axis
+    final_width = xmax-xmin
+    final_height = title_xy[1]+offsets[1,1]-ymin
+    
+    fig_width = plot_width*(n_cols - (n_cols-1)*overlap[0])
+    fig_height = final_height/final_width*fig_width
+    fig.set_size_inches((fig_width, fig_height))
+        
+    ax.set_xlim(xmin,xmax)
+    ax.set_ylim(ymin,ymax)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    plt.tight_layout()
+        
+    rasters = [] # for making a gif
+    
     for i in range(Xs.shape[1]):
         for X,offset in zip(Xs,offsets):
             for ii,jj in edges: 
@@ -823,26 +859,11 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
             ax.fill_between(
                 [xmin,xmax], y1=[ymax,ymax], y2=[ymin,ymin], 
                 facecolor=fill_color, alpha=alpha, zorder=i*4+3, clip_on=False)
+ 
+        if return_rasters:
+            rasters.append(rasterize_figure(fig))          
 
-            
-    title_xy = (lims * np.array([[0.5,0.1],[0.5,0.9]])).sum(0)
-    title_color = 'w' if invert else 'k'
-
-    for xy,text in zip(offsets+title_xy,titles):
-        ax.text(*xy, text, c=title_color, ha='center', 
-                va='top', zorder=Xs.shape[1]*4+4)
-        
-    plot_height = plot_width*(ymax-ymin)/(xmax-xmin)*1.1
-    fig_width = plot_width*n_cols - (n_cols-1)*plot_width*overlap[0]
-    fig_height = plot_height*n_rows - (n_rows-1)*plot_height*overlap[1]
-    fig.set_size_inches((fig_width, fig_height))
-    ax.set_xlim(xmin,xmax)
-    ax.set_ylim(ymin,ymax)
-    ax.set_aspect('equal')
-    ax.axis('off')
-    return fig,ax
-
-
+    return fig,ax,rasters
 
 def generate_trajectory_plots(
     coordinates=None, results=None, output_dir=None, name=None, 
@@ -852,16 +873,17 @@ def generate_trajectory_plots(
     use_bodyparts=None, num_samples=40, keypoint_colormap='autumn',
     plot_options={}, sampling_options={'mode':'density'},
     padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2},
-    plot_syllables_individually=True, **kwargs):
+    save_individually=True, save_gifs=True, fps=30, 
+    **kwargs):
     """
     Generate trajectory plots for a modeled dataset.
 
     Each trajectory plot shows a sequence of poses along the average
     trajectory through latent space associated with a given syllable.
-    A separate figure is saved for each syllable, along with a single
-    figure showing all syllables in a grid. The plots are saved to
-    ``{output_dir}`` if it is provided, otherwise they are saved to
-    ``{project_dir}/{name}/trajectory_plots``.
+    A separate figure (and gif, optionally) is saved for each syllable, 
+    along with a single figure showing all syllables in a grid. The 
+    plots are saved to ``{output_dir}`` if it is provided, otherwise 
+    they are saved to ``{project_dir}/{name}/trajectory_plots``.
 
     Parameters
     ----------
@@ -963,9 +985,16 @@ def generate_trajectory_plots(
         between trajectories (when multiple are shown in one figure)
         as well as the title offset. 
 
-    plot_syllables_individually: bool, default=True
+    save_individually: bool, default=True
         If True, a separate figure is saved for each syllable (in
         addition to the grid figure).
+        
+    save_gifs: bool, default=True
+        Whether to save an animated gif of the trajectory plots. 
+        
+    fps: int, default=30
+        Framerate of the videos from which keypoints were derived.
+        Used to set the framerate of gifs when ``save_gif=True``.
     
     """
     if output_dir is None:
@@ -1020,48 +1049,41 @@ def generate_trajectory_plots(
     lims = np.stack([Xs.min((0,1,2)),Xs.max((0,1,2))])
     lims = _pad_limits(lims, **padding)
     
-    if Xs.shape[-1]==2:
+    if Xs.shape[-1]:
         
         # individual plots
-        if plot_syllables_individually:
+        if save_individually:
             desc = 'Generating trajectory plots'
             for title,X in tqdm.tqdm(zip(titles,Xs), desc=desc, total=len(titles)):
-                fig,ax = plot_trajectories([title], X[None], lims, edges=edges, **plot_options)
-                path = os.path.join(output_dir, f'{title}.pdf')
-                plt.savefig(path)
+                
+                fig,ax,rasters = plot_trajectories(
+                    [title], X[None], lims, edges=edges, 
+                    return_rasters=save_gifs, **plot_options)
+                
+                plt.savefig(os.path.join(output_dir, f'{title}.pdf'))
                 plt.close(fig=fig)
+                
+                if save_gifs:
+                    gif_fps = len(rasters)/(pre+post)*fps
+                    path = os.path.join(output_dir, f'{title}.gif')
+                    imageio.mimsave(path, rasters, fps=gif_fps)
 
         # grid plot
-        fig,ax = plot_trajectories(titles, Xs, lims, edges=edges, **plot_options)
-        path = os.path.join(output_dir, 'all_trajectories.pdf')
-        plt.savefig(path)
+        fig,ax,rasters = plot_trajectories(
+            titles, Xs, lims, edges=edges, 
+            return_rasters=save_gifs, **plot_options)
+        
+        plt.savefig(os.path.join(output_dir, 'all_trajectories.pdf'))
         plt.show()
-            
+        
+        if save_gifs:
+            gif_fps = len(rasters)/(pre+post)*fps
+            path = os.path.join(output_dir, 'all_trajectories.gif')
+            imageio.mimsave(path, rasters, fps=gif_fps) 
     else: raise NotImplementedError()
 
 
-def save_gif(frames, output_path, fps=15, dwell_time_at_end=.5):
-    """
-    Save a list of frames as a gif.
 
-    Parameters
-    ----------
-    frames: list of ndarrays
-        List of frames to save as a gif.
-
-    output_path: str
-        Path to save the gif to.
-
-    fps: int, default=15
-        Frames per second.
-
-    dwell_time_at_end: int, default=5
-        Number of seconds to dwell on the last frame.
-    """
-    if len(frames)==0: return
-    if not output_path.endswith('.gif'): output_path += '.gif'
-    frames += [frames[-1]]*int(dwell_time_at_end*fps)
-    imageio.mimsave(output_path, frames, fps=fps)
 
 def overlay_keypoints_on_image(
     image, coordinates, edges=[], keypoint_colormap='autumn',
