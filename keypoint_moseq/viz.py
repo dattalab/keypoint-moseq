@@ -160,7 +160,7 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
     plot_n_pcs = min(plot_n_pcs, pca.components_.shape[0])
     
     if d==2: dims_list,names = [[0,1]],['xy']
-    if d==3: dims_list,names = [[0,1],[0,2],[1,2]],['xy','xz','yz']
+    if d==3: dims_list,names = [[0,1],[0,2]],['xy','xz']
     
     magnitude = np.sqrt((pca.mean_**2).mean()) * scale
     for dims,name in zip(dims_list,names):
@@ -659,10 +659,42 @@ def generate_grid_movies(
 
         
         
+def get_limits(coordinates, pctl=1, blocksize=1, 
+               left=0.2, right=0.2, top=0.2, bottom=0.2):
+    """
+    Get axis limits based on the coordinates of all keypoints.
 
-def _pad_limits(limits, left=0.1, right=0.1, top=0.1, bottom=0.1):
-    xmin,ymin = limits[0]
-    xmax,ymax = limits[1]
+    For each axis, limits are determined using the percentiles
+    ``pctl`` and ``100-pctl`` and then padded by ``padding``.
+
+    Parameters
+    ----------
+    coordinates: ndarray or dict
+        Coordinates as an ndarray of shape (..., 2), or a dict
+        with values that are ndarrays of shape (..., 2).
+
+    pctl: float, default=1
+        Percentile to use for determining the axis limits.
+
+    blocksize: int, default=1
+        Axis limits are further padded to be multiples of ``blocksize``.
+
+    left, right, top, bottom: float, default=0.1
+        Fraction of the axis range to pad on each side.
+
+    Returns
+    -------
+    lims: ndarray of shape (2,dim)
+        Axis limits, in the format ``[[xmin,ymin,...],[xmax,ymax,...]]``.
+    """
+    if isinstance(coordinates, dict):
+        X = np.concatenate(list(coordinates.values())).reshape(-1,2)
+    else:
+        X = coordinates.reshape(-1,2)
+
+    xmin,ymin = np.nanpercentile(X, pctl, axis=0)
+    xmax,ymax = np.nanpercentile(X, 100-pctl, axis=0)
+
     width = xmax-xmin
     height = ymax-ymin
     
@@ -675,42 +707,6 @@ def _pad_limits(limits, left=0.1, right=0.1, top=0.1, bottom=0.1):
         [xmin,ymin],
         [xmax,ymax]])
 
-def get_limits(coordinates, padding=0.2, pctl=1, blocksize=16):
-    """
-    Get axis limits based on the coordinates of all keypoints.
-
-    For each axis, limits are determined using the percentiles
-    ``pctl`` and ``100-pctl`` and then padded by ``padding``.
-
-    Parameters
-    ----------
-    coordinates: dict
-        Dictionary mapping session names to keypoint coordinates as
-        ndarrays of shape (n_frames, n_bodyparts, dim).
-
-    padding: float, default=0.2
-        Fraction of the axis range to pad on each side.
-
-    pctl: float, default=1
-        Percentile to use for determining the axis limits.
-
-    blocksize: int, default=16
-        Axis limits are further padded to be multiples of ``blocksize``.
-
-    Returns
-    -------
-    lims: ndarray of shape (2,dim)
-        Axis limits, in the format ``[[xmin,ymin,...],[xmax,ymax,...]]``.
-    """
-    X = np.vstack(list(coordinates.values()))
-    lims = np.nanpercentile(X, [pctl,100-pctl], axis=(0,1))
-    lims = (lims-lims.mean(0))*(1+padding) + lims.mean(0)
-    lims = np.array([
-        np.floor(lims[0]/blocksize)*blocksize,
-        np.ceil(lims[1]/blocksize)*blocksize
-    ])
-    return lims
-
 def rasterize_figure(fig):
     canvas = fig.canvas
     canvas.draw()
@@ -718,6 +714,7 @@ def rasterize_figure(fig):
     raster_flat = np.frombuffer(canvas.tostring_rgb(), dtype='uint8')
     raster = raster_flat.reshape((height, width, 3))
     return raster
+
 
 def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False, 
                       keypoint_colormap='autumn', node_size=50, line_width=3, 
@@ -873,8 +870,7 @@ def generate_trajectory_plots(
     use_bodyparts=None, num_samples=40, keypoint_colormap='autumn',
     plot_options={}, sampling_options={'mode':'density'},
     padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2},
-    save_individually=True, save_gifs=True, fps=30, 
-    **kwargs):
+    save_individually=True, save_gifs=True, fps=30, dims=None, **kwargs):
     """
     Generate trajectory plots for a modeled dataset.
 
@@ -995,6 +991,11 @@ def generate_trajectory_plots(
     fps: int, default=30
         Framerate of the videos from which keypoints were derived.
         Used to set the framerate of gifs when ``save_gif=True``.
+        
+    dims: (int,int), default=None
+        Dimensions to plot. Can be used for 3D data to select
+        the 2D subspace used for plotting. If dims is None, 
+        3D data will be plotted in the x/z plane.
     
     """
     if output_dir is None:
@@ -1044,44 +1045,47 @@ def generate_trajectory_plots(
 
     syllables = sorted(trajectories.keys())
     titles = [f'Syllable {syllable}' for syllable in syllables]
-    Xs = np.nanmean(np.array([trajectories[syllable] for syllable in syllables]),axis=1)
+    Xs = np.nanmean(np.array([trajectories[syllable] for syllable in syllables]),axis=1)  
     
-    lims = np.stack([Xs.min((0,1,2)),Xs.max((0,1,2))])
-    lims = _pad_limits(lims, **padding)
-    
-    if Xs.shape[-1]==2:
+    if Xs.shape[-1]==3:
+        if dims is None:
+            warnings.warn(fill(
+                'Data is 3D but `dims` is None. Defaulting to the x/z plane ' 
+                '(dims=(0,2)). Use dims=(0,1) for a top-down view.'))
+            dims = (0,2)
+        Xs = Xs[...,np.array(dims)]
         
-        # individual plots
-        if save_individually:
-            desc = 'Generating trajectory plots'
-            for title,X in tqdm.tqdm(zip(titles,Xs), desc=desc, total=len(titles)):
-                
-                fig,ax,rasters = plot_trajectories(
-                    [title], X[None], lims, edges=edges, 
-                    return_rasters=save_gifs, **plot_options)
-                
-                plt.savefig(os.path.join(output_dir, f'{title}.pdf'))
-                plt.close(fig=fig)
-                
-                if save_gifs:
-                    gif_fps = len(rasters)/(pre+post)*fps
-                    path = os.path.join(output_dir, f'{title}.gif')
-                    imageio.mimsave(path, rasters, fps=gif_fps)
+    lims = get_limits(Xs, pctl=0, **padding)
 
-        # grid plot
-        fig,ax,rasters = plot_trajectories(
-            titles, Xs, lims, edges=edges, 
-            return_rasters=save_gifs, **plot_options)
-        
-        plt.savefig(os.path.join(output_dir, 'all_trajectories.pdf'))
-        plt.show()
-        
-        if save_gifs:
-            gif_fps = len(rasters)/(pre+post)*fps
-            path = os.path.join(output_dir, 'all_trajectories.gif')
-            imageio.mimsave(path, rasters, fps=gif_fps) 
-            
-    else: raise NotImplementedError()
+    # individual plots
+    if save_individually:
+        desc = 'Generating trajectory plots'
+        for title,X in tqdm.tqdm(zip(titles,Xs), desc=desc, total=len(titles)):
+
+            fig,ax,rasters = plot_trajectories(
+                [title], X[None], lims, edges=edges, 
+                return_rasters=save_gifs, **plot_options)
+
+            plt.savefig(os.path.join(output_dir, f'{title}.pdf'))
+            plt.close(fig=fig)
+
+            if save_gifs:
+                gif_fps = len(rasters)/(pre+post)*fps
+                path = os.path.join(output_dir, f'{title}.gif')
+                imageio.mimsave(path, rasters, fps=gif_fps)
+
+    # grid plot
+    fig,ax,rasters = plot_trajectories(
+        titles, Xs, lims, edges=edges, 
+        return_rasters=save_gifs, **plot_options)
+
+    plt.savefig(os.path.join(output_dir, 'all_trajectories.pdf'))
+    plt.show()
+
+    if save_gifs:
+        gif_fps = len(rasters)/(pre+post)*fps
+        path = os.path.join(output_dir, 'all_trajectories.gif')
+        imageio.mimsave(path, rasters, fps=gif_fps)
 
 
 
@@ -1478,7 +1482,7 @@ def generate_crowd_movies(
     plot_options.update({'keypoint_colormap':keypoint_colormap})
 
     if limits is None: 
-        limits = get_limits(coordinates)
+        limits = get_limits(coordinates, blocksize=16)
 
     centroids,headings = None,None
     k = list(results.keys())[0]
