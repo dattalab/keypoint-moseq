@@ -1,6 +1,6 @@
 # Academic and Non-Commercial Research Use Software License and Terms of Use
 
-MoSeq is a software package that includes original code created by the Harvard researchers listed below (the “Software”), and third-party code that may be obtained by End Users under separate terms of use. The Software is designed to label behaviors identified from 3D pose dynamics data through the use of computational modeling and fitting approaches. The Software was developed by Caleb Weinreb, Ph.D. and Sandeep Robert Datta, Ph.D. at Harvard University. It is distributed for free academic and non-commercial research use by President and Fellows of Harvard College (“Harvard”).
+Keypoint-MoSeq is a software package that includes original code created by the Harvard researchers listed below (the “Software”), and third-party code that may be obtained by End Users under separate terms of use. The Software is designed to label behaviors identified from keypoint tracking data through the use of computational modeling and fitting approaches. The Software was developed by Caleb Weinreb, Ph.D. and Sandeep Robert Datta, Ph.D. at Harvard University. It is distributed for free academic and non-commercial research use by President and Fellows of Harvard College (“Harvard”).
 
 Using the Software indicates your agreement to be bound by the terms of this Academic and Non-Commercial Research Use Software License and Terms of Use (“License and Terms of Use”). Absent your agreement to the terms below, you (the “End User”) have no rights to hold or use the Software whatsoever.
 
@@ -31,7 +31,7 @@ E-mail: otd@harvard.edu
 
 Wiltschko AB, Johnson MJ, Iurilli G, Peterson RE, Katon JE, Pashkovski SL, Abraira VE, Adams RP and Datta SR. (2015). Mapping sub-second Structure in Behavior. Neuron, 88:1121.
 
-Markowitz JE, Gillis WF, Beron CC, Neufeld SQ, Robertson K, Bhagat ND, Peterson RE, Peterson E, Hyun M, Linderman SW, Sabatini BL and Datta SR. (2018). The striatum organizes 3D behavior via moment-to-moment action selection. Cell, in press.
+Caleb Weinreb, Mohammed Adbal Monium Osman, Libby Zhang, Sherry Lin, Jonah Pearl, Sidharth Annapragada, Eli Conlin, Winthrop F. Gillis, Maya Jay, Shaokai Ye, Alexander Mathis, Mackenzie Weygandt Mathis, Talmo Pereira, Scott W Linderman, Sandeep Robert Datta. (2023). Keypoint-MoSeq: parsing behavior by linking point tracking to pose dynamics. Bioarxiv, 2023.03.16.532307.
 
 8. **NO WARRANTIES.** THE SOFTWARE IS PROVIDED "AS IS." TO THE FULLEST EXTENT PERMITTED BY LAW, HARVARD HEREBY DISCLAIMS ALL WARRANTIES OF ANY KIND (EXPRESS, IMPLIED OR OTHERWISE) REGARDING THE SOFTWARE, INCLUDING BUT NOT LIMITED TO ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OWNERSHIP, AND NON-INFRINGEMENT. HARVARD MAKES NO WARRANTY ABOUT THE ACCURACY, RELIABILITY, COMPLETENESS, TIMELINESS, SUFFICIENCY OR QUALITY OF THE SOFTWARE. HARVARD DOES NOT WARRANT THAT THE SOFTWARE WILL OPERATE WITHOUT ERROR OR INTERRUPTION.
 
