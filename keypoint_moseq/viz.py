@@ -825,7 +825,7 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
         
     # final extents in axis
     final_width = xmax-xmin
-    final_height = title_xy[1]+offsets[1,1]-ymin
+    final_height = title_xy[1]-ymin
     
     fig_width = plot_width*(n_cols - (n_cols-1)*overlap[0])
     fig_height = final_height/final_width*fig_width
