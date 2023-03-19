@@ -3,8 +3,6 @@ import os
 import glob
 import tqdm
 from textwrap import fill
-from jax.config import config
-config.update('jax_enable_x64', True)
 import jax, jax.numpy as jnp, jax.random as jr
 from jax.tree_util import tree_map
 from itertools import groupby
