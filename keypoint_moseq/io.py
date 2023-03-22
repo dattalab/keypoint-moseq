@@ -70,6 +70,7 @@ def generate_config(project_dir, **kwargs):
         'posterior_bodyparts': ['BODYPART3']})
         
     other = _update_dict(kwargs, {
+        'session_name_suffix': '',
         'verbose':True,
         'conf_pseudocount': 1e-3,
         'video_dir': '',
@@ -89,9 +90,14 @@ def generate_config(project_dir, **kwargs):
 #         'num_kpslds_scan_iters': 50,
 #         'num_kpslds_final_iters': 500
     })
-        
+    
     comments = {
+        'verbose': 'whether to print progress messages during fitting',
+        'keypoint_colormap': 'colormap used for visualization; see `matplotlib.cm.get_cmap` for options',
+        'added_noise_level': 'upper bound of uniform noise added to the data during initial AR-HMM fitting; this is used to regularize the model',
+        'PCA_fitting_num_frames': 'number of frames used to fit the PCA model during initialization',
         'video_dir': 'directory with videos from which keypoints were derived (used for crowd movies)',
+        'session_name_suffix': 'suffix used to match videos to session names; this can usually be left empty (see `util.find_matching_videos` for details)',
         'bodyparts': 'used to access columns in the keypoint data',
         'skeleton': 'used for visualization only',
         'use_bodyparts': 'determines the subset of bodyparts to use for modeling and the order in which they are represented',
@@ -109,7 +115,7 @@ def generate_config(project_dir, **kwargs):
         'conf_threshold': 'used to define outliers for interpolation when the model is initialized',
         'conf_pseudocount': 'pseudocount used regularize neural network confidences',
     }
-    
+
     sections = [
         ('ANATOMY', anatomy),
         ('FITTING', fitting),

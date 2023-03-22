@@ -220,12 +220,14 @@ def list_files_with_exts(dir_path, ext_list, recursive=True):
         for name in os.listdir(dir_path)
         if os.path.splitext(name)[1] in ext_list]
 
-def find_matching_videos(keys, video_dir, as_dict=False, 
-                         video_extension=None, recursive=True):
+def find_matching_videos(keys, video_dir, as_dict=False, recursive=True, 
+                         session_name_suffix='', video_extension=None):
     """
     Find video files for a set of session names. The filename of each
-    video is assumed to be a prefix within the session name. For example
-    given the following video directory::
+    video is assumed to be a prefix within the session name, i.e. the
+    session name has the form ``{video_name}{more_text}``. If more than 
+    one video matches a session name, the longest match will be used. 
+    For example given the following video directory::
 
         video_dir
         ├─ videoname1.avi
@@ -238,6 +240,9 @@ def find_matching_videos(keys, video_dir, as_dict=False,
 
         {'videoname1blahblah': 'video_dir/videoname1.avi',
          'videoname2blahblah': 'video_dir/videoname2.avi'}
+
+    A suffix can also be specified, in which case the session name 
+    is assumed to have the form ``{video_name}{suffix}{more_text}``.
  
     Parameters
     -------
@@ -259,6 +264,9 @@ def find_matching_videos(keys, video_dir, as_dict=False,
         Determines whether to return a dict mapping session names to 
         video paths, or a list of paths in the same order as `keys`.
 
+    session_name_suffix: str, default=None
+        Suffix to append to the video name when searching for a match.
+
     Returns
     -------
     video_paths: list or dict (depending on `as_dict`)
@@ -276,11 +284,14 @@ def find_matching_videos(keys, video_dir, as_dict=False,
 
     video_paths = []
     for key in keys:
-        matches = [path for video,path in videos_to_paths.items() 
-                   if os.path.basename(key).startswith(video)]
+
+        matches,lengths = tuple(zip(
+            *[(path,len(video)) for video,path in videos_to_paths.items() 
+            if os.path.basename(key).startswith(video+session_name_suffix)]))
+        
         assert len(matches)>0, fill(f'No matching videos found for {key}')
-        assert len(matches)<2, fill(f'More than one video matches {key} ({matches})')
-        video_paths.append(matches[0])
+        video_paths.append(matches[np.argmax(lengths)])
+
     if as_dict: return dict(zip(sorted(keys),video_paths))
     else: return video_paths
 
