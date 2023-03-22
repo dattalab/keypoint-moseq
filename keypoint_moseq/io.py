@@ -651,11 +651,14 @@ def load_results(project_dir=None, name=None, path=None):
     return load_hdf5(path)
 
     
-def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False):
+def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False, extension=None):
     """
-    Load tracking results from a directory containing deeplabcut csv or 
-    hdf5 files.
+    Load all deeplabcut tracking results from a directory.
 
+    Deeplabcut outputs tracking results in csv and/or hdf5 format. This
+    function tries to load all files ending in ``.csv`` ``.h5`` or ``.hdf5``,
+    unless a specific extension is specified by the ``extension`` argument.
+   
     Parameters
     ----------
     directory: str, default=None
@@ -666,6 +669,9 @@ def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False):
 
     return_bodyparts: bool, default=False
         Whether to return a list of bodypart names.
+
+    extension: str, default=None
+        If specified, only files with this extension will be loaded.
     
     Returns
     -------
@@ -680,10 +686,9 @@ def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False):
     bodyparts: list of str
         List of bodypart names. Only returned if ``return_bodyparts`` is True.
     """
-    filepaths = list_files_with_exts(
-        directory, ['.csv','.h5','.hdf5'], recursive=recursive)
-    assert len(filepaths)>0, fill(
-        f'No deeplabcut csv or hdf5 files found in {directory}')
+    extensions = ['.csv','.h5','.hdf5'] if extension is None else [extension]
+    filepaths = list_files_with_exts(directory, extensions, recursive=recursive)
+    assert len(filepaths)>0, fill(f'There are no files in {directory} ending in {extensions}')
 
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(filepaths, desc='Loading from deeplabcut'):
