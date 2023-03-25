@@ -16,5 +16,5 @@ dependencies:
     - jax==0.3.22
     - "https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl"
     - "jax-moseq==0.0.0"
-    - "--editable=."
+    - "--editable=../"
     - jupyterlab

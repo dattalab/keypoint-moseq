@@ -14,5 +14,5 @@ dependencies:
   - pip
   - pip:
     - "jax-moseq==0.0.0"
-    - "--editable=."
+    - "--editable=../"
     - jupyterlab
