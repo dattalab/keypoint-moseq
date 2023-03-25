@@ -405,6 +405,11 @@ def format_data(coordinates, confidences=None, keys=None,
     if keys is None: 
         keys = sorted(coordinates.keys()) 
 
+    if any(['/' in key for key in keys]): 
+        warnings.warn(fill(
+            'WARNING: Session names should not contain "/", this will cause '
+            'problems with saving/loading hdf5 files.'))
+        
     if confidences is None:
         confidences = {key: np.ones_like(coordinates[key][...,0]) for key in keys}
 
