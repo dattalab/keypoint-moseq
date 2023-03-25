@@ -870,7 +870,8 @@ def generate_trajectory_plots(
     use_bodyparts=None, num_samples=40, keypoint_colormap='autumn',
     plot_options={}, sampling_options={'mode':'density'},
     padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2},
-    save_individually=True, save_gifs=True, fps=30, dims=None, **kwargs):
+    save_individually=True, save_gifs=True, fps=30, 
+    projection_planes=['xy','xz'], **kwargs):
     """
     Generate trajectory plots for a modeled dataset.
 
@@ -992,11 +993,11 @@ def generate_trajectory_plots(
         Framerate of the videos from which keypoints were derived.
         Used to set the framerate of gifs when ``save_gif=True``.
         
-    dims: (int,int), default=None
-        Dimensions to plot. Can be used for 3D data to select
-        the 2D subspace used for plotting. If dims is None, 
-        3D data will be plotted in the x/z plane.
-    
+    projection_planes: list (subset of ['xy', 'yz', 'xz']), default=['xy','xz']
+        For 3D data, defines the 2D plane(s) on which to project keypoint 
+        coordinates. A separate plot will be saved for each plane with 
+        the name of the plane (e.g. 'xy') as a suffix. This argument is 
+        ignored for 2D data.
     """
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
@@ -1048,44 +1049,48 @@ def generate_trajectory_plots(
     Xs = np.nanmean(np.array([trajectories[syllable] for syllable in syllables]),axis=1)  
     
     if Xs.shape[-1]==3:
-        if dims is None:
-            warnings.warn(fill(
-                'Data is 3D but `dims` is None. Defaulting to the x/z plane ' 
-                '(dims=(0,2)). Use dims=(0,1) for a top-down view.'))
-            dims = (0,2)
-        Xs = Xs[...,np.array(dims)]
-        
-    lims = get_limits(Xs, pctl=0, **padding)
+        projection_planes = [''.join(sorted(plane.lower())) for plane in projection_planes]
+        assert set(projection_planes) <= set(['xy','yz','xz']), fill(
+            "`projection_planes` must be a subset of `['xy','yz','xz']`")
+        all_Xs = [Xs[...,np.array({'xy':[0,1], 'yz':[1,2], 'xz':[0,2]}[plane])] for plane in projection_planes]
+        suffixes = ['.'+plane for plane in projection_planes]
+       
+    else: 
+        all_Xs = [Xs]
+        suffixes = ['']
 
-    # individual plots
-    if save_individually:
-        desc = 'Generating trajectory plots'
-        for title,X in tqdm.tqdm(zip(titles,Xs), desc=desc, total=len(titles)):
+    for Xs,suffix in zip(all_Xs,suffixes):
+        lims = get_limits(Xs, pctl=0, **padding)
 
-            fig,ax,rasters = plot_trajectories(
-                [title], X[None], lims, edges=edges, 
-                return_rasters=save_gifs, **plot_options)
+        # individual plots
+        if save_individually:
+            desc = 'Generating trajectory plots'
+            for title,X in tqdm.tqdm(zip(titles,Xs), desc=desc, total=len(titles)):
 
-            plt.savefig(os.path.join(output_dir, f'{title}.pdf'))
-            plt.close(fig=fig)
+                fig,ax,rasters = plot_trajectories(
+                    [title], X[None], lims, edges=edges, 
+                    return_rasters=save_gifs, **plot_options)
 
-            if save_gifs:
-                gif_fps = len(rasters)/(pre+post)*fps
-                path = os.path.join(output_dir, f'{title}.gif')
-                imageio.mimsave(path, rasters, fps=gif_fps)
+                plt.savefig(os.path.join(output_dir, f'{title}{suffix}.pdf'))
+                plt.close(fig=fig)
 
-    # grid plot
-    fig,ax,rasters = plot_trajectories(
-        titles, Xs, lims, edges=edges, 
-        return_rasters=save_gifs, **plot_options)
+                if save_gifs:
+                    gif_fps = len(rasters)/(pre+post)*fps
+                    path = os.path.join(output_dir, f'{title}{suffix}.gif')
+                    imageio.mimsave(path, rasters, fps=gif_fps)
 
-    plt.savefig(os.path.join(output_dir, 'all_trajectories.pdf'))
-    plt.show()
+        # grid plot
+        fig,ax,rasters = plot_trajectories(
+            titles, Xs, lims, edges=edges, 
+            return_rasters=save_gifs, **plot_options)
 
-    if save_gifs:
-        gif_fps = len(rasters)/(pre+post)*fps
-        path = os.path.join(output_dir, 'all_trajectories.gif')
-        imageio.mimsave(path, rasters, fps=gif_fps)
+        plt.savefig(os.path.join(output_dir, f'all_trajectories{suffix}.pdf'))
+        plt.show()
+
+        if save_gifs:
+            gif_fps = len(rasters)/(pre+post)*fps
+            path = os.path.join(output_dir, f'all_trajectories{suffix}.gif')
+            imageio.mimsave(path, rasters, fps=gif_fps)
 
 
 
