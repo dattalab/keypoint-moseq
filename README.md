@@ -41,7 +41,7 @@ pip install keypoint-moseq
 python -m ipykernel install --user --name=keypoint_moseq
 ```
 
-### Option 2: Conda environment installation
+## Option 2: Conda environment installation
 As an alternative, you can install directly from conda environment files. This will automatically install the appropriate GPU drivers and other dependencies.
 
 1. Clone the repository:
@@ -61,9 +61,14 @@ conda env create -f conda_envs/environment.win64_gpu.yml
 # Linux (CPU-only)
 conda env create -f conda_envs/environment.linux_cpu.yml
 
-#Linux (GPU)
+# Linux (GPU)
 conda env create -f conda_envs/environment.linux_gpu.yml
+
+# Mac (CPU-only)
+conda env create -f conda_envs/environment.mac_cpu.yml
 ```
+
+See [this issue](https://github.com/dattalab/keypoint-moseq/issues/5) for updates regarding Apple Silicon (M1/M2) support. For now, you can use the Mac (CPU) version on newer Macs.
 
 3. Activate the new environment:
 ```
