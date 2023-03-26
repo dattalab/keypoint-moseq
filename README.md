@@ -1,4 +1,6 @@
-# Keypoint MoSeq
+# Keypoint MoSeq 
+
+## (Documentation)[https://keypoint-moseq.readthedocs.io/en/latest/]
 
 ![logo](docs/source/logo.jpg)
 
