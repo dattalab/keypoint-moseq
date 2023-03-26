@@ -1,6 +1,19 @@
 # Keypoint MoSeq
 
-Motion Sequencing ([MoSeq](https://www.cell.com/neuron/fulltext/S0896-6273(15)01037-5?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS0896627315010375%3Fshowall%3Dtrue)) for keypoint tracking data. 
+![logo](docs/source/logo.jpg)
+
+Motion Sequencing (MoSeq) is an unsupervised machine learning method for animal behavior analysis [(Wiltschko et al., 2015)](http://datta.hms.harvard.edu/wp-content/uploads/2018/01/pub_23.pdf). Given behavioral recordings, MoSeq learns a set of stereotyped movement patterns and when they occur over time. This package provides tools for fitting a MoSeq model to keypoint tracking data. 
+
+## Links
+
+- [Keypoint MoSeq docs](https://keypoint-moseq.readthedocs.io/en/latest/)
+
+- [MoSeq website](https://dattalab.github.io/moseq2-website/index.html)
+
+- [Keypoint-MoSeq paper](https://www.biorxiv.org/content/10.1101/2023.03.16.532307v1)
+
+- [Slack workspace](https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A)
+"""
 
 ## Option 1: Install using pip
 
