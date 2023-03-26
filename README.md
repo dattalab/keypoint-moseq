@@ -1,8 +1,24 @@
-# Keypoint MoSeq
+# Keypoint MoSeq 
 
-Motion Sequencing ([MoSeq](https://www.cell.com/neuron/fulltext/S0896-6273(15)01037-5?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS0896627315010375%3Fshowall%3Dtrue)) for keypoint tracking data. 
+![logo](docs/source/logo.jpg)
 
-## Option 1: Install using pip
+Motion Sequencing (MoSeq) is an unsupervised machine learning method for animal behavior analysis [(Wiltschko et al., 2015)](http://datta.hms.harvard.edu/wp-content/uploads/2018/01/pub_23.pdf). Given behavioral recordings, MoSeq learns a set of stereotyped movement patterns and when they occur over time. This package provides tools for fitting a MoSeq model to keypoint tracking data [(Weinreb et al., 2023)](https://www.biorxiv.org/content/10.1101/2023.03.16.532307v1). 
+
+## [Documentation](https://keypoint-moseq.readthedocs.io/en/latest/)
+
+- [Installation](https://keypoint-moseq.readthedocs.io/en/latest/install.html)
+
+- [Tutorial](https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html)
+
+- [Keypoint-MoSeq paper](https://www.biorxiv.org/content/10.1101/2023.03.16.532307v1)
+
+- [Slack workspace](https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A)
+
+- [MoSeq homepage](https://dattalab.github.io/moseq2-website/index.html)
+
+## Installation
+
+### Option 1: Install using pip
 
 1. If you plan to use a GPU (recommended), install the appropriate driver and CUDA version. CUDA ≥11.1 and cuDNN ≥8.2 are required. [This section of the DeepLabCut docs](https://deeplabcut.github.io/DeepLabCut/docs/installation.html#gpu-support) may be helpful.
 
