@@ -193,10 +193,10 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
 
     Parameters
     ----------
-    filepath_pattern : str
-        A filepath pattern. Can be a a directory or a file path with
-        wildcards (e.g., '/path/to/dir/prefix*'). Any extension will be
-        ignored.
+    filepath_pattern : str or list
+        A filepath pattern or a list thereof. Filepath patterns can be
+        be a single file, a directory, or a path with wildcards (e.g.,
+        '/path/to/dir/prefix*'). Any extensions will be ignored.
 
     ext_list : list of str
         A list of file extensions to search for, including the dot 
@@ -210,19 +210,27 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
     list
         A list of file paths.
     """
-    # make sure extensions all start with "." and include uppercase versions
-    ext_list = ['.'+ext.strip('.') for ext in ext_list]
-    ext_list += [ext.upper() for ext in ext_list]
+    if isinstance(filepath_pattern, list):
+        matches = []
+        for fp in filepath_pattern:
+            matches += list_files_with_exts(fp, ext_list, recursive=recursive)
+        return sorted(set(matches))
     
-    # find all matches (recursively)
-    matches = glob.glob(os.path.splitext(filepath_pattern)[0])
-    if recursive:
-        for match in list(matches):
-            matches += glob.glob(os.path.join(match, '**'), recursive=True)
+    else:
+        # make sure extensions all start with "." and include uppercase versions
+        ext_list = ['.'+ext.strip('.') for ext in ext_list]
+        ext_list += [ext.upper() for ext in ext_list]
+        
+        # find all matches (recursively)
+        matches = glob.glob(os.path.splitext(filepath_pattern)[0])
+        if recursive:
+            for match in list(matches):
+                matches += glob.glob(os.path.join(match, '**'), recursive=True)
 
-    # filter matches by extension
-    matches = [match for match in matches if os.path.splitext(match)[1] in ext_list]
-    return matches
+        # filter matches by extension
+        matches = [match for match in matches if os.path.splitext(match)[1] in ext_list]
+        return matches
+    
 
 def find_matching_videos(keys, video_dir, as_dict=False, recursive=True, 
                          session_name_suffix='', video_extension=None):
