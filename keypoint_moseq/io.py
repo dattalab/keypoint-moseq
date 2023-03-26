@@ -684,8 +684,6 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
             - single directory (e.g. ``/path/to/dir/``)
             - set of files (e.g. ``/path/to/fileprefix*``)
             - set of directories (e.g. ``/path/to/dirprefix*``)
-            
-        File extensions are ignored.
 
     recursive: bool, default=True
         Whether to search recursively for deeplabcut csv or hdf5 files.
@@ -757,8 +755,6 @@ def load_sleap_results(filepath_pattern, recursive=True, return_bodyparts=False)
             - single directory (e.g. ``/path/to/dir/``)
             - set of files (e.g. ``/path/to/fileprefix*``)
             - set of directories (e.g. ``/path/to/dirprefix*``)
-            
-        File extensions are ignored.
 
     recursive: bool, default=True
         Whether to search recursively for sleap hdf5 files.
@@ -814,7 +810,7 @@ def load_sleap_results(filepath_pattern, recursive=True, return_bodyparts=False)
                         confidences[f'{name}_track{i}'] = confs[i].T
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
-            
+
     if return_bodyparts: 
         return coordinates,confidences,bodyparts
     else: return coordinates,confidences

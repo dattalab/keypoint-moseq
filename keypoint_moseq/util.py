@@ -196,7 +196,7 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
     filepath_pattern : str or list
         A filepath pattern or a list thereof. Filepath patterns can be
         be a single file, a directory, or a path with wildcards (e.g.,
-        '/path/to/dir/prefix*'). Any extensions will be ignored.
+        '/path/to/dir/prefix*').
 
     ext_list : list of str
         A list of file extensions to search for, including the dot 
@@ -222,7 +222,7 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
         ext_list += [ext.upper() for ext in ext_list]
         
         # find all matches (recursively)
-        matches = glob.glob(os.path.splitext(filepath_pattern)[0])
+        matches = glob.glob(filepath_pattern)
         if recursive:
             for match in list(matches):
                 matches += glob.glob(os.path.join(match, '**'), recursive=True)
