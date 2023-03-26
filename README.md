@@ -13,7 +13,6 @@ Motion Sequencing (MoSeq) is an unsupervised machine learning method for animal 
 - [Keypoint-MoSeq paper](https://www.biorxiv.org/content/10.1101/2023.03.16.532307v1)
 
 - [Slack workspace](https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A)
-"""
 
 ## Option 1: Install using pip
 
