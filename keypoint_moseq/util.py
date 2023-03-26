@@ -186,15 +186,17 @@ def reindex_by_frequency(stateseqs, mask=None):
     return stateseqs_reindexed
 
 
-def list_files_with_exts(dir_path, ext_list, recursive=True):
+def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
     """
-    This function lists all the files in a directory with one of the
-    specified extensions.
+    This function lists all the files matching a pattern and with a
+    an extension in a list of extensions.
 
     Parameters
     ----------
-    dir_path : str
-        The directory path to search.
+    filepath_pattern : str
+        A filepath pattern. Can be a a directory or a file path with
+        wildcards (e.g., '/path/to/dir/prefix*'). Any extension will be
+        ignored.
 
     ext_list : list of str
         A list of file extensions to search for, including the dot 
@@ -208,15 +210,19 @@ def list_files_with_exts(dir_path, ext_list, recursive=True):
     list
         A list of file paths.
     """
+    # make sure extensions all start with "." and include uppercase versions
+    ext_list = ['.'+ext.strip('.') for ext in ext_list]
     ext_list += [ext.upper() for ext in ext_list]
-    if recursive: return [
-        os.path.join(root, name)
-        for root, dirs, files in os.walk(dir_path)
-        for name in files if os.path.splitext(name)[1] in ext_list]
-    else: return [
-        os.path.join(dir_path, name)
-        for name in os.listdir(dir_path)
-        if os.path.splitext(name)[1] in ext_list]
+    
+    # find all matches (recursively)
+    matches = glob.glob(os.path.splitext(filepath_pattern)[0])
+    if recursive:
+        for match in list(matches):
+            matches += glob.glob(os.path.join(match, '**'), recursive=True)
+
+    # filter matches by extension
+    matches = [match for match in matches if os.path.splitext(match)[1] in ext_list]
+    return matches
 
 def find_matching_videos(keys, video_dir, as_dict=False, recursive=True, 
                          session_name_suffix='', video_extension=None):

@@ -656,15 +656,17 @@ def load_results(project_dir=None, name=None, path=None):
     return load_hdf5(path)
 
     
-def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False):
+def load_deeplabcut_results(filepath_pattern, recursive=True, return_bodyparts=False):
     """
-    Load tracking results from a directory containing deeplabcut csv or 
-    hdf5 files.
+    Load tracking results from deeplabcut csv or hdf5 files.
 
     Parameters
     ----------
-    directory: str, default=None
-        Path to the directory containing the deeplabcut csv or hdf5 files.
+    filepath_pattern: str, default=None
+        File path pattern for a set of deeplabcut csv or hdf5 files. The 
+        path can define a single directory (e.g. ``/path/to/dir/``) or a 
+        set of files (e.g. ``/path/to/fileprefix*``) or a set of directories
+        (e.g. ``/path/to/dirprefix*``). File extensions are ignored. 
 
     recursive: bool, default=True
         Whether to search recursively for deeplabcut csv or hdf5 files.
@@ -686,9 +688,9 @@ def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False):
         List of bodypart names. Only returned if ``return_bodyparts`` is True.
     """
     filepaths = list_files_with_exts(
-        directory, ['.csv','.h5','.hdf5'], recursive=recursive)
+        filepath_pattern, ['.csv','.h5','.hdf5'], recursive=recursive)
     assert len(filepaths)>0, fill(
-        f'No deeplabcut csv or hdf5 files found in {directory}')
+        f'No deeplabcut csv or hdf5 files found for {filepath_pattern}')
 
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(filepaths, desc='Loading from deeplabcut'):
@@ -709,14 +711,17 @@ def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False):
 
 
 
-def load_sleap_results(directory, recursive=True, return_bodyparts=False):
+def load_sleap_results(filepath_pattern, recursive=True, return_bodyparts=False):
     """
-    Load keypoints from a directory of sleap hdf5 files.
+    Load keypoints from sleap hdf5 files.
 
     Parameters
     ----------
-    directory: str, default=None
-        Path to the directory containing the sleap hdf5 files.
+    filepath_pattern: str, default=None
+        File path pattern for a set of sleap hdf5 files. The path can 
+        define a single directory (e.g. ``/path/to/dir/``) or a set 
+        of files (e.g. ``/path/to/fileprefix*``) or a set of directories
+        (e.g. ``/path/to/dirprefix*``). File extensions are ignored. 
 
     recursive: bool, default=True
         Whether to search recursively for sleap hdf5 files.
@@ -739,9 +744,9 @@ def load_sleap_results(directory, recursive=True, return_bodyparts=False):
     """
 
     filepaths = list_files_with_exts(
-        directory, ['.h5','.hdf5'], recursive=recursive)
+        filepath_pattern, ['.h5','.hdf5'], recursive=recursive)
     assert len(filepaths)>0, fill(
-        f'No sleap hdf5 files found in {directory}.')
+        f'No sleap hdf5 files found for {filepath_pattern}.')
 
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(filepaths, desc='Loading from sleap'):
