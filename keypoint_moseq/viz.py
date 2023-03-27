@@ -397,7 +397,8 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
         Radius of the dot indicating syllable onset and offset
 
     window_size: int, default=112
-        Size of the window around the animal
+        Size of the window around the animal. This should be a multiple
+        of 16 or imageio will complain.
 
     pre: int, default=30
         Number of frames before syllable onset to include in the movie
@@ -658,8 +659,7 @@ def generate_grid_movies(
         write_video_clip(frames, path, fps=fps, quality=quality)
 
         
-        
-def get_limits(coordinates, pctl=1, blocksize=1, 
+def get_limits(coordinates, pctl=1, blocksize=None,
                left=0.2, right=0.2, top=0.2, bottom=0.2):
     """
     Get axis limits based on the coordinates of all keypoints.
@@ -676,9 +676,11 @@ def get_limits(coordinates, pctl=1, blocksize=1,
     pctl: float, default=1
         Percentile to use for determining the axis limits.
 
-    blocksize: int, default=1
-        Axis limits are further padded to be multiples of ``blocksize``.
-
+    blocksize: int, default=None
+        Axis limits are cast to integers and padded so that the width
+        and height are multiples of ``blocksize``. This is useful
+        when they are used for generating cropped images for a video. 
+        
     left, right, top, bottom: float, default=0.1
         Fraction of the axis range to pad on each side.
 
@@ -697,15 +699,23 @@ def get_limits(coordinates, pctl=1, blocksize=1,
 
     width = xmax-xmin
     height = ymax-ymin
-    
     xmin -= width*left
     xmax += width*right
     ymin -= height*bottom
     ymax += height*top
-    
-    return np.array([
+
+    lims = np.array([
         [xmin,ymin],
         [xmax,ymax]])
+
+    if blocksize is not None:
+        lims = np.round(lims)
+        padding = np.mod(lims[0]-lims[1], blocksize)/2
+        lims[0] -= padding
+        lims[1] += padding
+        lims = lims.astype(int)
+    
+    return lims
 
 def rasterize_figure(fig):
     canvas = fig.canvas
