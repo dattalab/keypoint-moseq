@@ -122,10 +122,10 @@ def get_durations(stateseqs, mask=None):
     }
     >>> get_durations(stateseqs)
     array([2, 3, 1, 3, 1])
-
     """
-    stateseq_flat = concatenate_stateseqs(stateseqs, mask=mask).astype(int)
-    changepoints = np.insert(np.diff(stateseq_flat).nonzero()[0]+1,0,0)
+    stateseq_flat = concatenate_stateseqs(z, mask=mask).astype(int)
+    stateseq_padded = np.hstack([[-1],stateseq_flat,[-1]])
+    changepoints = np.diff(stateseq_padded).nonzero()[0]
     return changepoints[1:]-changepoints[:-1]
 
 
