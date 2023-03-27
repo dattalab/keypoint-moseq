@@ -76,6 +76,7 @@ def generate_config(project_dir, **kwargs):
         'video_dir': '',
         'keypoint_colormap': 'autumn',
         'whiten': True,
+        'fix_heading': False,
         'seg_length': 10000 })
        
     fitting = _update_dict(kwargs, {
@@ -114,6 +115,7 @@ def generate_config(project_dir, **kwargs):
         'whiten': 'whether to whiten principal components; used to initialize the latent pose trajectory `x`',
         'conf_threshold': 'used to define outliers for interpolation when the model is initialized',
         'conf_pseudocount': 'pseudocount used regularize neural network confidences',
+        'fix_heading': 'whether to keep the heading angle fixed; this should only be True if the pose is constrained to a narrow range of angles, e.g. a headfixed mouse.',
     }
 
     sections = [
