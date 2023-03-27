@@ -2,17 +2,17 @@ name: keypoint_moseq
 
 channels:
   - conda-forge
-  - nvidia
   - defaults
 
 dependencies:
   - python=3.9
   - pytables
-  - jaxlib=0.3.22=*cuda*
-  - jax
-  - cuda-nvcc
+  - openblas
+  - numpy=1.23.5
   - pip
   - pip:
+    - jax==0.3.22
+    - jaxlib==0.3.22
     - "jax-moseq==0.0.0"
     - "--editable=../"
     - jupyterlab
