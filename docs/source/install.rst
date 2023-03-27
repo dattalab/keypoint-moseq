@@ -50,8 +50,13 @@ Install the appropriate conda environment for your platform::
    # Linux (CPU-only)
    conda env create -f conda_envs/environment.linux_cpu.yml
 
-   #Linux (GPU)
+   # Linux (GPU)
    conda env create -f conda_envs/environment.linux_gpu.yml
+
+   # Mac (CPU-only)
+   conda env create -f conda_envs/environment.mac_cpu.yml
+
+See `this issue <https://github.com/dattalab/keypoint-moseq/issues/5>`_ for updates regarding Apple Silicon (M1/M2) support. For now, you can use the Mac (CPU) version on newer Macs.
 
 Activate the new environment::
 
