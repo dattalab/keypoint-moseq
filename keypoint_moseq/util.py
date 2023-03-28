@@ -3,8 +3,6 @@ import os
 import glob
 import tqdm
 from textwrap import fill
-from jax.config import config
-config.update('jax_enable_x64', True)
 import jax, jax.numpy as jnp, jax.random as jr
 from jax.tree_util import tree_map
 from itertools import groupby
@@ -124,10 +122,10 @@ def get_durations(stateseqs, mask=None):
     }
     >>> get_durations(stateseqs)
     array([2, 3, 1, 3, 1])
-
     """
     stateseq_flat = concatenate_stateseqs(stateseqs, mask=mask).astype(int)
-    changepoints = np.insert(np.diff(stateseq_flat).nonzero()[0]+1,0,0)
+    stateseq_padded = np.hstack([[-1],stateseq_flat,[-1]])
+    changepoints = np.diff(stateseq_padded).nonzero()[0]
     return changepoints[1:]-changepoints[:-1]
 
 
@@ -188,15 +186,17 @@ def reindex_by_frequency(stateseqs, mask=None):
     return stateseqs_reindexed
 
 
-def list_files_with_exts(dir_path, ext_list, recursive=True):
+def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
     """
-    This function lists all the files in a directory with one of the
-    specified extensions.
+    This function lists all the files matching a pattern and with a
+    an extension in a list of extensions.
 
     Parameters
     ----------
-    dir_path : str
-        The directory path to search.
+    filepath_pattern : str or list
+        A filepath pattern or a list thereof. Filepath patterns can be
+        be a single file, a directory, or a path with wildcards (e.g.,
+        '/path/to/dir/prefix*').
 
     ext_list : list of str
         A list of file extensions to search for, including the dot 
@@ -210,15 +210,27 @@ def list_files_with_exts(dir_path, ext_list, recursive=True):
     list
         A list of file paths.
     """
-    ext_list += [ext.upper() for ext in ext_list]
-    if recursive: return [
-        os.path.join(root, name)
-        for root, dirs, files in os.walk(dir_path)
-        for name in files if os.path.splitext(name)[1] in ext_list]
-    else: return [
-        os.path.join(dir_path, name)
-        for name in os.listdir(dir_path)
-        if os.path.splitext(name)[1] in ext_list]
+    if isinstance(filepath_pattern, list):
+        matches = []
+        for fp in filepath_pattern:
+            matches += list_files_with_exts(fp, ext_list, recursive=recursive)
+        return sorted(set(matches))
+    
+    else:
+        # make sure extensions all start with "." and include uppercase versions
+        ext_list = ['.'+ext.strip('.') for ext in ext_list]
+        ext_list += [ext.upper() for ext in ext_list]
+        
+        # find all matches (recursively)
+        matches = glob.glob(filepath_pattern)
+        if recursive:
+            for match in list(matches):
+                matches += glob.glob(os.path.join(match, '**'), recursive=True)
+
+        # filter matches by extension
+        matches = [match for match in matches if os.path.splitext(match)[1] in ext_list]
+        return matches
+    
 
 def find_matching_videos(keys, video_dir, as_dict=False, recursive=True, 
                          session_name_suffix='', video_extension=None):

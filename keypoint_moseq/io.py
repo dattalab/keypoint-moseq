@@ -76,6 +76,7 @@ def generate_config(project_dir, **kwargs):
         'video_dir': '',
         'keypoint_colormap': 'autumn',
         'whiten': True,
+        'fix_heading': False,
         'seg_length': 10000 })
        
     fitting = _update_dict(kwargs, {
@@ -114,6 +115,7 @@ def generate_config(project_dir, **kwargs):
         'whiten': 'whether to whiten principal components; used to initialize the latent pose trajectory `x`',
         'conf_threshold': 'used to define outliers for interpolation when the model is initialized',
         'conf_pseudocount': 'pseudocount used regularize neural network confidences',
+        'fix_heading': 'whether to keep the heading angle fixed; this should only be True if the pose is constrained to a narrow range of angles, e.g. a headfixed mouse.',
     }
 
     sections = [
@@ -405,6 +407,11 @@ def format_data(coordinates, confidences=None, keys=None,
     if keys is None: 
         keys = sorted(coordinates.keys()) 
 
+    if any(['/' in key for key in keys]): 
+        warnings.warn(fill(
+            'WARNING: Session names should not contain "/", this will cause '
+            'problems with saving/loading hdf5 files.'))
+        
     if confidences is None:
         confidences = {key: np.ones_like(coordinates[key][...,0]) for key in keys}
 
@@ -650,10 +657,24 @@ def load_results(project_dir=None, name=None, path=None):
         path = os.path.join(project_dir,name,'results.h5')
     return load_hdf5(path)
 
-    
-def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False, extension=None):
+
+def _name_from_path(filepath, path_in_name, path_sep):
     """
-    Load all deeplabcut tracking results from a directory.
+    Create a name from a filepath. Either return the name of the file
+    (with the extension removed) or return the full filepath, where the
+    path separators are replaced with ``path_sep``.
+    """
+    filepath = os.path.splitext(filepath)[0]
+    if path_in_name:
+        return filepath.replace(os.path.sep, path_sep)
+    else:
+        return os.path.basename(filepath)
+
+
+def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
+                            path_in_name=False, return_bodyparts=False):
+    """
+    Load tracking results from deeplabcut csv or hdf5 files.
 
     Deeplabcut outputs tracking results in csv and/or hdf5 format. This
     function tries to load all files ending in ``.csv`` ``.h5`` or ``.hdf5``,
@@ -661,18 +682,33 @@ def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False, e
    
     Parameters
     ----------
-    directory: str, default=None
-        Path to the directory containing the deeplabcut csv or hdf5 files.
+    filepath_pattern: str or list of str
+        Filepath pattern for a set of deeplabcut csv or hdf5 files, 
+        or a list of such patterns. Filepath patterns can be:
+
+            - single file (e.g. ``/path/to/file.csv``) 
+            - single directory (e.g. ``/path/to/dir/``)
+            - set of files (e.g. ``/path/to/fileprefix*``)
+            - set of directories (e.g. ``/path/to/dirprefix*``)
 
     recursive: bool, default=True
         Whether to search recursively for deeplabcut csv or hdf5 files.
 
+    path_in_name: bool, default=False
+        Whether to name the tracking results from each file by the path
+        to the file (True) or just the filename (False). If True, the
+        ``path_sep`` argument is used to separate the path components.
+        
+    path_sep: str, default='-'
+        Separator to use when ``path_in_name`` is True. For example,
+        if ``path_sep`` is ``'-'``, then the tracking results from the
+        file ``/path/to/file.csv`` will be named ``path-to-file``. Using
+        ``'/'`` as the separator is discouraged, as it will cause problems
+        saving/loading the modeling results to/from hdf5 files.
+
     return_bodyparts: bool, default=False
         Whether to return a list of bodypart names.
 
-    extension: str, default=None
-        If specified, only files with this extension will be loaded.
-    
     Returns
     -------
     coordinates: dict
@@ -686,40 +722,61 @@ def load_deeplabcut_results(directory, recursive=True, return_bodyparts=False, e
     bodyparts: list of str
         List of bodypart names. Only returned if ``return_bodyparts`` is True.
     """
-    extensions = ['.csv','.h5','.hdf5'] if extension is None else [extension]
-    filepaths = list_files_with_exts(directory, extensions, recursive=recursive)
-    assert len(filepaths)>0, fill(f'There are no files in {directory} ending in {extensions}')
+    filepaths = list_files_with_exts(
+        filepath_pattern, ['.csv','.h5','.hdf5'], recursive=recursive)
+    assert len(filepaths)>0, fill(
+        f'No deeplabcut csv or hdf5 files found for {filepath_pattern}')
 
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(filepaths, desc='Loading from deeplabcut'):
         try: 
-            filename = os.path.basename(filepath)
+            name = _name_from_path(filepath, path_in_name, path_sep)
             ext = os.path.splitext(filepath)[1]
             if ext=='.h5': df = pd.read_hdf(filepath)
             if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0)   
             bodyparts = list(list(zip(*df.columns.to_list()))[1][::3])      
             arr = df.to_numpy().reshape(len(df), -1, 3)
-            coordinates[filename] = arr[:,:,:-1]
-            confidences[filename] = arr[:,:,-1]
+            coordinates[name] = arr[:,:,:-1]
+            confidences[name] = arr[:,:,-1]
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
+    
     if return_bodyparts: 
         return coordinates,confidences,bodyparts
     else: return coordinates,confidences
 
 
 
-def load_sleap_results(directory, recursive=True, return_bodyparts=False):
+def load_sleap_results(filepath_pattern, recursive=True, return_bodyparts=False):
     """
-    Load keypoints from a directory of sleap hdf5 files.
+    Load keypoints from sleap hdf5 files.
 
     Parameters
     ----------
-    directory: str, default=None
-        Path to the directory containing the sleap hdf5 files.
+    filepath_pattern: str, default=None
+        Filepath pattern for a set of sleap hdf5 files, or a list of 
+        such patterns. Filepath patterns can be:
+
+            - single file (e.g. ``/path/to/file.csv``) 
+            - single directory (e.g. ``/path/to/dir/``)
+            - set of files (e.g. ``/path/to/fileprefix*``)
+            - set of directories (e.g. ``/path/to/dirprefix*``)
 
     recursive: bool, default=True
         Whether to search recursively for sleap hdf5 files.
+
+    path_in_name: bool, default=False
+        Whether to name the tracking results from each file by the path
+        to the file (True) or just the filename (False). If True, the
+        ``path_sep`` argument is used to separate the path components.
+        
+    path_sep: str, default='-'
+        Separator to use when ``path_in_name`` is True. For example,
+        if ``path_sep`` is ``'-'``, then the tracking results from the
+        file ``/path/to/file.csv`` will be named ``path-to-file``. Using
+        ``'/'`` as the separator is discouraged, as it will cause problems
+        saving/loading the modeling results to/from hdf5 files.
+
     
     return_bodyparts: bool, default=False
         Whether to return a list of bodypart names.
@@ -737,29 +794,29 @@ def load_sleap_results(directory, recursive=True, return_bodyparts=False):
     bodyparts: list of str
         List of bodypart names. Only returned if ``return_bodyparts`` is True.
     """
-
     filepaths = list_files_with_exts(
-        directory, ['.h5','.hdf5'], recursive=recursive)
+        filepath_pattern, ['.h5','.hdf5'], recursive=recursive)
     assert len(filepaths)>0, fill(
-        f'No sleap hdf5 files found in {directory}.')
+        f'No sleap hdf5 files found for {filepath_pattern}.')
 
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(filepaths, desc='Loading from sleap'):
         try: 
-            filename = os.path.basename(filepath)
+            name = _name_from_path(filepath, path_in_name, path_sep)
             with h5py.File(filepath, 'r') as f:
                 coords = f['tracks'][()]
                 confs = f['point_scores'][()]
                 bodyparts = [name.decode('utf-8') for name in f['node_names']]
                 if coords.shape[0] == 1: 
-                    coordinates[filename] = coords[0].T
-                    confidences[filename] = confs[0].T
+                    coordinates[name] = coords[0].T
+                    confidences[name] = confs[0].T
                 else:
                     for i in range(coords.shape[0]):
-                        coordinates[f'{filename}_track{i}'] = coords[i].T
-                        confidences[f'{filename}_track{i}'] = confs[i].T
+                        coordinates[f'{name}_track{i}'] = coords[i].T
+                        confidences[f'{name}_track{i}'] = confs[i].T
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
+
     if return_bodyparts: 
         return coordinates,confidences,bodyparts
     else: return coordinates,confidences
