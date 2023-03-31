@@ -9,10 +9,10 @@ dependencies:
   - pytables
   - openblas
   - numpy=1.23.5
+  - conda-forge::jax=0.3.22
+  - conda-forge::jaxlib=0.3.22=*cpu*
   - pip
   - pip:
-    - jax==0.3.22
-    - jaxlib==0.3.22
     - "jax-moseq"
     - "--editable=../"
     - jupyterlab
