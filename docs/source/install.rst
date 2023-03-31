@@ -1,5 +1,11 @@
+Installation
+------------
+
+- For a Mac with an M1 chip, follow `Install using conda`_.
+- The first import of ``keypoint_moseq`` after installation can take a few minutes.
+
 Install using pip
------------------
+~~~~~~~~~~~~~~~~~
 
 To use a GPU (recommended), install the appropriate driver and CUDA version. CUDA ≥11.1 and cuDNN ≥8.2 are required. `This section of the DeepLabCut docs <https://deeplabcut.github.io/DeepLabCut/docs/installation.html#gpu-support>`_ may be helpful. Next use `Anaconda <https://docs.anaconda.com/anaconda/install/index.html>`_  or `Miniconda <https://docs.conda.io/en/latest/miniconda.html>`_ to configure a new python environment called ``keypoint_moseq``::
 
@@ -33,7 +39,7 @@ Make the environment available to jupyter::
    python -m ipykernel install --user --name=keypoint_moseq
 
 Install using conda
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 As an alternative, you can install directly from conda environment files. This will automatically install the appropriate GPU drivers and other dependencies. Start by cloning the repository::
 

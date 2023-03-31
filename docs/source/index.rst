@@ -19,7 +19,7 @@ Links
 .. toctree::
    :maxdepth: 2
    :hidden:
-   :caption: Installation
+   :caption: Setup
 
    install
 

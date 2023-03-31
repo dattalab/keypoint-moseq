@@ -18,7 +18,7 @@ Motion Sequencing (MoSeq) is an unsupervised machine learning method for animal 
 
 ## Installation
 
-- The first import of `keypoint_moseq` after installation can take a few minutes. Subsequent imports should be much faster. 
+- The first import of `keypoint_moseq` after installation can take a few minutes. 
 - To install on a Mac with an M1 chip, we recommend option 2 (conda environment installation).
 
 ### Option 1: Install using pip
