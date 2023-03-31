@@ -13,6 +13,6 @@ dependencies:
   - pip:
     - jax==0.3.22
     - jaxlib==0.3.22
-    - "jax-moseq==0.0.0"
+    - "jax-moseq"
     - "--editable=../"
     - jupyterlab

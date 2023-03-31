@@ -18,6 +18,9 @@ Motion Sequencing (MoSeq) is an unsupervised machine learning method for animal 
 
 ## Installation
 
+- The first import of `keypoint_moseq` after installation can take a few minutes. Subsequent imports should be much faster. 
+- To install on a Mac with an M1 chip, we recommend option 2 (conda environment installation).
+
 ### Option 1: Install using pip
 
 1. If you plan to use a GPU (recommended), install the appropriate driver and CUDA version. CUDA ≥11.1 and cuDNN ≥8.2 are required. [This section of the DeepLabCut docs](https://deeplabcut.github.io/DeepLabCut/docs/installation.html#gpu-support) may be helpful.
@@ -90,6 +93,7 @@ See [this issue](https://github.com/dattalab/keypoint-moseq/issues/5) for update
 ```
 conda activate keypoint_moseq
 ```
+
 
 ### Troubleshooting
 #### `UNKNOWN: no kernel image is available for execution on the device`
