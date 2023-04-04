@@ -3,12 +3,10 @@ import cv2
 import tqdm
 import imageio
 import warnings
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
-plt.rcParams['figure.dpi'] = 100
-warnings.formatwarning = lambda msg, *a: str(msg)
-
 from vidio.read import OpenCVReader
 from textwrap import fill
 
@@ -20,6 +18,14 @@ from keypoint_moseq.util import (
 )
 from keypoint_moseq.io import load_results
 from jax_moseq.models.keypoint_slds import center_embedding
+
+# simple warning formatting
+plt.rcParams['figure.dpi'] = 100
+warnings.formatwarning = lambda msg, *a: str(msg)
+
+# suppress warnings from imageio
+logging.getLogger().setLevel(logging.ERROR)
+
 
 
 def crop_image(image, centroid, crop_size):
@@ -346,14 +352,11 @@ def write_video_clip(frames, path, fps=30, quality=7, suppress_warnings=True):
         Whether to suppress warnings from imageio (e.g. if the video
         width or height is not divisible by 16).
     """
-    with warnings.catch_warnings():
-        if suppress_warnings: warnings.simplefilter('ignore')
-
-        with imageio.get_writer(
-            path, pixelformat='yuv420p', 
-            fps=fps, quality=quality) as writer:
-            for frame in frames: 
-                writer.append_data(frame)
+    with imageio.get_writer(
+        path, pixelformat='yuv420p', 
+        fps=fps, quality=quality) as writer:
+        for frame in frames: 
+            writer.append_data(frame)
 
 
 def _grid_movie_tile(key, start, end, videos, centroids, headings, 
