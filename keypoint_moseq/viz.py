@@ -323,14 +323,37 @@ def plot_progress(model, data, history, iteration, path=None,
     plt.show()
 
     
-def write_video_clip(frames, path, fps=30, quality=7):
-    """Write a video clip to a file.
+def write_video_clip(frames, path, fps=30, quality=7, suppress_warnings=True):
     """
-    with imageio.get_writer(
-        path, pixelformat='yuv420p', 
-        fps=fps, quality=quality) as writer:
-        for frame in frames: 
-            writer.append_data(frame)
+    Write a video clip to a file.
+
+    Parameters
+    ----------
+    frames : np.ndarray
+        Video frames as a 4D array of shape `(num_frames, height, width, 3)`
+        or a 3D array of shape `(num_frames, height, width)`.
+
+    path : str
+        Path to save the video clip.
+
+    fps : int, default=30
+        Framerate of video encoding.
+
+    quality : int, default=7
+        Quality of video encoding.
+    
+    suppress_warnings : bool, default=True
+        Whether to suppress warnings from imageio (e.g. if the video
+        width or height is not divisible by 16).
+    """
+    with warnings.catch_warnings():
+        if suppress_warnings: warnings.simplefilter('ignore')
+
+        with imageio.get_writer(
+            path, pixelformat='yuv420p', 
+            fps=fps, quality=quality) as writer:
+            for frame in frames: 
+                writer.append_data(frame)
 
 
 def _grid_movie_tile(key, start, end, videos, centroids, headings, 
@@ -791,7 +814,7 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
         
     return_rasters: bool, default=False
         Rasterize the matplotlib canvas after plotting each step of
-        the trajecory. This is used to generate an animated gif
+        the trajecory. This is used to generate an animated video/gif
         of the trajectory. 
 
     Returns
@@ -880,7 +903,7 @@ def generate_trajectory_plots(
     use_bodyparts=None, num_samples=40, keypoint_colormap='autumn',
     plot_options={}, sampling_options={'mode':'density'},
     padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2},
-    save_individually=True, save_gifs=True, fps=30, 
+    save_individually=True, save_gifs=True, save_mp4s=False, fps=30, 
     projection_planes=['xy','xz'], **kwargs):
     """
     Generate trajectory plots for a modeled dataset.
@@ -997,7 +1020,10 @@ def generate_trajectory_plots(
         addition to the grid figure).
         
     save_gifs: bool, default=True
-        Whether to save an animated gif of the trajectory plots. 
+        Whether to save an animated gif of the trajectory plots.
+        
+    save_mp4s: bool, default=False
+        Whether to save videos of the trajectory plots as .mp4 files
         
     fps: int, default=30
         Framerate of the videos from which keypoints were derived.
@@ -1079,29 +1105,39 @@ def generate_trajectory_plots(
 
                 fig,ax,rasters = plot_trajectories(
                     [title], X[None], lims, edges=edges, 
-                    return_rasters=save_gifs, **plot_options)
+                    return_rasters=(save_gifs or save_mp4s),
+                    **plot_options)
 
                 plt.savefig(os.path.join(output_dir, f'{title}{suffix}.pdf'))
                 plt.close(fig=fig)
 
                 if save_gifs:
-                    gif_fps = len(rasters)/(pre+post)*fps
+                    use_fps = len(rasters)/(pre+post)*fps
                     path = os.path.join(output_dir, f'{title}{suffix}.gif')
-                    imageio.mimsave(path, rasters, fps=gif_fps)
+                    imageio.mimsave(path, rasters, fps=use_fps)
+                if save_mp4s:
+                    use_fps = len(rasters)/(pre+post)*fps
+                    path = os.path.join(output_dir, f'{title}{suffix}.mp4')
+                    write_video_clip(rasters, path, fps=use_fps)
+                    
 
         # grid plot
         fig,ax,rasters = plot_trajectories(
             titles, Xs, lims, edges=edges, 
-            return_rasters=save_gifs, **plot_options)
+            return_rasters=(save_gifs or save_mp4s),
+            **plot_options)
 
         plt.savefig(os.path.join(output_dir, f'all_trajectories{suffix}.pdf'))
         plt.show()
 
         if save_gifs:
-            gif_fps = len(rasters)/(pre+post)*fps
+            use_fps = len(rasters)/(pre+post)*fps
             path = os.path.join(output_dir, f'all_trajectories{suffix}.gif')
-            imageio.mimsave(path, rasters, fps=gif_fps)
-
+            imageio.mimsave(path, rasters, fps=use_fps)
+        if save_mp4s:
+            use_fps = len(rasters)/(pre+post)*fps
+            path = os.path.join(output_dir, f'all_trajectories{suffix}.mp4')
+            write_video_clip(rasters, path, fps=use_fps)
 
 
 
@@ -1531,8 +1567,5 @@ def generate_crowd_movies(
             edges=edges, lims=limits, plot_options=plot_options)
 
         path = os.path.join(output_dir, f'syllable{syllable}.mp4')
-        
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            write_video_clip(frames, path, fps=fps, quality=quality)
+        write_video_clip(frames, path, fps=fps, quality=quality)
             
