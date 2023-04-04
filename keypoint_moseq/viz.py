@@ -329,7 +329,7 @@ def plot_progress(model, data, history, iteration, path=None,
     plt.show()
 
     
-def write_video_clip(frames, path, fps=30, quality=7, suppress_warnings=True):
+def write_video_clip(frames, path, fps=30, quality=7):
     """
     Write a video clip to a file.
 
@@ -347,10 +347,6 @@ def write_video_clip(frames, path, fps=30, quality=7, suppress_warnings=True):
 
     quality : int, default=7
         Quality of video encoding.
-    
-    suppress_warnings : bool, default=True
-        Whether to suppress warnings from imageio (e.g. if the video
-        width or height is not divisible by 16).
     """
     with imageio.get_writer(
         path, pixelformat='yuv420p', 
