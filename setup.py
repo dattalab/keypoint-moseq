@@ -5,7 +5,7 @@ with open("README.md", 'r', encoding='utf-8') as f:
 
 setuptools.setup(
     name='keypoint-moseq',
-    version='0.0.1',
+    version='0.0.2',
     author='Caleb Weinreb',
     author_email='calebsw@gmail.com',
     include_package_data=True,
@@ -28,7 +28,7 @@ setuptools.setup(
         'bokeh',
         'pandas',
         'tables',
-        'jax-moseq==0.0.1',
+        'jax-moseq',
     ], 
     url='https://github.com/dattalab/keypoint-moseq'
 )
