@@ -296,16 +296,16 @@ def find_matching_videos(keys, video_dir, as_dict=False, recursive=True,
 
     video_paths = []
     for key in keys:
-
-        matches,lengths = tuple(zip(
-            *[(path,len(video)) for video,path in videos_to_paths.items() 
-            if os.path.basename(key).startswith(video+session_name_suffix)]))
-        
+        matches = [v for v in videos_to_paths if \
+                   os.path.basename(key).startswith(v+session_name_suffix)]
         assert len(matches)>0, fill(f'No matching videos found for {key}')
-        video_paths.append(matches[np.argmax(lengths)])
+        
+        longest_match = sorted(matches, key=lambda v: len(v))[-1]
+        video_paths.append(videos_to_paths[longest_match])
 
     if as_dict: return dict(zip(sorted(keys),video_paths))
     else: return video_paths
+
 
 
 def pad_along_axis(arr, pad_widths, axis=0, value=0):
