@@ -167,7 +167,7 @@ def fit_model(model,
                             project_dir=project_dir,save_history=save_history, 
                             save_states=save_states, save_data=save_data)
             
-        try: model = resample_model(data, **model, ar_only=ar_only)
+        try: model = resample_model(data, **model, ar_only=ar_only, verbose=verbose)
         except KeyboardInterrupt: break
     
     return model, history, name
