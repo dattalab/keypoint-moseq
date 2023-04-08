@@ -71,7 +71,7 @@ def generate_config(project_dir, **kwargs):
         
     other = _update_dict(kwargs, {
         'session_name_suffix': '',
-        'verbose':True,
+        'verbose':False,
         'conf_pseudocount': 1e-3,
         'video_dir': '',
         'keypoint_colormap': 'autumn',
