@@ -9,7 +9,6 @@ import tqdm
 import yaml
 import os
 import cv2
-import tqdm
 import re
 import pandas as pd
 from datetime import datetime
@@ -71,7 +70,7 @@ def generate_config(project_dir, **kwargs):
         
     other = _update_dict(kwargs, {
         'session_name_suffix': '',
-        'verbose':False,
+        'verbose':True,
         'conf_pseudocount': 1e-3,
         'video_dir': '',
         'keypoint_colormap': 'autumn',
@@ -747,8 +746,7 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
 
 
 
-def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
-                       path_in_name=False, return_bodyparts=False):
+def load_sleap_results(filepath_pattern, recursive=True, return_bodyparts=False):
     """
     Load keypoints from sleap hdf5 files.
 

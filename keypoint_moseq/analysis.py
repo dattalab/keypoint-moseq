@@ -4,16 +4,25 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.lines as mlines
 from tqdm import tqdm
-
 import uuid
 from collections import defaultdict
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
-
 from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from cytoolz import sliding_window
-from keypoint_moseq.util import filter_angle
 import seaborn as sns
+
+# imports for changepoint analysis
+from statsmodels.stats.multitest import fdrcorrection
+from scipy.ndimage import gaussian_filter1d, convolve1d
+from scipy.signal import argrelextrema
+from keypoint_moseq.util import filter_angle, filtered_derivative, permute_cyclic
+from keypoint_moseq.io import format_data
+from jax_moseq.models.keypoint_slds import align_egocentric
+from jax_moseq.utils import unbatch
+na = np.newaxis
+
+
 
 def compute_moseq_df(results_dict, *, use_bodyparts, smooth_heading=True, **kwargs):
     session_name = []
@@ -520,3 +529,161 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
         # Getting frequency information for node scaling
         frequencies.append(get_syllable_statistics(use_labels, max_syllable=max_sylls)[0])
     return trans_mats, frequencies
+
+def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts, 
+                         bodyparts=None, use_bodyparts=None, alpha=0.1, 
+                         derivative_ksize=3, gaussian_ksize=1, num_thresholds=20,
+                         verbose=True, **kwargs):
+    """
+    Find changepoints in keypoint data. 
+    
+    Changepoints are peaks in a change score that is computed by:
+
+        1. Differentiating (egocentrically aligned) keypoint coordinates
+        2. Z-scoring the absolute values of each derivative
+        3. Counting the number keypoint-coordinate pairs where the 
+           Z-score crosses a threshold (in each frame).
+        4. Computing a p-value for the number of threshold-crossings
+           using a temporally shuffled null distribution
+        5. Smoothing the resulting significance score across time
+        
+    Steps (3-5) are performed for a range of threshold values, and 
+    the final outputs are based on the threshold that yields the 
+    highest changepoint frequency.
+
+    Parameters
+    ----------
+    coordinates : dict
+        Keypoint observations as a dictionary mapping session names to
+        ndarrays of shape (num_frames, num_keypoints, dim)
+
+    anterior_bodyparts : iterable of str or int
+        Anterior keypoints for egocentric alignment, either as indices
+        or as strings if ``bodyparts`` is provided.
+
+    posterior_bodyparts : iterable of str or int
+        Posterior keypoints for egocentric alignment, either as indices
+        or as strings if ``bodyparts`` is provided.
+
+    bodyparts : iterable of str, optional
+        Names of keypoints. Required for subsetting keypoints using
+        ``use_bodyparts`` or if ``anterior_bodyparts`` and
+        ``posterior_bodyparts`` are specified as strings.
+
+    use_bodyparts : iterable of str, optional
+        Subset of keypoints to use for changepoint analysis. If not
+        provided, all keypoints are used.
+
+    alpha : float, default=0.1
+        False-discovery rate for statistical significance testing. Only
+         changepoints with ``p < alpha`` are considered significant.
+
+    derivative_ksize : int, default=3
+        Size of the kernel used to differentiate keypoint coordinates. 
+        For example if ``derivative_ksize=3``, the derivative would be
+
+        .. math::
+
+            \dot{y_t} = \frac{1}{3}( x_{t+3}+x_{t+2}+x_{t+1}-x_{t-1}-x_{t-2}-x_{t-3})
+
+    gaussian_ksize : int, default=1
+        Size of the kernel used to smooth the change score. 
+        
+    num_thresholds : int, default=20
+        Number of thresholds to test.
+        
+    verbose : bool, default=True
+        Print progress messages.
+
+    Returns
+    -------
+    changepoints : dict
+        Changepoints as a dictionary with the same keys as ``coordinates``.
+
+    changescores : dict
+        Change scores as a dictionary with the same keys as ``coordinates``.
+
+    coordinates_ego: dict
+        Keypoints in egocentric coordinates, in the same format as 
+        ``coordinates``.
+
+    derivatives : dict
+        Z-scored absolute values of the derivatives for each egocentic 
+        keypoint coordinate, in the same format as ``coordinates``
+
+    threshold: float
+        Threshold used to binarize Z-scored derivatives. 
+    """
+    if use_bodyparts is None and bodyparts is not None:
+        use_bodyparts = bodyparts
+    
+    if isinstance(anterior_bodyparts[0], str):
+        assert use_bodyparts is not None, fill(
+            "Must provide `bodyparts` or `use_bodyparts` if `anterior_bodyparts` is a list of strings")
+        anterior_idxs = [use_bodyparts.index(bp) for bp in anterior_bodyparts]
+    else: anterior_idxs = anterior_bodyparts
+
+    if isinstance(posterior_bodyparts[0], str):
+        assert use_bodyparts is not None, fill(
+            "Must provide `bodyparts` or `use_bodyparts` if `posterior_bodyparts` is a list of strings")
+        posterior_idxs = [use_bodyparts.index(bp) for bp in posterior_bodyparts]
+    else: posterior_idxs = posterior_bodyparts
+    
+    # Differentiating (egocentrically aligned) keypoint coordinates
+    if verbose: print('Aligning keypoints')
+    data, labels = format_data(coordinates, bodyparts=bodyparts, use_bodyparts=use_bodyparts)
+    Y_ego,_,_ = align_egocentric(data['Y'], anterior_idxs, posterior_idxs)
+    Y_flat = np.array(Y_ego).reshape(*Y_ego.shape[:2], -1)
+    
+    if verbose: print('Differentiating and z-scoring')
+    dy = np.abs(filtered_derivative(Y_flat, derivative_ksize, axis=1))
+    mask = np.broadcast_to(np.array(data['mask'])[:,:,na], dy.shape)>0
+    means = (dy * mask).sum(1) / mask.sum(1)
+    dy_centered = dy - means[:,na,:]
+    stds = np.sqrt((dy_centered**2 * mask).sum(1) / mask.sum(1))
+    dy_zscored = dy_centered / (stds[:,na,:]+1e-8)
+
+    # Count threshold crossings
+    thresholds = np.linspace(
+        np.percentile(dy_zscored,1), 
+        np.percentile(dy_zscored,99), 
+        num_thresholds)
+    
+    def get_changepoints(score, pvals, alpha):
+        pts = argrelextrema(score, np.greater, order=1)[0]
+        return pts[pvals[pts] < alpha]
+    
+    # get changescores for each threshold
+    all_changescores, all_changepoints = [],[]
+    for threshold in tqdm(thresholds, disable=(not verbose), desc='Testing thresholds'):
+
+        # permute within-session then combine across sessions
+        crossings = (dy_zscored > threshold).sum(2)[mask[:,:,0]]
+        crossings_shuff = permute_cyclic(dy_zscored > threshold, mask, axis=1).sum(2)[mask[:,:,0]]
+        crossings_shuff = crossings_shuff + np.random.uniform(-.1,.1,crossings_shuff.shape)
+
+        # get significance score
+        ps_combined = 1-(np.sort(crossings_shuff).searchsorted(crossings)-1)/len(crossings)
+        ps_combined = fdrcorrection(ps_combined, alpha=alpha)[1]
+
+        # separate back into sessions
+        pvals = np.zeros(mask[:,:,0].shape)
+        pvals[mask[:,:,0]] = ps_combined
+        pvals = unbatch(pvals, labels)
+
+        changescores = {k:gaussian_filter1d(-np.log10(ps),gaussian_ksize) for k,ps in pvals.items()}
+        changepoints = {k:get_changepoints(changescores[k],ps,alpha) for k,ps in pvals.items()}
+        all_changescores.append(changescores)
+        all_changepoints.append(changepoints)
+        
+    # pick threshold with most changepoints 
+    num_changepoints = [sum(map(len,d.values())) for d in all_changepoints]
+    changescores = all_changescores[np.argmax(num_changepoints)]
+    changepoints = all_changepoints[np.argmax(num_changepoints)]
+    threshold = thresholds[np.argmax(num_changepoints)]
+
+    coordinates_ego = unbatch(np.array(Y_ego), labels)
+    derivatives = unbatch(dy_zscored.reshape(Y_ego.shape), labels)
+    return changepoints, changescores, coordinates_ego, derivatives, threshold
+
+
