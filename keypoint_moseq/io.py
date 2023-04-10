@@ -236,15 +236,15 @@ def update_config(project_dir, **kwargs):
     --------
     To update ``video_dir`` to ``/path/to/videos``::
 
-    >>> update_config(project_dir, video_dir='/path/to/videos')
-    >>> print(load_config(project_dir)['video_dir'])
-    /path/to/videos
+      >>> update_config(project_dir, video_dir='/path/to/videos')
+      >>> print(load_config(project_dir)['video_dir'])
+      /path/to/videos
 
     To update ``trans_hypparams['kappa']`` to ``100``::
 
-    >>> update_config(project_dir, kappa=100)
-    >>> print(load_config(project_dir)['trans_hypparams']['kappa'])
-    100
+      >>> update_config(project_dir, kappa=100)
+      >>> print(load_config(project_dir)['trans_hypparams']['kappa'])
+      100
     """
     config = load_config(project_dir, check_if_valid=False, build_indexes=False)
     config.update(kwargs)
