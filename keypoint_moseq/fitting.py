@@ -167,7 +167,7 @@ def fit_model(model,
                             project_dir=project_dir,save_history=save_history, 
                             save_states=save_states, save_data=save_data)
             
-        try: model = resample_model(data, **model, ar_only=ar_only)
+        try: model = resample_model(data, **model, ar_only=ar_only, verbose=verbose)
         except KeyboardInterrupt: break
     
     return model, history, name
@@ -186,7 +186,7 @@ def resume_fitting(*, params, hypparams, labels, iteration, mask,
 
 def apply_model(*, params, coordinates, confidences=None, num_iters=5, 
                 use_saved_states=True, states=None, mask=None, labels=None, 
-                noise_prior=None, ar_only=False, save_results=True, 
+                noise_prior=None, ar_only=False, save_results=True, verbose=False,
                 project_dir=None, name=None, results_path=None, **kwargs): 
     """
     Apply a model to data.
@@ -256,6 +256,9 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
     save_results : bool, default=True
         If True, the model outputs will be saved to disk.
 
+    verbose : bool, default=False
+        Whether to print progress updates.
+
     project_dir : str, default=None
         Path to the project directory. Required if ``save_results=True``
         and ``results_path=None``.
@@ -308,11 +311,11 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         states = None
         noise_prior = None
     
-    model = init_model(data, states, params, noise_prior=noise_prior, **kwargs)
+    model = init_model(data, states, params, noise_prior=noise_prior, verbose=verbose, **kwargs)
     
     if num_iters>0:
         for iteration in tqdm.trange(num_iters, desc='Applying model'):
-            model = resample_model(data, **model, ar_only=ar_only, states_only=True)
+            model = resample_model(data, **model, ar_only=ar_only, states_only=True, verbose=verbose)
 
     nlags = model['hypparams']['ar_hypparams']['nlags']
     states = jax.device_get(model['states'])                     

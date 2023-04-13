@@ -7,7 +7,7 @@ import jax, jax.numpy as jnp, jax.random as jr
 from jax.tree_util import tree_map
 from itertools import groupby
 from functools import partial
-from scipy.ndimage import median_filter
+from scipy.ndimage import median_filter, convolve1d
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 from jaxlib.xla_extension import DeviceArray as jax_array
@@ -647,7 +647,6 @@ def get_trajectories(syllable_instances, coordinates, pre=0, post=None,
     return trajectories
 
 
-
 def sample_instances(syllable_instances, num_samples, mode='random', 
                      pca_samples=50000, pca_dim=4, n_neighbors=50,
                      coordinates=None, pre=5, post=15, centroids=None, 
@@ -668,10 +667,10 @@ def sample_instances(syllable_instances, num_samples, mode='random',
         Sampling method to use. Options are:
         
         - 'random': Instances are chosen randomly (without replacement)
-        - 'density': For each syllable, a syllable-specific density function is
-          computed in trajectory space and compared to the overall
-          density across all syllables. An exemplar instance that 
-          maximizes this ratio is chosen for each syllable, and
+        - 'density': For each syllable, a syllable-specific density 
+          function is computed in trajectory space and compared to the 
+          overall density across all syllables. An exemplar instance
+          that maximizes this ratio is chosen for each syllable, and
           its nearest neighbors are randomly sampled. 
 
     pca_samples: int, default=50000
@@ -693,8 +692,8 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     Returns
     -------
     sampled_instances: dict
-        Dictionary in the same format as ``syllable_instances`` mapping
-        each syllable to a list of sampled instances.
+        Dictionary in the same format as ``syllable_instances`` 
+        mapping each syllable to a list of sampled instances.
     """
     assert mode in ['random','density']
     assert all([len(v)>=num_samples for v in syllable_instances.values()])
@@ -806,3 +805,77 @@ def interpolate_keypoints(coordinates, outliers):
             np.nonzero(~outliers[:,i])[0],
             coordinates[~outliers[:,i],i,:])
     return interpolated_coordinates
+
+
+
+def filtered_derivative(Y_flat, ksize, axis=0):
+    """
+    Compute the filtered derivative of a signal along a given axis.
+
+    When ``ksize=3``, for example, the filtered derivative is
+
+    .. math::
+
+        \dot{y_t} = \frac{1}{3}( x_{t+3}+x_{t+2}+x_{t+1}-x_{t-1}-x_{t-2}-x_{t-3})
+
+    Parameters
+    ----------
+    Y_flat: ndarray
+        The signal to differentiate
+
+    ksize: int
+        The size of the filter. Must be odd.
+
+    axis: int, default=0
+        The axis along which to differentiate
+
+    Returns
+    -------
+    dY: ndarray
+        The filtered derivative of the signal
+    """
+    kernel = np.ones(ksize+1)/(ksize+1)
+    pre = convolve1d(Y_flat, kernel, origin=-(ksize+1)//2, axis=axis)
+    post = convolve1d(Y_flat, kernel, origin=ksize//2, axis=axis)
+    return post-pre
+
+
+def permute_cyclic(arr, mask=None, axis=0):
+    """
+    Cyclically permute an array along a given axis.
+
+    Parameters
+    ----------
+    arr: ndarray
+        The array to permute
+
+    mask: ndarray, optional
+        A boolean mask indicating which elements to permute. If None,
+        all elements are permuted.
+
+    axis: int, default=0
+        The axis along which to permute
+
+    Returns
+    -------
+    arr_permuted: ndarray
+        The permuted array
+    """
+    if mask is None: 
+        mask = np.ones_like(arr)
+
+    arr = np.moveaxis(arr, axis, 0)
+    mask = np.moveaxis(mask, axis, 0)
+    
+    shape = arr.shape
+    arr = arr.reshape(arr.shape[0],-1)
+    mask = mask.reshape(mask.shape[0],-1)
+
+    arr_permuted = np.zeros_like(arr)
+    for i in range(arr.shape[1]):
+        arr_permuted[mask[:,i]>0,i] = np.roll(
+            arr[mask[:,i]>0,i], np.random.randint(0,mask[:,i].sum()))
+        
+    arr_permuted = arr_permuted.reshape(shape)
+    arr_permuted = np.moveaxis(arr_permuted, 0, axis)
+    return arr_permuted

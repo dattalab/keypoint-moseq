@@ -11,7 +11,7 @@ Links
 
 - `MoSeq website <https://dattalab.github.io/moseq2-website/index.html>`_
 
-- `Keypoint-MoSeq paper <_static/BIORXIV-2023-532307v1-Datta.pdf>`_
+- `Keypoint-MoSeq paper <https://www.biorxiv.org/content/10.1101/2023.03.16.532307v2>`_
 
 - `Slack workspace <https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A>`_
 
@@ -29,6 +29,7 @@ Links
    :caption: Tutorial
 
    tutorial
+   changepoints
 
 .. toctree::
    :caption: API Documentation
