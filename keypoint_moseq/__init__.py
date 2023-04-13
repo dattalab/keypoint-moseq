@@ -30,6 +30,7 @@ from .analysis import (
     create_fingerprint_dataframe, 
     plot_syll_stats_with_sem,
     get_group_trans_mats,
+    changepoint_analysis,
 )
 
 from jax_moseq.models.keypoint_slds import (
