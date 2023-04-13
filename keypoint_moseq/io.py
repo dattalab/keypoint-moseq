@@ -746,7 +746,8 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
 
 
 
-def load_sleap_results(filepath_pattern, recursive=True, return_bodyparts=False):
+def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
+                       path_in_name=False, return_bodyparts=False):
     """
     Load keypoints from sleap hdf5 files.
 
