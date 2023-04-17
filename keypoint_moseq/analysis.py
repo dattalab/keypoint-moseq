@@ -25,6 +25,21 @@ na = np.newaxis
 
 
 def compute_moseq_df(results_dict, *, use_bodyparts, smooth_heading=True, **kwargs):
+    """compute moseq dataframe from results dict that contains all kinematic values by frame
+    Parameters
+    ----------
+    results_dict : dict
+        dictionary of results from model fitting
+    use_bodyparts : bool
+        boolean flag whether to include data for bodyparts
+    smooth_heading : bool, optional
+        boolean flag whether smooth the computed heading, by default True
+    Returns
+    -------
+    moseq_df : pandas.DataFrame
+        the dataframe that contains kinematic data for each frame
+    """
+
     session_name = []
     centroid = []
     velocity = []
@@ -82,6 +97,27 @@ def compute_moseq_df(results_dict, *, use_bodyparts, smooth_heading=True, **kwar
     return moseq_df
 
 def compute_stats_df(moseq_df, threshold=0.005, groupby=['group','uuid', 'session_name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
+    """summary statistics for syllable frequencies and kinematic values
+    Parameters
+    ----------
+    moseq_df : pandas.DataFrame
+        the dataframe that contains kinematic data for each frame
+    threshold : float, optional
+        usge threshold for the syllable to be included, by default 0.005
+    groupby : list, optional
+        the list of column names to group by, by default ['group','uuid', 'session_name']
+    fps : int, optional
+        frame per second information of the recording, by default 30
+    syll_key : str, optional
+        the column name of the syllable column to be summarize by, by default 'syllables_reindexed'
+    normalize : bool, optional
+        boolean falg whether to normalize by counts, by default True
+    Returns
+    -------
+    stats_df : pandas.DataFrame
+        the summary statistics dataframe for syllable frequencies and kinematic values
+    """
+
     raw_frequency = (moseq_df.groupby('syllable').count()['frame_index']/moseq_df.shape[0]).reset_index().rename(columns={'frame_index':'counts'})
     syll_include = raw_frequency[raw_frequency['counts'] > threshold]['syllable']
     filtered_df = moseq_df[moseq_df['syllable'].isin(syll_include)].copy()
@@ -115,10 +151,32 @@ def compute_stats_df(moseq_df, threshold=0.005, groupby=['group','uuid', 'sessio
 
 ## fingerprint
 def robust_min(v):
+    """find the 1% quantile of the input vector and return it as the robust minimum value
+    Parameters
+    ----------
+    v : numpy.array
+        the array to find robust minimum from
+    Returns
+    -------
+    float
+        the robust minimum value of the array
+    """
+
     return v.quantile(0.01)
 
 
 def robust_max(v):
+    """find the 99% quantile of the input vector and return it as the robust maximum value
+    Parameters
+    ----------
+    v : numpy.array
+        the array to find robust maximum from
+    Returns
+    -------
+    float
+        the robust maximum value of the array
+    """
+
     return v.quantile(0.99)
 
 
@@ -129,6 +187,31 @@ def _apply_to_col(df, fn, **kwargs):
 def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=100, 
                                  groupby_list=['group','uuid'], range_type='robust', 
                                  scalars=['heading', 'velocity_px_s']):
+    """create a summary dataframe to visualize the data as the MoSeq fingerprint (behvavoiral summary) plot
+    Parameters
+    ----------
+    scalar_df : pandas.DataFrame
+        the dataframe that contains kinematic data for each frame
+    mean_df : pandas.DataFrame
+        the summay statistics dataframe for syllable frequencies and kinematic values
+    stat_type : str, optional
+        the statistics to plot, by default 'mean'
+    n_bins : int, optional
+        the number of bins to use for the histogram, by default 100
+    groupby_list : list, optional
+        the list of column names to group by, by default ['group','uuid']
+    range_type : str, optional
+        the range type to use for the heatmap, by default 'robust'
+    scalars : list, optional
+        the list of scalars to include in the fingerprint, by default ['heading', 'velocity_px_s']
+    Returns
+    -------
+    fingerprint_df : pandas.DataFrame
+        the fingerprint dataframe to be used for plotting
+    pandas.DataFrame
+        the range dataframe of the values with the selcted range type
+    """        
+
     # deep copy the dfs
     scalar_df = scalar_df.copy()
     mean_df = mean_df.copy()
@@ -176,7 +259,35 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=10
 def plotting_fingerprint(summary,range_dict, preprocessor_type='minmax', num_level=1, level_names=['Group'], vmin=None, vmax=None,
                          figsize=(10,15), plot_columns=['heading','velocity_px_s', 'MoSeq'],
                          col_names=[('Heading','a.u.'),('velocity','px/s'), ('MoSeq','Syllable ID')]):
-    
+    """plot the fingerprint plot from fingerprint dataframe
+    Parameters
+    ----------
+    summary : pandas.DataFrame
+        the fingerprint dataframe to be used for plotting
+    range_dict : pandas.DataFrame 
+        the range dataframe of the values with the selcted range type
+    preprocessor_type : str, optional
+        the type of sklearn preprocessor to use to process data to plot, by default 'minmax'
+    num_level : int, optional
+        the number of levels to group by for plotting, by default 1
+    level_names : list, optional
+        the list of level names to use for plotting, by default ['Group']
+    vmin : float, optional
+        min value to plot, by default None, the min value for plotting will be found from the data
+    vmax : float, optional
+        max value to plot, by default None, the max value for plotting will be found from the data
+    figsize : tuple, optional
+        the size of the figure, by default (10,15)
+    plot_columns : list, optional
+        the columns to plot the fingerprint, by default ['heading','velocity_px_s', 'MoSeq']
+    col_names : list, optional
+        column names for the fingerprint plot, by default [('Heading','a.u.'),('velocity','px/s'), ('MoSeq','Syllable ID')]
+    Raises
+    ------
+    Exception
+        too many levels to unpack. num_level should be less than the number of levels in the summary dataframe
+    """
+
     from sklearn.preprocessing import MinMaxScaler, StandardScaler
     assert preprocessor_type in ['minmax','standard','none']
     if preprocessor_type=='minmax': preprocessor = MinMaxScaler()
@@ -275,6 +386,25 @@ def plotting_fingerprint(summary,range_dict, preprocessor_type='minmax', num_lev
 
 ## frequency plot stuff
 def sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, max_sylls=None, stat='frequency'):
+    """sort syllables by the difference in the stat between the control and experimental group
+    Parameters
+    ----------
+    complete_df : pandas.DataFrame
+        the complete dataframe that contains kinematic data for each frame
+    ctrl_group : str
+        the name of the control group
+    exp_group : str
+        the name of the experimental group
+    max_sylls : int, optional
+        the maximum number of syllables to consider, by default None
+    stat : str, optional
+        the statistic to use for finding the syllable differences between two groups, by default 'frequency'
+    Returns
+    -------
+    list
+        ordering list of syllables based on the difference in the stat between the control and experimental group
+    """
+
     if max_sylls is not None:
         complete_df = complete_df[complete_df.syllable < max_sylls]
 
@@ -292,6 +422,25 @@ def sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, max_sy
 
 
 def sort_syllables_by_stat(complete_df, stat='frequency', max_sylls=None):
+    """sort sylllabes by the stat and return the ordering and label mapping
+
+    Parameters
+    ----------
+    complete_df : pandas.DataFrame
+        the dataframe that contains kinematic data and the syllable label for each frame
+    stat : str, optional
+        the statistic to sort on, by default 'frequency'
+    max_sylls : int, optional
+        the maximum number of syllables to include, by default None
+
+    Returns
+    -------
+    ordering : list
+        the list of syllables sorted by the stat
+    relabel_mapping : dict
+        the mapping from the syllable to the new plotting label
+    """
+
     if max_sylls is not None:
         complete_df = complete_df[complete_df.syllable < max_sylls]
 
@@ -344,6 +493,42 @@ def _validate_and_order_syll_stats_params(complete_df, stat='frequency', orderin
 
 def plot_syll_stats_with_sem(scalar_df, syll_info=None, sig_sylls=None, stat='frequency', ordering='stat', max_sylls=40,
                              groups=None, ctrl_group=None, exp_group=None, colors=None, join=False, figsize=(8, 4)):
+    """plot syllable statistics with standard error of the mean
+
+    Parameters
+    ----------
+    scalar_df : pandas.DataFrame
+        the dataframe that contains kinematic data and the syllable label for each frame
+    syll_info : dict, optional
+        the dictionary that contains syllable information, ie. names and short descriptions, by default None
+    sig_sylls : dict, optional
+        dictionary of significantly different syllables between groups, by default None
+    stat : str, optional
+        the statistic to plot, by default 'frequency'
+    ordering : str, optional
+        the ordering of the syllables, by default 'stat'
+    max_sylls : int, optional
+        the maximum number of syllables to include, by default 40
+    groups : list, optional
+        the list of groups to plot, by default None
+    ctrl_group : str, optional
+        the control group, by default None
+    exp_group : str, optional
+        the experimental group, by default None
+    colors : list, optional
+        the list of colors to use for each group, by default None
+    join : bool, optional
+        whether to join the points with a line, by default False
+    figsize : tuple, optional
+        the figure size, by default (8, 4)
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        the figure object
+    legend : matplotlib.legend.Legend
+        the legend object
+    """
 
     xlabel = f'Syllables sorted by {stat}'
     if ordering == 'diff':
@@ -398,6 +583,19 @@ def plot_syll_stats_with_sem(scalar_df, syll_info=None, sig_sylls=None, stat='fr
 
 # transition matrix
 def get_transitions(label_sequence):
+    """get the syllable transitions and their locations
+
+    Parameters
+    ----------
+    label_sequence : np.ndarray
+        the sequence of syllable labels for a session
+
+    Returns
+    -------
+    transitions : np.ndarray
+        the sequence of syllable transitions
+    """
+
     arr = deepcopy(label_sequence)
 
     # get syllable transition locations
@@ -407,6 +605,24 @@ def get_transitions(label_sequence):
     return transitions, locs
 
 def get_syllable_statistics(data, fill_value=-5, max_syllable=100, count='frequency'):
+    """get syllable statistics based on the session state lists
+    Parameters
+    ----------
+    data : list or np.ndarray
+        list of session state lists
+    fill_value : int, optional
+        the syllable label value used to fill in the frames with no states, by default -5
+    max_syllable : int, optional
+        the maximum number of syllables to include, by default 100
+    count : str, optional
+        the type of statistic to calculate, by default 'frequency'
+    Returns
+    -------
+    frequencies : dict
+        the dictionary of the count of each syllable label
+    durations : dict
+        the dictionary of the duration of each syllable label
+    """
     frequencies = defaultdict(int)
     durations = defaultdict(list)
 
@@ -460,6 +676,20 @@ def get_syllable_statistics(data, fill_value=-5, max_syllable=100, count='freque
     return frequencies, durations
 
 def n_gram_transition_matrix(labels, n=2, max_label=99):
+    """the transition matrix for n-grams
+    Parameters
+    ----------
+    labels : list or np.ndarray
+        session state lists
+    n : int, optional
+        the number of successive states in the sequence, by default 2
+    max_label : int, optional
+        the maximum number of the syllable labels to include, by default 99
+    Returns
+    -------
+    trans_mat : np.ndarray
+        the transition matrices for the n-grams
+    """
     trans_mat = np.zeros((max_label, ) * n, dtype='float')
     for loc in sliding_window(n, labels):
         if any(l >= max_label for l in loc):
@@ -469,6 +699,18 @@ def n_gram_transition_matrix(labels, n=2, max_label=99):
     
 
 def normalize_transition_matrix(init_matrix, normalize):
+    """normalize the transition matrices
+    Parameters
+    ----------
+    init_matrix : numpy.ndarray
+        the initial transition matrix to be normalized 
+    normalize : str
+        the method to normalize the transition matrix
+    Returns
+    -------
+    init_matrix : numpy.ndarray
+        the trnasition matrix normalized by the method specified
+    """
     if normalize is None or normalize not in ('bigram', 'rows', 'columns'):
         return init_matrix
     if normalize == 'bigram':
@@ -482,6 +724,26 @@ def normalize_transition_matrix(init_matrix, normalize):
 
 def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
                           smoothing=0.0, combine=False, disable_output=False) -> list:
+    """compute the transition matrix for the syllable labels
+    Parameters
+    ----------
+    labels : list or np.ndarray
+        session state lists
+    max_syllable : int, optional
+        the maximum number of syllables to include, by default 100
+    normalize : str, optional
+        the method to normalize the transition matrix, by default 'bigram'
+    smoothing : float, optional
+        the smoothing value (pseudo count) to add to the transition matrix, by default 0.0
+    combine : bool, optional
+        whether to combine the transition matrices for all the sessions, by default False
+    disable_output : bool, optional
+        whether to disable the progress bar, by default False
+    Returns
+    -------
+    all_mats : list
+        the list of transition matrices for each session
+    """
     if not isinstance(labels[0], (list, np.ndarray, pd.Series)):
         labels = [labels]
 
@@ -514,6 +776,26 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
     return all_mats
 
 def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigram'):
+    """get the transition matrices for each group
+    Parameters
+    ----------
+    labels : list or np.ndarray
+        session state lists
+    label_group : list or np.ndarray
+        the group labels for each session
+    group : list or np.ndarray
+        the groups in the project
+    max_sylls : int
+        the maximum number of syllables to include
+    normalize : str, optional
+        the method to normalize the transition matrix, by default 'bigram'
+    Returns
+    -------
+    trans_mats : list
+        the list of transition matrices for each group
+    frequencies : list
+        the list of syllable frequencies for each group
+    """
     trans_mats = []
     frequencies = []
 
