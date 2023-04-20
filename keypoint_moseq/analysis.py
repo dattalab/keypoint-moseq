@@ -1091,12 +1091,12 @@ def update_progress(progress_paths, project_dir, filename='progress.yaml'):
 
     Parameters
     ----------
-    progress_paths : _type_
-        _description_
-    project_dir : _type_
-        _description_
+    progress_paths : dict
+        the dictionary containing the progress and the filepaths of the project
+    project_dir : str
+        base directory of the project
     filename : str, optional
-        _description_, by default 'progress.yaml'
+        filename of progress file, by default 'progress.yaml'.
     """
     with open(os.path.join(project_dir, filename), 'w') as f:
         yaml.safe_dump(progress_paths, f, default_flow_style=False)
