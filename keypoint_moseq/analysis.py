@@ -1,16 +1,20 @@
+import uuid
+import yaml
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 import matplotlib.lines as mlines
+import seaborn as sns
+
+from matplotlib.gridspec import GridSpec
 from tqdm import tqdm
-import uuid
+
 from collections import defaultdict
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from cytoolz import sliding_window
-import seaborn as sns
+
 
 # imports for changepoint analysis
 from statsmodels.stats.multitest import fdrcorrection
