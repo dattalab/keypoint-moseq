@@ -30,6 +30,6 @@ setuptools.setup(
         'pandas',
         'tables',
         'jax-moseq',
-    ], 
+    ],
     url='https://github.com/dattalab/keypoint-moseq'
 )
