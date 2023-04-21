@@ -1070,11 +1070,13 @@ def track_progress(model_dirname, project_dir, input_dir, filename='progress.yam
     progress['crowd_movie_dir'] = os.path.join(
         progress['model_dir'], 'crowd_movies')
     progress['grid_movie_dir'] = os.path.join(
+        progress['model_dir'], 'grid_movies')
     progress['trajectory_plot_dir'] = os.path.join(
         progress['model_dir'], 'trajectory_plots')
     progress['model_checkpoint'] = os.path.join(
         progress['model_dir'], 'checkpoint.p')
     progress['model_results'] = os.path.join(
+        progress['model_dir'], 'results.h5')
 
     # the folder to save the plots
     plot_dir = os.path.join(progress['model_dir'], 'plots')
@@ -1122,4 +1124,45 @@ def update_model_progress(progress_paths, model_dirname, progress_filepath):
         print('Same model, no changes to progress file')
 
     return progress_paths
+
+def index_to_dataframe(index_filepath):
+    # load index data
+    with open(index_filepath, 'r') as f:
+        index_data = yaml.safe_load(f)
+    
+    # process index data into dataframe
+    df = pd.DataFrame(index_data['files'])
+    
+    return index_data, df
+
+def interactive_group_setting(progress_paths):
+    
+    from IPython.display import display
+    from keypoint_moseq.widgets import GroupSettingWidgets
+
+    index_filepath = os.path.join(progress_paths['base_dir'], 'index.yaml')
+    
+    if os.path.exists(index_filepath):
+        with open(index_filepath, 'r') as f:
+            index_data = yaml.safe_load(f)
+    else:
+        # generate a new index file
+        results_dict = load_results(project_dir=progress_paths['base_dir'], name=progress_paths['model_name'])
+        files = []
+        for session in results_dict.keys():
+            file_dict = {'filename': session, 'group': 'default',
+                         'uuid': str(uuid.uuid4())}
+            files.append(file_dict)
+
+        index_data = {'files':files}
+        # write to file and progress_paths
+        with open(index_filepath, 'w') as f:
+            yaml.safe_dump(index_data, f, default_flow_style=False)
+        progress_paths['index_file'] = index_filepath
+    
+    # display the widget
+    index_grid=GroupSettingWidgets(index_filepath)
+    display(index_grid.clear_button, index_grid.group_set)
+    display(index_grid.qgrid_widget)
+
     return progress_paths
