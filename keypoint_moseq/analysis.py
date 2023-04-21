@@ -1127,6 +1127,22 @@ def update_model_progress(progress_paths, model_dirname, progress_filepath):
     return progress_paths
 
 def index_to_dataframe(index_filepath):
+    """parse index file to a dataframe
+
+    Parameters
+    ----------
+    index_filepath : str
+        path to the index file
+
+    Returns
+    -------
+    index_data : dict
+        the dictionary containing the index data
+    df : pandas.DataFrame
+        the dataframe containing the index data
+    """
+
+
     # load index data
     with open(index_filepath, 'r') as f:
         index_data = yaml.safe_load(f)
@@ -1137,7 +1153,19 @@ def index_to_dataframe(index_filepath):
     return index_data, df
 
 def interactive_group_setting(progress_paths):
-    
+    """start the interactive group setting widget
+
+    Parameters
+    ----------
+    progress_paths : dict
+        the dictionary containing the progress and the filepaths of the project
+
+    Returns
+    -------
+    progress_paths : dict
+        the dictionary containing the progress and the filepaths of the project with index path updated
+    """
+
     from IPython.display import display
     from keypoint_moseq.widgets import GroupSettingWidgets
 
