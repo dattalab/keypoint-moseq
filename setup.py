@@ -30,6 +30,9 @@ setuptools.setup(
         'pandas',
         'tables',
         'jax-moseq',
+        'qgrid==1.3.1',
+        'ipywidgets==7.5.1',
+        'jupyter_nbextensions_configurator'
     ],
     url='https://github.com/dattalab/keypoint-moseq'
 )
