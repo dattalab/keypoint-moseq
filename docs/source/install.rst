@@ -43,7 +43,8 @@ Install using conda
 
 As an alternative, you can install directly from conda environment files. This will automatically install the appropriate GPU drivers and other dependencies. Start by cloning the repository::
 
-   git clone https://github.com/dattalab/keypoint-moseq && cd keypoint-moseq
+   git clone https://github.com/dattalab/keypoint-moseq
+   cd keypoint-moseq # (`chdir keypoint-moseq` if using Windows)
 
 Install the appropriate conda environment for your platform::
 

@@ -16,12 +16,14 @@ from textwrap import fill
 from vidio.read import OpenCVReader
 warnings.formatwarning = lambda msg, *a: str(msg)
 
+from jax_moseq.utils import batch
 from keypoint_moseq.util import (
-    batch, 
     reindex_by_bodyparts, 
     list_files_with_exts, 
     interpolate_keypoints,
 )
+
+
 
 
 def _build_yaml(sections, comments):

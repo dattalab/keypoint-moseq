@@ -65,7 +65,8 @@ As an alternative, you can install directly from conda environment files. This w
 
 1. Clone the repository:
 ```
-git clone https://github.com/dattalab/keypoint-moseq && cd keypoint-moseq
+git clone https://github.com/dattalab/keypoint-moseq
+cd keypoint-moseq # (`chdir keypoint-moseq` if using Windows)
 ```
 
 2. Install the appropriate conda environment for your platform:

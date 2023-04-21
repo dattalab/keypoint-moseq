@@ -10,8 +10,12 @@ from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_checkpoint, format_data, save_hdf5
-from keypoint_moseq.util import get_durations, batch, unbatch, get_frequencies, pad_along_axis, reindex_by_frequency
+from keypoint_moseq.util import get_durations, get_frequencies, pad_along_axis, reindex_by_frequency
 from jax_moseq.models.keypoint_slds import estimate_coordinates, resample_model, init_model
+from jax_moseq.utils import check_for_nans, batch, unbatch
+
+class StopResampling(Exception):
+    pass
 
 def _update_history(history, iteration, model, include_states=True): 
     
@@ -25,6 +29,22 @@ def _update_history(history, iteration, model, include_states=True):
     history[iteration] = model_snapshot
     return history
 
+
+def _wrapped_resample(data, model, **resample_options):
+    try: 
+        resample_model(data, model, **resample_options)
+    except KeyboardInterrupt: 
+        print('Early termination of fitting: user interrupted')
+        raise StopResampling()
+
+    any_nans, nan_info, messages = check_for_nans(model)
+    
+    if any_nans:
+        print('Early termination of fitting: NaNs encountered')
+        for msg in messages: print('  - {}'.format(msg))
+        raise StopResampling()
+    
+    return model
 
 
 def fit_model(model,
@@ -150,7 +170,6 @@ def fit_model(model,
         if not os.path.exists(savedir): os.makedirs(savedir)
         print(fill(f'Outputs will be saved to {savedir}'))
 
-    
     if history is None: history = {}
 
     for iteration in tqdm.trange(start_iter, num_iters+1):
@@ -167,9 +186,11 @@ def fit_model(model,
                             project_dir=project_dir,save_history=save_history, 
                             save_states=save_states, save_data=save_data)
             
-        try: model = resample_model(data, **model, ar_only=ar_only, verbose=verbose)
-        except KeyboardInterrupt: break
-    
+        try: model = _wrapped_resample(
+            data, model, ar_only=ar_only, verbose=verbose)
+        except StopResampling: break
+
+
     return model, history, name
     
     
@@ -315,7 +336,10 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
     
     if num_iters>0:
         for iteration in tqdm.trange(num_iters, desc='Applying model'):
-            model = resample_model(data, **model, ar_only=ar_only, states_only=True, verbose=verbose)
+            try: model = _wrapped_resample(
+                    data, model, ar_only=ar_only, states_only=True, verbose=verbose)
+            except StopResampling: break
+
 
     nlags = model['hypparams']['ar_hypparams']['nlags']
     states = jax.device_get(model['states'])                     
