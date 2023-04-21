@@ -1106,13 +1106,19 @@ def update_model_progress(progress_paths, model_dirname, progress_filepath):
     if model_dirname != progress_paths['model_name']:
         print(f'Updating progress for analyzing {model_dirname} model')
         progress_paths['model_name'] = model_dirname
-        progress_paths['model_dir'] = os.path.join(progress_paths['base_dir'], model_dirname)
-        progress_paths['crowd_movie_dir'] = os.path.join(progress_paths['model_dir'], 'crowd_movies')
-        progress_paths['grid_movie_dir'] = os.path.join(progress_paths['model_dir'], 'grid_movies')
-        progress_paths['trajectory_plot_dir'] = os.path.join(progress_paths['model_dir'], 'trajectory_plots')
-        progress_paths['model_checkpoint'] = os.path.join(progress_paths['model_dir'], 'checkpoint.p')
-        progress_paths['model_results'] = os.path.join(progress_paths['model_dir'], 'results.h5')
-        
+        progress_paths['model_dir'] = os.path.join(
+            progress_paths['base_dir'], model_dirname)
+        progress_paths['crowd_movie_dir'] = os.path.join(
+            progress_paths['model_dir'], 'crowd_movies')
+        progress_paths['grid_movie_dir'] = os.path.join(
+            progress_paths['model_dir'], 'grid_movies')
+        progress_paths['trajectory_plot_dir'] = os.path.join(
+            progress_paths['model_dir'], 'trajectory_plots')
+        progress_paths['model_checkpoint'] = os.path.join(
+            progress_paths['model_dir'], 'checkpoint.p')
+        progress_paths['model_results'] = os.path.join(
+            progress_paths['model_dir'], 'results.h5')
+
         # the folder to save the plots
         plot_dir = os.path.join(progress_paths['model_dir'], 'plots')
         if not os.path.exists(plot_dir):
@@ -1125,6 +1131,7 @@ def update_model_progress(progress_paths, model_dirname, progress_filepath):
         print('Same model, no changes to progress file')
 
     return progress_paths
+
 
 def index_to_dataframe(index_filepath):
     """parse index file to a dataframe
@@ -1142,15 +1149,15 @@ def index_to_dataframe(index_filepath):
         the dataframe containing the index data
     """
 
-
     # load index data
     with open(index_filepath, 'r') as f:
         index_data = yaml.safe_load(f)
-    
+
     # process index data into dataframe
     df = pd.DataFrame(index_data['files'])
-    
+
     return index_data, df
+
 
 def interactive_group_setting(progress_paths):
     """start the interactive group setting widget
@@ -1170,32 +1177,32 @@ def interactive_group_setting(progress_paths):
     from keypoint_moseq.widgets import GroupSettingWidgets
 
     index_filepath = os.path.join(progress_paths['base_dir'], 'index.yaml')
-    
+
     if os.path.exists(index_filepath):
         with open(index_filepath, 'r') as f:
             index_data = yaml.safe_load(f)
     else:
         # generate a new index file
-        results_dict = load_results(project_dir=progress_paths['base_dir'], name=progress_paths['model_name'])
+        results_dict = load_results(
+            project_dir=progress_paths['base_dir'], name=progress_paths['model_name'])
         files = []
         for session in results_dict.keys():
             file_dict = {'filename': session, 'group': 'default',
                          'uuid': str(uuid.uuid4())}
             files.append(file_dict)
 
-        index_data = {'files':files}
+        index_data = {'files': files}
         # write to file and progress_paths
         with open(index_filepath, 'w') as f:
             yaml.safe_dump(index_data, f, default_flow_style=False)
         progress_paths['index_file'] = index_filepath
-        
+
         # update progress file
         with open(progress_paths['progress_filepath'], 'w') as f:
             yaml.safe_dump(progress_paths, f, default_flow_style=False)
-        
-    
+
     # display the widget
-    index_grid=GroupSettingWidgets(index_filepath)
+    index_grid = GroupSettingWidgets(index_filepath)
     display(index_grid.clear_button, index_grid.group_set)
     display(index_grid.qgrid_widget)
 
