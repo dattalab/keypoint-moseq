@@ -88,7 +88,7 @@ class GroupSettingWidgets:
 
         files = self.index_dict['files']
 
-        latest_df = self.qgrid_widget.get_changed_df()åå
+        latest_df = self.qgrid_widget.get_changed_df()
         self.df.update(latest_df)
 
         updated_index = {'files': list(self.df.to_dict(orient='index').values())}

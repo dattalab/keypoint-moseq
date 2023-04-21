@@ -1066,6 +1066,7 @@ def track_progress(model_dirname, project_dir, input_dir, filename='progress.yam
     progress['config_file'] = os.path.join(project_dir, 'config.yml')
     progress['data_dir'] = input_dir
     progress['model_name'] = model_dirname
+    progress['progress_filepath'] = progress_filepath
     progress['model_dir'] = os.path.join(project_dir, model_dirname)
     progress['crowd_movie_dir'] = os.path.join(
         progress['model_dir'], 'crowd_movies')
@@ -1159,6 +1160,11 @@ def interactive_group_setting(progress_paths):
         with open(index_filepath, 'w') as f:
             yaml.safe_dump(index_data, f, default_flow_style=False)
         progress_paths['index_file'] = index_filepath
+        
+        # update progress file
+        with open(progress_paths['progress_filepath'], 'w') as f:
+            yaml.safe_dump(progress_paths, f, default_flow_style=False)
+        
     
     # display the widget
     index_grid=GroupSettingWidgets(index_filepath)
