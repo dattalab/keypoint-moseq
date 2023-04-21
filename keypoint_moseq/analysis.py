@@ -22,7 +22,7 @@ from statsmodels.stats.multitest import fdrcorrection
 from scipy.ndimage import gaussian_filter1d, convolve1d
 from scipy.signal import argrelextrema
 from keypoint_moseq.util import filter_angle, filtered_derivative, permute_cyclic
-from keypoint_moseq.io import format_data
+from keypoint_moseq.io import format_data, load_results
 from jax_moseq.models.keypoint_slds import align_egocentric
 from jax_moseq.utils import unbatch
 na = np.newaxis
@@ -1029,7 +1029,7 @@ def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts
     return changepoints, changescores, coordinates_ego, derivatives, threshold
 
 
-def track_progress(model_dirname, project_dir, filename='progress.yaml', overwrite=False):
+def track_progress(model_dirname, project_dir, input_dir, filename='progress.yaml', overwrite=False):
     """track progress and the filepaths of a project
 
     Parameters
@@ -1038,6 +1038,8 @@ def track_progress(model_dirname, project_dir, filename='progress.yaml', overwri
         name of the model directory
     project_dir : str
         base directory of the project
+    input_dir : str
+        name of the input video data directory
     filename : str, optional
         filename of progress file, by default 'progress.yaml'.
     overwrite : bool, optional
@@ -1062,20 +1064,20 @@ def track_progress(model_dirname, project_dir, filename='progress.yaml', overwri
     progress = {}
     progress['base_dir'] = project_dir
     progress['config_file'] = os.path.join(project_dir, 'config.yml')
+    progress['data_dir'] = input_dir
+    progress['model_name'] = model_dirname
     progress['model_dir'] = os.path.join(project_dir, model_dirname)
     progress['crowd_movie_dir'] = os.path.join(
-        project_dir, model_dirname, 'crowd_movies')
+        progress['model_dir'], 'crowd_movies')
     progress['grid_movie_dir'] = os.path.join(
-        project_dir, model_dirname, 'grid_movies')
     progress['trajectory_plot_dir'] = os.path.join(
-        project_dir, model_dirname, 'trajectory_plots')
+        progress['model_dir'], 'trajectory_plots')
     progress['model_checkpoint'] = os.path.join(
-        project_dir, model_dirname, 'checkpoint.p')
+        progress['model_dir'], 'checkpoint.p')
     progress['model_results'] = os.path.join(
-        project_dir, model_dirname, 'results.h5')
 
     # the folder to save the plots
-    plot_dir = os.path.join(project_dir, model_dirname, 'plots')
+    plot_dir = os.path.join(progress['model_dir'], 'plots')
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
     progress['plot_dir'] = plot_dir
@@ -1086,7 +1088,7 @@ def track_progress(model_dirname, project_dir, filename='progress.yaml', overwri
     return progress
 
 
-def update_progress(progress_paths, project_dir, filename='progress.yaml'):
+def update_model_progress(progress_paths, model_dirname, progress_filepath):
     """
 
     Parameters
@@ -1098,6 +1100,26 @@ def update_progress(progress_paths, project_dir, filename='progress.yaml'):
     filename : str, optional
         filename of progress file, by default 'progress.yaml'.
     """
-    with open(os.path.join(project_dir, filename), 'w') as f:
-        yaml.safe_dump(progress_paths, f, default_flow_style=False)
+    if model_dirname != progress_paths['model_name']:
+        print(f'Updating progress for analyzing {model_dirname} model')
+        progress_paths['model_name'] = model_dirname
+        progress_paths['model_dir'] = os.path.join(progress_paths['base_dir'], model_dirname)
+        progress_paths['crowd_movie_dir'] = os.path.join(progress_paths['model_dir'], 'crowd_movies')
+        progress_paths['grid_movie_dir'] = os.path.join(progress_paths['model_dir'], 'grid_movies')
+        progress_paths['trajectory_plot_dir'] = os.path.join(progress_paths['model_dir'], 'trajectory_plots')
+        progress_paths['model_checkpoint'] = os.path.join(progress_paths['model_dir'], 'checkpoint.p')
+        progress_paths['model_results'] = os.path.join(progress_paths['model_dir'], 'results.h5')
+        
+        # the folder to save the plots
+        plot_dir = os.path.join(progress_paths['model_dir'], 'plots')
+        if not os.path.exists(plot_dir):
+            os.makedirs(plot_dir)
+        progress_paths['plot_dir'] = plot_dir
+
+        with open(progress_filepath, 'w') as f:
+            yaml.safe_dump(progress_paths, f, default_flow_style=False)
+    else:
+        print('Same model, no changes to progress file')
+
+    return progress_paths
     return progress_paths
