@@ -329,6 +329,24 @@ def pad_along_axis(arr, pad_widths, axis=0, value=0):
     padded_arr = np.pad(arr, pad_widths_full, constant_values=value)
     return padded_arr
 
+def filter_angle(angles, size=9, axis=0):
+    """
+    Perform median filtering on time-series of angles by transforming to
+    a (cos,sin) representation, filtering in R^2, and then transforming 
+    back into angle space. 
+    Parameters
+    -------
+    angles: ndarray, Array of angles (in radians)
+    size: int, default=9, Size of the filtering kernel
+    axis: int, default=0, Axis along which to filter
+    Returns
+    -------
+    filtered_angles: ndarray
+    """
+    kernel = np.where(np.arange(len(angles.shape))==axis, size, 1)
+    return np.arctan2(median_filter(np.sin(angles), kernel),
+                      median_filter(np.cos(angles), kernel))
+
 
 def filter_centroids_headings(centroids, headings, filter_size=9):
     """
