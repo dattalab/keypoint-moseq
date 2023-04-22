@@ -35,10 +35,10 @@ Activate the new environment::
 
    conda activate keypoint_moseq
 
-[Optional] Make the new environment accessible in jupyter. This may be required if launching jupyter from another environment.
-```
-python -m ipykernel install --user --name=keypoint_moseq
-```
+To use the keypoint_moseq environment in a notebook, either launch jupyterlab (`jupyter lab`) or register the environment as a jupyter notebook kernel as follows::
+
+   python -m ipykernel install --user --name=keypoint_moseq
+
 
 
 
@@ -75,23 +75,6 @@ Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 Make the environment available to jupyter::
 
    python -m ipykernel install --user --name=keypoint_moseq
-
-
-
-Troubleshooting
----------------
-
-- ``UNKNOWN: no kernel image is available for execution on the device``
-
-  If you're running into issues when trying to use the GPU-accelerated version, you might see this error message::
-
-     jaxlib.xla_extension.XlaRuntimeError: UNKNOWN: no kernel image is available for execution on the device
-
-  First, check if jax can detect your GPU::
-
-     python -c "import jax; print(jax.default_backend())
-
-  The result should be "gpu". If it isn't, then you might not be using the right version of ``cudatoolkit`` or ``cudnn``. If you installed these via ``conda``, you can check by doing a ``conda list | grep cud``. If you are on the right versions, try `updating your GPU driver to the latest version <https://nvidia.com/drivers>`_.
 
 
 License
