@@ -22,6 +22,7 @@ setuptools.setup(
         'tqdm',
         'ipykernel',
         'imageio[ffmpeg]',
+        'statsmodels',
         'pyyaml',
         'vidio',
         'holoviews[recommended]',

@@ -329,111 +329,16 @@ def pad_along_axis(arr, pad_widths, axis=0, value=0):
     padded_arr = np.pad(arr, pad_widths_full, constant_values=value)
     return padded_arr
 
-
-def unbatch(data, labels): 
-    """
-    Invert :py:func:`keypoint_moseq.util.batch`
- 
-    Parameters
-    -------
-    data: ndarray, shape (num_segs, seg_length, ...)
-        Stack of segmented time-series
-
-    labels: tuples (str,int,int)
-        Labels for the rows of ``data`` as tuples with the form
-        (name,start,end)
-
-    Returns
-    -------
-    data_dict: dict
-        Dictionary mapping names to reconstructed time-series
-    """     
-    data_dict = {}
-    keys = sorted(set([key for key,start,end in labels]))    
-    for key in keys:
-        length = np.max([e for k,s,e in labels if k==key])
-        seq = np.zeros((int(length),*data.shape[2:]), dtype=data.dtype)
-        for (k,s,e),d in zip(labels,data):
-            if k==key: seq[s:e] = d[:e-s]
-        data_dict[key] = seq
-    return data_dict
-
-
-def batch(data_dict, keys=None, seg_length=None, seg_overlap=30):
-    """
-    Stack time-series data of different lengths into a single array for
-    batch processing, optionally breaking up the data into fixed length 
-    segments. Data is 0-padded so that the stacked array isn't ragged.
-
-    Parameters
-    -------
-    data_dict: dict {str : ndarray}
-        Dictionary mapping names to ndarrays, where the first dim
-        represents time. All data arrays must have the same shape except
-        for the first dim. 
-
-    keys: list of str, default=None
-        Optional list of names specifying which datasets to include in 
-        the output and what order to put them in. Each name must be a 
-        key in ``data_dict``. If ``keys=None``, names will be sorted 
-        alphabetically.
-
-    seg_length: int, default=None
-        Break each time-series into segments of this length. If 
-        ``seg_length=None``, the final stacked array will be as long
-        as the longest time-series. 
-
-    seg_overlap: int, default=30
-        Amount of overlap between segments. For example, setting
-        ``seg_length=N`` and ``seg_overlap=M`` will result in segments
-        with start/end times (0, N+M), (N, 2*N+M), (2*N, 3*N+M),...
-
-    Returns
-    -------
-    data: ndarray, shape (N, seg_length, ...)
-        Stacked data array
-
-    mask: ndarray, shape (N, seg_length)
-        Binary indicator specifying which elements of ``data`` are not
-        padding (``mask==0`` in padded locations)
-
-    keys: list of tuples (str,int), length N
-        Row labels for ``data`` consisting (name, segment_num) pairs
-
-    """
-    if keys is None: keys = sorted(data_dict.keys())
-    Ns = [len(data_dict[key]) for key in keys]
-    if seg_length is None: seg_length = np.max(Ns)
-        
-    stack,mask,labels = [],[],[]
-    for key,N in zip(keys,Ns):
-        for start in range(0,N,seg_length):
-            arr = data_dict[key]
-            end = min(start+seg_length+seg_overlap, N)
-            pad_length = seg_length+seg_overlap-(end-start)
-            padding = np.zeros((pad_length,*arr.shape[1:]), dtype=arr.dtype)
-            mask.append(np.hstack([np.ones(end-start),np.zeros(pad_length)]))
-            stack.append(np.concatenate([arr[start:end],padding],axis=0))
-            labels.append((key,start,end))
-
-    stack = np.stack(stack)
-    mask = np.stack(mask)
-    return stack,mask,labels
-
-
-    
 def filter_angle(angles, size=9, axis=0):
     """
     Perform median filtering on time-series of angles by transforming to
     a (cos,sin) representation, filtering in R^2, and then transforming 
     back into angle space. 
-
     Parameters
     -------
     angles: ndarray, Array of angles (in radians)
     size: int, default=9, Size of the filtering kernel
     axis: int, default=0, Axis along which to filter
-
     Returns
     -------
     filtered_angles: ndarray

@@ -1,3 +1,6 @@
+from jax import config
+config.update("jax_enable_x64", True)
+
 from .util import *
 
 from .io import *
