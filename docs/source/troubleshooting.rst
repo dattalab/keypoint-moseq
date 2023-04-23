@@ -66,7 +66,7 @@ NaNs are much more likely with single-precision computing. Check the precision u
     import jax
     jax.config.read('jax_enable_x64')
 
-If the output is ``True`` (i.e. JAX is using double-precision), then please contact calebsw@gmail.com and include the data used for fitting as well as the most recent model checkpoint. 
+If the output is ``True`` (i.e. JAX is using double-precision), then please contact calebsw@gmail.com and include the config, the data used for fitting, and the most recent model checkpoint. 
 
 
 Installation errors
