@@ -34,7 +34,7 @@ def _wrapped_resample(data, model, **resample_options):
     try: 
         resample_model(data, **model, **resample_options)
     except KeyboardInterrupt: 
-        print('Early termination of fitting: user interrupted')
+        print('Early termination of fitting: user interruption')
         raise StopResampling()
 
     any_nans, nan_info, messages = check_for_nans(model)
@@ -42,6 +42,7 @@ def _wrapped_resample(data, model, **resample_options):
     if any_nans:
         print('Early termination of fitting: NaNs encountered')
         for msg in messages: print('  - {}'.format(msg))
+        print('\nFor additional information, see https://keypoint-moseq.readthedocs.io/en/latest/troubleshooting.html#nans-during-fitting')
         raise StopResampling()
     
     return model
@@ -222,7 +223,8 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
 
     Model outputs are saved to disk as a .h5 file, either at ``results_path``
     if it is specified, or at ``{project_dir}/{name}/results.h5`` if it is not.
-    The results have the following structure::
+    If a .h5 file with the given path already exists, the outputs will be added
+    to it. The results have the following structure::
 
         results.h5
         ├──session_name1
