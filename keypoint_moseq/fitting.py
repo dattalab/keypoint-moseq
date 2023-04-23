@@ -32,7 +32,7 @@ def _update_history(history, iteration, model, include_states=True):
 
 def _wrapped_resample(data, model, **resample_options):
     try: 
-        resample_model(data, model, **resample_options)
+        resample_model(data, **model, **resample_options)
     except KeyboardInterrupt: 
         print('Early termination of fitting: user interrupted')
         raise StopResampling()
