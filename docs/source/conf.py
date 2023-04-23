@@ -39,8 +39,7 @@ extensions = [
 
 intersphinx_mapping = {
     "holoviews": ("https://holoviews.org/", None),
-    "jax_moseq": ("../../../jax-moseq/docs/build/html/", None),
-    #"jax_moseq": ("https://jax-moseq.readthedocs.io/en/latest/", None),
+    "jax_moseq": ("https://jax-moseq.readthedocs.io/en/latest/", None),
     "sklearn": ("https://scikit-learn.org/stable/", None),
 }
 

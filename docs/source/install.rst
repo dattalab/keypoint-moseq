@@ -1,8 +1,9 @@
-Installation
-------------
+Local installation
+------------------
 
 - For a Mac with an M1 chip, `Install using conda`_.
 - Note that the first import of ``keypoint_moseq`` after installation can take a few minutes.
+- To use keypoint MoSeq without a local installation, try `Google colab <colab>`_.
 
 Install using conda
 ~~~~~~~~~~~~~~~~~~~
@@ -76,8 +77,3 @@ Make the environment available to jupyter::
 
    python -m ipykernel install --user --name=keypoint_moseq
 
-
-License
--------
-
-MoSeq is freely available for academic use under a license provided by Harvard University. Please refer to the `license file <https://github.com/dattalab/keypoint-moseq/blob/main/LICENSE.md>`_ for details. If you are interested in using MoSeq for commercial purposes please contact Bob Datta directly at srdatta@hms.harvard.edu, who will put you in touch with the Harvard Technology Transfer office.
