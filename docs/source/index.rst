@@ -23,7 +23,7 @@ Links
    :caption: Setup
    
    install
-   colab
+   Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb>
 
 .. include:: install.rst
 
