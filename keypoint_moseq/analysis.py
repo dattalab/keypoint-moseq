@@ -48,7 +48,6 @@ def compute_moseq_df(progress_paths, *, smooth_heading=True, **kwargs):
         progress_paths['base_dir'], progress_paths['model_name'])
     # load index file
     if progress_paths.get('index_file') is not None:
-        print('meow')
         with open(progress_paths['index_file'], 'r') as file:
             index_data = yaml.safe_load(file)
         # create a file dictionary for each session
