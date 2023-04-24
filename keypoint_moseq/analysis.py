@@ -1211,11 +1211,11 @@ def interactive_group_setting(progress_paths):
         # write to file and progress_paths
         with open(index_filepath, 'w') as f:
             yaml.safe_dump(index_data, f, default_flow_style=False)
-        progress_paths['index_file'] = index_filepath
-
-        # update progress file
-        with open(progress_paths['progress_filepath'], 'w') as f:
-            yaml.safe_dump(progress_paths, f, default_flow_style=False)
+        
+    # update progress file to ensure index_file is in progress.yaml
+    progress_paths['index_file'] = index_filepath
+    with open(progress_paths['progress_filepath'], 'w') as f:
+        yaml.safe_dump(progress_paths, f, default_flow_style=False)
 
     # display the widget
     index_grid = GroupSettingWidgets(index_filepath)
