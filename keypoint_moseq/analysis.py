@@ -118,7 +118,7 @@ def compute_moseq_df(progress_paths, *, smooth_heading=True, **kwargs):
     return moseq_df
 
 
-def compute_stats_df(moseq_df, threshold=0.005, groupby=['group', 'uuid', 'session_name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
+def compute_stats_df(moseq_df, threshold=0.005, groupby=['group', 'uuid', 'file_name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
     """summary statistics for syllable frequencies and kinematic values
     Parameters
     ----------
@@ -140,6 +140,7 @@ def compute_stats_df(moseq_df, threshold=0.005, groupby=['group', 'uuid', 'sessi
         the summary statistics dataframe for syllable frequencies and kinematic values
     """
 
+    # filter out syllables that are used less than threshold in all sessions
     raw_frequency = (moseq_df.groupby('syllable').count()[
                      'frame_index']/moseq_df.shape[0]).reset_index().rename(columns={'frame_index': 'counts'})
     syll_include = raw_frequency[raw_frequency['counts']
