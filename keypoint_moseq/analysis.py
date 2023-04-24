@@ -28,7 +28,7 @@ from jax_moseq.utils import unbatch
 na = np.newaxis
 
 
-def compute_moseq_df(results_dict, *, use_bodyparts, smooth_heading=True, **kwargs):
+def compute_moseq_df(progress_paths, *, smooth_heading=True, **kwargs):
     """compute moseq dataframe from results dict that contains all kinematic values by frame
     Parameters
     ----------
@@ -43,53 +43,69 @@ def compute_moseq_df(results_dict, *, use_bodyparts, smooth_heading=True, **kwar
     moseq_df : pandas.DataFrame
         the dataframe that contains kinematic data for each frame
     """
+    # load model results
+    results_dict = load_results(
+        progress_paths['base_dir'], progress_paths['model_name'])
+    # load index file
+    if progress_paths.get('index_file') is not None:
+        print('meow')
+        with open(progress_paths['index_file'], 'r') as file:
+            index_data = yaml.safe_load(file)
+        # create a file dictionary for each session
+        file_info = {}
+        for session in index_data['files']:
+            file_info[session['filename']] = {'uuid': session['uuid'],
+                                              'group': session['group']}
 
     session_name = []
     centroid = []
     velocity = []
-    estimated_coordinates = []
     heading = []
     syllables = []
     syllables_reindexed = []
     frame_index = []
     s_uuid = []
+    s_group = []
+
     for k, v in results_dict.items():
-        centroid.append(v['centroid'])
-        velocity.append(np.concatenate(
-            ([0], np.sqrt(np.square(np.diff(v['centroid'], axis=0)).sum(axis=1)) * 30)))
         n_frame = v['centroid'].shape[0]
         session_name.append([str(k)] * n_frame)
-        s_uuid.append([str(uuid.uuid4())]*n_frame)
+        centroid.append(v['centroid'])
+        # velocity is pixel per second
+        velocity.append(np.concatenate(
+            ([0], np.sqrt(np.square(np.diff(v['centroid'], axis=0)).sum(axis=1)) * 30)))
+
+        if progress_paths.get('index_file') is not None:
+            # find the uuid and group for each session from index data
+            s_uuid.append([file_info[k]['uuid']]*n_frame)
+            s_group.append([file_info[k]['group']]*n_frame)
+        else:
+            # no index data
+            s_uuid.append([uuid.uuid4()]*n_frame)
+            s_group.append(['default']*n_frame)
         frame_index.append(np.arange(n_frame))
-        estimated_coordinates.append(v['estimated_coordinates'])
+
         if smooth_heading:
             heading.append(filter_angle(v['heading']))
         else:
             heading.append(v['heading'])
+
+        # add syllable data
         syllables.append(v['syllables'])
         syllables_reindexed.append(v['syllables_reindexed'])
 
-    # build data frame
-    # coor_col = []
-    # for part in use_bodyparts:
-    #     coor_col.append(part+'_x')
-    #     coor_col.append(part+'_y')
-    # estimated_coordinates =np.concatenate(estimated_coordinates)
-    # n, x, y = estimated_coordinates.shape
-    # coor_df = pd.DataFrame(np.reshape(estimated_coordinates, (n, x*y)), columns=coor_col)
-
-    moseq_df = pd.DataFrame(np.concatenate(centroid), columns=[
-                            'centroid_x', 'centroid_y'])
-    # moseq_df = pd.concat([moseq_df, coor_df], axis = 1)
+    # construct dataframe
+    moseq_df = pd.DataFrame(np.concatenate(
+        session_name), columns=['file_name'])
+    moseq_df = pd.concat([moseq_df, pd.DataFrame(np.concatenate(centroid), columns=[
+                         'centroid_x', 'centroid_y'])], axis=1)
     moseq_df['heading'] = np.concatenate(heading)
     moseq_df['velocity_px_s'] = np.concatenate(velocity)
     moseq_df['syllable'] = np.concatenate(syllables)
     moseq_df['syllables_reindexed'] = np.concatenate(syllables_reindexed)
     moseq_df['frame_index'] = np.concatenate(frame_index)
-    moseq_df['session_name'] = np.concatenate(session_name)
     moseq_df['uuid'] = np.concatenate(s_uuid)
-
-    # TODO: velecity, body span etc?
+    moseq_df['group'] = np.concatenate(s_group)
 
     # compute syllable onset
     change = np.diff(moseq_df['syllable']) != 0
