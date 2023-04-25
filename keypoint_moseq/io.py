@@ -223,6 +223,9 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
             [config['use_bodyparts'].index(bp) for bp in config['anterior_bodyparts']])
         config['posterior_idxs'] = jnp.array(
             [config['use_bodyparts'].index(bp) for bp in config['posterior_bodyparts']])
+    
+    if not 'skeleton' in config or config['skeleton'] is None:
+        config['skeleton'] = []
         
     return config
 
