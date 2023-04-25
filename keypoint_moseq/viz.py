@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
 from textwrap import fill
+plt.rcParams['figure.dpi'] = 100
 
 from keypoint_moseq.util import (
     get_edges, get_durations, get_frequencies, reindex_by_bodyparts,
@@ -20,7 +21,6 @@ from keypoint_moseq.io import load_results
 from jax_moseq.models.keypoint_slds import center_embedding
 
 # simple warning formatting
-plt.rcParams['figure.dpi'] = 100
 warnings.formatwarning = lambda msg, *a: str(msg)
 
 # suppress warnings from imageio

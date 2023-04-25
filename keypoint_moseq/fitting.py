@@ -40,9 +40,10 @@ def _wrapped_resample(data, model, **resample_options):
     any_nans, nan_info, messages = check_for_nans(model)
     
     if any_nans:
-        print('Early termination of fitting: NaNs encountered')
-        for msg in messages: print('  - {}'.format(msg))
-        print('\nFor additional information, see https://keypoint-moseq.readthedocs.io/en/latest/troubleshooting.html#nans-during-fitting')
+        warning_text = ['Early termination of fitting: NaNs encountered']
+        for msg in messages: warning_text.append('  - {}'.format(msg))
+        warning_text.append('\nFor additional information, see https://keypoint-moseq.readthedocs.io/en/latest/troubleshooting.html#nans-during-fitting')
+        warnings.warn('\n'.join(warning_text))
         raise StopResampling()
     
     return model
