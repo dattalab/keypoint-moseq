@@ -1,15 +1,27 @@
 """
-This module contains the widget components that comprise the group setting table functionality.
+This module contains the widget components in the analysis and visualiation pipeline.
 """
 
+# group setting widget imports
+import os
 import qgrid
 import pandas as pd
 import yaml
 import ipywidgets as widgets
-from IPython.display import clear_output
-from keypoint_moseq.analysis import index_to_dataframe
+from IPython.display import display, clear_output
+
+# video viewer widget additional imports
+import io
+import imageio
+import base64
+from glob import glob
+from bokeh.io import show
+from bokeh.models import Div, CustomJS, Slider
+
 
 class GroupSettingWidgets:
+    """The group setting widget for setting group names in the index file.
+    """
 
     def __init__(self, index_filepath):
         """
@@ -20,7 +32,8 @@ class GroupSettingWidgets:
         """
 
         self.index_filepath = index_filepath
-        style = {'description_width': 'initial', 'display': 'flex-grow', 'align_items': 'stretch'}
+        style = {'description_width': 'initial',
+                 'display': 'flex-grow', 'align_items': 'stretch'}
 
         self.col_opts = {
             'editable': False,
@@ -34,7 +47,8 @@ class GroupSettingWidgets:
             }
         }
 
-        self.clear_button = widgets.Button(description='Clear Output', disabled=False, tooltip='Close Cell Output')
+        self.clear_button = widgets.Button(
+            description='Clear Output', disabled=False, tooltip='Close Cell Output')
 
         self.group_input = widgets.Text(value='', placeholder='Enter Group Name to Set', style=style,
                                         description='New Group Name', continuous_update=False, disabled=False)
@@ -43,9 +57,10 @@ class GroupSettingWidgets:
         self.update_index_button = widgets.Button(description='Update Index File', style=style,
                                                   disabled=False, tooltip='Save Parameters')
 
-        self.group_set = widgets.HBox([self.group_input, self.save_button, self.update_index_button])
+        self.group_set = widgets.HBox(
+            [self.group_input, self.save_button, self.update_index_button])
 
-        self.index_dict, self.df = index_to_dataframe(self.index_filepath)
+        self.index_dict, self.df = self.index_to_dataframe(self.index_filepath)
         self.qgrid_widget = qgrid.show_grid(self.df[['group', 'uuid', 'filename']],
                                             column_options=self.col_opts,
                                             column_definitions=self.col_defs,
@@ -60,6 +75,31 @@ class GroupSettingWidgets:
         self.clear_button.on_click(self.clear_clicked)
         self.update_index_button.on_click(self.update_clicked)
         self.save_button.on_click(self.update_table)
+
+    def index_to_dataframe(self, index_filepath):
+        """parse index file to a dataframe
+
+        Parameters
+        ----------
+        index_filepath : str
+            path to the index file
+
+        Returns
+        -------
+        index_data : dict
+            the dictionary containing the index data
+        df : pandas.DataFrame
+            the dataframe containing the index data
+        """
+
+        # load index data
+        with open(index_filepath, 'r') as f:
+            index_data = yaml.safe_load(f)
+
+        # process index data into dataframe
+        df = pd.DataFrame(index_data['files'])
+
+        return index_data, df
 
     def update_table(self, b=None):
         """
@@ -91,7 +131,8 @@ class GroupSettingWidgets:
         latest_df = self.qgrid_widget.get_changed_df()
         self.df.update(latest_df)
 
-        updated_index = {'files': list(self.df.to_dict(orient='index').values())}
+        updated_index = {'files': list(
+            self.df.to_dict(orient='index').values())}
 
         with open(self.index_filepath, 'w') as f:
             yaml.safe_dump(updated_index, f, default_flow_style=False)
@@ -108,3 +149,5 @@ class GroupSettingWidgets:
         Returns:
         """
         clear_output()
+
+
