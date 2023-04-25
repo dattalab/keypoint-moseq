@@ -164,7 +164,7 @@ class InteractiveVideoViewer:
         """
 
         self.sess_select = widgets.Dropdown(options=self.create_syllable_path_dict(syll_vid_dir),
-                                            description='Session:', disabled=False, continuous_update=True)
+                                            description='Syllable:', disabled=False, continuous_update=True)
 
         self.clear_button = widgets.Button(
             description='Clear Output', disabled=False, tooltip='Close Cell Output')
