@@ -1,3 +1,7 @@
+from keypoint_moseq.widgets import GroupSettingWidgets, InteractiveVideoViewer
+from bokeh.io import output_notebook, show
+from IPython.display import display
+import ipywidgets as widgets
 import os
 import uuid
 import yaml
@@ -1149,32 +1153,6 @@ def update_model_progress(progress_paths, model_dirname, progress_filepath):
     return progress_paths
 
 
-def index_to_dataframe(index_filepath):
-    """parse index file to a dataframe
-
-    Parameters
-    ----------
-    index_filepath : str
-        path to the index file
-
-    Returns
-    -------
-    index_data : dict
-        the dictionary containing the index data
-    df : pandas.DataFrame
-        the dataframe containing the index data
-    """
-
-    # load index data
-    with open(index_filepath, 'r') as f:
-        index_data = yaml.safe_load(f)
-
-    # process index data into dataframe
-    df = pd.DataFrame(index_data['files'])
-
-    return index_data, df
-
-
 def interactive_group_setting(progress_paths):
     """start the interactive group setting widget
 
@@ -1188,9 +1166,6 @@ def interactive_group_setting(progress_paths):
     progress_paths : dict
         the dictionary containing the progress and the filepaths of the project with index path updated
     """
-
-    from IPython.display import display
-    from keypoint_moseq.widgets import GroupSettingWidgets
 
     index_filepath = os.path.join(progress_paths['base_dir'], 'index.yaml')
 
@@ -1211,7 +1186,7 @@ def interactive_group_setting(progress_paths):
         # write to file and progress_paths
         with open(index_filepath, 'w') as f:
             yaml.safe_dump(index_data, f, default_flow_style=False)
-        
+
     # update progress file to ensure index_file is in progress.yaml
     progress_paths['index_file'] = index_filepath
     with open(progress_paths['progress_filepath'], 'w') as f:
@@ -1223,3 +1198,30 @@ def interactive_group_setting(progress_paths):
     display(index_grid.qgrid_widget)
 
     return progress_paths
+
+
+def view_syllable_movies(progress_paths, type='grid'):
+    """view the syllable grid movie or crowd movie
+
+    Parameters
+    ----------
+    progress_paths : dict
+        the dictionary containing path names in the analysis process
+    type : str, optional
+        the type of movie to view, by default 'grid'
+    """
+
+    output_notebook()
+    if type == 'grid':
+        # show grid movies
+        video_dir = os.path.join(progress_paths['model_dir'], 'grid_movies')
+        viewer = InteractiveVideoViewer(syll_vid_dir=video_dir)
+    else:
+        # show crowd movies
+        video_dir = os.path.join(progress_paths['model_dir'], 'crowd_movies')
+        viewer = InteractiveVideoViewer(syll_vid_dir=video_dir)
+
+    # Run interactive application
+    selout = widgets.interactive_output(viewer.get_video,
+                                        {'input_file': viewer.sess_select})
+    display(viewer.clear_button, viewer.sess_select, selout)
