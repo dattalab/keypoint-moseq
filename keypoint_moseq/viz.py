@@ -347,8 +347,7 @@ def plot_duration_distribution(results=None, path=None, project_dir=None,
 def plot_progress(model, data, history, iteration, path=None,
                   project_dir=None, name=None, savefig=True,
                   fig_size=None, seq_length=600, min_frequency=.001, 
-                  min_histogram_length=10):
-                  **kwargs):
+                  min_histogram_length=10, **kwargs):
     """
     Plot the progress of the model during fitting.
 
@@ -807,10 +806,10 @@ def generate_grid_movies(
         min_frequency=min_frequency, min_instances=rows*cols)
     
     if len(syllable_instances) == 0:
-        print('No syllables with sufficient instances make a grid movie. '
-              'This usually occurs when all frames have the same syllable label '
-              '(use keypoint_moseq.viz.plot_syllable_frequencies to check if '
-              'this is the case)')
+        warnings.warn(fill(
+            'No syllables with sufficient instances to make a grid movie. '
+            'This usually occurs when all frames have the same syllable label '
+            '(use `plot_syllable_frequencies` to check if this is the case)'))
         return
 
     sampled_instances = sample_instances(
@@ -1221,10 +1220,10 @@ def generate_trajectory_plots(
         min_frequency=min_frequency, min_instances=num_samples)
     
     if len(syllable_instances) == 0:
-        print('No syllables with sufficient instances to plot trajectories. '
-              'This usually occurs when all frames have the same syllable label '
-              '(use keypoint_moseq.viz.plot_syllable_frequencies to check if '
-              'this is the case)')
+        warnings.warn(fill(
+            'No syllables with sufficient instances to make a trajectory plot. '
+            'This usually occurs when all frames have the same syllable label '
+            '(use `plot_syllable_frequencies` to check if this is the case)'))
         return
     
     sampling_options['n_neighbors'] = num_samples
@@ -1721,10 +1720,10 @@ def generate_crowd_movies(
         min_frequency=min_frequency, min_instances=num_instances)
     
     if len(syllable_instances) == 0:
-        print('No syllables with sufficient instances to make a crowd movie. '
-              'This usually occurs when all frames have the same syllable label '
-              '(use keypoint_moseq.viz.plot_syllable_frequencies to check if '
-              'this is the case)')
+        warnings.warn(fill(
+            'No syllables with sufficient instances to make a crowd movie. '
+            'This usually occurs when all frames have the same syllable label '
+            '(use `plot_syllable_frequencies` to check if this is the case)'))
         return
 
     sampled_instances = sample_instances(
