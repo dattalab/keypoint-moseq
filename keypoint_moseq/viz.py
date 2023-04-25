@@ -805,6 +805,13 @@ def generate_grid_movies(
     syllable_instances = get_syllable_instances(
         syllables, pre=pre, post=post, min_duration=min_duration,
         min_frequency=min_frequency, min_instances=rows*cols)
+    
+    if len(syllable_instances) == 0:
+        print('No syllables with sufficient instances make a grid movie. '
+              'This usually occurs when all frames have the same syllable label '
+              '(use keypoint_moseq.viz.plot_syllable_frequencies to check if '
+              'this is the case)')
+        return
 
     sampled_instances = sample_instances(
         syllable_instances, rows*cols, coordinates=coordinates, 
@@ -1712,6 +1719,13 @@ def generate_crowd_movies(
     syllable_instances = get_syllable_instances(
         syllables, pre=pre, post=post, min_duration=min_duration,
         min_frequency=min_frequency, min_instances=num_instances)
+    
+    if len(syllable_instances) == 0:
+        print('No syllables with sufficient instances to make a crowd movie. '
+              'This usually occurs when all frames have the same syllable label '
+              '(use keypoint_moseq.viz.plot_syllable_frequencies to check if '
+              'this is the case)')
+        return
 
     sampled_instances = sample_instances(
         syllable_instances, num_instances, coordinates=coordinates, 
