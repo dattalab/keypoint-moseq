@@ -30,7 +30,7 @@ def _update_history(history, iteration, model, include_states=True):
     return history
 
 
-def _wrapped_resample(data, model, **resample_options):
+def _wrapped_resample(data, model, pbar=None, **resample_options):
     try: 
         resample_model(data, **model, **resample_options)
     except KeyboardInterrupt: 
@@ -40,7 +40,8 @@ def _wrapped_resample(data, model, **resample_options):
     any_nans, nan_info, messages = check_for_nans(model)
     
     if any_nans:
-        warning_text = ['Early termination of fitting: NaNs encountered']
+        if pbar is not None: pbar.close()
+        warning_text = ['\nEarly termination of fitting: NaNs encountered']
         for msg in messages: warning_text.append('  - {}'.format(msg))
         warning_text.append('\nFor additional information, see https://keypoint-moseq.readthedocs.io/en/latest/troubleshooting.html#nans-during-fitting')
         warnings.warn('\n'.join(warning_text))
@@ -174,24 +175,24 @@ def fit_model(model,
 
     if history is None: history = {}
 
-    for iteration in tqdm.trange(start_iter, num_iters+1):
-        if history_every_n_iters>0 and (iteration%history_every_n_iters)==0:
-            history = _update_history(history, iteration, model, 
-                                     include_states=states_in_history)
-            
-        if plot_every_n_iters>0 and (iteration%plot_every_n_iters)==0:
-            plot_progress(model, data, history, iteration, name=name, 
-                          savefig=save_progress_figs, project_dir=project_dir)
+    with tqdm.trange(start_iter, num_iters+1) as pbar:
+        for iteration in pbar:
+            if history_every_n_iters>0 and (iteration%history_every_n_iters)==0:
+                history = _update_history(history, iteration, model, 
+                                        include_states=states_in_history)
+                
+            if plot_every_n_iters>0 and (iteration%plot_every_n_iters)==0:
+                plot_progress(model, data, history, iteration, name=name, 
+                            savefig=save_progress_figs, project_dir=project_dir)
 
-        if save_every_n_iters>0 and (iteration%save_every_n_iters)==0:
-            save_checkpoint(model, data, history, labels, iteration, name=name,
-                            project_dir=project_dir,save_history=save_history, 
-                            save_states=save_states, save_data=save_data)
-            
-        try: model = _wrapped_resample(
-            data, model, ar_only=ar_only, verbose=verbose)
-        except StopResampling: break
-
+            if save_every_n_iters>0 and (iteration%save_every_n_iters)==0:
+                save_checkpoint(model, data, history, labels, iteration, name=name,
+                                project_dir=project_dir,save_history=save_history, 
+                                save_states=save_states, save_data=save_data)
+                
+            try: model = _wrapped_resample(
+                data, model, pbar=pbar, ar_only=ar_only, verbose=verbose)
+            except StopResampling: break
 
     return model, history, name
     
@@ -340,10 +341,12 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
     model = init_model(data, states, params, noise_prior=noise_prior, verbose=verbose, **kwargs)
     
     if num_iters>0:
-        for iteration in tqdm.trange(num_iters, desc='Applying model'):
-            try: model = _wrapped_resample(
-                    data, model, ar_only=ar_only, states_only=True, verbose=verbose)
-            except StopResampling: break
+        with tqdm.trange(num_iters, desc='Applying model') as pbar:
+            for iteration in pbar:
+                try: model = _wrapped_resample(
+                        data, model, pbar=pbar, ar_only=ar_only, 
+                        states_only=True, verbose=verbose)
+                except StopResampling: break
 
 
     nlags = model['hypparams']['ar_hypparams']['nlags']
