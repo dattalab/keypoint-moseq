@@ -196,15 +196,17 @@ def fit_model(model,
     return model, history, name
     
     
-def resume_fitting(*, params, hypparams, labels, iteration, mask,
+def resume_fitting(*, params, hypparams, labels, iteration, mask, num_iters,
                    Y, conf, seed, noise_prior=None, states=None, **kwargs):
     """Resume fitting a model from a checkpoint."""
     
+    num_iters = num_iters + iteration
     data = jax.device_put({'Y':Y, 'mask':mask, 'conf':conf})    
     model = init_model(data, states, params, hypparams,
                        noise_prior, seed, **kwargs)
 
-    return fit_model(model, data, labels, start_iter=iteration+1, **kwargs)
+    return fit_model(model, data, labels, start_iter=iteration+1, 
+                     num_iters=num_iters, **kwargs)
 
 
 def apply_model(*, params, coordinates, confidences=None, num_iters=5, 
