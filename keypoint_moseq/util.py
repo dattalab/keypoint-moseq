@@ -217,7 +217,7 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
         return sorted(set(matches))
     
     else:
-        # make sure extensions all start with "." and include uppercase versions
+        # make sure extensions all start with "." and are lowercase
         ext_list = ['.'+ext.strip('.').lower() for ext in ext_list]
         
         # find all matches (recursively)
