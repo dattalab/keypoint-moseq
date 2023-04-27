@@ -32,7 +32,7 @@ from jax_moseq.utils import unbatch
 na = np.newaxis
 
 
-def compute_moseq_df(progress_paths, *, smooth_heading=True, **kwargs):
+def compute_moseq_df(base_dir, model_name, index_file, *, smooth_heading=True, **kwargs):
     """compute moseq dataframe from results dict that contains all kinematic values by frame
     Parameters
     ----------
@@ -48,11 +48,10 @@ def compute_moseq_df(progress_paths, *, smooth_heading=True, **kwargs):
         the dataframe that contains kinematic data for each frame
     """
     # load model results
-    results_dict = load_results(
-        progress_paths['base_dir'], progress_paths['model_name'])
+    results_dict = load_results(base_dir, model_name)
     # load index file
-    if progress_paths.get('index_file') is not None:
-        with open(progress_paths['index_file'], 'r') as file:
+    if index_file is not None:
+        with open(index_file, 'r') as file:
             index_data = yaml.safe_load(file)
         # create a file dictionary for each session
         file_info = {}
@@ -78,7 +77,7 @@ def compute_moseq_df(progress_paths, *, smooth_heading=True, **kwargs):
         velocity.append(np.concatenate(
             ([0], np.sqrt(np.square(np.diff(v['centroid'], axis=0)).sum(axis=1)) * 30)))
 
-        if progress_paths.get('index_file') is not None:
+        if index_file is not None:
             # find the uuid and group for each session from index data
             s_uuid.append([file_info[k]['uuid']]*n_frame)
             s_group.append([file_info[k]['group']]*n_frame)
