@@ -1308,7 +1308,7 @@ def generate_trajectory_plots(
 
 def overlay_keypoints_on_image(
     image, coordinates, edges=[], keypoint_colormap='autumn',
-    node_size=3, line_width=2, copy=False, opacity=1.0):
+    node_size=2, line_width=1, copy=False, opacity=1.0):
     """
     Overlay keypoints on an image.
 
@@ -1372,7 +1372,7 @@ def overlay_keypoints_on_image(
 
 def overlay_trajectory_on_video(
         frames, trajectory, smoothing_kernel=1, highlight=None, 
-        min_opacity=0.2, max_opacity=1, num_ghosts=10, interval=2, 
+        min_opacity=0.2, max_opacity=1, num_ghosts=5, interval=2, 
         plot_options={}):
     
     """
@@ -1493,7 +1493,7 @@ def overlay_keypoints_on_video(
 
 
 def crowd_movie(
-    instances, coordinates, lims, pre=30, post=60,
+    instances, coordinates, centroids, lims, pre=30, post=60,
     edges=[], plot_options={}):
     """
     Generate a crowd movie.
@@ -1511,8 +1511,11 @@ def crowd_movie(
         where each instance is specified as a tuple with the session
         name, start frame and end frame. 
     
-    coordinates: dict of ndarray of shape (num_frames, num_keypoints, dim)
+    coordinates: dict of ndarrays of shape (num_frames, num_keypoints, dim)
         Dictionary of keypoint coordinates, where each key is a session name.
+        
+    centroids: dict of ndarrays of shape (num_frames, dim)
+        Dictionary of animal centroids, where each key is a session name.
 
     lims: array of shape (2, dim)
         Axis limits for plotting keypoints in the crowd movies. 
@@ -1543,15 +1546,17 @@ def crowd_movie(
 
     for key, start, end in instances:
         xy = coordinates[key][start-pre:start+post,:,:2]
-        xy = (np.clip(xy, *lims[:,:2]) - lims[0,:2])
+        xy = np.clip(xy, *lims[:,:2]) - lims[0,:2]
         frames = overlay_trajectory_on_video(
             frames, xy, plot_options=plot_options)
 
         dot_radius=5
         dot_color=(255,255,255)
-        centroids = gaussian_filter1d(xy.mean(1),1,axis=0)
+        cen = centroids[key][start-pre:start+post,:2]
+        cen = gaussian_filter1d(cen,1,axis=0)
+        cen = np.clip(cen, *lims[:,:2]) - lims[0,:2]
         for i in range(pre, min(end-start+pre,pre+post)):
-            pos = (int(centroids[i,0]),int(centroids[i,1]))
+            pos = (int(cen[i,0]),int(cen[i,1]))
             frames[i] = cv2.circle(frames[i], pos, dot_radius, dot_color, -1, cv2.LINE_AA)
 
     return frames
@@ -1699,12 +1704,17 @@ def generate_crowd_movies(
     if limits is None: 
         limits = get_limits(coordinates, blocksize=16)
 
-    centroids,headings = None,None
     k = list(results.keys())[0]
-    if 'centroid' in results[k]:
-        centroids = {k:v['centroid'] for k,v in results.items()}
     if 'heading' in results[k]:
         headings = {k:v['heading'] for k,v in results.items()}
+    else: headings = None
+        
+    if 'centroid' in results[k]:
+        centroids = {k:v['centroid'] for k,v in results.items()}
+    else:
+        outliers = np.any(np.isnan(coordinates), axis=2)
+        interpolated_coordinates = interpolate_keypoints(coordinates, outliers)
+        centroids = {k:v.mean(1) for k,v in interpolated_coordinates.items()}
 
     edges = []
     if len(skeleton)>0: 
@@ -1734,7 +1744,7 @@ def generate_crowd_movies(
         sampled_instances.items(), desc='Generating crowd movies'):
         
         frames = crowd_movie(
-            instances, coordinates, pre=pre, post=post,
+            instances, coordinates, centroids, pre=pre, post=post,
             edges=edges, lims=limits, plot_options=plot_options)
 
         path = os.path.join(output_dir, f'syllable{syllable}.mp4')
