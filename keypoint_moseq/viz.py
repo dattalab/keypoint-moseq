@@ -1277,9 +1277,9 @@ def generate_trajectory_plots(
                 plt.close(fig=fig)
 
                 if save_gifs:
-                    use_fps = len(rasters)/(pre+post)*fps
+                    frame_duration = int(1000 * (pre+post) / len(rasters) / fps)
                     path = os.path.join(output_dir, f'{title}{suffix}.gif')
-                    imageio.mimsave(path, rasters, fps=use_fps)
+                    imageio.mimsave(path, rasters, duration=frame_duration)
                 if save_mp4s:
                     use_fps = len(rasters)/(pre+post)*fps
                     path = os.path.join(output_dir, f'{title}{suffix}.mp4')
@@ -1296,9 +1296,9 @@ def generate_trajectory_plots(
         plt.show()
 
         if save_gifs:
-            use_fps = len(rasters)/(pre+post)*fps
+            frame_duration = int(1000 * (pre+post) / len(rasters) / fps)
             path = os.path.join(output_dir, f'all_trajectories{suffix}.gif')
-            imageio.mimsave(path, rasters, fps=use_fps)
+            imageio.mimsave(path, rasters, duration=frame_duration)
         if save_mp4s:
             use_fps = len(rasters)/(pre+post)*fps
             path = os.path.join(output_dir, f'all_trajectories{suffix}.mp4')
