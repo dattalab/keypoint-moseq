@@ -31,7 +31,7 @@ from jax_moseq.utils import unbatch
 na = np.newaxis
 
 
-def compute_moseq_df(base_dir, model_name, index_file, *, smooth_heading=True, **kwargs):
+def compute_moseq_df(base_dir, model_name, index_file, *,fps=30, smooth_heading=True, **kwargs):
     """compute moseq dataframe from results dict that contains all kinematic values by frame
     Parameters
     ----------
@@ -74,7 +74,7 @@ def compute_moseq_df(base_dir, model_name, index_file, *, smooth_heading=True, *
         centroid.append(v['centroid'])
         # velocity is pixel per second
         velocity.append(np.concatenate(
-            ([0], np.sqrt(np.square(np.diff(v['centroid'], axis=0)).sum(axis=1)) * 30)))
+            ([0], np.sqrt(np.square(np.diff(v['centroid'], axis=0)).sum(axis=1)) * fps)))
 
         if index_file is not None:
             # find the uuid and group for each session from index data
