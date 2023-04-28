@@ -41,7 +41,7 @@ def _build_yaml(sections, comments):
 def generate_config(project_dir, **kwargs):
     """
     Generate a ``config.yml`` file with project settings. Default 
-    settings will be used unless overriden by a keywork argument.
+    settings will be used unless overriden by a keyword argument.
     
     Parameters
     ----------
