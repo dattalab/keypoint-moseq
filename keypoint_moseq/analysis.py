@@ -1,14 +1,22 @@
-from bokeh.io import output_notebook, show
-from IPython.display import display
-import ipywidgets as widgets
 import os
 import uuid
 import yaml
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
+
 import seaborn as sns
+import ipywidgets as widgets
+from bokeh.io import output_notebook, show
+from IPython.display import display
+from scipy import stats
+from statsmodels.stats.multitest import multipletests
+from itertools import combinations
+
+
+
 
 from matplotlib.gridspec import GridSpec
 from tqdm import tqdm
@@ -432,10 +440,261 @@ def plotting_fingerprint(summary, range_dict, preprocessor_type='minmax', num_le
     else:
         cb.set_xlabel('Percentage Usage')
 
+
+def get_tie_correction(x, N_m):
+    """
+   assign tied rank values to the average of the ranks they would have received if they had not been tied for Kruskal-Wallis helper function.
+
+    Args:
+    x (pd.Series): syllable usages for a single session.
+    N_m (int): Number of total sessions.
+
+    Returns:
+    corrected_rank (float): average of the inputted tied rank
+    """
+
+    vc = x.value_counts()
+    tie_sum = 0
+    if (vc > 1).any():
+        tie_sum += np.sum(vc[vc != 1] ** 3 - vc[vc != 1])
+    return tie_sum / (12.0 * (N_m - 1))
+
+def run_manual_KW_test(df_usage, merged_usages_all, num_groups, n_per_group, cum_group_idx, n_perm=10000, seed=0):
+    """
+
+    Run a manual Kruskal-Wallis test compare the results agree with the scipy.stats.s
+
+    Args:
+    df_usage (pandas.DataFrame): DataFrame containing only pre-computed syllable stats. shape = (N_m, n_syllables)
+    merged_usages_all (np.array): numpy array format of the df_usage DataFrame.
+    num_groups (int): Number of unique groups
+    n_per_group (list): list of value counts for sessions per group. len == num_groups.
+    cum_group_idx (list): list of indices for different groups. len == num_groups + 1.
+    n_perm (int): Number of permuted samples to generate.
+    seed (int): Random seed used to initialize the pseudo-random number generator.
+
+    Returns:
+    h_all (np.array): Array of H-stats computed for given n_syllables; shape = (n_perms, N_s)
+    real_ranks (np.array): Array of syllable ranks, shape = (N_m, n_syllables)
+    X_ties (np.array): 1-D list of tied ranks, where if value > 0, then rank is tied. len(X_ties) = n_syllables
+    """
+
+    N_m, N_s = merged_usages_all.shape
+
+    # create random index array n_perm times
+    rnd = np.random.RandomState(seed=seed)
+    perm = rnd.rand(n_perm, N_m).argsort(-1)
+
+    # get degrees of freedom
+    dof = num_groups - 1
+
+    real_ranks = np.apply_along_axis(stats.rankdata, 0, merged_usages_all)
+    X_ties = df_usage.apply(get_tie_correction, 0, N_m=N_m).values
+    KW_tie_correct = np.apply_along_axis(stats.tiecorrect, 0, real_ranks)
+
+    # rank data
+    perm_ranks = real_ranks[perm]
+
+    # get square of sums for each group
+    ssbn = np.zeros((n_perm, N_s))
+    for i in range(num_groups):
+        ssbn += (
+                perm_ranks[:, cum_group_idx[i]: cum_group_idx[i + 1]].sum(1) ** 2
+                / n_per_group[i]
+        )
+
+    # h-statistic
+    h_all = 12.0 / (N_m * (N_m + 1)) * ssbn - 3 * (N_m + 1)
+    h_all /= KW_tie_correct
+    p_vals = stats.chi2.sf(h_all, df=dof)
+
+    # check that results agree
+    p_i = np.random.randint(n_perm)
+    s_i = np.random.randint(N_s)
+    kr = stats.kruskal(
+        *np.array_split(
+            merged_usages_all[perm[p_i, :], s_i], np.cumsum(n_per_group[:-1])
+        )
+    )
+    assert (kr.statistic == h_all[p_i, s_i]) & (
+            kr.pvalue == p_vals[p_i, s_i]
+    ), "manual KW is incorrect"
+
+    return h_all, real_ranks, X_ties
+
+def dunns_z_test_permute_within_group_pairs(df_usage, vc, real_ranks, X_ties, N_m, group_names, rnd, n_perm):
+    """
+    Run Dunn's z-test statistic on combinations of all group pairs, handling pre-computed tied ranks.
+
+    Args:
+    df_usage (pandas.DataFrame): DataFrame containing only pre-computed syllable stats.
+    vc (pd.Series): value counts of sessions in each group.
+    real_ranks (np.array): Array of syllable ranks.
+    X_ties (np.array): 1-D list of tied ranks, where if value > 0, then rank is tied
+    N_m (int): Number of sessions.
+    group_names (pd.Index): Index list of unique group names.
+    rnd (np.random.RandomState): Pseudo-random number generator.
+    n_perm (int): Number of permuted samples to generate.
+
+    Returns:
+    null_zs_within_group (dict): dict of group pair keys paired with vector of Dunn's z-test statistics of the null hypothesis.
+    real_zs_within_group (dict): dict of group pair keys paired with vector of Dunn's z-test statistics
+    """
+
+    null_zs_within_group = {}
+    real_zs_within_group = {}
+
+    A = N_m * (N_m + 1.0) / 12.0
+
+    for (i_n, j_n) in combinations(group_names, 2):
+        is_i = df_usage.group == i_n
+        is_j = df_usage.group == j_n
+
+        n_mice = is_i.sum() + is_j.sum()
+
+        ranks_perm = real_ranks[(is_i | is_j)][rnd.rand(n_perm, n_mice).argsort(-1)]
+        diff = np.abs(
+            ranks_perm[:, : is_i.sum(), :].mean(1)
+            - ranks_perm[:, is_i.sum():, :].mean(1)
+        )
+        B = 1.0 / vc.loc[i_n] + 1.0 / vc.loc[j_n]
+
+        # also do for real data
+        group_ranks = real_ranks[(is_i | is_j)]
+        real_diff = np.abs(
+            group_ranks[: is_i.sum(), :].mean(0) - group_ranks[is_i.sum():, :].mean(0)
+        )
+
+        # add to dict
+        pair = (i_n, j_n)
+        null_zs_within_group[pair] = diff / np.sqrt((A - X_ties) * B)
+        real_zs_within_group[pair] = real_diff / np.sqrt((A - X_ties) * B)
+
+    return null_zs_within_group, real_zs_within_group
+
+
+def compute_pvalues_for_group_pairs(real_zs_within_group, null_zs, df_k_real, group_names, n_perm=10000, thresh=0.05, mc_method="fdr_bh"):
+    """
+    Adjust the p-values from Dunn's z-test statistics and computes the resulting significant syllables with the adjusted p-values.
+
+    Args:
+    real_zs_within_group (dict): dict of group pair keys paired with vector of Dunn's z-test statistics
+    null_zs  (dict): dict of group pair keys paired with vector of Dunn's z-test statistics of the null hypothesis.
+    df_k_real (pandas.DataFrame): DataFrame of KW test results.
+    group_names (pd.Index): Index list of unique group names.
+    n_perm (int): Number of permuted samples to generate.
+    thresh (float): Alpha threshold to consider syllable significant.
+    mc_method (str): Multiple Corrections method to use.
+    verbose (bool): indicates whether to print out the significant syllable results
+
+    Returns:
+    df_pval_corrected (pandas.DataFrame): DataFrame containing Dunn's test results with corrected p-values.
+    significant_syllables (list): List of corrected KW significant syllables (syllables with p-values < thresh)
+    """
+
+    # do empirical p-val calculation for all group permutation
+    
+    p_vals_allperm = {}
+    for pair in combinations(group_names, 2):
+        p_vals_allperm[pair] = (
+                                       (null_zs[pair] > real_zs_within_group[pair]).sum(0) + 1
+                               ) / n_perm
+
+    # summarize into df
+    df_pval = pd.DataFrame(p_vals_allperm)
+
+    correct_p = lambda x: multipletests(x, alpha=thresh, method=mc_method)[1]
+    df_pval_corrected = df_pval.apply(correct_p, axis=1, result_type="broadcast")
+
+    return df_pval_corrected, ((df_pval_corrected[df_k_real.is_sig] < thresh).sum(0))
+
+
+def run_kruskal(stats_df, statistic = 'frequency', n_perm =10000, seed=42, thresh=0.05, mc_method='fdr_bh'):
+    rnd = np.random.RandomState(seed=seed)
+    # get grouped mean data
+    grouped_data = stats_df.pivot_table(index=["group", "uuid"], columns="syllable", values=statistic).replace(np.nan, 0).reset_index()
+    # compute KW constants
+    vc = grouped_data.group.value_counts().loc[grouped_data.group.unique()]
+    n_per_group = vc.values
+    group_names = vc.index
+
+    cum_group_idx = np.insert(np.cumsum(n_per_group), 0, 0)
+    num_groups = len(group_names)
+
+    # get all syllable usage data
+    df_only_stats = grouped_data.drop(["group", "uuid"], axis=1)
+    syllable_data = grouped_data.drop(["group", "uuid"], axis=1).values
+
+    N_m, N_s = syllable_data.shape
+
+    # Run KW and return H-stats
+    h_all, real_ranks, X_ties = run_manual_KW_test(
+        df_usage=df_only_stats,
+        merged_usages_all=syllable_data,
+        num_groups=num_groups,
+        n_per_group=n_per_group,
+        cum_group_idx=cum_group_idx,
+        n_perm=n_perm,
+        seed=seed,
+    )
+
+    # find the real k_real
+    df_k_real = pd.DataFrame(
+        [
+            stats.kruskal(
+                *np.array_split(syllable_data[:, s_i], np.cumsum(n_per_group[:-1]))
+            )
+            for s_i in range(N_s)
+        ]
+    )
+
+    # multiple test correction
+    df_k_real["p_adj"] = multipletests(
+        ((h_all > df_k_real.statistic.values).sum(0) + 1) / n_perm,
+        alpha=thresh,
+        method=mc_method,
+    )[1]
+
+    # return significant syllables based on the threshold
+    df_k_real["is_sig"] = df_k_real["p_adj"] <= thresh
+
+    # Run Dunn's z-test statistics
+    (
+        null_zs_within_group,
+        real_zs_within_group,
+    ) = dunns_z_test_permute_within_group_pairs(
+        grouped_data, vc, real_ranks, X_ties, N_m, group_names, rnd, n_perm
+    )
+
+    # Compute p-values from Dunn's z-score statistics
+    df_pair_corrected_pvalues, _ = compute_pvalues_for_group_pairs(
+        real_zs_within_group,
+        null_zs_within_group,
+        df_k_real,
+        group_names,
+        n_perm,
+        thresh,
+        mc_method,
+    )
+
+    # combine Dunn's test results into single DataFrame
+    df_z = pd.DataFrame(real_zs_within_group)
+    df_z.index = df_z.index.set_names("syllable")
+    dunn_results_df = df_z.reset_index().melt(id_vars="syllable")
+
+    
+    # Get intersecting significant syllables between
+    intersect_sig_syllables = {}
+    for pair in df_pair_corrected_pvalues.columns.tolist():
+        intersect_sig_syllables[pair] = np.where(
+            (df_pair_corrected_pvalues[pair] < thresh) & (df_k_real.is_sig)
+        )[0]
+
+    return df_k_real, dunn_results_df, intersect_sig_syllables
+
+
 # frequency plot stuff
-
-
-def sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, max_sylls=None, stat='frequency'):
+def sort_syllables_by_stat_difference(stats_df, ctrl_group, exp_group, stat='frequency'):
     """sort syllables by the difference in the stat between the control and experimental group
     Parameters
     ----------
@@ -445,8 +704,6 @@ def sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, max_sy
         the name of the control group
     exp_group : str
         the name of the experimental group
-    max_sylls : int, optional
-        the maximum number of syllables to consider, by default None
     stat : str, optional
         the statistic to use for finding the syllable differences between two groups, by default 'frequency'
     Returns
@@ -455,11 +712,8 @@ def sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, max_sy
         ordering list of syllables based on the difference in the stat between the control and experimental group
     """
 
-    if max_sylls is not None:
-        complete_df = complete_df[complete_df.syllable < max_sylls]
-
     # Prepare DataFrame
-    mutation_df = complete_df.groupby(['group', 'syllable']).mean()
+    mutation_df = stats_df.drop([col for col, dtype in stats_df.dtypes.items() if (dtype == 'object' and col not in ['group', 'syllable'])], axis =1).groupby(['group', 'syllable']).mean()
 
     # Get groups to measure mutation by
     control_df = mutation_df.loc[ctrl_group]
@@ -472,13 +726,13 @@ def sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, max_sy
     return list(ordering)
 
 
-def sort_syllables_by_stat(complete_df, stat='frequency', max_sylls=None):
+def sort_syllables_by_stat(stats_df, stat='frequency'):
     """sort sylllabes by the stat and return the ordering and label mapping
 
     Parameters
     ----------
     complete_df : pandas.DataFrame
-        the dataframe that contains kinematic data and the syllable label for each frame
+        the stats dataframe that contains kinematic data and the syllable label for each session and each syllable
     stat : str, optional
         the statistic to sort on, by default 'frequency'
     max_sylls : int, optional
@@ -492,10 +746,7 @@ def sort_syllables_by_stat(complete_df, stat='frequency', max_sylls=None):
         the mapping from the syllable to the new plotting label
     """
 
-    if max_sylls is not None:
-        complete_df = complete_df[complete_df.syllable < max_sylls]
-
-    tmp = complete_df.groupby('syllable').mean(
+    tmp = stats_df.drop([col for col, dtype in stats_df.dtypes.items() if dtype =='object'], axis=1).groupby('syllable').mean(
     ).sort_values(by=stat, ascending=False).index
 
     # Get sorted ordering
@@ -507,7 +758,7 @@ def sort_syllables_by_stat(complete_df, stat='frequency', max_sylls=None):
     return ordering, relabel_mapping
 
 
-def _validate_and_order_syll_stats_params(complete_df, stat='frequency', ordering='stat', max_sylls=40, groups=None, ctrl_group=None, exp_group=None, colors=None, figsize=(10, 5)):
+def _validate_and_order_syll_stats_params(complete_df, stat='frequency', ordering='stat', groups=None, ctrl_group=None, exp_group=None, colors=None, figsize=(10, 5)):
 
     if not isinstance(figsize, (tuple, list)):
         print('Invalid figsize. Input a integer-tuple or list of len(figsize) = 2. Setting figsize to (10, 5)')
@@ -529,17 +780,14 @@ def _validate_and_order_syll_stats_params(complete_df, stat='frequency', orderin
         raise ValueError(
             f'Invalid stat entered: {stat}. Must be a column in the supplied dataframe.')
 
-    if ordering is None:
-        ordering = np.arange(max_sylls)
-    elif ordering == "stat":
+    if ordering == "stat":
         ordering, _ = sort_syllables_by_stat(
-            complete_df, stat=stat, max_sylls=max_sylls)
+            complete_df, stat=stat)
     elif ordering == "diff":
         if ctrl_group is None or exp_group is None or not np.all(np.isin([ctrl_group, exp_group], groups)):
             raise ValueError(
                 f'Attempting to sort by {stat} differences, but {ctrl_group} or {exp_group} not in {groups}.')
-        ordering = sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group,
-                                                     max_sylls=max_sylls, stat=stat)
+        ordering = sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, stat=stat)
     if colors is None:
         colors = []
     if len(colors) == 0 or len(colors) != len(groups):
@@ -548,14 +796,14 @@ def _validate_and_order_syll_stats_params(complete_df, stat='frequency', orderin
     return ordering, groups, colors, figsize
 
 
-def plot_syll_stats_with_sem(scalar_df, syll_info=None, sig_sylls=None, stat='frequency', ordering='stat', max_sylls=40,
-                             groups=None, ctrl_group=None, exp_group=None, colors=None, join=False, figsize=(8, 4)):
+def plot_syll_stats_with_sem(stats_df, progress_paths, plot_sig = True, thresh=0.05, stat='frequency', 
+                             ordering='stat', groups=None, ctrl_group=None, exp_group=None, colors=None, join=False, figsize=(8, 4)):
     """plot syllable statistics with standard error of the mean
 
     Parameters
     ----------
-    scalar_df : pandas.DataFrame
-        the dataframe that contains kinematic data and the syllable label for each frame
+    stats_df : pandas.DataFrame
+        the dataframe that contains kinematic data and the syllable label
     syll_info : dict, optional
         the dictionary that contains syllable information, ie. names and short descriptions, by default None
     sig_sylls : dict, optional
@@ -587,13 +835,37 @@ def plot_syll_stats_with_sem(scalar_df, syll_info=None, sig_sylls=None, stat='fr
         the legend object
     """
 
+    # get syllable info
+    syll_info = None
+    syll_info_path = progress_paths.get('syll_info_path')
+    if syll_info_path is not None:
+        if os.path.exists(syll_info_path):
+            with open(syll_info_path, 'r') as f:
+                syll_info = yaml.safe_load(f)
+    
+    # get significant syllables
+    sig_sylls = None
+    if plot_sig:
+        # run kruskal wallis and dunn's test
+        _, _, sig_pairs = run_kruskal(stats_df, statistic = stat, thresh=thresh)
+        # plot significant syllables for control and experimental group
+        if ctrl_group is not None and exp_group is not None:
+            # check if the group pair is in the sig pairs dict
+            if (ctrl_group, exp_group) in sig_pairs.keys():
+                sig_sylls = sig_pairs.get((ctrl_group, exp_group))
+            # flip the order of the groups
+            else:
+                sig_sylls = sig_pairs.get((exp_group, ctrl_group))
+        else:
+            print('No control or experimental group specified. Not plotting significant syllables.')
+        
+
     xlabel = f'Syllables sorted by {stat}'
     if ordering == 'diff':
         xlabel += ' difference'
-    ordering, groups, colors, figsize = _validate_and_order_syll_stats_params(scalar_df,
+    ordering, groups, colors, figsize = _validate_and_order_syll_stats_params(stats_df,
                                                                               stat=stat,
                                                                               ordering=ordering,
-                                                                              max_sylls=max_sylls,
                                                                               groups=groups,
                                                                               ctrl_group=ctrl_group,
                                                                               exp_group=exp_group,
@@ -604,7 +876,7 @@ def plot_syll_stats_with_sem(scalar_df, syll_info=None, sig_sylls=None, stat='fr
 
     # plot each group's stat data separately, computes groupwise SEM, and orders data based on the stat/ordering parameters
     hue = 'group' if groups is not None else None
-    ax = sns.pointplot(data=scalar_df, x='syllable', y=stat, hue=hue, order=ordering,
+    ax = sns.pointplot(data=stats_df, x='syllable', y=stat, hue=hue, order=ordering,
                        join=join, dodge=True, errorbar=('ci', 68), ax=ax, hue_order=groups,
                        palette=colors)
 
@@ -617,7 +889,7 @@ def plot_syll_stats_with_sem(scalar_df, syll_info=None, sig_sylls=None, stat='fr
         for o in (ordering):
             mean_xlabels.append(f'{syll_info[o]["label"]} - {o}')
 
-        plt.xticks(range(max_sylls), mean_xlabels, rotation=90)
+        plt.xticks(range(len(syll_info)), mean_xlabels, rotation=90)
 
     # if a list of significant syllables is given, mark the syllables above the x-axis
     if sig_sylls is not None:
@@ -637,8 +909,6 @@ def plot_syll_stats_with_sem(scalar_df, syll_info=None, sig_sylls=None, stat='fr
     sns.despine()
 
     return fig, legend
-
-# transition matrix
 
 
 def get_transitions(label_sequence):
