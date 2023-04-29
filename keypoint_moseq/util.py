@@ -34,9 +34,9 @@ def stateseq_stats(stateseqs, mask):
         Batch of state sequences where the last dim indexes time 
 
     mask: ndarray
-        Binary indicator for which elements of ``stateseqs`` are valid,
+        Binary indicator for which elements of `stateseqs` are valid,
         e.g. when state sequences of different lengths have been padded
-        and stacked together in ``stateseqs``
+        and stacked together in `stateseqs`
 
     Returns
     -------
@@ -80,9 +80,9 @@ def concatenate_stateseqs(stateseqs, mask=None):
         where the last dim indexes time
 
     mask: ndarray, shape (..., >=t), default=None
-        Binary indicator for which elements of ``stateseqs`` are valid,
+        Binary indicator for which elements of `stateseqs` are valid,
         e.g. when state sequences of different lengths have been padded.
-        If ``mask`` contains more time-points than ``stateseqs``, the
+        If `mask` contains more time-points than `stateseqs`, the
         initial extra time-points will be ignored.
 
     Returns
@@ -141,7 +141,7 @@ def get_frequencies(stateseqs, mask=None, num_states=None):
     mask: ndarray of shape (..., >=t), default=None
     num_states: int, default=None
         Number of different states. If None, the number of states will
-        be set to ``max(stateseqs)+1``.
+        be set to `max(stateseqs)+1`.
 
     Returns
     -------
@@ -176,7 +176,7 @@ def reindex_by_frequency(stateseqs, mask=None):
     Returns
     -------
     stateseqs_reindexed: ndarray
-        The reindexed state sequences in the same format as ``stateseqs``
+        The reindexed state sequences in the same format as `stateseqs`
     """
     frequency = get_frequencies(stateseqs, mask=mask)
     o = np.argsort(np.argsort(frequency)[::-1])
@@ -236,7 +236,7 @@ def find_matching_videos(keys, video_dir, as_dict=False, recursive=True,
     """
     Find video files for a set of session names. The filename of each
     video is assumed to be a prefix within the session name, i.e. the
-    session name has the form ``{video_name}{more_text}``. If more than 
+    session name has the form `{video_name}{more_text}`. If more than 
     one video matches a session name, the longest match will be used. 
     For example given the following video directory::
 
@@ -253,7 +253,7 @@ def find_matching_videos(keys, video_dir, as_dict=False, recursive=True,
          'videoname2blahblah': 'video_dir/videoname2.avi'}
 
     A suffix can also be specified, in which case the session name 
-    is assumed to have the form ``{video_name}{suffix}{more_text}``.
+    is assumed to have the form `{video_name}{suffix}{more_text}`.
  
     Parameters
     -------
@@ -378,9 +378,9 @@ def get_syllable_instances(stateseqs, min_duration=3, pre=30, post=60,
                            min_frequency=0, min_instances=0):
     """
     Map each syllable to a list of instances when it occured. Only 
-    include instances that meet the criteria specified by ``pre``, 
-    ``post``, and ``min_duration``. Only include syllables that meet the
-    criteria specified by ``min_frequency`` and ``min_instances``. 
+    include instances that meet the criteria specified by `pre`, 
+    `post`, and `min_duration`. Only include syllables that meet the
+    criteria specified by `min_frequency` and `min_instances`. 
 
     Parameters
     -------
@@ -411,7 +411,7 @@ def get_syllable_instances(stateseqs, min_duration=3, pre=30, post=60,
     syllable_instances: dict
         Dictionary mapping each syllable to a list of instances. Each
         instance is a tuple (name,start,end) representing subsequence
-        ``stateseqs[name][start:end]``.
+        `stateseqs[name][start:end]`.
     """
     num_syllables = int(max(map(max,stateseqs.values()))+1)
     syllable_instances = [[] for syllable in range(num_syllables)]
@@ -445,7 +445,7 @@ def get_edges(use_bodyparts, skeleton):
     Returns
     -------
     edges: list
-        Pairs of indexes representing the enties of ``skeleton``
+        Pairs of indexes representing the enties of `skeleton`
     """
     edges = []
     for bp1,bp2 in skeleton:
@@ -465,19 +465,19 @@ def reindex_by_bodyparts(data, bodyparts, use_bodyparts, axis=1):
         names to arrays of keypoint coordinates
 
     bodyparts: list
-        Label for each keypoint represented in ``data``
+        Label for each keypoint represented in `data`
 
     use_bodyparts: list
         Ordered subset of keypoint labels
 
     axis: int, default=1
-        The axis in ``data`` that represents keypoints. It is required
-        that ``data.shape[axis]==len(bodyparts)``. 
+        The axis in `data` that represents keypoints. It is required
+        that `data.shape[axis]==len(bodyparts)`. 
 
     Returns
     -------
     reindexed_data: ndarray or dict
-        Keypoint coordinates in the same form as ``data`` with
+        Keypoint coordinates in the same form as `data` with
         reindexing applied
     """
     ix = np.array([bodyparts.index(bp) for bp in use_bodyparts])
@@ -492,7 +492,7 @@ def get_trajectories(syllable_instances, coordinates, pre=0, post=None,
     
     If centroids and headings are provided, each trajectory
     is transformed into the ego-centric reference frame from the moment 
-    of syllable onset. When ``post`` is not None, trajectories will 
+    of syllable onset. When `post` is not None, trajectories will 
     all terminate a fixed number of frames after syllable onset. 
 
     Parameters
@@ -509,26 +509,26 @@ def get_trajectories(syllable_instances, coordinates, pre=0, post=None,
         Number of frames to include before syllable onset
 
     post: int, defualt=None
-        Determines the length of the trajectory. When ``post=None``,
+        Determines the length of the trajectory. When `post=None`,
         the trajectory terminates at the end of the syllable instance.
         Otherwise the trajectory terminates at a fixed number of frames
-        after syllable (where the number is determined by ``post``).
+        after syllable (where the number is determined by `post`).
 
     centroids: dict, default=None
-        Dictionary with the same keys as ``coordinates`` mapping each
+        Dictionary with the same keys as `coordinates` mapping each
         name to an ndarray with shape (num_frames, d)
 
     headings: dict, default=None
-        Dictionary with the same keys as ``coordinates`` mapping each
+        Dictionary with the same keys as `coordinates` mapping each
         name to a 1d array of heading angles in radians
 
     filter_size: int, default=9
-        Size of median filter applied to ``centroids`` and ``headings``
+        Size of median filter applied to `centroids` and `headings`
 
     Returns
     -------
     trajectories: list
-        List or array of trajectories (a list is used when ``post=None``, 
+        List or array of trajectories (a list is used when `post=None`, 
         else an array)
     """
     if centroids is not None and headings is not None:
@@ -579,16 +579,16 @@ def sample_instances(syllable_instances, num_samples, mode='random',
 
     pca_samples: int, default=50000
         Number of trajectories to sample when fitting a PCA model for 
-        density estimation (used when ``mode='density'``)
+        density estimation (used when `mode='density'`)
 
     pca_dim: int, default=4
         Number of principal components to use for density estimation
-        (used when ``mode='density'``)
+        (used when `mode='density'`)
 
     n_neighbors: int, defualt=50
         Number of neighbors to use for density estimation and for 
         sampling the neighbors of the examplar syllable instance
-        (used when ``mode='density'``)
+        (used when `mode='density'`)
 
     coordinates, pre, pos, centroids, heading, filter_size
         Passed to :py:func:`keypoint_moseq.util.get_trajectories`
@@ -596,7 +596,7 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     Returns
     -------
     sampled_instances: dict
-        Dictionary in the same format as ``syllable_instances`` 
+        Dictionary in the same format as `syllable_instances` 
         mapping each syllable to a list of sampled instances.
     """
     assert mode in ['random','density']
@@ -611,8 +611,8 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     
     elif mode=='density':
         assert not (coordinates is None or headings is None or centroids is None), fill(
-            '``coordinates``, ``headings`` and ``centroids`` are required when '
-            '``mode == "density"``')
+            '`coordinates`, `headings` and `centroids` are required when '
+            '`mode == "density"`')
 
         for key in coordinates.keys():
             outliers = np.isnan(coordinates[key]).any(-1)
@@ -699,7 +699,7 @@ def interpolate_keypoints(coordinates, outliers):
         
     Returns
     -------
-    interpolated_coordinates : ndarray with same shape as ``coordinates``
+    interpolated_coordinates : ndarray with same shape as `coordinates`
         Keypoint observations with outliers imputed.
     """  
     interpolated_coordinates = np.zeros_like(coordinates)
@@ -716,7 +716,7 @@ def filtered_derivative(Y_flat, ksize, axis=0):
     """
     Compute the filtered derivative of a signal along a given axis.
 
-    When ``ksize=3``, for example, the filtered derivative is
+    When `ksize=3`, for example, the filtered derivative is
 
     .. math::
 
