@@ -680,10 +680,6 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
     """
     Load tracking results from deeplabcut csv or hdf5 files.
 
-    Deeplabcut outputs tracking results in csv and/or hdf5 format. This
-    function tries to load all files ending in ``.csv`` ``.h5`` or ``.hdf5``,
-    unless a specific extension is specified by the ``extension`` argument.
-   
     Parameters
     ----------
     filepath_pattern: str or list of str
