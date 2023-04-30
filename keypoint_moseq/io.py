@@ -24,8 +24,6 @@ from keypoint_moseq.util import (
 )
 
 
-
-
 def _build_yaml(sections, comments):
     text_blocks = []
     for title,data in sections:
@@ -426,13 +424,13 @@ def format_data(coordinates, confidences=None, keys=None,
     for key in keys:
         outliers = np.isnan(coordinates[key]).any(-1)
         coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
-        confidences[key] = np.where(outliers, 0, confidences[key])
+        confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
 
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
     Y = Y.astype(float)
 
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
-    if np.nanmin(conf) < 0: 
+    if np.min(conf) < 0: 
         conf = np.maximum(conf,0) 
         warnings.warn(fill(
             'Negative confidence values are not allowed and will be set to 0.'))
