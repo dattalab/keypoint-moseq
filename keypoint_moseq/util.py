@@ -199,8 +199,7 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
         '/path/to/dir/prefix*').
 
     ext_list : list of str
-        A list of file extensions to search for, including the dot 
-        (e.g., '.txt').
+        A list of file extensions to search for.
 
     recursive : bool, default=True
         Whether to search for files recursively.
