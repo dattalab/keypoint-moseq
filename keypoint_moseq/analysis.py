@@ -15,18 +15,11 @@ from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from itertools import combinations
 
-
-
-
-from matplotlib.gridspec import GridSpec
 from tqdm import tqdm
-
-from collections import defaultdict
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 from collections import defaultdict, OrderedDict
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 from copy import deepcopy
 from cytoolz import sliding_window
-
 
 # imports for changepoint analysis
 from statsmodels.stats.multitest import fdrcorrection
@@ -37,6 +30,18 @@ from keypoint_moseq.io import format_data, load_results
 from jax_moseq.models.keypoint_slds import align_egocentric
 from jax_moseq.utils import unbatch
 na = np.newaxis
+
+# imports for syllable transitions
+import warnings
+import numpy as np
+import pandas as pd
+import networkx as nx
+from copy import deepcopy
+from tqdm.auto import tqdm
+import matplotlib.pyplot as plt
+from collections import OrderedDict
+from cytoolz import sliding_window, complement
+from matplotlib.lines import Line2D
 
 
 def compute_moseq_df(base_dir, model_name, index_file, *,fps=30, smooth_heading=True, **kwargs):
@@ -459,6 +464,7 @@ def get_tie_correction(x, N_m):
         tie_sum += np.sum(vc[vc != 1] ** 3 - vc[vc != 1])
     return tie_sum / (12.0 * (N_m - 1))
 
+
 def run_manual_KW_test(df_usage, merged_usages_all, num_groups, n_per_group, cum_group_idx, n_perm=10000, seed=0):
     """
 
@@ -521,6 +527,7 @@ def run_manual_KW_test(df_usage, merged_usages_all, num_groups, n_per_group, cum
     ), "manual KW is incorrect"
 
     return h_all, real_ranks, X_ties
+
 
 def dunns_z_test_permute_within_group_pairs(df_usage, vc, real_ranks, X_ties, N_m, group_names, rnd, n_perm):
     """
@@ -1186,7 +1193,7 @@ def generate_transition_matrices(progress_paths, normalize='bigram', syll_key = 
             label_group = [session_info['group'] for session_info in index_data['files']]
             uuids = [session_info['uuid'] for session_info in index_data['files']]
             sessions = [session_info['filename'] for session_info in index_data['files']]
-            group = list(set(label_group))
+            group = sorted(list(set(label_group)))
             print('Group(s):', ', '.join(group))
 
             results_dict = load_results(project_dir=progress_paths['base_dir'], name=progress_paths['model_name'])
