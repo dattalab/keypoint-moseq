@@ -42,3 +42,5 @@ from jax_moseq.models.keypoint_slds import (
     fit_pca, 
     init_model
 )
+from . import _version
+__version__ = _version.get_versions()['version']
