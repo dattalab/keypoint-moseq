@@ -30,7 +30,7 @@ def _update_history(history, iteration, model, include_states=True):
     return history
 
 
-def _wrapped_resample(data, model, **resample_options):
+def _wrapped_resample(data, model, pbar=None, **resample_options):
     try: 
         resample_model(data, **model, **resample_options)
     except KeyboardInterrupt: 
@@ -40,9 +40,11 @@ def _wrapped_resample(data, model, **resample_options):
     any_nans, nan_info, messages = check_for_nans(model)
     
     if any_nans:
-        print('Early termination of fitting: NaNs encountered')
-        for msg in messages: print('  - {}'.format(msg))
-        print('\nFor additional information, see https://keypoint-moseq.readthedocs.io/en/latest/troubleshooting.html#nans-during-fitting')
+        if pbar is not None: pbar.close()
+        warning_text = ['\nEarly termination of fitting: NaNs encountered']
+        for msg in messages: warning_text.append('  - {}'.format(msg))
+        warning_text.append('\nFor additional information, see https://keypoint-moseq.readthedocs.io/en/latest/troubleshooting.html#nans-during-fitting')
+        warnings.warn('\n'.join(warning_text))
         raise StopResampling()
     
     return model
@@ -53,7 +55,7 @@ def fit_model(model,
               labels,
               start_iter=0,
               history=None,
-              verbose=True,
+              verbose=False,
               num_iters=50,
               ar_only=False,
               name=None,
@@ -105,7 +107,7 @@ def fit_model(model,
 
     ar_only : bool, default=False
         If True, fit an AR-HMM model using the latent trajectory
-        defined by ``model['states']['x']`` (see 
+        defined by `model['states']['x']` (see 
         :py:func:`jax_moseq.models.arhmm.resample_model`).
         Otherwise fit a full keypoint-SLDS model
         (see :py:func:`jax_moseq.models.keypoint_slds.resample_model`)
@@ -115,8 +117,8 @@ def fit_model(model,
         date and time.
 
     project_dir : str, default=None
-        Project directory; required if ``save_every_n_iters>0`` or
-        ``save_progress_figs=True``.
+        Project directory; required if `save_every_n_iters>0` or
+        `save_progress_figs=True`.
 
     save_data : bool, default=True
         If True, include the data in the checkpoint.
@@ -128,20 +130,20 @@ def fit_model(model,
         If True, include the model's history in the checkpoint.
 
     save_every_n_iters : int, default=10
-        Save a checkpoint every ``save_every_n_iters``
+        Save a checkpoint every `save_every_n_iters`
 
     history_every_n_iters : int, default=10
-        Update the model's history every ``history_every_n_iters``. E.g.,
-        if ``history_every_n_iters=10``, the history will contain snapshots 
-        from iterations 0, 10, 20, etc. If ``history_every_n_iters=0``, no
+        Update the model's history every `history_every_n_iters`. E.g.,
+        if `history_every_n_iters=10`, the history will contain snapshots 
+        from iterations 0, 10, 20, etc. If `history_every_n_iters=0`, no
         history is saved.
 
     states_in_history : bool, default=True
         If True, include the model's states in the history.
 
     plot_every_n_iters : int, default=10
-        Plot the model's progress every ``plot_every_n_iters``. If 
-        ``plot_every_n_iters=0``, no plots are generated.
+        Plot the model's progress every `plot_every_n_iters`. If 
+        `plot_every_n_iters=0`, no plots are generated.
 
     save_progress_figs : bool, default=True
         If True, save the progress plots to disk.
@@ -155,7 +157,7 @@ def fit_model(model,
     history : dict
         Snapshots of the model over the course of fitting, represented as
         a dictionary with keys corresponding to the iteration number and
-        values corresponding to copies of the ``model`` dictionary.
+        values corresponding to copies of the `model` dictionary.
 
     name : str
         Name of the model.
@@ -163,8 +165,8 @@ def fit_model(model,
     if save_every_n_iters>0 or save_progress_figs:
         assert project_dir, fill(
             'To save checkpoints or progress plots during fitting, provide '
-            'a ``project_dir``. Otherwise set ``save_every_n_iters=0`` and '
-            '``save_progress_figs=False``')
+            'a `project_dir`. Otherwise set `save_every_n_iters=0` and '
+            '`save_progress_figs=False`')
         if name is None: 
             name = str(datetime.now().strftime('%Y_%m_%d-%H_%M_%S'))
         savedir = os.path.join(project_dir,name)
@@ -173,37 +175,39 @@ def fit_model(model,
 
     if history is None: history = {}
 
-    for iteration in tqdm.trange(start_iter, num_iters+1):
-        if history_every_n_iters>0 and (iteration%history_every_n_iters)==0:
-            history = _update_history(history, iteration, model, 
-                                     include_states=states_in_history)
-            
-        if plot_every_n_iters>0 and (iteration%plot_every_n_iters)==0:
-            plot_progress(model, data, history, iteration, name=name, 
-                          savefig=save_progress_figs, project_dir=project_dir)
+    with tqdm.trange(start_iter, num_iters+1) as pbar:
+        for iteration in pbar:
+            if history_every_n_iters>0 and (iteration%history_every_n_iters)==0:
+                history = _update_history(history, iteration, model, 
+                                        include_states=states_in_history)
+                
+            if plot_every_n_iters>0 and (iteration%plot_every_n_iters)==0:
+                plot_progress(model, data, history, iteration, name=name, 
+                            savefig=save_progress_figs, project_dir=project_dir)
 
-        if save_every_n_iters>0 and (iteration%save_every_n_iters)==0:
-            save_checkpoint(model, data, history, labels, iteration, name=name,
-                            project_dir=project_dir,save_history=save_history, 
-                            save_states=save_states, save_data=save_data)
-            
-        try: model = _wrapped_resample(
-            data, model, ar_only=ar_only, verbose=verbose)
-        except StopResampling: break
-
+            if save_every_n_iters>0 and (iteration%save_every_n_iters)==0:
+                save_checkpoint(model, data, history, labels, iteration, name=name,
+                                project_dir=project_dir,save_history=save_history, 
+                                save_states=save_states, save_data=save_data)
+                
+            try: model = _wrapped_resample(
+                data, model, pbar=pbar, ar_only=ar_only, verbose=verbose)
+            except StopResampling: break
 
     return model, history, name
     
     
-def resume_fitting(*, params, hypparams, labels, iteration, mask,
+def resume_fitting(*, params, hypparams, labels, iteration, mask, num_iters,
                    Y, conf, seed, noise_prior=None, states=None, **kwargs):
     """Resume fitting a model from a checkpoint."""
     
+    num_iters = num_iters + iteration
     data = jax.device_put({'Y':Y, 'mask':mask, 'conf':conf})    
     model = init_model(data, states, params, hypparams,
                        noise_prior, seed, **kwargs)
 
-    return fit_model(model, data, labels, start_iter=iteration+1, **kwargs)
+    return fit_model(model, data, labels, start_iter=iteration+1, 
+                     num_iters=num_iters, **kwargs)
 
 
 def apply_model(*, params, coordinates, confidences=None, num_iters=5, 
@@ -217,12 +221,12 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         - The model is being applied to the same data it was fit to.
             This would useful if the the data was chunked into segments
             to allow parallelization during fitting. In this case,
-            set ``use_saved_states=True`` and provide ``states``.
+            set `use_saved_states=True` and provide `states`.
         - The model is being applied to new data. In this case,
-            set ``use_saved_states=False``.
+            set `use_saved_states=False`.
 
-    Model outputs are saved to disk as a .h5 file, either at ``results_path``
-    if it is specified, or at ``{project_dir}/{name}/results.h5`` if it is not.
+    Model outputs are saved to disk as a .h5 file, either at `results_path`
+    if it is specified, or at `{project_dir}/{name}/results.h5` if it is not.
     If a .h5 file with the given path already exists, the outputs will be added
     to it. The results have the following structure::
 
@@ -255,23 +259,23 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         (e.g. 10-20) for new data.
 
     use_saved_states : bool, default=True
-        If True, and ``states`` is provided, the model will be initialized
+        If True, and `states` is provided, the model will be initialized
         with the saved states. 
 
     states : dict, default=None
         Dictionary of saved states. 
 
     mask: ndarray, default=None
-        Binary mask indicating areas of padding in ``states``
+        Binary mask indicating areas of padding in `states`
         (see :py:func:`keypoint_moseq.util.batch`).
 
     labels: list
-        Row labels ``states``
+        Row labels `states`
         (see :py:func:`keypoint_moseq.util.batch`).
 
     noise_prior : ndarray, default=None
         Prior on the noise for each observation. Should be the same shape
-        as ``states['s']``.
+        as `states['s']`.
 
     ar_only : bool, default=False
         See :py:func:`keypoint_moseq.fitting.fit_model`.
@@ -283,12 +287,12 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
         Whether to print progress updates.
 
     project_dir : str, default=None
-        Path to the project directory. Required if ``save_results=True``
-        and ``results_path=None``.
+        Path to the project directory. Required if `save_results=True`
+        and `results_path=None`.
 
     name : str, default=None
-        Name of the model. Required if ``save_results=True``
-        and ``results_path=None``.
+        Name of the model. Required if `save_results=True`
+        and `results_path=None`.
 
     results_path : str, default=None
         Optional path for saving model outputs.
@@ -297,7 +301,7 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
     -------
     results_dict : dict
         Dictionary of model outputs with the same structure as the
-        results ``.h5`` file.
+        results `.h5` file.
     """
     
     kwargs['seg_length'] = None # dont separate the data into segments
@@ -309,14 +313,14 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
     if save_results:
         if results_path is None: 
             assert project_dir is not None and name is not None, fill(
-                'The ``save_results`` option requires either a ``results_path`` '
-                'or the ``project_dir`` and ``name`` arguments')
+                'The `save_results` option requires either a `results_path` '
+                'or the `project_dir` and `name` arguments')
             results_path = os.path.join(project_dir,name,'results.h5')
      
     if use_saved_states:
         assert not (states is None or mask is None or labels is None), fill(
-            'The ``use_saved_states`` option requires the additional '
-            'arguments ``states``, ``mask`` and ``labels``')   
+            'The `use_saved_states` option requires the additional '
+            'arguments `states`, `mask` and `labels`')   
         
         if noise_prior is not None:
             noise_prior = batch(unbatch(noise_prior, labels), keys=session_names)[0]
@@ -337,10 +341,12 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=5,
     model = init_model(data, states, params, noise_prior=noise_prior, verbose=verbose, **kwargs)
     
     if num_iters>0:
-        for iteration in tqdm.trange(num_iters, desc='Applying model'):
-            try: model = _wrapped_resample(
-                    data, model, ar_only=ar_only, states_only=True, verbose=verbose)
-            except StopResampling: break
+        with tqdm.trange(num_iters, desc='Applying model') as pbar:
+            for iteration in pbar:
+                try: model = _wrapped_resample(
+                        data, model, pbar=pbar, ar_only=ar_only, 
+                        states_only=True, verbose=verbose)
+                except StopResampling: break
 
 
     nlags = model['hypparams']['ar_hypparams']['nlags']
@@ -372,7 +378,7 @@ def revert(checkpoint, iteration):
     Revert a checkpoint to an earlier iteration.
 
     The checkpoint will revert to latest iteration stored in the 
-    fitting history that is less than or equal to ``iteration``.
+    fitting history that is less than or equal to `iteration`.
     The model parameters, seed, and iteration number will be updated
     accordingly. The fitting history will be truncated to remove
     all iterations after the reverted iteration.
@@ -416,7 +422,7 @@ def update_hypparams(model_dict, **kwargs):
     Edit the hyperparameters of a model.
 
     Hyperparameters are stored as a nested dictionary in the
-    ``hypparams`` key of the model dictionary. This function
+    `hypparams` key of the model dictionary. This function
     allows the user to update the hyperparameters of a model
     by passing in keyword arguments with the same name as the
     hyperparameter. The hyperparameter will be updated if it

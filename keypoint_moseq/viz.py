@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
 from textwrap import fill
+plt.rcParams['figure.dpi'] = 100
 
 from keypoint_moseq.util import (
     get_edges, get_durations, get_frequencies, reindex_by_bodyparts,
@@ -20,7 +21,6 @@ from keypoint_moseq.io import load_results
 from jax_moseq.models.keypoint_slds import center_embedding
 
 # simple warning formatting
-plt.rcParams['figure.dpi'] = 100
 warnings.formatwarning = lambda msg, *a: str(msg)
 
 # suppress warnings from imageio
@@ -79,10 +79,10 @@ def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3,2),
 
     savefig : bool, True
         Whether to save the figure to a file. If true, the figure is 
-        saved to ``{project_dir}/pca_scree.pdf``.
+        saved to `{project_dir}/pca_scree.pdf`.
 
     project_dir : str, default=None
-        Path to the project directory. Required if ``savefig`` is True.
+        Path to the project directory. Required if `savefig` is True.
 
     fig_size : tuple, (2.5,2)
         Size of the figure in inches.
@@ -102,7 +102,7 @@ def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3,2),
     
     if savefig:
         assert project_dir is not None, fill(
-            'The ``savefig`` option requires a ``project_dir``')
+            'The `savefig` option requires a `project_dir`')
         plt.savefig(os.path.join(project_dir,'pca_scree.pdf'))
     plt.show()
     return fig
@@ -134,11 +134,11 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
 
     savefig : bool, True
         Whether to save the figure to a file. If true, the figure is
-        saved to ``{project_dir}/pcs-{xy/xz/yz}.pdf`` (``xz`` and ``yz``
+        saved to `{project_dir}/pcs-{xy/xz/yz}.pdf` (`xz` and `yz`
         are only included for 3D data).
 
     project_dir : str, default=None
-        Path to the project directory. Required if ``savefig`` is True.
+        Path to the project directory. Required if `savefig` is True.
 
     scale : float, default=0.5
         Scale factor for the perturbation of the mean pose.
@@ -198,7 +198,7 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
         
         if savefig:
             assert project_dir is not None, fill(
-                'The ``savefig`` option requires a ``project_dir``')
+                'The `savefig` option requires a `project_dir`')
             plt.savefig(os.path.join(project_dir,f'pcs-{name}.pdf'))
         plt.show()
         
@@ -211,7 +211,7 @@ def plot_syllable_frequencies(results=None, path=None, project_dir=None,
     
     Caller must provide a results dictionary, a path to a results .h5,
     or a project directory and model name, in which case the results are
-    loaded from ``{project_dir}/{name}/results.h5``.
+    loaded from `{project_dir}/{name}/results.h5`.
 
     Parameters
     ----------
@@ -220,16 +220,16 @@ def plot_syllable_frequencies(results=None, path=None, project_dir=None,
         :py:func:`keypoint_moseq.fitting.apply_model`)
 
     name: str, default=None
-        Name of the model. Required to load results if ``results`` is 
-        None and ``path`` is None. 
+        Name of the model. Required to load results if `results` is 
+        None and `path` is None. 
         
     project_dir: str, default=None
-        Project directory. Required to load results if ``results`` is 
-        None and ``path`` is None. 
+        Project directory. Required to load results if `results` is 
+        None and `path` is None. 
 
     path: str, default=None
         Path to a results file. If None, results will be loaded from
-        ``{project_dir}/{name}/results.h5``.
+        `{project_dir}/{name}/results.h5`.
 
     use_reindexed: bool, default=True
         Whether to use label syllables by their frequency rank (True) or
@@ -277,7 +277,7 @@ def plot_duration_distribution(results=None, path=None, project_dir=None,
     
     Caller must provide a results dictionary, a path to a results .h5,
     or a project directory and model name, in which case the results are
-    loaded from ``{project_dir}/{name}/results.h5``.
+    loaded from `{project_dir}/{name}/results.h5`.
 
     Parameters
     ----------
@@ -286,16 +286,16 @@ def plot_duration_distribution(results=None, path=None, project_dir=None,
         :py:func:`keypoint_moseq.fitting.apply_model`)
 
     name: str, default=None
-        Name of the model. Required to load results if ``results`` is 
-        None and ``path`` is None. 
+        Name of the model. Required to load results if `results` is 
+        None and `path` is None. 
         
     project_dir: str, default=None
-        Project directory. Required to load results if ``results`` is 
-        None and ``path`` is None. 
+        Project directory. Required to load results if `results` is 
+        None and `path` is None. 
 
     path: str, default=None
         Path to a results file. If None, results will be loaded from
-        ``{project_dir}/{name}/results.h5``.
+        `{project_dir}/{name}/results.h5`.
 
     lim: tuple, default=None
         x-axis limits as a pair of ints (in units of frames). If None,
@@ -367,10 +367,10 @@ def plot_progress(model, data, history, iteration, path=None,
     Parameters
     ----------
     model : dict
-        Model dictionary containing ``states``
+        Model dictionary containing `states`
 
     data : dict
-        Data dictionary containing ``mask``
+        Data dictionary containing `mask`
 
     history : dict
         Dictionary mapping iteration number to saved model dictionaries
@@ -380,8 +380,8 @@ def plot_progress(model, data, history, iteration, path=None,
 
     savefig : bool, default=True
         Whether to save the figure to a file. If true, the figure is
-        either saved to ``path`` or, to ``{project_dir}/{name}-progress.pdf``
-        if ``path`` is None.
+        either saved to `path` or, to `{project_dir}/{name}-progress.pdf`
+        if `path` is None.
 
     fig_size : tuple of float, default=None
         Size of the figure in inches. 
@@ -474,8 +474,8 @@ def plot_progress(model, data, history, iteration, path=None,
     if savefig:
         if path is None:
             assert name is not None and project_dir is not None, fill(
-                'The ``savefig`` option requires either a ``path`` '
-                'or a ``name`` and ``project_dir``')
+                'The `savefig` option requires either a `path` '
+                'or a `name` and `project_dir`')
             path = os.path.join(project_dir,name,'fitting_progress.pdf')
         plt.savefig(path)  
     plt.show()
@@ -545,25 +545,25 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
 
     Parameters
     ----------
-    instances: list of tuples ``(key, start, end)``
+    instances: list of tuples `(key, start, end)`
         List of syllable instances to include in the grid movie,
         where each instance is specified as a tuple with the video 
         name, start frame and end frame. The list must have length
-        ``rows*cols``. The video names must also be keys in ``videos``.
+        `rows*cols`. The video names must also be keys in `videos`.
         
     rows: int, cols : int
         Number of rows and columns in the grid movie grid
     
     videos: dict
         Dictionary mapping video names to video readers. Frames from
-        each reader should be accessible via ``__getitem__(int or slice)``
+        each reader should be accessible via `__getitem__(int or slice)`
 
     centroids: dict
-        Dictionary mapping video names to arrays of shape ``(n_frames, 2)``
+        Dictionary mapping video names to arrays of shape `(n_frames, 2)`
         with the x,y coordinates of animal centroid on each frame
 
     headings: dict
-        Dictionary mapping video names to arrays of shape ``(n_frames,)``
+        Dictionary mapping video names to arrays of shape `(n_frames,)`
         with the heading of the animal on each frame (in radians)
 
     dot_color: tuple of ints, default=(255,255,255)
@@ -585,11 +585,11 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
     coordinates: dict, default=None
         Dictionary mapping session names to keypoint coordinates as 
         ndarrays of shape (n_frames, n_bodyparts, 2). Required when
-        ``overlay_trajectory=True``
+        `overlay_trajectory=True`
 
     overlay_trajectory: bool, default=False
         Whether to overlay trajectory of keypoints on the grid movie. 
-        If True, ``coordinates`` must be provided.
+        If True, `coordinates` must be provided.
 
     overlay_options: dict, default={}
         Dictionary of options for overlaying trajectory (see
@@ -601,12 +601,12 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
 
     Returns
     -------
-    frames: array of shape ``(rows, cols, post+pre, window_size, window_size, 3)``
+    frames: array of shape `(rows, cols, post+pre, window_size, window_size, 3)`
         Array of frames in the grid movie
     """
     if overlay_trajectory:
         assert coordinates is not None, fill(
-            '``coordinates`` must be provided if ``overlay_trajectory`` is True')
+            '`coordinates` must be provided if `overlay_trajectory` is True')
 
         trajectories = get_trajectories(
             instances, coordinates, pre=pre, post=post, 
@@ -647,10 +647,10 @@ def generate_grid_movies(
     figuring out what behavior the syllable captures 
     (see :py:func:`keypoint_moseq.viz.grid_movie`). This method
     generates a grid movie for each syllable that is used sufficiently
-    often (i.e. has at least ``rows*cols`` instances with duration
-    of at least ``min_duration`` and an overall frequency of at least
-    ``min_frequency``). The grid movies are saved to ``output_dir`` if 
-    specified, or else to ``{project_dir}/{name}/grid_movies``.
+    often (i.e. has at least `rows*cols` instances with duration
+    of at least `min_duration` and an overall frequency of at least
+    `min_frequency`). The grid movies are saved to `output_dir` if 
+    specified, or else to `{project_dir}/{name}/grid_movies`.
 
     Parameters
     ----------
@@ -669,41 +669,41 @@ def generate_grid_movies(
                 ...  
             }
             
-        - ``syllables`` is required if ``use_reindexed=False``
-        - ``syllables_reindexed`` is required if ``use_reindexed=True``
-        - ``centroid`` is always required
-        - ``heading`` is always required
+        - `syllables` is required if `use_reindexed=False`
+        - `syllables_reindexed` is required if `use_reindexed=True`
+        - `centroid` is always required
+        - `heading` is always required
 
-        If ``results=None``, results will be loaded using either 
-        ``results_path`` or  ``project_dir`` and ``name``.
+        If `results=None`, results will be loaded using either 
+        `results_path` or  `project_dir` and `name`.
 
     output_dir: str, default=None
         Directory where grid movies should be saved. If None, grid
-        movies will be saved to ``{project_dir}/{name}/grid_movies``.
+        movies will be saved to `{project_dir}/{name}/grid_movies`.
 
     name: str, default=None
-        Name of the model. Required to load results if ``results`` is 
-        None and ``results_path`` is None. Required to save grid movies 
-        if ``output_dir`` is None.
+        Name of the model. Required to load results if `results` is 
+        None and `results_path` is None. Required to save grid movies 
+        if `output_dir` is None.
         
     project_dir: str, default=None
-        Project directory. Required to load results if ``results`` is 
-        None and ``results_path`` is None. Required to save grid movies 
-        if ``output_dir`` is None.
+        Project directory. Required to load results if `results` is 
+        None and `results_path` is None. Required to save grid movies 
+        if `output_dir` is None.
 
     results_path: str, default=None
         Path to a results file. If None, results will be loaded from
-        ``{project_dir}/{name}/results.h5``.
+        `{project_dir}/{name}/results.h5`.
 
     video_dir: str, default=None
         Directory containing videos of the modeled data (see 
         :py:func:`keypoint_moseq.io.find_matching_videos`). If None,
-        a dictionary of ``video_paths`` must be provided.
+        a dictionary of `video_paths` must be provided.
 
     video_paths: dict, default=None
         Dictionary mapping session names to video paths. The session 
-        names must correspond to keys in ``results['syllables']``. If
-        None, a ``video_dir`` must be provided.
+        names must correspond to keys in `results['syllables']`. If
+        None, a `video_dir` must be provided.
 
     filter_size: int, default=9
         Size of the median filter applied to centroids and headings
@@ -727,18 +727,18 @@ def generate_grid_movies(
     coordinates: dict, default=None
         Dictionary mapping session names to keypoint coordinates as 
         ndarrays of shape (n_frames, n_bodyparts, 2). Required when
-        ``overlay_trajectory=True``, and for density-based sampling 
-        (i.e. when ``sampling_options['mode']=='density'``; see 
+        `overlay_trajectory=True`, and for density-based sampling 
+        (i.e. when `sampling_options['mode']=='density'`; see 
         :py:func:`keypoint_moseq.util.sample_instances`).
 
     bodyparts: list of str, default=None
-        List of bodypart names in ``coordinates``. Required when 
-        ``coordinates`` is provided and bodyparts were reindexed 
+        List of bodypart names in `coordinates`. Required when 
+        `coordinates` is provided and bodyparts were reindexed 
         for modeling. 
 
     use_bodyparts: list of str, default=None
         Ordered list of bodyparts used for modeling. Required when 
-        ``coordinates`` is provided and bodyparts were reindexed 
+        `coordinates` is provided and bodyparts were reindexed 
         for modeling. 
 
     skeleton : list, default=[]
@@ -747,7 +747,7 @@ def generate_grid_movies(
 
     overlay_trajectory: bool, default=False
         Whether to overlay trajectory of keypoints on the grid movie. 
-        If True, ``coordinates`` must be provided.
+        If True, `coordinates` must be provided.
 
     overlay_options: dict, default={}
         Dictionary of options for overlaying trajectory (see
@@ -768,16 +768,16 @@ def generate_grid_movies(
         Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
     """
     assert (video_dir is not None) or (video_paths is not None), fill(
-        'You must provide either ``video_dir`` or ``video_paths``') 
+        'You must provide either `video_dir` or `video_paths`') 
 
     if overlay_trajectory:
         assert coordinates is not None, fill(
-            '``coordinates`` must be provided if ``overlay_trajectory`` is True')     
+            '`coordinates` must be provided if `overlay_trajectory` is True')     
     
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
-            'Either specify the ``output_dir`` where grid movies should '
-            'be saved or include a ``project_dir`` and ``name``')
+            'Either specify the `output_dir` where grid movies should '
+            'be saved or include a `project_dir` and `name`')
         output_dir = os.path.join(project_dir,name, 'grid_movies')
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     print(f'Writing grid movies to {output_dir}')
@@ -823,7 +823,7 @@ def generate_grid_movies(
         if isinstance(skeleton[0][0],str):
             assert use_bodyparts is not None, fill(
                 'If skeleton edges are specified using bodypart names, '
-                '``use_bodyparts`` must be specified')
+                '`use_bodyparts` must be specified')
             plot_options['edges'] = get_edges(use_bodyparts, skeleton)
         else: plot_options['edges'] = skeleton
     
@@ -847,7 +847,7 @@ def get_limits(coordinates, pctl=1, blocksize=None,
     Get axis limits based on the coordinates of all keypoints.
 
     For each axis, limits are determined using the percentiles
-    ``pctl`` and ``100-pctl`` and then padded by ``padding``.
+    `pctl` and `100-pctl` and then padded by `padding`.
 
     Parameters
     ----------
@@ -860,7 +860,7 @@ def get_limits(coordinates, pctl=1, blocksize=None,
 
     blocksize: int, default=None
         Axis limits are cast to integers and padded so that the width
-        and height are multiples of ``blocksize``. This is useful
+        and height are multiples of `blocksize`. This is useful
         when they are used for generating cropped images for a video. 
         
     left, right, top, bottom: float, default=0.1
@@ -869,7 +869,7 @@ def get_limits(coordinates, pctl=1, blocksize=None,
     Returns
     -------
     lims: ndarray of shape (2,dim)
-        Axis limits, in the format ``[[xmin,ymin,...],[xmax,ymax,...]]``.
+        Axis limits, in the format `[[xmin,ymin,...],[xmax,ymax,...]]`.
     """
     if isinstance(coordinates, dict):
         X = np.concatenate(list(coordinates.values())).reshape(-1,2)
@@ -933,14 +933,14 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
     lims: ndarray
         Axis limits used for all the trajectory plots. The limits 
         should be provided as an array of shape (2,2) with the format
-        ``[[xmin,ymin],[xmax,ymax]]``.
+        `[[xmin,ymin],[xmax,ymax]]`.
 
     n_cols: int, default=4
         Number of columns in the figure (used when plotting multiple
         trajectories).
 
     invert: bool, default=False
-        Determines the background color of the figure. If ``True``,
+        Determines the background color of the figure. If `True`,
         the background will be black.
 
     keypoint_colormap : str or list
@@ -963,12 +963,12 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
 
     plot_width: int, default=4
         Width of each trajectory plot in inches. The height  is 
-        determined by the aspect ratio of ``lims``. The final figure 
-        width is ``fig_width * min(n_cols, len(X))``.
+        determined by the aspect ratio of `lims`. The final figure 
+        width is `fig_width * min(n_cols, len(X))`.
 
     overlap: tuple of float, default=(0.2,0)
         Amount of overlap between each trajectory plot as a tuple 
-        with the format ``(x_overlap, y_overlap)``. The values should
+        with the format `(x_overlap, y_overlap)`. The values should
         be between 0 and 1.
         
     return_rasters: bool, default=False
@@ -1071,15 +1071,15 @@ def generate_trajectory_plots(
     trajectory through latent space associated with a given syllable.
     A separate figure (and gif, optionally) is saved for each syllable, 
     along with a single figure showing all syllables in a grid. The 
-    plots are saved to ``{output_dir}`` if it is provided, otherwise 
-    they are saved to ``{project_dir}/{name}/trajectory_plots``.
+    plots are saved to `{output_dir}` if it is provided, otherwise 
+    they are saved to `{project_dir}/{name}/trajectory_plots`.
 
     Parameters
     ----------
     coordinates : dict, default=None
         Dictionary mapping session names to keypoint coordinates as 
         ndarrays of shape (n_frames, n_bodyparts, 2). Required if
-        ``use_estimated_coords=False``.
+        `use_estimated_coords=False`.
 
     results: dict, default=None
         Dictionary containing modeling results for a dataset (see
@@ -1097,32 +1097,32 @@ def generate_trajectory_plots(
                 ...  
             }
             
-        - ``syllables`` is required if ``use_reindexed=False``
-        - ``syllables_reindexed`` is required if ``use_reindexed=True``
-        - ``centroid`` is always required
-        - ``heading`` is always required
-        - ``estimated_coordinates`` is required if ``use_estimated_coords=True``
+        - `syllables` is required if `use_reindexed=False`
+        - `syllables_reindexed` is required if `use_reindexed=True`
+        - `centroid` is always required
+        - `heading` is always required
+        - `estimated_coordinates` is required if `use_estimated_coords=True`
 
-        If ``results=None``, results will be loaded using either 
-        ``results_path`` or  ``project_dir`` and ``name``.
+        If `results=None`, results will be loaded using either 
+        `results_path` or  `project_dir` and `name`.
 
     output_dir: str, default=None
         Directory where trajectory plots should be saved. If None, 
-        plots will be saved to ``{project_dir}/{name}/trajectory_plots``.
+        plots will be saved to `{project_dir}/{name}/trajectory_plots`.
 
     name: str, default=None
-        Name of the model. Required to load results if ``results`` is 
-        None and ``results_path`` is None. Required to save trajectory
-        plots if ``output_dir`` is None.
+        Name of the model. Required to load results if `results` is 
+        None and `results_path` is None. Required to save trajectory
+        plots if `output_dir` is None.
 
     project_dir: str, default=None
-       Project directory. Required to load results if ``results`` is 
-        None and ``results_path`` is None. Required to save trajectory
-        plots if ``output_dir`` is None.
+       Project directory. Required to load results if `results` is 
+        None and `results_path` is None. Required to save trajectory
+        plots if `output_dir` is None.
 
     results_path: str, default=None
         Path to a results file. If None, results will be loaded from
-        ``{project_dir}/{name}/results.h5``.
+        `{project_dir}/{name}/results.h5`.
 
     pre: int, default=5, post: int, default=15
         Defines the temporal window around syllable onset for 
@@ -1142,7 +1142,7 @@ def generate_trajectory_plots(
         the most frequent syllable).
 
     bodyparts: list of str, default=None
-        List of bodypart names in ``coordinates``. 
+        List of bodypart names in `coordinates`. 
 
     use_bodyparts: list of str, default=None
         Ordered list of bodyparts to include in trajectory plot.
@@ -1154,8 +1154,8 @@ def generate_trajectory_plots(
 
     num_samples: int, default=40
         Number of samples to used to compute the average trajectory.
-        Also used to set ``n_neighbors`` when sampling syllable instances
-        in ``density`` mode. 
+        Also used to set `n_neighbors` when sampling syllable instances
+        in `density` mode. 
 
     keypoint_colormap : str
         Name of a matplotlib colormap to use for coloring the keypoints.
@@ -1185,7 +1185,7 @@ def generate_trajectory_plots(
         
     fps: int, default=30
         Framerate of the videos from which keypoints were derived.
-        Used to set the framerate of gifs when ``save_gif=True``.
+        Used to set the framerate of gifs when `save_gif=True`.
         
     projection_planes: list (subset of ['xy', 'yz', 'xz']), default=['xy','xz']
         For 3D data, defines the 2D plane(s) on which to project keypoint 
@@ -1195,8 +1195,8 @@ def generate_trajectory_plots(
     """
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
-            'Either specify the ``output_dir`` where trajectory plots '
-            'should be saved or include a ``project_dir`` and ``name``')
+            'Either specify the `output_dir` where trajectory plots '
+            'should be saved or include a `project_dir` and `name`')
         output_dir = os.path.join(project_dir,name, 'trajectory_plots')
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     print(f'Saving trajectory plots to {output_dir}')
@@ -1241,7 +1241,7 @@ def generate_trajectory_plots(
         if isinstance(skeleton[0][0],str):
             assert use_bodyparts is not None, fill(
                 'If skeleton edges are specified using bodypart names, '
-                '``use_bodyparts`` must be specified')
+                '`use_bodyparts` must be specified')
             edges = get_edges(use_bodyparts, skeleton)
         else: edges = skeleton
 
@@ -1277,9 +1277,9 @@ def generate_trajectory_plots(
                 plt.close(fig=fig)
 
                 if save_gifs:
-                    use_fps = len(rasters)/(pre+post)*fps
+                    frame_duration = int(1000 * (pre+post) / len(rasters) / fps)
                     path = os.path.join(output_dir, f'{title}{suffix}.gif')
-                    imageio.mimsave(path, rasters, fps=use_fps)
+                    imageio.mimsave(path, rasters, duration=frame_duration)
                 if save_mp4s:
                     use_fps = len(rasters)/(pre+post)*fps
                     path = os.path.join(output_dir, f'{title}{suffix}.mp4')
@@ -1296,9 +1296,9 @@ def generate_trajectory_plots(
         plt.show()
 
         if save_gifs:
-            use_fps = len(rasters)/(pre+post)*fps
+            frame_duration = int(1000 * (pre+post) / len(rasters) / fps)
             path = os.path.join(output_dir, f'all_trajectories{suffix}.gif')
-            imageio.mimsave(path, rasters, fps=use_fps)
+            imageio.mimsave(path, rasters, duration=frame_duration)
         if save_mp4s:
             use_fps = len(rasters)/(pre+post)*fps
             path = os.path.join(output_dir, f'all_trajectories{suffix}.mp4')
@@ -1308,7 +1308,7 @@ def generate_trajectory_plots(
 
 def overlay_keypoints_on_image(
     image, coordinates, edges=[], keypoint_colormap='autumn',
-    node_size=3, line_width=2, copy=False, opacity=1.0):
+    node_size=2, line_width=1, copy=False, opacity=1.0):
     """
     Overlay keypoints on an image.
 
@@ -1372,7 +1372,7 @@ def overlay_keypoints_on_image(
 
 def overlay_trajectory_on_video(
         frames, trajectory, smoothing_kernel=1, highlight=None, 
-        min_opacity=0.2, max_opacity=1, num_ghosts=10, interval=2, 
+        min_opacity=0.2, max_opacity=1, num_ghosts=5, interval=2, 
         plot_options={}):
     
     """
@@ -1415,15 +1415,15 @@ def overlay_keypoints_on_video(
         pair of bodypart names or a pair of indexes.
 
     bodyparts: list of str, default=None
-        List of bodypart names in ``coordinates``. Required if
-        ``skeleton`` is defined using bodypart names.
+        List of bodypart names in `coordinates`. Required if
+        `skeleton` is defined using bodypart names.
 
     use_bodyparts: list of str, default=None
         Subset of bodyparts to plot. If None, all bodyparts are plotted.
 
     output_path: str, default=None
         Path to save the video. If None, the video is saved to
-        ``video_path`` with the suffix ``_keypoints``.
+        `video_path` with the suffix `_keypoints`.
 
     show_frame_numbers: bool, default=True
         Whether to overlay the frame number in the video.
@@ -1493,7 +1493,7 @@ def overlay_keypoints_on_video(
 
 
 def crowd_movie(
-    instances, coordinates, lims, pre=30, post=60,
+    instances, coordinates, centroids, lims, pre=30, post=60,
     edges=[], plot_options={}):
     """
     Generate a crowd movie.
@@ -1506,13 +1506,16 @@ def crowd_movie(
 
     Parameters
     ----------
-    instances: list of tuples ``(key, start, end)``
+    instances: list of tuples `(key, start, end)`
         List of syllable instances to include in the grid movie,
         where each instance is specified as a tuple with the session
         name, start frame and end frame. 
     
-    coordinates: dict of ndarray of shape (num_frames, num_keypoints, dim)
+    coordinates: dict of ndarrays of shape (num_frames, num_keypoints, dim)
         Dictionary of keypoint coordinates, where each key is a session name.
+        
+    centroids: dict of ndarrays of shape (num_frames, dim)
+        Dictionary of animal centroids, where each key is a session name.
 
     lims: array of shape (2, dim)
         Axis limits for plotting keypoints in the crowd movies. 
@@ -1529,9 +1532,9 @@ def crowd_movie(
 
     Returns
     -------
-    frames: array of shape ``(post+pre, height, width, 3)``
-        Array of frames in the grid movie. ``width`` and 
-        ``height`` are determined by ``lims``.
+    frames: array of shape `(post+pre, height, width, 3)`
+        Array of frames in the grid movie. `width` and 
+        `height` are determined by `lims`.
     """
     dim = coordinates[instances[0][0]].shape[2]
     if dim == 3: warnings.warn(fill(
@@ -1543,15 +1546,17 @@ def crowd_movie(
 
     for key, start, end in instances:
         xy = coordinates[key][start-pre:start+post,:,:2]
-        xy = (np.clip(xy, *lims[:,:2]) - lims[0,:2])
+        xy = np.clip(xy, *lims[:,:2]) - lims[0,:2]
         frames = overlay_trajectory_on_video(
             frames, xy, plot_options=plot_options)
 
         dot_radius=5
         dot_color=(255,255,255)
-        centroids = gaussian_filter1d(xy.mean(1),1,axis=0)
+        cen = centroids[key][start-pre:start+post,:2]
+        cen = gaussian_filter1d(cen,1,axis=0)
+        cen = np.clip(cen, *lims[:,:2]) - lims[0,:2]
         for i in range(pre, min(end-start+pre,pre+post)):
-            pos = (int(centroids[i,0]),int(centroids[i,1]))
+            pos = (int(cen[i,0]),int(cen[i,1]))
             frames[i] = cv2.circle(frames[i], pos, dot_radius, dot_color, -1, cv2.LINE_AA)
 
     return frames
@@ -1572,17 +1577,17 @@ def generate_crowd_movies(
     figuring out what behavior the syllable captures 
     (see :py:func:`keypoint_moseq.viz.crowd_movie`). This method
     generates a crowd movie for each syllable that is used sufficiently
-    often (i.e. has at least ``num_instances`` instances with duration
-    of at least ``min_duration`` and an overall frequency of at least
-    ``min_frequency``). The crowd movies are saved to ``output_dir`` if 
-    specified, or else to ``{project_dir}/{name}/crowd_movies``.
+    often (i.e. has at least `num_instances` instances with duration
+    of at least `min_duration` and an overall frequency of at least
+    `min_frequency`). The crowd movies are saved to `output_dir` if 
+    specified, or else to `{project_dir}/{name}/crowd_movies`.
 
     Parameters
     ----------
     coordinates: dict, default=None
         Dictionary mapping session names to keypoint coordinates as 
         ndarrays of shape (n_frames, n_bodyparts, 2). Required if
-        ``use_estimated_coords=False``.
+        `use_estimated_coords=False`.
 
     results: dict, default=None
         Dictionary containing modeling results for a dataset (see
@@ -1600,33 +1605,33 @@ def generate_crowd_movies(
                 ...  
             }
             
-        - ``syllables`` is required if ``use_reindexed=False``
-        - ``syllables_reindexed`` is required if ``use_reindexed=True``
-        - ``centroid`` is required if the sampling mode is 'density'
-        - ``heading`` is required if the sampling mode is 'density'
-        - ``estimated_coordinates`` is required if ``use_estimated_coords=True``
+        - `syllables` is required if `use_reindexed=False`
+        - `syllables_reindexed` is required if `use_reindexed=True`
+        - `centroid` is required if the sampling mode is 'density'
+        - `heading` is required if the sampling mode is 'density'
+        - `estimated_coordinates` is required if `use_estimated_coords=True`
         
 
-        If ``results=None``, results will be loaded using either 
-        ``results_path`` or  ``project_dir`` and ``name``.
+        If `results=None`, results will be loaded using either 
+        `results_path` or  `project_dir` and `name`.
 
     output_dir: str, default=None
         Directory where crowd movies should be saved. If None, 
-        movies will be saved to ``{project_dir}/{name}/crowd_movies``.
+        movies will be saved to `{project_dir}/{name}/crowd_movies`.
 
     name: str, default=None
-        Name of the model. Required to load results if ``results`` is 
-        None and ``results_path`` is None. Required to save crowd
-        movies if ``output_dir`` is None.
+        Name of the model. Required to load results if `results` is 
+        None and `results_path` is None. Required to save crowd
+        movies if `output_dir` is None.
 
     project_dir: str, default=None
-        Project directory. Required to load results if ``results`` is 
-        None and ``results_path`` is None. Required to save crowd
-        movies if ``output_dir`` is None.
+        Project directory. Required to load results if `results` is 
+        None and `results_path` is None. Required to save crowd
+        movies if `output_dir` is None.
 
     results_path: str, default=None
         Path to a results file. If None, results will be loaded from
-        ``{project_dir}/{name}/results.h5``.
+        `{project_dir}/{name}/results.h5`.
 
     num_instances: int, default=15
         Number of syllable instances per crowd movie.
@@ -1644,7 +1649,7 @@ def generate_crowd_movies(
         the most frequent syllable).
 
     bodyparts: list of str, default=None
-        List of bodypart names in ``coordinates``. 
+        List of bodypart names in `coordinates`. 
 
     use_bodyparts: list of str, default=None
         Ordered list of bodyparts to include in the crowd
@@ -1662,7 +1667,7 @@ def generate_crowd_movies(
 
     limits: array, default=None
         Axis limits for plotting keypoints in the crowd movies. If None,
-        limits will be inferred automatically from ``coordinates``.
+        limits will be inferred automatically from `coordinates`.
         
     plot_options: dict, default={}
         Dictionary of options for rendering keypoints in the crowd
@@ -1678,8 +1683,8 @@ def generate_crowd_movies(
     """    
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
-            'Either specify the ``output_dir`` where crowd movies should '
-            'be saved or include a ``project_dir`` and ``name``')
+            'Either specify the `output_dir` where crowd movies should '
+            'be saved or include a `project_dir` and `name`')
         output_dir = os.path.join(project_dir,name, 'crowd_movies')
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     print(f'Writing crowd movies to {output_dir}')
@@ -1699,19 +1704,24 @@ def generate_crowd_movies(
     if limits is None: 
         limits = get_limits(coordinates, blocksize=16)
 
-    centroids,headings = None,None
     k = list(results.keys())[0]
-    if 'centroid' in results[k]:
-        centroids = {k:v['centroid'] for k,v in results.items()}
     if 'heading' in results[k]:
         headings = {k:v['heading'] for k,v in results.items()}
+    else: headings = None
+        
+    if 'centroid' in results[k]:
+        centroids = {k:v['centroid'] for k,v in results.items()}
+    else:
+        outliers = np.any(np.isnan(coordinates), axis=2)
+        interpolated_coordinates = interpolate_keypoints(coordinates, outliers)
+        centroids = {k:v.mean(1) for k,v in interpolated_coordinates.items()}
 
     edges = []
     if len(skeleton)>0: 
         if isinstance(skeleton[0][0],str):
             assert use_bodyparts is not None, fill(
                 'If skeleton edges are specified using bodypart names, '
-                '``use_bodyparts`` must be specified')
+                '`use_bodyparts` must be specified')
             edges = get_edges(use_bodyparts, skeleton)
         else: edges = skeleton
 
@@ -1734,7 +1744,7 @@ def generate_crowd_movies(
         sampled_instances.items(), desc='Generating crowd movies'):
         
         frames = crowd_movie(
-            instances, coordinates, pre=pre, post=post,
+            instances, coordinates, centroids, pre=pre, post=post,
             edges=edges, lims=limits, plot_options=plot_options)
 
         path = os.path.join(output_dir, f'syllable{syllable}.mp4')
