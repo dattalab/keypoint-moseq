@@ -5,7 +5,7 @@ with open("README.md", 'r', encoding='utf-8') as f:
 
 setuptools.setup(
     name='keypoint-moseq',
-    version='0.0.4',
+    version='0.0.5',
     author='Caleb Weinreb',
     author_email='calebsw@gmail.com',
     include_package_data=True,
