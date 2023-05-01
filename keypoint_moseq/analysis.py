@@ -911,6 +911,7 @@ def plot_syll_stats_with_sem(stats_df, progress_paths, plot_sig = True, thresh=0
     return fig, legend
 
 
+# transition matrix
 def get_transitions(label_sequence):
     """get the syllable transitions and their locations
 
@@ -1147,6 +1148,52 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
         frequencies.append(get_syllable_statistics(
             use_labels, max_syllable=max_sylls)[0])
     return trans_mats, frequencies
+
+
+def visualize_transition_bigram(group, max_syllables, trans_mats, normalize='bigram'):
+    fig, ax = plt.subplots(1, len(group), figsize=(12, 15), sharex=False, sharey=True)
+    title_map = dict(bigram='Bigram', columns='Incoming', rows='Outgoing')
+    color_lim = max([x.max() for x in trans_mats])
+    for i, g in enumerate(group):
+        h = ax[i].imshow(trans_mats[i][:max_syllables,:max_syllables], cmap='cubehelix', vmax=color_lim)
+        if i == 0:
+            ax[i].set_ylabel('Incoming syllable')
+            plt.yticks(np.arange(0, max_syllables, 4))
+        cb = fig.colorbar(h, ax=ax[i], fraction=0.046, pad=0.04)
+        cb.set_label(f'{title_map[normalize]} transition probability')
+        ax[i].set_xlabel('Outgoing syllable')
+        ax[i].set_title(g)
+        ax[i].set_xticks(np.arange(0, max_syllables, 4))
+
+
+def generate_transition_matrices(progress_paths, normalize='bigram', syll_key = 'syllables_reindexed'):
+    
+    trans_mats, usages = None, None
+    # get max syllable labels
+    if progress_paths.get('grid_movie_dir') is None or progress_paths.get('index_file') is None:
+        print('No syllable movies or index file found. Please generate syllable movies and the index file first, and make sure the paths are recorded in progress.yaml.')
+    else:
+        # get the number of max syllable to include
+        max_syllables = len(os.listdir(progress_paths.get('grid_movie_dir')))
+        if max_syllables == 0:
+            print('No syllable movies found. Please generate syllable moives and make sure the path is recorded in progress.yaml.')
+        else:
+            print('maximum syllable to include:', max_syllables)
+            # get session info from index file
+            index_file = progress_paths.get('index_file')
+            with open(index_file, 'r') as f:
+                index_data = yaml.safe_load(f)
+            label_group = [session_info['group'] for session_info in index_data['files']]
+            uuids = [session_info['uuid'] for session_info in index_data['files']]
+            sessions = [session_info['filename'] for session_info in index_data['files']]
+            group = list(set(label_group))
+            print('Group(s):', ', '.join(group))
+
+            results_dict = load_results(project_dir=progress_paths['base_dir'], name=progress_paths['model_name'])
+            model_labels = [results_dict[session][syll_key] for session in sessions]
+            trans_mats, usages = get_group_trans_mats(model_labels, label_group, group, max_sylls=max_syllables, normalize=normalize)
+            visualize_transition_bigram(group, max_syllables, trans_mats, normalize=normalize)
+    return trans_mats, usages
 
 
 def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts,
