@@ -53,13 +53,14 @@ def generate_config(project_dir, **kwargs):
     def _update_dict(new, original):
         return {k:new[k] if k in new else v for k,v in original.items()} 
     
-    hypperams = {k: _update_dict(kwargs,v) for k,v in {
+    hypperams = _update_dict(kwargs, {
         'error_estimator': {'slope':-.5, 'intercept':.25},
         'obs_hypparams': {'sigmasq_0':0.1, 'sigmasq_C':.1, 'nu_sigma':1e5, 'nu_s':5},
         'ar_hypparams': {'latent_dim': 10, 'nlags': 3, 'S_0_scale': 0.01, 'K_0_scale': 10.0},
         'trans_hypparams': {'num_states': 100, 'gamma': 1e3, 'alpha': 5.7, 'kappa': 1e6},
-        'cen_hypparams': {'sigmasq_loc': 0.5}
-    }.items()}
+        'cen_hypparams': {'sigmasq_loc': 0.5}})
+    
+    hypperams = {k : _update_dict(kwargs, v) for k,v in hypperams.items()}
 
     anatomy = _update_dict(kwargs, {
         'bodyparts': ['BODYPART1','BODYPART2','BODYPART3'],
