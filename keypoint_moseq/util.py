@@ -219,6 +219,9 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
         # make sure extensions all start with "." and are lowercase
         ext_list = ['.'+ext.strip('.').lower() for ext in ext_list]
         
+        if os.path.isdir(filepath_pattern):
+            filepath_pattern = os.path.join(filepath_pattern,'*')
+
         # find all matches (recursively)
         matches = glob.glob(filepath_pattern)
         if recursive:
