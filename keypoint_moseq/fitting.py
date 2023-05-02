@@ -210,7 +210,174 @@ def resume_fitting(*, params, hypparams, labels, iteration, mask, num_iters,
                      num_iters=num_iters, **kwargs)
 
 
-def apply_model(*, params, coordinates, confidences=None, num_iters=5, 
+
+def extract_results(*, params, states, labels, save_results=True, 
+                    project_dir=None, name=None, results_path=None, 
+                    **kwargs): 
+    """
+    Extract model outputs and [optionally] save them to disk.
+
+    Model outputs are saved to disk as a .h5 file, either at `results_path`
+    if it is specified, or at `{project_dir}/{name}/results.h5` if it is not.
+    If a .h5 file with the given path already exists, the outputs will be added
+    to it. The results have the following structure::
+
+        results.h5
+        ├──session_name1
+        │  ├──syllables             # model state sequence (z), shape=(T,)
+        │  ├──syllables_reindexed   # states reindexed by frequency, shape=(T,)
+        │  ├──estimated_coordinates # model predicted coordinates, shape=(T,n_keypoints,dim)
+        │  ├──latent_state          # model latent state (x), shape=(T,latent_dim)
+        │  ├──centroid              # model centroid (v), shape=(T,dim)
+        │  └──heading               # model heading (h), shape=(T,)
+        ⋮
+
+    Parameters
+    ----------
+    params : dict
+        Model parameters.
+
+    states : dict, default=None
+        Dictionary of saved states. 
+
+    labels: list
+        Row labels for `states`
+        (see :py:func:`keypoint_moseq.util.batch`).
+
+    save_results : bool, default=True
+        If True, the model outputs will be saved to disk.
+        
+    project_dir : str, default=None
+        Path to the project directory. Required if `save_results=True`
+        and `results_path=None`.
+
+    name : str, default=None
+        Name of the model. Required if `save_results=True`
+        and `results_path=None`.
+
+    results_path : str, default=None
+        Optional path for saving model outputs.
+
+    Returns
+    -------
+    results_dict : dict
+        Dictionary of model outputs with the same structure as the
+        results `.h5` file.
+    """
+    if save_results:
+        if results_path is None: 
+            assert project_dir is not None and name is not None, fill(
+                'The `save_results` option requires either a `results_path` '
+                'or the `project_dir` and `name` arguments')
+            results_path = os.path.join(project_dir,name,'results.h5')
+
+    # estimate keypoint coords from latent state, centroid and heading
+    estimated_coords = jax.device_get(estimate_coordinates(**states, **params))
+    states = jax.device_get(states)
+    
+    # extract syllables; repeat first syllable an extra `nlags` times
+    nlags = states['x'].shape[1] - states['z'].shape[1]
+    lagged_labels = [(key,start+nlags,end) for key,start,end in labels]
+    syllables = unbatch(states['z'], lagged_labels)
+    syllables = {k: np.pad(z[nlags:], (nlags,0), mode='edge') for k,z in syllables.items()}
+    syllables_reindexed = reindex_by_frequency(syllables)
+    
+    # extract estimated coords, latent state, centroid, and heading
+    estimated_coords = unbatch(estimated_coords, labels)
+    latent_state = unbatch(states['x'], labels)
+    centroid = unbatch(states['v'], labels)
+    heading = unbatch(states['h'], labels)
+
+    results_dict = {
+        session_name : {
+            'syllables' : syllables[session_name],
+            'syllables_reindexed' : syllables_reindexed[session_name],
+            'estimated_coordinates' : estimated_coords[session_name],
+            'latent_state' : latent_state[session_name],
+            'centroid' : centroid[session_name],
+            'heading' : heading[session_name]
+        } for session_name in syllables.keys()}
+    
+    if save_results: 
+        save_hdf5(results_path, results_dict)
+        print(fill(f'Saved results to {results_path}'))
+        
+    return results_dict
+
+
+def apply_model(*, params, coordinates, confidences=None, num_iters=20, 
+                ar_only=False, save_results=True, verbose=False,
+                project_dir=None, name=None, results_path=None, **kwargs): 
+    """
+    Apply a model to new data.
+
+    Parameters
+    ----------
+    params : dict
+        Model parameters.
+
+    coordinates: dict
+        Dictionary mapping filenames to keypoint coordinates as ndarrays
+        of shape (n_frames, n_bodyparts, 2)
+
+    confidences: dict, default=None
+        Dictionary mapping filenames to keypoint confidences as ndarrays
+        of shape (n_frames, n_bodyparts)
+
+    num_iters : int, default=20
+        Number of iterations to run the model. 
+
+    ar_only : bool, default=False
+        See :py:func:`keypoint_moseq.fitting.fit_model`.
+
+    save_results : bool, default=True
+        If True, the model outputs will be saved to disk (see 
+        :py:func:`keypoint_moseq.fitting.extract_results` for
+        the output format).
+
+    verbose : bool, default=False
+        Whether to print progress updates.
+
+    project_dir : str, default=None
+        Path to the project directory. Required if `save_results=True`
+        and `results_path=None`.
+
+    name : str, default=None
+        Name of the model. Required if `save_results=True`
+        and `results_path=None`.
+
+    results_path : str, default=None
+        Optional path for saving model outputs.
+
+    Returns
+    -------
+    results_dict : dict
+        Dictionary of model outputs (for results format, see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
+    """
+    if save_results:
+        if results_path is None: 
+            assert project_dir is not None and name is not None, fill(
+                'The `save_results` option requires either a `results_path` '
+                'or the `project_dir` and `name` arguments')
+            results_path = os.path.join(project_dir,name,'results.h5')
+     
+    data, labels = format_data(coordinates, confidences=confidences, **kwargs)
+    model = init_model(data=data, params=params, verbose=verbose, **kwargs)
+
+    with tqdm.trange(num_iters, desc='Applying model') as pbar:
+        for iteration in pbar:
+            try: model = _wrapped_resample(
+                    data, model, pbar=pbar, ar_only=ar_only, 
+                    states_only=True, verbose=verbose)
+            except StopResampling: break
+
+    return extract_results(
+        **model, labels=labels, save_results=save_results, name=name,
+        project_dir=project_dir, results_path=results_path)
+
+
+def apply_model_original(*, params, coordinates, confidences=None, num_iters=5, 
                 use_saved_states=True, states=None, mask=None, labels=None, 
                 noise_prior=None, ar_only=False, save_results=True, verbose=False,
                 project_dir=None, name=None, results_path=None, **kwargs): 

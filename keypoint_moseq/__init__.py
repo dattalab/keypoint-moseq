@@ -13,6 +13,8 @@ from .fitting import (
     revert, 
     fit_model, 
     apply_model, 
+    extract_results,
+    apply_model_original,
     resume_fitting, 
     update_hypparams,
 )
