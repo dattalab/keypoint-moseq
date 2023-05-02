@@ -30,6 +30,7 @@ setuptools.setup(
         'pandas',
         'tables',
         'jax-moseq',
+        'networkx',
         'qgrid==1.3.1',
         'ipywidgets==7.5.1',
         'jupyter_nbextensions_configurator'
