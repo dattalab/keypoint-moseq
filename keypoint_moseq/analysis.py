@@ -1162,8 +1162,10 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
     return trans_mats, frequencies
 
 
-def visualize_transition_bigram(group, max_syllables, trans_mats, normalize='bigram'):
+def visualize_transition_bigram(group, trans_mats, normalize='bigram'):
 
+    # infer max_syllables
+    max_syllables = trans_mats[0].shape[0]
     fig, ax = plt.subplots(1, len(group), figsize=(12, 15), sharex=False, sharey=True)
     title_map = dict(bigram='Bigram', columns='Incoming', rows='Outgoing')
     color_lim = max([x.max() for x in trans_mats])
@@ -1205,7 +1207,6 @@ def generate_transition_matrices(progress_paths, normalize='bigram', syll_key = 
             results_dict = load_results(project_dir=progress_paths['base_dir'], name=progress_paths['model_name'])
             model_labels = [results_dict[session][syll_key] for session in sessions]
             trans_mats, usages = get_group_trans_mats(model_labels, label_group, group, max_sylls=max_syllables, normalize=normalize)
-            visualize_transition_bigram(group, max_syllables, trans_mats, normalize=normalize)
     return trans_mats, usages, group
 
 
