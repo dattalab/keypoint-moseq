@@ -4,11 +4,12 @@ import yaml
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.lines as mlines
-
 import seaborn as sns
 import ipywidgets as widgets
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+from matplotlib.gridspec import GridSpec
+
 from bokeh.io import output_notebook, show
 from IPython.display import display
 from scipy import stats
@@ -43,6 +44,10 @@ from collections import OrderedDict
 from cytoolz import sliding_window, complement
 from matplotlib.lines import Line2D
 
+# plot transition graphs
+import networkx as nx
+from math import ceil
+from itertools import combinations
 
 def compute_moseq_df(base_dir, model_name, index_file, *,fps=30, smooth_heading=True, **kwargs):
     """compute moseq dataframe from results dict that contains all kinematic values by frame
@@ -1158,6 +1163,7 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
 
 
 def visualize_transition_bigram(group, max_syllables, trans_mats, normalize='bigram'):
+
     fig, ax = plt.subplots(1, len(group), figsize=(12, 15), sharex=False, sharey=True)
     title_map = dict(bigram='Bigram', columns='Incoming', rows='Outgoing')
     color_lim = max([x.max() for x in trans_mats])
@@ -1200,7 +1206,94 @@ def generate_transition_matrices(progress_paths, normalize='bigram', syll_key = 
             model_labels = [results_dict[session][syll_key] for session in sessions]
             trans_mats, usages = get_group_trans_mats(model_labels, label_group, group, max_sylls=max_syllables, normalize=normalize)
             visualize_transition_bigram(group, max_syllables, trans_mats, normalize=normalize)
-    return trans_mats, usages
+    return trans_mats, usages, group
+
+
+def plot_transition_graph_group(groups, trans_mats, usages, layout = 'circular', node_scaling = 2000):
+    # Figure out the number of rows for the plot
+    n_row = ceil(len(groups)/2)
+    fig, all_axes = plt.subplots(n_row, 2, figsize=(16,8*n_row))
+    ax = all_axes.flat
+
+    for i in range(len(groups)):
+        G = nx.from_numpy_array(trans_mats[i]*100)
+        widths = nx.get_edge_attributes(G, 'weight')
+        if layout =='circular':
+            pos = nx.circular_layout(G)
+        else:
+            pos = nx.spring_layout(G)
+        nodelist = G.nodes()
+        # normalize the usage values
+        sum_usages = sum(usages[i].values())
+        normalized_usages = np.array([u/sum_usages for u in usages[i].values()]) *node_scaling + 500
+        nx.draw_networkx_nodes(G,pos,
+                            nodelist=nodelist,
+                            node_size=normalized_usages,
+                            node_color='white',edgecolors='red', ax = ax[i])
+        nx.draw_networkx_edges(G,pos,
+                            edgelist = widths.keys(),
+                            width=list(widths.values()),
+                            edge_color='black', ax = ax[i], alpha = 0.6)
+        nx.draw_networkx_labels(G, pos=pos,
+                                labels=dict(zip(nodelist,nodelist)),
+                                font_color='black', ax = ax[i])
+        ax[i].set_title(groups[i])
+    # turn off the axis spines
+    for sub_ax in ax:
+        sub_ax.axis('off')
+
+def plot_transition_graph_difference(groups, trans_mats, usages, layout = 'circular', node_scaling = 3000):
+    # find combinations
+    group_combinations = list(combinations(groups, 2))
+    # create group index dict
+    group_idx_dict = {group:idx for idx, group in enumerate(groups)}
+
+    # Figure out the number of rows for the plot
+    n_row = ceil(len(group_combinations)/2)
+    fig, all_axes = plt.subplots(n_row, 2, figsize=(16,8*n_row))
+    ax = all_axes.flat
+
+    for i, pair in enumerate(group_combinations):
+        left_ind = group_idx_dict[pair[0]]
+        right_ind = group_idx_dict[pair[1]]
+        # left tm minus right tm
+        tm_diff = trans_mats[left_ind] - trans_mats[right_ind]
+        # left usage minus right usage
+        usages_diff = np.array(list(usages[left_ind].values())) - np.array(list(usages[right_ind].values()))
+        normlized_usg_abs_diff = (np.abs(usages_diff)/np.abs(usages_diff).sum())*node_scaling+500
+
+        G = nx.from_numpy_array(tm_diff * 1000)
+        if layout =='circular':
+            pos = nx.circular_layout(G)
+        else:
+            pos = nx.spring_layout(G)
+        
+        nodelist = G.nodes()
+        widths = nx.get_edge_attributes(G, 'weight')
+        
+        nx.draw_networkx_nodes(G,pos,
+                               nodelist=nodelist,
+                               node_size=normlized_usg_abs_diff,
+                               node_color='white',edgecolors=['blue' if u >0 else 'red' for u in usages_diff], ax = ax[i])
+        nx.draw_networkx_edges(G,pos,
+                               edgelist = widths.keys(),
+                               width=np.abs(list(widths.values())),
+                               edge_color=['blue' if u >0 else 'red' for u in widths.values()],
+                               ax = ax[i], alpha = 0.6)
+        nx.draw_networkx_labels(G, pos=pos,
+                                labels=dict(zip(nodelist,nodelist)),
+                                font_color='black', ax = ax[i])
+        ax[i].set_title(pair[0] + '-' + pair[1])
+    
+    # turn off the axis spines
+    for sub_ax in ax:
+        sub_ax.axis('off')
+    # add legend
+    legend_elements = [Line2D([0], [0], color='r', lw=2, label= f'Up-regulated transistion'),
+                    Line2D([0], [0], color='b', lw=2, label= f'Down-regulated transistion'),
+                    Line2D([0], [0], marker='o', color='w', label=f'Up-regulated usage',markerfacecolor='w', markeredgecolor = 'r', markersize=10),
+                    Line2D([0], [0], marker='o', color='w', label=f'Down-regulated usage',markerfacecolor='w', markeredgecolor = 'b', markersize=10)]
+    plt.legend(handles = legend_elements,bbox_to_anchor=(1.04, 3), loc='upper left', borderaxespad=0)
 
 
 def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts,
