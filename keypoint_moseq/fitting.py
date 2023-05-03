@@ -177,6 +177,11 @@ def fit_model(model,
 
     with tqdm.trange(start_iter, num_iters+1) as pbar:
         for iteration in pbar:
+
+            try: model = _wrapped_resample(
+                data, model, pbar=pbar, ar_only=ar_only, verbose=verbose)
+            except StopResampling: break
+            
             if history_every_n_iters>0 and (iteration%history_every_n_iters)==0:
                 history = _update_history(history, iteration, model, 
                                         include_states=states_in_history)
@@ -190,9 +195,7 @@ def fit_model(model,
                                 project_dir=project_dir,save_history=save_history, 
                                 save_states=save_states, save_data=save_data)
                 
-            try: model = _wrapped_resample(
-                data, model, pbar=pbar, ar_only=ar_only, verbose=verbose)
-            except StopResampling: break
+
 
     return model, history, name
     
@@ -375,169 +378,6 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
     return extract_results(
         **model, labels=labels, save_results=save_results, name=name,
         project_dir=project_dir, results_path=results_path)
-
-
-def apply_model_original(*, params, coordinates, confidences=None, num_iters=5, 
-                use_saved_states=True, states=None, mask=None, labels=None, 
-                noise_prior=None, ar_only=False, save_results=True, verbose=False,
-                project_dir=None, name=None, results_path=None, **kwargs): 
-    """
-    Apply a model to data.
-
-    There are two scenarios for applying this function:
-        - The model is being applied to the same data it was fit to.
-            This would useful if the the data was chunked into segments
-            to allow parallelization during fitting. In this case,
-            set `use_saved_states=True` and provide `states`.
-        - The model is being applied to new data. In this case,
-            set `use_saved_states=False`.
-
-    Model outputs are saved to disk as a .h5 file, either at `results_path`
-    if it is specified, or at `{project_dir}/{name}/results.h5` if it is not.
-    If a .h5 file with the given path already exists, the outputs will be added
-    to it. The results have the following structure::
-
-        results.h5
-        ├──session_name1
-        │  ├──syllables             # model state sequence (z), shape=(T,)
-        │  ├──syllables_reindexed   # states reindexed by frequency, shape=(T,)
-        │  ├──estimated_coordinates # model predicted coordinates, shape=(T,n_keypoints,dim)
-        │  ├──latent_state          # model latent state (x), shape=(T,latent_dim)
-        │  ├──centroid              # model centroid (v), shape=(T,dim)
-        │  └──heading               # model heading (h), shape=(T,)
-        ⋮
-
-    Parameters
-    ----------
-    params : dict
-        Model parameters.
-
-    coordinates: dict
-        Dictionary mapping filenames to keypoint coordinates as ndarrays
-        of shape (n_frames, n_bodyparts, 2)
-
-    confidences: dict, default=None
-        Dictionary mapping filenames to keypoint confidences as ndarrays
-        of shape (n_frames, n_bodyparts)
-
-    num_iters : int, default=5
-        Number of iterations to run the model. We recommend 5 iterations
-        for data the model has already been fit to, and a higher number
-        (e.g. 10-20) for new data.
-
-    use_saved_states : bool, default=True
-        If True, and `states` is provided, the model will be initialized
-        with the saved states. 
-
-    states : dict, default=None
-        Dictionary of saved states. 
-
-    mask: ndarray, default=None
-        Binary mask indicating areas of padding in `states`
-        (see :py:func:`keypoint_moseq.util.batch`).
-
-    labels: list
-        Row labels `states`
-        (see :py:func:`keypoint_moseq.util.batch`).
-
-    noise_prior : ndarray, default=None
-        Prior on the noise for each observation. Should be the same shape
-        as `states['s']`.
-
-    ar_only : bool, default=False
-        See :py:func:`keypoint_moseq.fitting.fit_model`.
-
-    save_results : bool, default=True
-        If True, the model outputs will be saved to disk.
-
-    verbose : bool, default=False
-        Whether to print progress updates.
-
-    project_dir : str, default=None
-        Path to the project directory. Required if `save_results=True`
-        and `results_path=None`.
-
-    name : str, default=None
-        Name of the model. Required if `save_results=True`
-        and `results_path=None`.
-
-    results_path : str, default=None
-        Optional path for saving model outputs.
-
-    Returns
-    -------
-    results_dict : dict
-        Dictionary of model outputs with the same structure as the
-        results `.h5` file.
-    """
-    
-    kwargs['seg_length'] = None # dont separate the data into segments
-    
-    data, new_labels = format_data(
-        coordinates, confidences=confidences, **kwargs)
-    session_names = [key for key,start,end in new_labels]
-
-    if save_results:
-        if results_path is None: 
-            assert project_dir is not None and name is not None, fill(
-                'The `save_results` option requires either a `results_path` '
-                'or the `project_dir` and `name` arguments')
-            results_path = os.path.join(project_dir,name,'results.h5')
-     
-    if use_saved_states:
-        assert not (states is None or mask is None or labels is None), fill(
-            'The `use_saved_states` option requires the additional '
-            'arguments `states`, `mask` and `labels`')   
-        
-        if noise_prior is not None:
-            noise_prior = batch(unbatch(noise_prior, labels), keys=session_names)[0]
-            noise_prior = np.where(data['mask'][...,None], noise_prior, 1) 
-            
-        new_states = {}
-        for k,v in jax.device_get(states).items():
-            padding = mask.shape[1] - v.shape[1]
-            v = pad_along_axis(v, (padding, 0), axis=1, value=1)
-            v = batch(unbatch(v, labels), keys=session_names)[0]
-            new_states[k] = v[:,padding:]
-        states = new_states
-        
-    else: 
-        states = None
-        noise_prior = None
-    
-    model = init_model(data, states, params, noise_prior=noise_prior, verbose=verbose, **kwargs)
-    
-    if num_iters>0:
-        with tqdm.trange(num_iters, desc='Applying model') as pbar:
-            for iteration in pbar:
-                try: model = _wrapped_resample(
-                        data, model, pbar=pbar, ar_only=ar_only, 
-                        states_only=True, verbose=verbose)
-                except StopResampling: break
-
-
-    nlags = model['hypparams']['ar_hypparams']['nlags']
-    states = jax.device_get(model['states'])                     
-    estimated_coords = jax.device_get(estimate_coordinates(
-        **model['states'], **model['params'], **data))
-    z_reindexed = reindex_by_frequency(states['z'], np.array(data['mask']))
-
-    
-    results_dict = {
-        session_name : {
-            'syllables' : np.pad(states['z'][i], (nlags,0), mode='edge')[m>0],
-            'syllables_reindexed' : np.pad(z_reindexed[i], (nlags,0), mode='edge')[m>0],
-            'estimated_coordinates' : estimated_coords[i][m>0],
-            'latent_state' : states['x'][i][m>0],
-            'centroid' : states['v'][i][m>0],
-            'heading' : states['h'][i][m>0],
-        } for i,(m,session_name) in enumerate(zip(data['mask'],session_names))}
-    
-    if save_results: 
-        save_hdf5(results_path, results_dict)
-        print(fill(f'Saved results to {results_path}'))
-        
-    return results_dict
 
 
 def revert(checkpoint, iteration):
