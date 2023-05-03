@@ -1,3 +1,10 @@
+from math import ceil
+from matplotlib.lines import Line2D
+from cytoolz import sliding_window, complement
+from collections import OrderedDict
+from tqdm.auto import tqdm
+import networkx as nx
+import warnings
 import os
 import uuid
 import yaml
@@ -33,23 +40,11 @@ from jax_moseq.utils import unbatch
 na = np.newaxis
 
 # imports for syllable transitions
-import warnings
-import numpy as np
-import pandas as pd
-import networkx as nx
-from copy import deepcopy
-from tqdm.auto import tqdm
-import matplotlib.pyplot as plt
-from collections import OrderedDict
-from cytoolz import sliding_window, complement
-from matplotlib.lines import Line2D
 
 # plot transition graphs
-import networkx as nx
-from math import ceil
-from itertools import combinations
 
-def compute_moseq_df(base_dir, model_name, index_file, *,fps=30, smooth_heading=True, **kwargs):
+
+def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading=True, **kwargs):
     """compute moseq dataframe from results dict that contains all kinematic values by frame
     Parameters
     ----------
@@ -510,8 +505,8 @@ def run_manual_KW_test(df_usage, merged_usages_all, num_groups, n_per_group, cum
     ssbn = np.zeros((n_perm, N_s))
     for i in range(num_groups):
         ssbn += (
-                perm_ranks[:, cum_group_idx[i]: cum_group_idx[i + 1]].sum(1) ** 2
-                / n_per_group[i]
+            perm_ranks[:, cum_group_idx[i]: cum_group_idx[i + 1]].sum(1) ** 2
+            / n_per_group[i]
         )
 
     # h-statistic
@@ -528,7 +523,7 @@ def run_manual_KW_test(df_usage, merged_usages_all, num_groups, n_per_group, cum
         )
     )
     assert (kr.statistic == h_all[p_i, s_i]) & (
-            kr.pvalue == p_vals[p_i, s_i]
+        kr.pvalue == p_vals[p_i, s_i]
     ), "manual KW is incorrect"
 
     return h_all, real_ranks, X_ties
@@ -564,7 +559,8 @@ def dunns_z_test_permute_within_group_pairs(df_usage, vc, real_ranks, X_ties, N_
 
         n_mice = is_i.sum() + is_j.sum()
 
-        ranks_perm = real_ranks[(is_i | is_j)][rnd.rand(n_perm, n_mice).argsort(-1)]
+        ranks_perm = real_ranks[(is_i | is_j)][rnd.rand(
+            n_perm, n_mice).argsort(-1)]
         diff = np.abs(
             ranks_perm[:, : is_i.sum(), :].mean(1)
             - ranks_perm[:, is_i.sum():, :].mean(1)
@@ -574,7 +570,8 @@ def dunns_z_test_permute_within_group_pairs(df_usage, vc, real_ranks, X_ties, N_
         # also do for real data
         group_ranks = real_ranks[(is_i | is_j)]
         real_diff = np.abs(
-            group_ranks[: is_i.sum(), :].mean(0) - group_ranks[is_i.sum():, :].mean(0)
+            group_ranks[: is_i.sum(), :].mean(
+                0) - group_ranks[is_i.sum():, :].mean(0)
         )
 
         # add to dict
@@ -605,26 +602,29 @@ def compute_pvalues_for_group_pairs(real_zs_within_group, null_zs, df_k_real, gr
     """
 
     # do empirical p-val calculation for all group permutation
-    
+
     p_vals_allperm = {}
     for pair in combinations(group_names, 2):
         p_vals_allperm[pair] = (
-                                       (null_zs[pair] > real_zs_within_group[pair]).sum(0) + 1
-                               ) / n_perm
+            (null_zs[pair] > real_zs_within_group[pair]).sum(0) + 1
+        ) / n_perm
 
     # summarize into df
     df_pval = pd.DataFrame(p_vals_allperm)
 
-    correct_p = lambda x: multipletests(x, alpha=thresh, method=mc_method)[1]
-    df_pval_corrected = df_pval.apply(correct_p, axis=1, result_type="broadcast")
+    def correct_p(x): return multipletests(
+        x, alpha=thresh, method=mc_method)[1]
+    df_pval_corrected = df_pval.apply(
+        correct_p, axis=1, result_type="broadcast")
 
     return df_pval_corrected, ((df_pval_corrected[df_k_real.is_sig] < thresh).sum(0))
 
 
-def run_kruskal(stats_df, statistic = 'frequency', n_perm =10000, seed=42, thresh=0.05, mc_method='fdr_bh'):
+def run_kruskal(stats_df, statistic='frequency', n_perm=10000, seed=42, thresh=0.05, mc_method='fdr_bh'):
     rnd = np.random.RandomState(seed=seed)
     # get grouped mean data
-    grouped_data = stats_df.pivot_table(index=["group", "uuid"], columns="syllable", values=statistic).replace(np.nan, 0).reset_index()
+    grouped_data = stats_df.pivot_table(
+        index=["group", "uuid"], columns="syllable", values=statistic).replace(np.nan, 0).reset_index()
     # compute KW constants
     vc = grouped_data.group.value_counts().loc[grouped_data.group.unique()]
     n_per_group = vc.values
@@ -694,7 +694,6 @@ def run_kruskal(stats_df, statistic = 'frequency', n_perm =10000, seed=42, thres
     df_z.index = df_z.index.set_names("syllable")
     dunn_results_df = df_z.reset_index().melt(id_vars="syllable")
 
-    
     # Get intersecting significant syllables between
     intersect_sig_syllables = {}
     for pair in df_pair_corrected_pvalues.columns.tolist():
@@ -725,7 +724,8 @@ def sort_syllables_by_stat_difference(stats_df, ctrl_group, exp_group, stat='fre
     """
 
     # Prepare DataFrame
-    mutation_df = stats_df.drop([col for col, dtype in stats_df.dtypes.items() if (dtype == 'object' and col not in ['group', 'syllable'])], axis =1).groupby(['group', 'syllable']).mean()
+    mutation_df = stats_df.drop([col for col, dtype in stats_df.dtypes.items() if (
+        dtype == 'object' and col not in ['group', 'syllable'])], axis=1).groupby(['group', 'syllable']).mean()
 
     # Get groups to measure mutation by
     control_df = mutation_df.loc[ctrl_group]
@@ -758,7 +758,7 @@ def sort_syllables_by_stat(stats_df, stat='frequency'):
         the mapping from the syllable to the new plotting label
     """
 
-    tmp = stats_df.drop([col for col, dtype in stats_df.dtypes.items() if dtype =='object'], axis=1).groupby('syllable').mean(
+    tmp = stats_df.drop([col for col, dtype in stats_df.dtypes.items() if dtype == 'object'], axis=1).groupby('syllable').mean(
     ).sort_values(by=stat, ascending=False).index
 
     # Get sorted ordering
@@ -799,7 +799,8 @@ def _validate_and_order_syll_stats_params(complete_df, stat='frequency', orderin
         if ctrl_group is None or exp_group is None or not np.all(np.isin([ctrl_group, exp_group], groups)):
             raise ValueError(
                 f'Attempting to sort by {stat} differences, but {ctrl_group} or {exp_group} not in {groups}.')
-        ordering = sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, stat=stat)
+        ordering = sort_syllables_by_stat_difference(
+            complete_df, ctrl_group, exp_group, stat=stat)
     if colors is None:
         colors = []
     if len(colors) == 0 or len(colors) != len(groups):
@@ -808,7 +809,7 @@ def _validate_and_order_syll_stats_params(complete_df, stat='frequency', orderin
     return ordering, groups, colors, figsize
 
 
-def plot_syll_stats_with_sem(stats_df, progress_paths, plot_sig = True, thresh=0.05, stat='frequency', 
+def plot_syll_stats_with_sem(stats_df, progress_paths, plot_sig=True, thresh=0.05, stat='frequency',
                              ordering='stat', groups=None, ctrl_group=None, exp_group=None, colors=None, join=False, figsize=(8, 4)):
     """plot syllable statistics with standard error of the mean
 
@@ -854,12 +855,12 @@ def plot_syll_stats_with_sem(stats_df, progress_paths, plot_sig = True, thresh=0
         if os.path.exists(syll_info_path):
             with open(syll_info_path, 'r') as f:
                 syll_info = yaml.safe_load(f)
-    
+
     # get significant syllables
     sig_sylls = None
     if plot_sig:
         # run kruskal wallis and dunn's test
-        _, _, sig_pairs = run_kruskal(stats_df, statistic = stat, thresh=thresh)
+        _, _, sig_pairs = run_kruskal(stats_df, statistic=stat, thresh=thresh)
         # plot significant syllables for control and experimental group
         if ctrl_group is not None and exp_group is not None:
             # check if the group pair is in the sig pairs dict
@@ -869,8 +870,8 @@ def plot_syll_stats_with_sem(stats_df, progress_paths, plot_sig = True, thresh=0
             else:
                 sig_sylls = sig_pairs.get((exp_group, ctrl_group))
         else:
-            print('No control or experimental group specified. Not plotting significant syllables.')
-        
+            print(
+                'No control or experimental group specified. Not plotting significant syllables.')
 
     xlabel = f'Syllables sorted by {stat}'
     if ordering == 'diff':
@@ -1166,11 +1167,13 @@ def visualize_transition_bigram(group, trans_mats, normalize='bigram'):
 
     # infer max_syllables
     max_syllables = trans_mats[0].shape[0]
-    fig, ax = plt.subplots(1, len(group), figsize=(12, 15), sharex=False, sharey=True)
+    fig, ax = plt.subplots(1, len(group), figsize=(
+        12, 15), sharex=False, sharey=True)
     title_map = dict(bigram='Bigram', columns='Incoming', rows='Outgoing')
     color_lim = max([x.max() for x in trans_mats])
     for i, g in enumerate(group):
-        h = ax[i].imshow(trans_mats[i][:max_syllables,:max_syllables], cmap='cubehelix', vmax=color_lim)
+        h = ax[i].imshow(trans_mats[i][:max_syllables,
+                         :max_syllables], cmap='cubehelix', vmax=color_lim)
         if i == 0:
             ax[i].set_ylabel('Incoming syllable')
             plt.yticks(np.arange(0, max_syllables, 4))
@@ -1181,8 +1184,8 @@ def visualize_transition_bigram(group, trans_mats, normalize='bigram'):
         ax[i].set_xticks(np.arange(0, max_syllables, 4))
 
 
-def generate_transition_matrices(progress_paths, normalize='bigram', syll_key = 'syllables_reindexed'):
-    
+def generate_transition_matrices(progress_paths, normalize='bigram', syll_key='syllables_reindexed'):
+
     trans_mats, usages = None, None
     # get max syllable labels
     if progress_paths.get('grid_movie_dir') is None or progress_paths.get('index_file') is None:
@@ -1198,60 +1201,68 @@ def generate_transition_matrices(progress_paths, normalize='bigram', syll_key = 
             index_file = progress_paths.get('index_file')
             with open(index_file, 'r') as f:
                 index_data = yaml.safe_load(f)
-            label_group = [session_info['group'] for session_info in index_data['files']]
-            uuids = [session_info['uuid'] for session_info in index_data['files']]
-            sessions = [session_info['filename'] for session_info in index_data['files']]
+            label_group = [session_info['group']
+                           for session_info in index_data['files']]
+            uuids = [session_info['uuid']
+                     for session_info in index_data['files']]
+            sessions = [session_info['filename']
+                        for session_info in index_data['files']]
             group = sorted(list(set(label_group)))
             print('Group(s):', ', '.join(group))
 
-            results_dict = load_results(project_dir=progress_paths['base_dir'], name=progress_paths['model_name'])
-            model_labels = [results_dict[session][syll_key] for session in sessions]
-            trans_mats, usages = get_group_trans_mats(model_labels, label_group, group, max_sylls=max_syllables, normalize=normalize)
+            results_dict = load_results(
+                project_dir=progress_paths['base_dir'], name=progress_paths['model_name'])
+            model_labels = [results_dict[session][syll_key]
+                            for session in sessions]
+            trans_mats, usages = get_group_trans_mats(
+                model_labels, label_group, group, max_sylls=max_syllables, normalize=normalize)
     return trans_mats, usages, group
 
 
-def plot_transition_graph_group(groups, trans_mats, usages, layout = 'circular', node_scaling = 2000):
+def plot_transition_graph_group(groups, trans_mats, usages, layout='circular', node_scaling=2000):
     # Figure out the number of rows for the plot
     n_row = ceil(len(groups)/2)
-    fig, all_axes = plt.subplots(n_row, 2, figsize=(16,8*n_row))
+    fig, all_axes = plt.subplots(n_row, 2, figsize=(16, 8*n_row))
     ax = all_axes.flat
 
     for i in range(len(groups)):
         G = nx.from_numpy_array(trans_mats[i]*100)
         widths = nx.get_edge_attributes(G, 'weight')
-        if layout =='circular':
+        if layout == 'circular':
             pos = nx.circular_layout(G)
         else:
             pos = nx.spring_layout(G)
         nodelist = G.nodes()
         # normalize the usage values
         sum_usages = sum(usages[i].values())
-        normalized_usages = np.array([u/sum_usages for u in usages[i].values()]) *node_scaling + 500
-        nx.draw_networkx_nodes(G,pos,
-                            nodelist=nodelist,
-                            node_size=normalized_usages,
-                            node_color='white',edgecolors='red', ax = ax[i])
-        nx.draw_networkx_edges(G,pos,
-                            edgelist = widths.keys(),
-                            width=list(widths.values()),
-                            edge_color='black', ax = ax[i], alpha = 0.6)
+        normalized_usages = np.array(
+            [u/sum_usages for u in usages[i].values()]) * node_scaling + 500
+        nx.draw_networkx_nodes(G, pos,
+                               nodelist=nodelist,
+                               node_size=normalized_usages,
+                               node_color='white', edgecolors='red', ax=ax[i])
+        nx.draw_networkx_edges(G, pos,
+                               edgelist=widths.keys(),
+                               width=list(widths.values()),
+                               edge_color='black', ax=ax[i], alpha=0.6)
         nx.draw_networkx_labels(G, pos=pos,
-                                labels=dict(zip(nodelist,nodelist)),
-                                font_color='black', ax = ax[i])
+                                labels=dict(zip(nodelist, nodelist)),
+                                font_color='black', ax=ax[i])
         ax[i].set_title(groups[i])
     # turn off the axis spines
     for sub_ax in ax:
         sub_ax.axis('off')
 
-def plot_transition_graph_difference(groups, trans_mats, usages, layout = 'circular', node_scaling = 3000):
+
+def plot_transition_graph_difference(groups, trans_mats, usages, layout='circular', node_scaling=3000):
     # find combinations
     group_combinations = list(combinations(groups, 2))
     # create group index dict
-    group_idx_dict = {group:idx for idx, group in enumerate(groups)}
+    group_idx_dict = {group: idx for idx, group in enumerate(groups)}
 
     # Figure out the number of rows for the plot
     n_row = ceil(len(group_combinations)/2)
-    fig, all_axes = plt.subplots(n_row, 2, figsize=(16,8*n_row))
+    fig, all_axes = plt.subplots(n_row, 2, figsize=(16, 8*n_row))
     ax = all_axes.flat
 
     for i, pair in enumerate(group_combinations):
@@ -1260,41 +1271,47 @@ def plot_transition_graph_difference(groups, trans_mats, usages, layout = 'circu
         # left tm minus right tm
         tm_diff = trans_mats[left_ind] - trans_mats[right_ind]
         # left usage minus right usage
-        usages_diff = np.array(list(usages[left_ind].values())) - np.array(list(usages[right_ind].values()))
-        normlized_usg_abs_diff = (np.abs(usages_diff)/np.abs(usages_diff).sum())*node_scaling+500
+        usages_diff = np.array(
+            list(usages[left_ind].values())) - np.array(list(usages[right_ind].values()))
+        normlized_usg_abs_diff = (
+            np.abs(usages_diff)/np.abs(usages_diff).sum())*node_scaling+500
 
         G = nx.from_numpy_array(tm_diff * 1000)
-        if layout =='circular':
+        if layout == 'circular':
             pos = nx.circular_layout(G)
         else:
             pos = nx.spring_layout(G)
-        
+
         nodelist = G.nodes()
         widths = nx.get_edge_attributes(G, 'weight')
-        
-        nx.draw_networkx_nodes(G,pos,
+
+        nx.draw_networkx_nodes(G, pos,
                                nodelist=nodelist,
                                node_size=normlized_usg_abs_diff,
-                               node_color='white',edgecolors=['blue' if u >0 else 'red' for u in usages_diff], ax = ax[i])
-        nx.draw_networkx_edges(G,pos,
-                               edgelist = widths.keys(),
+                               node_color='white', edgecolors=['blue' if u > 0 else 'red' for u in usages_diff], ax=ax[i])
+        nx.draw_networkx_edges(G, pos,
+                               edgelist=widths.keys(),
                                width=np.abs(list(widths.values())),
-                               edge_color=['blue' if u >0 else 'red' for u in widths.values()],
-                               ax = ax[i], alpha = 0.6)
+                               edge_color=[
+                                   'blue' if u > 0 else 'red' for u in widths.values()],
+                               ax=ax[i], alpha=0.6)
         nx.draw_networkx_labels(G, pos=pos,
-                                labels=dict(zip(nodelist,nodelist)),
-                                font_color='black', ax = ax[i])
+                                labels=dict(zip(nodelist, nodelist)),
+                                font_color='black', ax=ax[i])
         ax[i].set_title(pair[0] + '-' + pair[1])
-    
+
     # turn off the axis spines
     for sub_ax in ax:
         sub_ax.axis('off')
     # add legend
-    legend_elements = [Line2D([0], [0], color='r', lw=2, label= f'Up-regulated transistion'),
-                    Line2D([0], [0], color='b', lw=2, label= f'Down-regulated transistion'),
-                    Line2D([0], [0], marker='o', color='w', label=f'Up-regulated usage',markerfacecolor='w', markeredgecolor = 'r', markersize=10),
-                    Line2D([0], [0], marker='o', color='w', label=f'Down-regulated usage',markerfacecolor='w', markeredgecolor = 'b', markersize=10)]
-    plt.legend(handles = legend_elements,bbox_to_anchor=(1.04, 3), loc='upper left', borderaxespad=0)
+    legend_elements = [Line2D([0], [0], color='r', lw=2, label=f'Up-regulated transistion'),
+                       Line2D([0], [0], color='b', lw=2,
+                              label=f'Down-regulated transistion'),
+                       Line2D([0], [0], marker='o', color='w', label=f'Up-regulated usage',
+                              markerfacecolor='w', markeredgecolor='r', markersize=10),
+                       Line2D([0], [0], marker='o', color='w', label=f'Down-regulated usage', markerfacecolor='w', markeredgecolor='b', markersize=10)]
+    plt.legend(handles=legend_elements, bbox_to_anchor=(
+        1.04, 3), loc='upper left', borderaxespad=0)
 
 
 def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts,
