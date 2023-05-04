@@ -15,13 +15,15 @@ Links
 
 - `Slack workspace <https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A>`_
 
+- `License <https://github.com/dattalab/keypoint-moseq/blob/main/LICENSE.md>`_
 
 .. toctree::
    :maxdepth: 2
    :hidden:
    :caption: Setup
-
+   
    install
+   Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb>
 
 .. include:: install.rst
 
@@ -30,6 +32,11 @@ Links
 
    tutorial
    changepoints
+
+.. toctree::
+   :caption: Troubleshooting
+
+   troubleshooting
 
 .. toctree::
    :caption: API Documentation

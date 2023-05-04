@@ -1,3 +1,6 @@
+from jax import config
+config.update("jax_enable_x64", True)
+
 from .util import *
 
 from .io import *
@@ -18,6 +21,8 @@ from .viz import (
     plot_pcs, 
     plot_scree, 
     plot_progress, 
+    plot_syllable_frequencies,
+    plot_duration_distribution,
     generate_crowd_movies, 
     generate_grid_movies,
     generate_trajectory_plots,

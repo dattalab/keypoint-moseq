@@ -16,8 +16,8 @@ from textwrap import fill
 from vidio.read import OpenCVReader
 warnings.formatwarning = lambda msg, *a: str(msg)
 
+from jax_moseq.utils import batch
 from keypoint_moseq.util import (
-    batch, 
     reindex_by_bodyparts, 
     list_files_with_exts, 
     interpolate_keypoints,
@@ -38,13 +38,13 @@ def _build_yaml(sections, comments):
 
 def generate_config(project_dir, **kwargs):
     """
-    Generate a ``config.yml`` file with project settings. Default 
-    settings will be used unless overriden by a keywork argument.
+    Generate a `config.yml` file with project settings. Default 
+    settings will be used unless overriden by a keyword argument.
     
     Parameters
     ----------
     project_dir: str 
-        A file ``config.yml`` will be generated in this directory.
+        A file `config.yml` will be generated in this directory.
     
     kwargs
         Custom project settings.  
@@ -133,14 +133,14 @@ def check_config_validity(config):
     Check if the config is valid.
 
     To be valid, the config must satisfy the following criteria:
-        - All the elements of ``config["use_bodyparts"]`` are 
-          also in ``config["bodyparts"]`` 
-        - All the elements of ``config["anterior_bodyparts"]`` are
-          also in ``config["bodyparts"]`` 
-        - All the elements of ``config["anterior_bodyparts"]`` are
-          also in ``config["bodyparts"]`` 
-        - For each pair in ``config["skeleton"]``, both elements 
-          also in ``config["bodyparts"]`` 
+        - All the elements of `config["use_bodyparts"]` are 
+          also in `config["bodyparts"]` 
+        - All the elements of `config["anterior_bodyparts"]` are
+          also in `config["bodyparts"]` 
+        - All the elements of `config["anterior_bodyparts"]` are
+          also in `config["bodyparts"]` 
+        - For each pair in `config["skeleton"]`, both elements 
+          also in `config["bodyparts"]` 
 
     Parameters
     ----------
@@ -198,11 +198,11 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
         :py:func:`keypoint_moseq.io.check_config_validity`
         
     build_indexes: bool, default=True
-        Add keys ``"anterior_idxs"`` and ``"posterior_idxs"`` to the 
+        Add keys `"anterior_idxs"` and `"posterior_idxs"` to the 
         config. Each maps to a jax array indexing the elements of 
-        ``config["anterior_bodyparts"]`` and 
-        ``config["posterior_bodyparts"]`` by their order in 
-        ``config["use_bodyparts"]``
+        `config["anterior_bodyparts"]` and 
+        `config["posterior_bodyparts"]` by their order in 
+        `config["use_bodyparts"]`
 
     Returns
     -------
@@ -221,12 +221,15 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
             [config['use_bodyparts'].index(bp) for bp in config['anterior_bodyparts']])
         config['posterior_idxs'] = jnp.array(
             [config['use_bodyparts'].index(bp) for bp in config['posterior_bodyparts']])
+    
+    if not 'skeleton' in config or config['skeleton'] is None:
+        config['skeleton'] = []
         
     return config
 
 def update_config(project_dir, **kwargs):
     """
-    Update the config file stored at ``project_dir/config.yml``.
+    Update the config file stored at `project_dir/config.yml`.
      
     Use keyword arguments to update key/value pairs in the config.
     To update model hyperparameters, just use the name of the 
@@ -234,13 +237,13 @@ def update_config(project_dir, **kwargs):
 
     Examples
     --------
-    To update ``video_dir`` to ``/path/to/videos``::
+    To update `video_dir` to `/path/to/videos`::
 
       >>> update_config(project_dir, video_dir='/path/to/videos')
       >>> print(load_config(project_dir)['video_dir'])
       /path/to/videos
 
-    To update ``trans_hypparams['kappa']`` to ``100``::
+    To update `trans_hypparams['kappa']` to `100`::
 
       >>> update_config(project_dir, kappa=100)
       >>> print(load_config(project_dir)['trans_hypparams']['kappa'])
@@ -266,19 +269,19 @@ def setup_project(project_dir, deeplabcut_config=None, sleap_file=None,
         
     deeplabcut_config: str, default=None
         Path to a deeplabcut config file. Relevant settings, including
-        ``'bodyparts'``, ``'skeleton'``, ``'use_bodyparts'``, and 
-        ``'video_dir'`` will be imported from the deeplabcut config and 
+        `'bodyparts'`, `'skeleton'`, `'use_bodyparts'`, and 
+        `'video_dir'` will be imported from the deeplabcut config and 
         used to initialize the keypoint MoSeq config. (overrided by kwargs). 
 
     sleap_file: str, default=None
         Path to a sleap hdf5 file for one of the recordings to be modeled. 
-        Relevant settings, including ``'bodyparts'``, ``'skeleton'``, 
-        and ``'use_bodyparts'`` will be imported from the sleap file and used 
+        Relevant settings, including `'bodyparts'`, `'skeleton'`, 
+        and `'use_bodyparts'` will be imported from the sleap file and used 
         to initialize the keypoint MoSeq config. (overrided by kwargs). 
         
     overwrite: bool, default=False
         Overwrite any config.yml that already exists at the path
-        ``{project_dir}/config.yml``
+        `{project_dir}/config.yml`
         
     options
         Used to initialize config file. Overrides default settings
@@ -340,15 +343,15 @@ def format_data(coordinates, confidences=None, keys=None,
         1. Coordinates and confidences are each merged into a single 
            array using :py:func:`keypoint_moseq.util.batch`. 
         2. The keypoints axis is reindexed according to the order
-           of elements in ``use_bodyparts`` with respect to their 
-           initial orer in ``bodyparts``.
-        3. Uniform noise proportional to ``added_noise_level`` is
+           of elements in `use_bodyparts` with respect to their 
+           initial orer in `bodyparts`.
+        3. Uniform noise proportional to `added_noise_level` is
            added to the keypoint coordinates to prevent degenerate
            solutions during fitting. 
-        4. Keypoint confidences are augmented by ``conf_pseudocount``.
+        4. Keypoint confidences are augmented by `conf_pseudocount`.
         5. Wherever NaNs occur in the coordinates, they are replaced
            by values imputed using linear interpolation, and the
-           corresponding confidences are set to ``conf_pseudocount``.
+           corresponding confidences are set to `conf_pseudocount`.
     
     Parameters
     ----------
@@ -359,7 +362,7 @@ def format_data(coordinates, confidences=None, keys=None,
         
     confidences: dict, default=None
         Nonnegative confidence values for the keypoints in 
-        ``coordinates`` as numpy arrays of shape (T,K).
+        `coordinates` as numpy arrays of shape (T,K).
         
     keys: list of str, default=None
         (See :py:func:`keypoint_moseq.util.batch`)
@@ -368,18 +371,18 @@ def format_data(coordinates, confidences=None, keys=None,
         (See :py:func:`keypoint_moseq.util.batch`)
         
     bodyparts: list, default=None
-        Label for each keypoint represented in ``coordinates``. Required
-        to reindex coordinates and confidences according to ``use_bodyparts``.
+        Label for each keypoint represented in `coordinates`. Required
+        to reindex coordinates and confidences according to `use_bodyparts`.
 
     use_bodyparts: list, default=None
         Ordered subset of keypoint labels to be used for modeling.
-        If ``use_bodyparts=None``, then all keypoints are used.
+        If `use_bodyparts=None`, then all keypoints are used.
 
     conf_pseudocount: float, default=1e-3
         Pseudocount used to augment keypoint confidences.
     
     seg_length: int, default=None
-        Length of each segment. If ``seg_length=None``, a length is 
+        Length of each segment. If `seg_length=None`, a length is 
         chosen so that no time-series are broken into multiple segments.
         
     Returns
@@ -392,15 +395,15 @@ def format_data(coordinates, confidences=None, keys=None,
             
         conf: jax array with shape (n_segs, seg_length, K)
             Confidences from all sessions broken into fixed-length 
-            segments. If no input is provided for ``confidences``, 
-            then ``data["conf"]=None``.
+            segments. If no input is provided for `confidences`, 
+            then `data["conf"]=None`.
         
         mask: jax array with shape (n_segs, seg_length)
             Binary array where 0 indicates areas of padding 
             (see :py:func:`keypoint_moseq.util.batch`).
             
     labels: list of tuples (object, int, int)
-        Label for each row of ``Y`` and ``conf`` 
+        Label for each row of `Y` and `conf` 
         (see :py:func:`keypoint_moseq.util.batch`).
     """    
     if keys is None: 
@@ -421,13 +424,13 @@ def format_data(coordinates, confidences=None, keys=None,
     for key in keys:
         outliers = np.isnan(coordinates[key]).any(-1)
         coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
-        confidences[key] = np.where(outliers, 0, confidences[key])
+        confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
 
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
     Y = Y.astype(float)
 
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
-    if np.nanmin(conf) < 0: 
+    if np.min(conf) < 0: 
         conf = np.maximum(conf,0) 
         warnings.warn(fill(
             'Negative confidence values are not allowed and will be set to 0.'))
@@ -443,8 +446,8 @@ def save_pca(pca, project_dir, pca_path=None):
     """
     Save a PCA model to disk.
 
-    The model is saved to ``pca_path`` or else to 
-    ``{project_dir}/pca.p``.
+    The model is saved to `pca_path` or else to 
+    `{project_dir}/pca.p`.
     
     Parameters
     ----------
@@ -460,8 +463,8 @@ def load_pca(project_dir, pca_path=None):
     """
     Load a PCA model from disk.
 
-    The model is loaded from ``pca_path`` or else from 
-    ``{project_dir}/pca.p``.
+    The model is loaded from `pca_path` or else from 
+    `{project_dir}/pca.p`.
 
     Parameters
     ----------
@@ -521,8 +524,8 @@ def load_checkpoint(project_dir=None, name=None, path=None):
     """
     Load model fitting checkpoint.
 
-    The checkpoint path can be specified directly via ``path``.
-    Othewise is assumed to be ``{project_dir}/<name>/checkpoint.p``.
+    The checkpoint path can be specified directly via `path`.
+    Othewise is assumed to be `{project_dir}/<name>/checkpoint.p`.
 
     Parameters
     ----------
@@ -537,7 +540,7 @@ def load_checkpoint(project_dir=None, name=None, path=None):
     """
     if path is None: 
         assert project_dir is not None and name is not None, fill(
-            '``name`` and ``project_dir`` are required if no ``path`` is given.')
+            '`name` and `project_dir` are required if no `path` is given.')
         path = os.path.join(project_dir,name,'checkpoint.p')
     return joblib.load(path)
 
@@ -550,10 +553,10 @@ def save_checkpoint(model, data, history, labels, iteration,
 
     A single checkpoint file contains model snapshots from the full history
     of model fitting. To restart fitting from an iteration earlier than the
-    last iteration, use :py:func:`keypoint_moseq.fitting.revert``.
+    last iteration, use :py:func:`keypoint_moseq.fitting.revert`.
 
-    The checkpoint path can be specified directly via ``path``.
-    Otherwise is assumed to be ``{project_dir}/<name>/checkpoint.p``. See
+    The checkpoint path can be specified directly via `path`.
+    Otherwise is assumed to be `{project_dir}/<name>/checkpoint.p`. See
     :py:func:`keypoint_moseq.fitting.fit_model` for a more detailed
     description of the checkpoint contents.
 
@@ -569,37 +572,37 @@ def save_checkpoint(model, data, history, labels, iteration,
         Current iteration of model fitting
 
     save_history: bool, default=True
-        Whether to include ``history`` in the checkpoint
+        Whether to include `history` in the checkpoint
 
     save_states: bool, default=True
-        Whether to include ``states`` in the checkpoint
+        Whether to include `states` in the checkpoint
 
     save_data: bool, default=True
-        Whether to include ``Y``, ``conf``, and ``mask`` in the checkpoint
+        Whether to include `Y`, `conf`, and `mask` in the checkpoint
     
     project_dir: str, default=None
-        Project directory; used in conjunction with ``name`` to determine
-        the checkpoint path if ``path`` is not specified.
+        Project directory; used in conjunction with `name` to determine
+        the checkpoint path if `path` is not specified.
 
     name: str, default=None
-        Model name; used in conjunction with ``project_dir`` to determine
-        the checkpoint path if ``path`` is not specified.
+        Model name; used in conjunction with `project_dir` to determine
+        the checkpoint path if `path` is not specified.
 
     path: str, default=None
         Checkpoint path; if not specified, the checkpoint path is determined
-        from ``project_dir`` and ``name``.
+        from `project_dir` and `name`.
 
 
     Returns
     -------
     checkpoint: dict
-        Dictionary containing ``history``, ``labels`` and ``name`` as 
-        well as the key/value pairs from ``model`` and ``data``.
+        Dictionary containing `history`, `labels` and `name` as 
+        well as the key/value pairs from `model` and `data`.
     """
     
     if path is None: 
         assert project_dir is not None and name is not None, fill(
-            '``name`` and ``project_dir`` are required if no ``path`` is given.')
+            '`name` and `project_dir` are required if no `path` is given.')
         path = os.path.join(project_dir,name,'checkpoint.p')
 
     dirname = os.path.dirname(path)
@@ -636,8 +639,8 @@ def load_results(project_dir=None, name=None, path=None):
     """
     Load the results from a modeled dataset.
 
-    The results path can be specified directly via ``path``. Otherwise
-    it is assumed to be ``{project_dir}/<name>/results.h5``.
+    The results path can be specified directly via `path`. Otherwise
+    it is assumed to be `{project_dir}/<name>/results.h5`.
     
     Parameters
     ----------
@@ -652,7 +655,7 @@ def load_results(project_dir=None, name=None, path=None):
     """
     if path is None: 
         assert project_dir is not None and name is not None, fill(
-            '``name`` and ``project_dir`` are required if no ``path`` is given.')
+            '`name` and `project_dir` are required if no `path` is given.')
         path = os.path.join(project_dir,name,'results.h5')
     return load_hdf5(path)
 
@@ -661,7 +664,7 @@ def _name_from_path(filepath, path_in_name, path_sep):
     """
     Create a name from a filepath. Either return the name of the file
     (with the extension removed) or return the full filepath, where the
-    path separators are replaced with ``path_sep``.
+    path separators are replaced with `path_sep`.
     """
     filepath = os.path.splitext(filepath)[0]
     if path_in_name:
@@ -675,20 +678,16 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
     """
     Load tracking results from deeplabcut csv or hdf5 files.
 
-    Deeplabcut outputs tracking results in csv and/or hdf5 format. This
-    function tries to load all files ending in ``.csv`` ``.h5`` or ``.hdf5``,
-    unless a specific extension is specified by the ``extension`` argument.
-   
     Parameters
     ----------
     filepath_pattern: str or list of str
         Filepath pattern for a set of deeplabcut csv or hdf5 files, 
         or a list of such patterns. Filepath patterns can be:
 
-            - single file (e.g. ``/path/to/file.csv``) 
-            - single directory (e.g. ``/path/to/dir/``)
-            - set of files (e.g. ``/path/to/fileprefix*``)
-            - set of directories (e.g. ``/path/to/dirprefix*``)
+            - single file (e.g. `/path/to/file.csv`) 
+            - single directory (e.g. `/path/to/dir/`)
+            - set of files (e.g. `/path/to/fileprefix*`)
+            - set of directories (e.g. `/path/to/dirprefix*`)
 
     recursive: bool, default=True
         Whether to search recursively for deeplabcut csv or hdf5 files.
@@ -696,13 +695,13 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
     path_in_name: bool, default=False
         Whether to name the tracking results from each file by the path
         to the file (True) or just the filename (False). If True, the
-        ``path_sep`` argument is used to separate the path components.
+        `path_sep` argument is used to separate the path components.
         
     path_sep: str, default='-'
-        Separator to use when ``path_in_name`` is True. For example,
-        if ``path_sep`` is ``'-'``, then the tracking results from the
-        file ``/path/to/file.csv`` will be named ``path-to-file``. Using
-        ``'/'`` as the separator is discouraged, as it will cause problems
+        Separator to use when `path_in_name` is True. For example,
+        if `path_sep` is `'-'`, then the tracking results from the
+        file `/path/to/file.csv` will be named `path-to-file`. Using
+        `'/'` as the separator is discouraged, as it will cause problems
         saving/loading the modeling results to/from hdf5 files.
 
     return_bodyparts: bool, default=False
@@ -715,11 +714,11 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
         of shape (n_frames, n_bodyparts, 2)
 
     confidences: dict
-        Dictionary mapping filenames to ``likelihood`` scores as ndarrays
+        Dictionary mapping filenames to `likelihood` scores as ndarrays
         of shape (n_frames, n_bodyparts)
 
     bodyparts: list of str
-        List of bodypart names. Only returned if ``return_bodyparts`` is True.
+        List of bodypart names. Only returned if `return_bodyparts` is True.
     """
     filepaths = list_files_with_exts(
         filepath_pattern, ['.csv','.h5','.hdf5'], recursive=recursive)
@@ -757,10 +756,10 @@ def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
         Filepath pattern for a set of sleap hdf5 files, or a list of 
         such patterns. Filepath patterns can be:
 
-            - single file (e.g. ``/path/to/file.csv``) 
-            - single directory (e.g. ``/path/to/dir/``)
-            - set of files (e.g. ``/path/to/fileprefix*``)
-            - set of directories (e.g. ``/path/to/dirprefix*``)
+            - single file (e.g. `/path/to/file.csv`) 
+            - single directory (e.g. `/path/to/dir/`)
+            - set of files (e.g. `/path/to/fileprefix*`)
+            - set of directories (e.g. `/path/to/dirprefix*`)
 
     recursive: bool, default=True
         Whether to search recursively for sleap hdf5 files.
@@ -768,13 +767,13 @@ def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
     path_in_name: bool, default=False
         Whether to name the tracking results from each file by the path
         to the file (True) or just the filename (False). If True, the
-        ``path_sep`` argument is used to separate the path components.
+        `path_sep` argument is used to separate the path components.
         
     path_sep: str, default='-'
-        Separator to use when ``path_in_name`` is True. For example,
-        if ``path_sep`` is ``'-'``, then the tracking results from the
-        file ``/path/to/file.csv`` will be named ``path-to-file``. Using
-        ``'/'`` as the separator is discouraged, as it will cause problems
+        Separator to use when `path_in_name` is True. For example,
+        if `path_sep` is `'-'`, then the tracking results from the
+        file `/path/to/file.csv` will be named `path-to-file`. Using
+        `'/'` as the separator is discouraged, as it will cause problems
         saving/loading the modeling results to/from hdf5 files.
 
     
@@ -788,11 +787,11 @@ def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
         of shape (n_frames, n_bodyparts, 2)
 
     confidences: dict
-        Dictionary mapping filenames to ``likelihood`` scores as ndarrays
+        Dictionary mapping filenames to `likelihood` scores as ndarrays
         of shape (n_frames, n_bodyparts)
 
     bodyparts: list of str
-        List of bodypart names. Only returned if ``return_bodyparts`` is True.
+        List of bodypart names. Only returned if `return_bodyparts` is True.
     """
     filepaths = list_files_with_exts(
         filepath_pattern, ['.h5','.hdf5'], recursive=recursive)

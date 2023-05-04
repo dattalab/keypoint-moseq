@@ -19,7 +19,7 @@ def sample_error_frames(confidences, bodyparts, use_bodyparts,
         Keypoint detection confidences for a collection of sessions 
 
     bodyparts: list
-        Label for each keypoint represented in ``confidences``
+        Label for each keypoint represented in `confidences`
 
     use_bodyparts: list
         Ordered subset of keypoint labels to be used for modeling
@@ -93,7 +93,7 @@ def load_sampled_frames(sample_keys, video_dir, video_extension=None):
     Returns
     -------
     sample_keys: dict
-        Dictionary mapping elements from ``sample_keys`` to the
+        Dictionary mapping elements from `sample_keys` to the
         corresponding videos frames.
 
     """
@@ -112,7 +112,7 @@ def load_annotations(project_dir):
     Parameters
     ----------
     project_dir: str
-        Load annotations from ``{project_dir}/error_annotations.csv``
+        Load annotations from `{project_dir}/error_annotations.csv`
 
     Returns
     -------
@@ -138,7 +138,7 @@ def save_annotations(project_dir, annotations):
     Parameters
     ----------
     project_dir: str
-        Save annotations to ``{project_dir}/error_annotations.csv`` 
+        Save annotations to `{project_dir}/error_annotations.csv` 
 
     annotations: dict
         Dictionary mapping sample keys to annotated keypoint 
@@ -159,10 +159,10 @@ def save_params(project_dir, estimator):
     Parameters
     ----------
     project_dir: str
-        Save parameters ``{project_dir}/config.yml`` 
+        Save parameters `{project_dir}/config.yml` 
 
     estimator: :py:func:`holoviews.streams.Stream`
-        Stream object with fields ``conf_threshold``, ``slope``, ``intercept``
+        Stream object with fields `conf_threshold`, `slope`, `intercept`
     """
     update_config(project_dir, 
                   conf_threshold=float(estimator.conf_threshold),
@@ -374,7 +374,7 @@ def noise_calibration(project_dir, coordinates, confidences, *,
     This function creates a widget for interactive annotation in a 
     jupyter notebook. Users mark correct keypoint locations for a 
     sequence of frames, and a regression line is fit to the 
-    ``log(confidence), log(error)`` pairs obtained through annotation.
+    `log(confidence), log(error)` pairs obtained through annotation.
     The regression coefficients are used during modeling to set a 
     prior on the noise level for each keypoint on each frame. 
 
@@ -391,34 +391,34 @@ def noise_calibration(project_dir, coordinates, confidences, *,
           the scatter plot. The confidence threshold is used to define 
           outlier keypoints for PCA and model initialization.
         - Use the "save" button to store your annotations to disk and 
-          save ``slope``, ``intercept``, and ``confidence_threshold``
+          save `slope`, `intercept`, and `confidence_threshold`
           to the config.
 
 
     Parameters
     ----------
     project_dir: str
-        Project directory. Must contain a ``config.yml`` file.
+        Project directory. Must contain a `config.yml` file.
 
     coordinates: dict
         Keypoint coordinates for a collection of sessions. Values
         must be numpy arrays of shape (T,K,D) where K is the number
         of keypoints and D={2 or 3}. Keys can be any unique str,
-        but must start with the name of a videofile in ``video_dir``. 
+        but must start with the name of a videofile in `video_dir`. 
 
     confidences: dict
         Nonnegative confidence values for the keypoints in 
-        ``coordinates`` as numpy arrays of shape (T,K).
+        `coordinates` as numpy arrays of shape (T,K).
 
     bodyparts: list
-        Label for each keypoint represented in ``coordinates``
+        Label for each keypoint represented in `coordinates`
 
     use_bodyparts: list
         Ordered subset of keypoint labels to be used for modeling
 
     video_dir: str
         Path to directory containing videos. Each video should
-        correspond to a key in ``coordinates``. The key must
+        correspond to a key in `coordinates`. The key must
         contain the videoname as a prefix. 
 
     video_extension: str, default=None

@@ -6,7 +6,7 @@ channels:
 
 dependencies:
   - python=3.9
-  - pytables
+  - conda-forge::pytables
   - pip
   - pip:
     - jax==0.3.22

@@ -34,9 +34,9 @@ def stateseq_stats(stateseqs, mask):
         Batch of state sequences where the last dim indexes time 
 
     mask: ndarray
-        Binary indicator for which elements of ``stateseqs`` are valid,
+        Binary indicator for which elements of `stateseqs` are valid,
         e.g. when state sequences of different lengths have been padded
-        and stacked together in ``stateseqs``
+        and stacked together in `stateseqs`
 
     Returns
     -------
@@ -80,9 +80,9 @@ def concatenate_stateseqs(stateseqs, mask=None):
         where the last dim indexes time
 
     mask: ndarray, shape (..., >=t), default=None
-        Binary indicator for which elements of ``stateseqs`` are valid,
+        Binary indicator for which elements of `stateseqs` are valid,
         e.g. when state sequences of different lengths have been padded.
-        If ``mask`` contains more time-points than ``stateseqs``, the
+        If `mask` contains more time-points than `stateseqs`, the
         initial extra time-points will be ignored.
 
     Returns
@@ -141,7 +141,7 @@ def get_frequencies(stateseqs, mask=None, num_states=None):
     mask: ndarray of shape (..., >=t), default=None
     num_states: int, default=None
         Number of different states. If None, the number of states will
-        be set to ``max(stateseqs)+1``.
+        be set to `max(stateseqs)+1`.
 
     Returns
     -------
@@ -176,7 +176,7 @@ def reindex_by_frequency(stateseqs, mask=None):
     Returns
     -------
     stateseqs_reindexed: ndarray
-        The reindexed state sequences in the same format as ``stateseqs``
+        The reindexed state sequences in the same format as `stateseqs`
     """
     frequency = get_frequencies(stateseqs, mask=mask)
     o = np.argsort(np.argsort(frequency)[::-1])
@@ -199,8 +199,7 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
         '/path/to/dir/prefix*').
 
     ext_list : list of str
-        A list of file extensions to search for, including the dot 
-        (e.g., '.txt').
+        A list of file extensions to search for.
 
     recursive : bool, default=True
         Whether to search for files recursively.
@@ -217,9 +216,8 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
         return sorted(set(matches))
     
     else:
-        # make sure extensions all start with "." and include uppercase versions
-        ext_list = ['.'+ext.strip('.') for ext in ext_list]
-        ext_list += [ext.upper() for ext in ext_list]
+        # make sure extensions all start with "." and are lowercase
+        ext_list = ['.'+ext.strip('.').lower() for ext in ext_list]
         
         # find all matches (recursively)
         matches = glob.glob(filepath_pattern)
@@ -228,7 +226,7 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
                 matches += glob.glob(os.path.join(match, '**'), recursive=True)
 
         # filter matches by extension
-        matches = [match for match in matches if os.path.splitext(match)[1] in ext_list]
+        matches = [match for match in matches if os.path.splitext(match)[1].lower() in ext_list]
         return matches
     
 
@@ -237,7 +235,7 @@ def find_matching_videos(keys, video_dir, as_dict=False, recursive=True,
     """
     Find video files for a set of session names. The filename of each
     video is assumed to be a prefix within the session name, i.e. the
-    session name has the form ``{video_name}{more_text}``. If more than 
+    session name has the form `{video_name}{more_text}`. If more than 
     one video matches a session name, the longest match will be used. 
     For example given the following video directory::
 
@@ -254,7 +252,7 @@ def find_matching_videos(keys, video_dir, as_dict=False, recursive=True,
          'videoname2blahblah': 'video_dir/videoname2.avi'}
 
     A suffix can also be specified, in which case the session name 
-    is assumed to have the form ``{video_name}{suffix}{more_text}``.
+    is assumed to have the form `{video_name}{suffix}{more_text}`.
  
     Parameters
     -------
@@ -329,111 +327,16 @@ def pad_along_axis(arr, pad_widths, axis=0, value=0):
     padded_arr = np.pad(arr, pad_widths_full, constant_values=value)
     return padded_arr
 
-
-def unbatch(data, labels): 
-    """
-    Invert :py:func:`keypoint_moseq.util.batch`
- 
-    Parameters
-    -------
-    data: ndarray, shape (num_segs, seg_length, ...)
-        Stack of segmented time-series
-
-    labels: tuples (str,int,int)
-        Labels for the rows of ``data`` as tuples with the form
-        (name,start,end)
-
-    Returns
-    -------
-    data_dict: dict
-        Dictionary mapping names to reconstructed time-series
-    """     
-    data_dict = {}
-    keys = sorted(set([key for key,start,end in labels]))    
-    for key in keys:
-        length = np.max([e for k,s,e in labels if k==key])
-        seq = np.zeros((int(length),*data.shape[2:]), dtype=data.dtype)
-        for (k,s,e),d in zip(labels,data):
-            if k==key: seq[s:e] = d[:e-s]
-        data_dict[key] = seq
-    return data_dict
-
-
-def batch(data_dict, keys=None, seg_length=None, seg_overlap=30):
-    """
-    Stack time-series data of different lengths into a single array for
-    batch processing, optionally breaking up the data into fixed length 
-    segments. Data is 0-padded so that the stacked array isn't ragged.
-
-    Parameters
-    -------
-    data_dict: dict {str : ndarray}
-        Dictionary mapping names to ndarrays, where the first dim
-        represents time. All data arrays must have the same shape except
-        for the first dim. 
-
-    keys: list of str, default=None
-        Optional list of names specifying which datasets to include in 
-        the output and what order to put them in. Each name must be a 
-        key in ``data_dict``. If ``keys=None``, names will be sorted 
-        alphabetically.
-
-    seg_length: int, default=None
-        Break each time-series into segments of this length. If 
-        ``seg_length=None``, the final stacked array will be as long
-        as the longest time-series. 
-
-    seg_overlap: int, default=30
-        Amount of overlap between segments. For example, setting
-        ``seg_length=N`` and ``seg_overlap=M`` will result in segments
-        with start/end times (0, N+M), (N, 2*N+M), (2*N, 3*N+M),...
-
-    Returns
-    -------
-    data: ndarray, shape (N, seg_length, ...)
-        Stacked data array
-
-    mask: ndarray, shape (N, seg_length)
-        Binary indicator specifying which elements of ``data`` are not
-        padding (``mask==0`` in padded locations)
-
-    keys: list of tuples (str,int), length N
-        Row labels for ``data`` consisting (name, segment_num) pairs
-
-    """
-    if keys is None: keys = sorted(data_dict.keys())
-    Ns = [len(data_dict[key]) for key in keys]
-    if seg_length is None: seg_length = np.max(Ns)
-        
-    stack,mask,labels = [],[],[]
-    for key,N in zip(keys,Ns):
-        for start in range(0,N,seg_length):
-            arr = data_dict[key]
-            end = min(start+seg_length+seg_overlap, N)
-            pad_length = seg_length+seg_overlap-(end-start)
-            padding = np.zeros((pad_length,*arr.shape[1:]), dtype=arr.dtype)
-            mask.append(np.hstack([np.ones(end-start),np.zeros(pad_length)]))
-            stack.append(np.concatenate([arr[start:end],padding],axis=0))
-            labels.append((key,start,end))
-
-    stack = np.stack(stack)
-    mask = np.stack(mask)
-    return stack,mask,labels
-
-
-    
 def filter_angle(angles, size=9, axis=0):
     """
     Perform median filtering on time-series of angles by transforming to
     a (cos,sin) representation, filtering in R^2, and then transforming 
     back into angle space. 
-
     Parameters
     -------
     angles: ndarray, Array of angles (in radians)
     size: int, default=9, Size of the filtering kernel
     axis: int, default=0, Axis along which to filter
-
     Returns
     -------
     filtered_angles: ndarray
@@ -474,9 +377,9 @@ def get_syllable_instances(stateseqs, min_duration=3, pre=30, post=60,
                            min_frequency=0, min_instances=0):
     """
     Map each syllable to a list of instances when it occured. Only 
-    include instances that meet the criteria specified by ``pre``, 
-    ``post``, and ``min_duration``. Only include syllables that meet the
-    criteria specified by ``min_frequency`` and ``min_instances``. 
+    include instances that meet the criteria specified by `pre`, 
+    `post`, and `min_duration`. Only include syllables that meet the
+    criteria specified by `min_frequency` and `min_instances`. 
 
     Parameters
     -------
@@ -507,7 +410,7 @@ def get_syllable_instances(stateseqs, min_duration=3, pre=30, post=60,
     syllable_instances: dict
         Dictionary mapping each syllable to a list of instances. Each
         instance is a tuple (name,start,end) representing subsequence
-        ``stateseqs[name][start:end]``.
+        `stateseqs[name][start:end]`.
     """
     num_syllables = int(max(map(max,stateseqs.values()))+1)
     syllable_instances = [[] for syllable in range(num_syllables)]
@@ -541,7 +444,7 @@ def get_edges(use_bodyparts, skeleton):
     Returns
     -------
     edges: list
-        Pairs of indexes representing the enties of ``skeleton``
+        Pairs of indexes representing the enties of `skeleton`
     """
     edges = []
     for bp1,bp2 in skeleton:
@@ -561,19 +464,19 @@ def reindex_by_bodyparts(data, bodyparts, use_bodyparts, axis=1):
         names to arrays of keypoint coordinates
 
     bodyparts: list
-        Label for each keypoint represented in ``data``
+        Label for each keypoint represented in `data`
 
     use_bodyparts: list
         Ordered subset of keypoint labels
 
     axis: int, default=1
-        The axis in ``data`` that represents keypoints. It is required
-        that ``data.shape[axis]==len(bodyparts)``. 
+        The axis in `data` that represents keypoints. It is required
+        that `data.shape[axis]==len(bodyparts)`. 
 
     Returns
     -------
     reindexed_data: ndarray or dict
-        Keypoint coordinates in the same form as ``data`` with
+        Keypoint coordinates in the same form as `data` with
         reindexing applied
     """
     ix = np.array([bodyparts.index(bp) for bp in use_bodyparts])
@@ -588,7 +491,7 @@ def get_trajectories(syllable_instances, coordinates, pre=0, post=None,
     
     If centroids and headings are provided, each trajectory
     is transformed into the ego-centric reference frame from the moment 
-    of syllable onset. When ``post`` is not None, trajectories will 
+    of syllable onset. When `post` is not None, trajectories will 
     all terminate a fixed number of frames after syllable onset. 
 
     Parameters
@@ -605,26 +508,26 @@ def get_trajectories(syllable_instances, coordinates, pre=0, post=None,
         Number of frames to include before syllable onset
 
     post: int, defualt=None
-        Determines the length of the trajectory. When ``post=None``,
+        Determines the length of the trajectory. When `post=None`,
         the trajectory terminates at the end of the syllable instance.
         Otherwise the trajectory terminates at a fixed number of frames
-        after syllable (where the number is determined by ``post``).
+        after syllable (where the number is determined by `post`).
 
     centroids: dict, default=None
-        Dictionary with the same keys as ``coordinates`` mapping each
+        Dictionary with the same keys as `coordinates` mapping each
         name to an ndarray with shape (num_frames, d)
 
     headings: dict, default=None
-        Dictionary with the same keys as ``coordinates`` mapping each
+        Dictionary with the same keys as `coordinates` mapping each
         name to a 1d array of heading angles in radians
 
     filter_size: int, default=9
-        Size of median filter applied to ``centroids`` and ``headings``
+        Size of median filter applied to `centroids` and `headings`
 
     Returns
     -------
     trajectories: list
-        List or array of trajectories (a list is used when ``post=None``, 
+        List or array of trajectories (a list is used when `post=None`, 
         else an array)
     """
     if centroids is not None and headings is not None:
@@ -675,16 +578,16 @@ def sample_instances(syllable_instances, num_samples, mode='random',
 
     pca_samples: int, default=50000
         Number of trajectories to sample when fitting a PCA model for 
-        density estimation (used when ``mode='density'``)
+        density estimation (used when `mode='density'`)
 
     pca_dim: int, default=4
         Number of principal components to use for density estimation
-        (used when ``mode='density'``)
+        (used when `mode='density'`)
 
     n_neighbors: int, defualt=50
         Number of neighbors to use for density estimation and for 
         sampling the neighbors of the examplar syllable instance
-        (used when ``mode='density'``)
+        (used when `mode='density'`)
 
     coordinates, pre, pos, centroids, heading, filter_size
         Passed to :py:func:`keypoint_moseq.util.get_trajectories`
@@ -692,7 +595,7 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     Returns
     -------
     sampled_instances: dict
-        Dictionary in the same format as ``syllable_instances`` 
+        Dictionary in the same format as `syllable_instances` 
         mapping each syllable to a list of sampled instances.
     """
     assert mode in ['random','density']
@@ -707,8 +610,8 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     
     elif mode=='density':
         assert not (coordinates is None or headings is None or centroids is None), fill(
-            '``coordinates``, ``headings`` and ``centroids`` are required when '
-            '``mode == "density"``')
+            '`coordinates`, `headings` and `centroids` are required when '
+            '`mode == "density"`')
 
         for key in coordinates.keys():
             outliers = np.isnan(coordinates[key]).any(-1)
@@ -795,7 +698,7 @@ def interpolate_keypoints(coordinates, outliers):
         
     Returns
     -------
-    interpolated_coordinates : ndarray with same shape as ``coordinates``
+    interpolated_coordinates : ndarray with same shape as `coordinates`
         Keypoint observations with outliers imputed.
     """  
     interpolated_coordinates = np.zeros_like(coordinates)
@@ -812,7 +715,7 @@ def filtered_derivative(Y_flat, ksize, axis=0):
     """
     Compute the filtered derivative of a signal along a given axis.
 
-    When ``ksize=3``, for example, the filtered derivative is
+    When `ksize=3`, for example, the filtered derivative is
 
     .. math::
 
