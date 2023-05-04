@@ -1,15 +1,17 @@
 Keypoint MoSeq
 ==============
 
-.. image:: logo.jpg
+.. image:: _static/logo.jpg
    :align: center
 
-Motion Sequencing (MoSeq) is an unsupervised machine learning method for animal behavior analysis `(Wiltschko et al., 2015) <http://datta.hms.harvard.edu/wp-content/uploads/2018/01/pub_23.pdf>`_. Given behavioral recordings, MoSeq learns a set of stereotyped movement patterns and when they occur over time. This package provides tools for fitting a MoSeq model to keypoint tracking data. 
+Motion Sequencing (MoSeq) is an unsupervised machine learning method for animal behavior analysis. Given behavioral recordings, MoSeq learns a set of stereotyped movement patterns and when they occur over time. This package provides tools for fitting a MoSeq model to keypoint tracking data. 
 
 Links
 -----
 
-- `MoSeq website <https://dattalab.github.io/moseq2-website/index.html>`_
+- `Keypoint MoSeq GitHub <https://github.com/dattalab/keypoint-moseq/>`_
+
+- `Google colab turorial <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb>`_
 
 - `Keypoint-MoSeq paper <https://www.biorxiv.org/content/10.1101/2023.03.16.532307v2>`_
 
@@ -18,14 +20,11 @@ Links
 - `License <https://github.com/dattalab/keypoint-moseq/blob/main/LICENSE.md>`_
 
 .. toctree::
-   :maxdepth: 2
-   :hidden:
    :caption: Setup
    
    install
    Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb>
 
-.. include:: install.rst
 
 .. toctree::
    :caption: Tutorial
@@ -34,12 +33,12 @@ Links
    changepoints
 
 .. toctree::
-   :caption: Troubleshooting
+   :caption: FAQs
 
-   troubleshooting
+   FAQs
 
 .. toctree::
-   :caption: API Documentation
+   :caption: Developer API
 
    fitting
    viz
