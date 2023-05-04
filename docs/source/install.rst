@@ -1,9 +1,12 @@
 Local installation
 ------------------
 
-- For a Mac with an M1 chip, `Install using conda`_.
-- Note that the first import of ``keypoint_moseq`` after installation can take a few minutes.
 - To use keypoint MoSeq without a local installation, try `Google colab <colab>`_.
+- Note that the first import of ``keypoint_moseq`` after installation can take a few minutes.
+- If you are using a GPU, confirm that jax has access to it once installation is complete::
+
+   python -c "import jax; print(jax.devices())"
+
 
 Install using conda
 ~~~~~~~~~~~~~~~~~~~
@@ -30,8 +33,6 @@ Install the appropriate conda environment for your platform::
    # Mac (CPU-only)
    conda env create -f conda_envs/environment.mac_cpu.yml
 
-See `this issue <https://github.com/dattalab/keypoint-moseq/issues/5>`_ for updates regarding Apple Silicon (M1/M2) support. For now, you can use the Mac (CPU) version on newer Macs.
-
 Activate the new environment::
 
    conda activate keypoint_moseq
@@ -41,12 +42,10 @@ To use the keypoint_moseq environment in a notebook, either launch jupyterlab (`
    python -m ipykernel install --user --name=keypoint_moseq
 
 
-
-
 Install using pip
 ~~~~~~~~~~~~~~~~~
 
-For pip installation with GPU support, manually install the appropriate driver and CUDA version. CUDA ≥11.1 and cuDNN ≥8.2 are required. `This section of the DeepLabCut docs <https://deeplabcut.github.io/DeepLabCut/docs/installation.html#gpu-support>`_ may be helpful. Next use `Anaconda <https://docs.anaconda.com/anaconda/install/index.html>`_  or `Miniconda <https://docs.conda.io/en/latest/miniconda.html>`_ to configure a new python environment called ``keypoint_moseq``::
+Create a new conda environment::
 
    conda create -n keypoint_moseq python=3.9
    conda activate keypoint_moseq
@@ -57,10 +56,10 @@ For pip installation with GPU support, manually install the appropriate driver a
 Install jax using one of the lines below::
 
    # MacOS or Linux (CPU)
-   pip install "jax[cpu]"
+   pip install "jax[cpu]==0.3.22"
 
    # MacOS or Linux (GPU)
-   pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+   pip install "jax[cuda11_cudnn82]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
    # Windows (CPU)
    pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cpu/jaxlib-0.3.22-cp39-cp39-win_amd64.whl

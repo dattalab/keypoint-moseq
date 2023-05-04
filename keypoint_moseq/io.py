@@ -53,13 +53,14 @@ def generate_config(project_dir, **kwargs):
     def _update_dict(new, original):
         return {k:new[k] if k in new else v for k,v in original.items()} 
     
-    hypperams = {k: _update_dict(kwargs,v) for k,v in {
+    hypperams = _update_dict(kwargs, {
         'error_estimator': {'slope':-.5, 'intercept':.25},
         'obs_hypparams': {'sigmasq_0':0.1, 'sigmasq_C':.1, 'nu_sigma':1e5, 'nu_s':5},
         'ar_hypparams': {'latent_dim': 10, 'nlags': 3, 'S_0_scale': 0.01, 'K_0_scale': 10.0},
         'trans_hypparams': {'num_states': 100, 'gamma': 1e3, 'alpha': 5.7, 'kappa': 1e6},
-        'cen_hypparams': {'sigmasq_loc': 0.5}
-    }.items()}
+        'cen_hypparams': {'sigmasq_loc': 0.5}})
+    
+    hypperams = {k : _update_dict(kwargs, v) for k,v in hypperams.items()}
 
     anatomy = _update_dict(kwargs, {
         'bodyparts': ['BODYPART1','BODYPART2','BODYPART3'],
@@ -660,13 +661,14 @@ def load_results(project_dir=None, name=None, path=None):
     return load_hdf5(path)
 
 
-def _name_from_path(filepath, path_in_name, path_sep):
+def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
     """
     Create a name from a filepath. Either return the name of the file
     (with the extension removed) or return the full filepath, where the
     path separators are replaced with `path_sep`.
     """
-    filepath = os.path.splitext(filepath)[0]
+    if remove_extension:
+        filepath = os.path.splitext(filepath)[0]
     if path_in_name:
         return filepath.replace(os.path.sep, path_sep)
     else:
@@ -674,7 +676,8 @@ def _name_from_path(filepath, path_in_name, path_sep):
 
 
 def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
-                            path_in_name=False, return_bodyparts=False):
+                            path_in_name=False, remove_extension=True, 
+                            return_bodyparts=False):
     """
     Load tracking results from deeplabcut csv or hdf5 files.
 
@@ -704,6 +707,10 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
         `'/'` as the separator is discouraged, as it will cause problems
         saving/loading the modeling results to/from hdf5 files.
 
+    remove_extension: bool, default=True
+        Whether to remove the file extension from the name of the tracking
+        results.
+
     return_bodyparts: bool, default=False
         Whether to return a list of bodypart names.
 
@@ -728,14 +735,17 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(filepaths, desc='Loading from deeplabcut'):
         try: 
-            name = _name_from_path(filepath, path_in_name, path_sep)
             ext = os.path.splitext(filepath)[1]
             if ext=='.h5': df = pd.read_hdf(filepath)
-            if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0)   
+            if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0) 
+
             bodyparts = list(list(zip(*df.columns.to_list()))[1][::3])      
             arr = df.to_numpy().reshape(len(df), -1, 3)
+
+            name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
             coordinates[name] = arr[:,:,:-1]
             confidences[name] = arr[:,:,-1]
+
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
     
@@ -746,7 +756,8 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
 
 
 def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
-                       path_in_name=False, return_bodyparts=False):
+                       path_in_name=False, return_bodyparts=False,
+                       remove_extension=True):
     """
     Load keypoints from sleap hdf5 files.
 
@@ -776,6 +787,9 @@ def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
         `'/'` as the separator is discouraged, as it will cause problems
         saving/loading the modeling results to/from hdf5 files.
 
+    remove_extension: bool, default=True
+        Whether to remove the file extension from the name of the tracking
+        results.
     
     return_bodyparts: bool, default=False
         Whether to return a list of bodypart names.
@@ -801,7 +815,7 @@ def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(filepaths, desc='Loading from sleap'):
         try: 
-            name = _name_from_path(filepath, path_in_name, path_sep)
+            name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
             with h5py.File(filepath, 'r') as f:
                 coords = f['tracks'][()]
                 confs = f['point_scores'][()]

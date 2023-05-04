@@ -275,7 +275,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         
         label = f'{bodypart}, confidence = {confs[keypoint_ix]:.5f}'
         h,w = sample_images[sample_key].shape[:2]
-        rgb = hv.RGB(sample_images[sample_key][::-1], bounds=(0,0,w,h), label=label).opts(
+        rgb = hv.RGB(sample_images[sample_key], bounds=(0,2*h,w,h), label=label).opts(
             framewise=True, xaxis='bare', yaxis='bare', frame_width=250)
 
         xlim = (xys[keypoint_ix,0]-crop_size/2,xys[keypoint_ix,0]+crop_size/2)
@@ -293,7 +293,8 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
         nodes = hv.Nodes((*xys[masked_nodes].T, masked_nodes, masked_bodyparts, sizes), vdims=['name','size'])        
         graph = hv.Graph((edge_data, nodes), vdims='ecolor').opts(
             node_color='name', node_cmap=keypoint_colormap, tools=[],
-            edge_color='ecolor', edge_cmap=keypoint_colormap, node_size='size')
+            edge_color='ecolor', edge_cmap=keypoint_colormap, 
+            node_size='size',  invert_yaxis=True)
 
         return (rgb*graph*hv_point).opts(data_aspect=1, xlim=xlim, ylim=ylim, toolbar=None)
     
