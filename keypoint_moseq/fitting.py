@@ -4,7 +4,6 @@ import numpy as np
 import tqdm
 import jax
 import warnings
-warnings.formatwarning = lambda msg, *a: str(msg)
 from textwrap import fill
 from datetime import datetime
 

@@ -21,9 +21,6 @@ from keypoint_moseq.util import (
 from keypoint_moseq.io import load_results
 from jax_moseq.models.keypoint_slds import center_embedding
 
-# simple warning formatting
-warnings.formatwarning = lambda msg, *a: str(msg)
-
 # suppress warnings from imageio
 logging.getLogger().setLevel(logging.ERROR)
 

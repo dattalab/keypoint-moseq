@@ -14,7 +14,7 @@ import pandas as pd
 from datetime import datetime
 from textwrap import fill
 from vidio.read import OpenCVReader
-warnings.formatwarning = lambda msg, *a: str(msg)
+
 
 from jax_moseq.utils import batch
 from keypoint_moseq.util import (
@@ -409,6 +409,23 @@ def format_data(coordinates, confidences=None, keys=None,
     """    
     if keys is None: 
         keys = sorted(coordinates.keys()) 
+    else: 
+        bad_keys = set(keys) - set(coordinates.keys())
+        assert len(bad_keys) == 0, fill(
+            f'Keys {bad_keys} not found in coordinates')
+
+    assert len(keys) > 0, 'No sessions found'
+
+    num_keypoints = [coordinates[key].shape[-2] for key in keys]
+    assert len(set(num_keypoints)) == 1, fill(
+        f'All sessions must have the same number of keypoints, but '
+        f'found {set(num_keypoints)} keypoints across sessions.')
+    
+    if bodyparts is not None:
+        assert len(bodyparts) == num_keypoints[0], fill(
+            f'The number of keypoints in `coordinates` ({num_keypoints[0]}) '
+            f'does not match the number of labels in `bodyparts` '
+            f'({len(bodyparts)})')
 
     if any(['/' in key for key in keys]): 
         warnings.warn(fill(
@@ -673,6 +690,38 @@ def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
         return filepath.replace(os.path.sep, path_sep)
     else:
         return os.path.basename(filepath)
+    
+
+def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5):
+    """
+    Check if any bodyparts have a high proportion of NaNs.
+    
+    Parameters
+    ----------
+    coordinates: dict
+        Dictionary mapping filenames to keypoint coordinates as ndarrays
+        of shape (n_frames, n_bodyparts, 2)
+
+    bodyparts: list of str
+        Name of each bodypart. The order of the names should match the
+        order of the bodyparts in `coordinates`.
+
+    warning_threshold: float, default=0.5
+        If the proportion of NaNs for a bodypart is greater than
+        `warning_threshold`, then a warning is printed.
+    """
+    any_warnings = False
+    for filename, coords in coordinates.items():
+        nan_proportion = np.isnan(coords).any(-1).mean(0)
+        for bp, prop in zip(bodyparts, nan_proportion):
+            if prop > warning_threshold:
+                warnings.warn(f'\n{bp} is NaN in {prop*100:.1f}% of frames from {filename}')
+                any_warnings = True
+    if any_warnings:
+        warnings.warn(
+            '\n\nBodyparts with a high proportion of NaNs may cause problems '
+            'during modeling. They can be excluded through the `use_bodyparts` '
+            'setting in the config.')
 
 
 def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
@@ -749,6 +798,9 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
     
+    if len(coordinates) > 0:
+        check_nan_proportions(coordinates, bodyparts)
+
     if return_bodyparts: 
         return coordinates,confidences,bodyparts
     else: return coordinates,confidences
@@ -829,6 +881,9 @@ def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
                         confidences[f'{name}_track{i}'] = confs[i].T
         except Exception as e: 
             print(fill(f'Error loading {filepath}: {e}'))
+
+    if len(coordinates) > 0:
+        check_nan_proportions(coordinates, bodyparts)
 
     if return_bodyparts: 
         return coordinates,confidences,bodyparts

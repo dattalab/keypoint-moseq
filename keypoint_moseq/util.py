@@ -2,6 +2,7 @@ import numpy as np
 import os
 import glob
 import tqdm
+import warnings
 from textwrap import fill
 import jax, jax.numpy as jnp, jax.random as jr
 from jax.tree_util import tree_map
@@ -691,6 +692,7 @@ def interpolate_along_axis(x, xp, fp, axis=0):
     """
     assert len(xp.shape)==len(x.shape)==1
     assert fp.shape[axis]==len(xp)
+    assert len(xp)>0, 'xp must be non-empty; cannot interpolate without datapoints'
     
     fp = np.moveaxis(fp, axis, 0)
     shape = fp.shape[1:]
@@ -722,10 +724,10 @@ def interpolate_keypoints(coordinates, outliers):
     """  
     interpolated_coordinates = np.zeros_like(coordinates)
     for i in range(coordinates.shape[1]):
-        interpolated_coordinates[:,i,:] = interpolate_along_axis(
-            np.arange(coordinates.shape[0]),
-            np.nonzero(~outliers[:,i])[0],
-            coordinates[~outliers[:,i],i,:])
+        xp = np.nonzero(~outliers[:,i])[0]
+        if len(xp) > 0: 
+            interpolated_coordinates[:,i,:] = interpolate_along_axis(
+                np.arange(coordinates.shape[0]), xp, coordinates[xp,i,:])
     return interpolated_coordinates
 
 
