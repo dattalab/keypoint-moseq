@@ -1,7 +1,7 @@
 # docs/requirements.txt
 sphinx==4.4.0
 sphinx-rtd-theme
-keypoint_moseq
+keypoint-moseq
 autodocsumm
 myst-nb
 requests>=2.5.0
