@@ -1,5 +1,11 @@
 # Keypoint MoSeq 
 
+<div style="border-left: 5px solid #f44336; padding-left: 20px; background-color: #ffebee;">
+
+**Warning:** We detected a bug in versions 0.0.4 and 0.0.5 of keypoint-moseq that led to incorrect model outputs. **This affects you if you installed/updated the code between April 25 and May 5.** The bug has been fixed in version 0.1.0. You can update using `pip install -U keypoint-moseq`.
+
+</div>
+
 ![logo](docs/source/logo.jpg)
 
 Motion Sequencing (MoSeq) is an unsupervised machine learning method for animal behavior analysis [(Wiltschko et al., 2015)](http://datta.hms.harvard.edu/wp-content/uploads/2018/01/pub_23.pdf). Given behavioral recordings, MoSeq learns a set of stereotyped movement patterns and when they occur over time. This package provides tools for fitting a MoSeq model to keypoint tracking data [(Weinreb et al., 2023)](https://www.biorxiv.org/content/10.1101/2023.03.16.532307v1). 
