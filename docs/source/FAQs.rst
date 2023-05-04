@@ -22,6 +22,19 @@ How many/which keypoints?
 -------------------------
 A fine starting point is 5-10 keypoints. For rodents, we recommend omitting the tail. The most important aspect is that the keypoints are informative and provide a holistic description of the animal's pose. If you are already tracking 4 keypoints along the spine, for example, adding 4 more may not add much new information. Note that it is always possible to exclude keypoints from modeling using the ``use_bodyparts`` setting in the config.
 
+Multiple animals
+----------------
+For multi-animal experiments where the animals are comparable in size and shape (e.g. same sex and strain), it is best to fit a single model to all the data from both animals. The results will be two or more syllable sequences for each video. 
+
+- SLEAP 
+   Load with ``coordinates, confidences = kpms.load_sleap_results(sleap_results)``. For each "track" in each SLEAP file, a separate key/vaue pair will be generated in the ``coordinates`` and ``confidences`` dictionaries. For example a single file called ``two_mice.h5`` will generate a pair of keys ``'two_mice_track0', 'two_mice_track1'``. These keys can then be used at the end of modeling to access syllables for each mouse.
+   
+- DeepLabCut
+   Currently we do not provide native support for multi-animal DeepLabCut (maDLC). If you would like to use Keypoint MoSeq with maDLC, please get in touch (calebsw@gmail.com) and we will add this feature. 
+
+For multi-animal experiments where the animals differ in size (e.g. adults and pups), it is best to fit separate models. If the tracking data is contained in a single file, the ``use_bodyparts`` config option can be used to limit modeling to the subset of keypoints belonging to each animal respectively. If the tracking data for each type of animal is in separate files, then simply restrict to the appropriate files when loading the data. 
+
+
 Keypoints are noisy
 -------------------
 In general, keypoint-MoSeq is tolerant to noise in keypoint tracking. During fitting, the model tries to detect and downweight tracking errors. It also takes advantage of neural network-based confidence estimates when they are available (which is typically the case for DeepLabCut and SLEAP). A good rule of thumb is to watch a video of the tracked keypoints. If you can tell what the animal is doing from the keypoints alone, then they likely provide a good starting point for keypoint-MoSeq.
@@ -33,6 +46,11 @@ For 2D keypoint tracking we generally don't recommend this. Keypoint-MoSeq is de
 Head-fixed animals
 ------------------
 We have only tested keypoint-MoSeq on freely moving animals, using either 2D keypoint detections from a top-down/bottom-up camera, or 3D keypoint detections inferred from multiple camera angles. But head-fixed animals could work in principle. In that case, one may wish to prevent keypoint-MoSeq from inferring heading angle and performing egocentric alignment. This can be done by setting ``fix_heading=True`` in the config.
+
+Non-rodents
+-----------
+Keypoint-MoSeq has only been validated on rodents (mice, rats, and anecdotal success with naked mole rats), but there is no reason in principle that it wouldn't work on other species such as insects. If you try it on another species, please let us know how it goes! A key consideration for non-rodents is setting the target syllable duration, which may differ from the 400ms, which we recommend for rodents. For additional information, see :ref:`Choosing the target syllable duration <target duration>`.
+
 
 Loading data from methods other than SLEAP or DeepLabCut
 --------------------------------------------------------
@@ -61,6 +79,8 @@ To confirm that model fitting was successful, you can check the following:
 .. image:: _static/fitting_progress.png
    :align: center
 
+
+.. _target duration:
 
 Choosing the target syllable duration
 -------------------------------------
