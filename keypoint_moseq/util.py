@@ -129,7 +129,7 @@ def get_durations(stateseqs, mask=None):
     return changepoints[1:]-changepoints[:-1]
 
 
-def get_frequencies(stateseqs, mask=None, num_states=None):
+def get_frequencies(stateseqs, mask=None, num_states=None, runlength=True):
     """
     Get state frequencies for a batch of state sequences. Each frame is
     counted separately. For a more detailed  description of the function 
@@ -138,28 +138,43 @@ def get_frequencies(stateseqs, mask=None, num_states=None):
     Parameters
     ----------
     stateseqs: dict or ndarray of shape (..., t)
+
     mask: ndarray of shape (..., >=t), default=None
+
     num_states: int, default=None
         Number of different states. If None, the number of states will
         be set to `max(stateseqs)+1`.
 
+    runlength: bool, default=True
+        Whether to count frequency by the number of instances of each
+        state (True), or by the number of frames in each state (False).
+
     Returns
     -------
     frequencies: 1d array
-        Proportion of frames in each state across all state sequences
+        Frequency of each state across all state sequences
 
     Examples
     --------
     >>> stateseqs = {
         'name1': np.array([1, 1, 2, 2, 2, 3]),
-        'name2': np.array([0, 0, 0, 1])
-    }
-    >>> get_frequencies(stateseqs)
+        'name2': np.array([0, 0, 0, 1])}
+    >>> get_frequencies(stateseqs, runlength=True)
+    array([0.2, 0.4, 0.2, 0.2])
+    >>> get_frequencies(stateseqs, runlength=False)
     array([0.3, 0.3, 0.3, 0.1])
-
     """    
-    stateseq_flat = concatenate_stateseqs(stateseqs, mask=mask).astype(int)
-    return np.bincount(stateseq_flat, minlength=num_states)/len(stateseq_flat)
+    stateseq_flat = concatenate_stateseqs(
+        stateseqs, mask=mask).astype(int)
+    
+    if runlength:
+        state_onsets = np.pad(np.diff(stateseq_flat).nonzero()[0]+1, (1,0))
+        stateseq_flat = stateseq_flat[state_onsets]
+
+    counts = np.bincount(stateseq_flat, minlength=num_states)
+    frequencies = counts/counts.sum()
+    return frequencies
+
 
 def reindex_by_frequency(stateseqs, mask=None):
     """
@@ -171,6 +186,7 @@ def reindex_by_frequency(stateseqs, mask=None):
     Parameters
     ----------
     stateseqs: dict or ndarray of shape (..., t)
+
     mask: ndarray of shape (..., >=t), default=None
 
     Returns
@@ -219,6 +235,9 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
         # make sure extensions all start with "." and are lowercase
         ext_list = ['.'+ext.strip('.').lower() for ext in ext_list]
         
+        if os.path.isdir(filepath_pattern):
+            filepath_pattern = os.path.join(filepath_pattern,'*')
+
         # find all matches (recursively)
         matches = glob.glob(filepath_pattern)
         if recursive:
@@ -719,8 +738,9 @@ def filtered_derivative(Y_flat, ksize, axis=0):
 
     .. math::
 
-        \dot{y_t} = \frac{1}{3}( x_{t+3}+x_{t+2}+x_{t+1}-x_{t-1}-x_{t-2}-x_{t-3})
+        \\dot{y_t} = \\frac{1}{3}( x_{t+3}+x_{t+2}+x_{t+1}-x_{t-1}-x_{t-2}-x_{t-3})
 
+        
     Parameters
     ----------
     Y_flat: ndarray

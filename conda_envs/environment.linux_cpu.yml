@@ -11,6 +11,5 @@ dependencies:
   - conda-forge::jaxlib=0.3.22=*cpu*
   - pip
   - pip:
-    - "jax-moseq"
-    - "--editable=../"
+    - "keypoint-moseq"
     - jupyterlab

@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
 from textwrap import fill
+from PIL import Image
 plt.rcParams['figure.dpi'] = 100
 
 from keypoint_moseq.util import (
@@ -25,7 +26,6 @@ warnings.formatwarning = lambda msg, *a: str(msg)
 
 # suppress warnings from imageio
 logging.getLogger().setLevel(logging.ERROR)
-
 
 
 def crop_image(image, centroid, crop_size):
@@ -271,7 +271,7 @@ def plot_syllable_frequencies(results=None, path=None, project_dir=None,
 
 def plot_duration_distribution(results=None, path=None, project_dir=None, 
                                name=None, use_reindexed=True, lim=None,
-                               num_bins=30, fps=None):
+                               num_bins=30, fps=None, show_median=True):
     """
     Plot a histogram showing the frequency of each syllable.
     
@@ -307,6 +307,9 @@ def plot_duration_distribution(results=None, path=None, project_dir=None,
     fps: int, default=None
         Frames per second. Used to convert x-axis from frames to seconds.
 
+    show_median: bool, default=True
+        Whether to show the median duration as a vertical line.
+
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -341,6 +344,7 @@ def plot_duration_distribution(results=None, path=None, project_dir=None,
     ax.set_ylabel('probability')
     ax.set_title('Duration distribution')
     ax.set_yticks([])
+    if show_median: ax.axvline(np.median(durations), color='k', linestyle='--')
     return fig, ax
         
 
@@ -1054,6 +1058,16 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
 
     return fig,ax,rasters
 
+def save_gif(image_list, gif_filename, duration=0.5):
+    # Convert NumPy arrays to PIL Image objects
+    pil_images = [Image.fromarray(np.uint8(img)) for img in image_list]
+
+    # Save the PIL Images as an animated GIF
+    pil_images[0].save(gif_filename, save_all=True, append_images=pil_images[1:], 
+                       duration=int(duration*1000), loop=0)
+
+
+
 def generate_trajectory_plots(
     coordinates=None, results=None, output_dir=None, name=None, 
     project_dir=None, results_path=None, pre=5, post=15, 
@@ -1277,9 +1291,9 @@ def generate_trajectory_plots(
                 plt.close(fig=fig)
 
                 if save_gifs:
-                    frame_duration = int(1000 * (pre+post) / len(rasters) / fps)
+                    frame_duration = (pre+post) / len(rasters) / fps
                     path = os.path.join(output_dir, f'{title}{suffix}.gif')
-                    imageio.mimsave(path, rasters, duration=frame_duration)
+                    save_gif(rasters, path, duration=frame_duration)
                 if save_mp4s:
                     use_fps = len(rasters)/(pre+post)*fps
                     path = os.path.join(output_dir, f'{title}{suffix}.mp4')
@@ -1296,9 +1310,9 @@ def generate_trajectory_plots(
         plt.show()
 
         if save_gifs:
-            frame_duration = int(1000 * (pre+post) / len(rasters) / fps)
+            frame_duration = (pre+post) / len(rasters) / fps
             path = os.path.join(output_dir, f'all_trajectories{suffix}.gif')
-            imageio.mimsave(path, rasters, duration=frame_duration)
+            save_gif(rasters, path, duration=frame_duration)
         if save_mp4s:
             use_fps = len(rasters)/(pre+post)*fps
             path = os.path.join(output_dir, f'all_trajectories{suffix}.mp4')
