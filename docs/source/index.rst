@@ -14,7 +14,7 @@ Keypoint MoSeq
 
 
 .. note::
-    We detected a bug in versions 0.0.4 and 0.0.5 of keypoint-moseq that led to incorrect model outputs. **This affects you if you installed/updated the code between April 25 and May 5.** The bug has been fixed in version 0.1.0. You can update using ``pip install -U keypoint-moseq``.
+    We detected a bug in versions 0.0.4 and 0.0.5 of keypoint-moseq that led to incorrect model outputs. **This affects you if you installed/updated the code between April 25 and May 5.** The bug has been fixed in version 0.1.0. You can update using ``pip install -U keypoint-moseq``. Note that after updating, the "Apply model" step of the original tutorial will no longer work and must be replaced with the `"Extract model results" step in the updated tutorial <https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#extract-model-results>`_.
 
 .. image:: _static/logo.jpg
    :align: center
