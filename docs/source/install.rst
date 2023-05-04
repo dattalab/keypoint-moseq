@@ -45,7 +45,7 @@ To use the keypoint_moseq environment in a notebook, either launch jupyterlab (`
 Install using pip
 ~~~~~~~~~~~~~~~~~
 
-Create a new conda environment
+Create a new conda environment::
 
    conda create -n keypoint_moseq python=3.9
    conda activate keypoint_moseq
