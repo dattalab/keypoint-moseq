@@ -722,8 +722,9 @@ def filtered_derivative(Y_flat, ksize, axis=0):
 
     .. math::
 
-        \dot{y_t} = \frac{1}{3}( x_{t+3}+x_{t+2}+x_{t+1}-x_{t-1}-x_{t-2}-x_{t-3})
+        \\dot{y_t} = \\frac{1}{3}( x_{t+3}+x_{t+2}+x_{t+1}-x_{t-1}-x_{t-2}-x_{t-3})
 
+        
     Parameters
     ----------
     Y_flat: ndarray
