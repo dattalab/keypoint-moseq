@@ -4,3 +4,4 @@ sphinx-rtd-theme
 keypoint_moseq
 autodocsumm
 myst-nb
+urllib3<2.0
