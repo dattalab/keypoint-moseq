@@ -368,9 +368,6 @@ def format_data(coordinates, confidences=None, keys=None,
     keys: list of str, default=None
         (See :py:func:`keypoint_moseq.util.batch`)
         
-    seg_length: int default=None
-        (See :py:func:`keypoint_moseq.util.batch`)
-        
     bodyparts: list, default=None
         Label for each keypoint represented in `coordinates`. Required
         to reindex coordinates and confidences according to `use_bodyparts`.
@@ -385,6 +382,8 @@ def format_data(coordinates, confidences=None, keys=None,
     seg_length: int, default=None
         Length of each segment. If `seg_length=None`, a length is 
         chosen so that no time-series are broken into multiple segments.
+        If all time-series are shorter than `seg_length`, then
+        `seg_length` is set to the length of the shortest time-series.
         
     Returns
     -------
@@ -443,6 +442,10 @@ def format_data(coordinates, confidences=None, keys=None,
         outliers = np.isnan(coordinates[key]).any(-1)
         coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
         confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
+    
+    if seg_length is not None:
+        max_session_length = max([coordinates[key].shape[0] for key in keys])
+        seg_length = min(seg_length, max_session_length)
 
     Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
     Y = Y.astype(float)
