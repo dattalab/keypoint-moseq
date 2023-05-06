@@ -21,6 +21,7 @@ from keypoint_moseq.util import (
 from keypoint_moseq.io import load_results
 from jax_moseq.models.keypoint_slds import center_embedding
 
+
 # suppress warnings from imageio
 logging.getLogger().setLevel(logging.ERROR)
 
@@ -64,8 +65,7 @@ def crop_image(image, centroid, crop_size):
     return padded
 
 
-def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3,2),
-              ):
+def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3,2)):
     """
     Plot explained variance as a function of the number of PCs.
 
@@ -90,7 +90,8 @@ def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3,2),
         Figure handle
     """
     fig = plt.figure()
-    plt.plot(np.arange(len(pca.mean_))+1,np.cumsum(pca.explained_variance_ratio_))
+    num_pcs = len(pca.components_)
+    plt.plot(np.arange(num_pcs)+1,np.cumsum(pca.explained_variance_ratio_))
     plt.xlabel('PCs')
     plt.ylabel('Explained variance')
     plt.gcf().set_size_inches(fig_size)
@@ -170,6 +171,10 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
         nrows = int(np.ceil(plot_n_pcs/ncols))
         fig,axs = plt.subplots(nrows, ncols, sharex=True, sharey=True)
         for i,ax in enumerate(axs.flat):
+            if i >= plot_n_pcs:
+                ax.axis('off')
+                continue
+
             ymean = Gamma @ pca.mean_.reshape(k-1,d)[:,dims]
             y = Gamma @ (pca.mean_ + magnitude*pca.components_[i]).reshape(k-1,d)[:,dims]
             
@@ -347,7 +352,7 @@ def plot_duration_distribution(results=None, path=None, project_dir=None,
 
 def plot_progress(model, data, history, iteration, path=None,
                   project_dir=None, name=None, savefig=True,
-                  fig_size=None, seq_length=600, min_frequency=.001, 
+                  fig_size=None, window_size=600, min_frequency=.001, 
                   min_histogram_length=10, **kwargs):
     """
     Plot the progress of the model during fitting.
@@ -387,8 +392,8 @@ def plot_progress(model, data, history, iteration, path=None,
     fig_size : tuple of float, default=None
         Size of the figure in inches. 
         
-    seq_length : int, default=600
-        Length of the state sequence history plot.
+    window_size : int, default=600
+        Window size for state sequence history plot.
 
     min_frequency : float, default=.001
         Minimum frequency for including a state in the frequency 
@@ -453,9 +458,10 @@ def plot_progress(model, data, history, iteration, path=None,
         axs[2].set_ylabel('duration')
         axs[2].set_title('Median duration')
         
-        nz = np.stack(np.array(mask[:,seq_length:]).nonzero(),axis=1)
+        window_size = int(min(window_size,mask.max(0).sum()-1))
+        nz = np.stack(np.array(mask[:,window_size:]).nonzero(),axis=1)
         batch_ix,start = nz[np.random.randint(nz.shape[0])]
-        seq_hist = np.stack([z[batch_ix,start:start+seq_length] for z in past_stateseqs])
+        seq_hist = np.stack([z[batch_ix,start:start+window_size] for z in past_stateseqs])
         axs[3].imshow(seq_hist, cmap=plt.cm.jet, aspect='auto', interpolation='nearest')
         axs[3].set_xlabel('Time (frames)')
         axs[3].set_ylabel('Iterations')
