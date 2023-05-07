@@ -539,7 +539,7 @@ def _grid_movie_tile(key, start, end, videos, centroids, headings,
 
     
 def grid_movie(instances, rows, cols, videos, centroids, headings,
-               dot_color=(255,255,255), dot_radius=4, window_size=112, 
+               window_size, dot_color=(255,255,255), dot_radius=4,
                pre=30, post=60, coordinates=None, overlay_trajectory=False,
                plot_options={}, overlay_options={}):
     
@@ -573,15 +573,15 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
         Dictionary mapping video names to arrays of shape `(n_frames,)`
         with the heading of the animal on each frame (in radians)
 
+    window_size: int
+        Size of the window around the animal. This should be a multiple
+        of 16 or imageio will complain.
+
     dot_color: tuple of ints, default=(255,255,255)
         RGB color of the dot indicating syllable onset and offset
 
     dot_radius: int, default=4
         Radius of the dot indicating syllable onset and offset
-
-    window_size: int, default=112
-        Size of the window around the animal. This should be a multiple
-        of 16 or imageio will complain.
 
     pre: int, default=30
         Number of frames before syllable onset to include in the movie
@@ -636,13 +636,65 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
     frames = np.concatenate(np.concatenate(tiles,axis=2),axis=2)
     return frames
 
+def get_grid_movie_window_size(sampled_instances, centroids, headings,
+                               coordinates, pre, post, pctl=90, 
+                               fudge_factor=1.1, blocksize=16):
+    """
+    Automatically determine the window size for a grid movie.
+
+    The window size is set such that across all sampled instances,
+    the animal is fully visible in at least `pctl` percent of frames.
+
+    Parameters
+    ----------
+    sampled_instances: dict
+        Dictionary mapping syllables to lists of instances, where each
+        instance is specified as a tuple with the video name, start frame
+        and end frame. 
+
+    centroids: dict
+        Dictionary mapping video names to arrays of shape `(n_frames, 2)`
+        with the x,y coordinates of animal centroid on each frame
+
+    headings: dict
+        Dictionary mapping video names to arrays of shape `(n_frames,)`
+        with the heading of the animal on each frame (in radians)
+
+    coordinates: dict
+        Dictionary mapping session names to keypoint coordinates as 
+        ndarrays of shape (n_frames, n_bodyparts, 2). 
+
+    pre, post: int
+        Number of frames before/after syllable onset that are included 
+        in the grid movies.
+
+    pctl: int, default=95
+        Percentile of frames in which the animal should be fully visible.
+
+    fudge_factor: float, default=1.1
+        Factor by which to multiply the window size. 
+
+    blocksize: int, default=16
+        Window size is rounded up to the nearest multiple of `blocksize`.
+    """
+    all_trajectories = get_trajectories(
+        sum(sampled_instances.values(), []), coordinates, pre=pre, 
+        post=post, centroids=centroids, headings=headings)
+    
+    all_trajectories = np.concatenate(all_trajectories, axis=0)
+    ax_distances = np.max(np.abs(all_trajectories), axis=1)
+    window_size = np.percentile(ax_distances, pctl) * fudge_factor * 2
+    window_size = int(np.ceil(window_size / blocksize) * blocksize)
+    print(window_size)
+    return window_size
+
 
 def generate_grid_movies(
     results=None, output_dir=None, name=None, project_dir=None,
     results_path=None, video_dir=None, video_paths=None, rows=4, 
     cols=6, filter_size=9, pre=30, post=60, min_frequency=0.005, 
     min_duration=3, dot_radius=4, dot_color=(255,255,255), 
-    window_size=112, use_reindexed=True, coordinates=None, 
+    window_size=None, use_reindexed=True, coordinates=None, 
     bodyparts=None, use_bodyparts=None, skeleton=[], quality=7, 
     sampling_options={},  overlay_trajectory=False, plot_options={},
     overlay_options={}, video_extension=None, **kwargs):
@@ -734,8 +786,9 @@ def generate_grid_movies(
     coordinates: dict, default=None
         Dictionary mapping session names to keypoint coordinates as 
         ndarrays of shape (n_frames, n_bodyparts, 2). Required when
-        `overlay_trajectory=True`, and for density-based sampling 
-        (i.e. when `sampling_options['mode']=='density'`; see 
+        `window_size=None`, when `overlay_trajectory=True`, and for 
+        density-based sampling (i.e. when 
+        `sampling_options['mode']=='density'`; see 
         :py:func:`keypoint_moseq.util.sample_instances`).
 
     bodyparts: list of str, default=None
@@ -773,13 +826,22 @@ def generate_grid_movies(
 
     video_extension: str, default=None
         Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
+
+    window_size: int, default=None
+        Size of the window around the animal. If None, the window
+        size is determined automatically based on the size of the
+        animal. If provided explicitly, `window_size` should be a
+        multiple of 16 or imageio will complain.
+
+    See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """
     assert (video_dir is not None) or (video_paths is not None), fill(
         'You must provide either `video_dir` or `video_paths`') 
 
-    if overlay_trajectory:
+    if overlay_trajectory or window_size is None:
         assert coordinates is not None, fill(
-            '`coordinates` must be provided if `overlay_trajectory` is True')     
+            '`coordinates` must be provided if `overlay_trajectory` is True '
+            'or `window_size` is None')     
     
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
@@ -799,7 +861,7 @@ def generate_grid_movies(
         video_paths = find_matching_videos(
             results.keys(), video_dir, as_dict=True, 
             video_extension=video_extension)
-
+        
     videos = {k: OpenCVReader(path) for k,path in video_paths.items()}
     fps = list(videos.values())[0].fps
     
@@ -826,6 +888,11 @@ def generate_grid_movies(
     centroids,headings = filter_centroids_headings(
         centroids, headings, filter_size=filter_size)
     
+    if window_size is None:
+        window_size = get_grid_movie_window_size(
+            sampled_instances, centroids, headings, 
+            coordinates, pre, post)
+        
     if len(skeleton)>0 and overlay_trajectory: 
         if isinstance(skeleton[0][0],str):
             assert use_bodyparts is not None, fill(
