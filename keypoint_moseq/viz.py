@@ -517,31 +517,31 @@ def write_video_clip(frames, path, fps=30, quality=7):
 
 
 def _grid_movie_tile(key, start, end, videos, centroids, headings, 
-                     dot_color=(255,255,255), window_size=112,
-                     pre=30, post=60, dot_radius=4):
-            
-        cs = centroids[key][start-pre:start+post]
-        h,c = headings[key][start],cs[pre]
-        r = np.float32([[np.cos(h), np.sin(h)],[-np.sin(h), np.cos(h)]])
-        c = r @ c - window_size//2
-        M = [[ np.cos(h), np.sin(h),-c[0]], [-np.sin(h), np.cos(h),-c[1]]]
-        
-        tile = []
-        frames = videos[key][start-pre:start+post]
-        for ii,(frame,c) in enumerate(zip(frames,cs)):
-            frame = cv2.warpAffine(frame,np.float32(M),(window_size,window_size))
-            if 0 <= ii-pre <= end-start and dot_radius>0:
-                pos = tuple([int(x) for x in M@np.append(c,1)])
-                cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
-            tile.append(frame)  
-        return np.stack(tile)
-
-
+                     dot_color, window_size, scaled_window_size,
+                     pre, post, dot_radius):
     
+    scale_factor = scaled_window_size/window_size
+    cs = centroids[key][start-pre:start+post]
+    h,c = headings[key][start],cs[pre]
+    r = np.float32([[np.cos(h), np.sin(h)],[-np.sin(h), np.cos(h)]])
+    c = r @ c - window_size//2
+    M = [[ np.cos(h), np.sin(h),-c[0]], [-np.sin(h), np.cos(h),-c[1]]]
+    
+    tile = []
+    frames = videos[key][start-pre:start+post]
+    for ii,(frame,c) in enumerate(zip(frames,cs)):
+        frame = cv2.warpAffine(frame,np.float32(M),(window_size,window_size))
+        frame = cv2.resize(frame, (scaled_window_size,scaled_window_size))
+        if 0 <= ii-pre <= end-start and dot_radius>0:
+            pos = tuple([int(x) for x in M@np.append(c,1)*scale_factor])
+            cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
+        tile.append(frame)  
+    return np.stack(tile)
+
+
 def grid_movie(instances, rows, cols, videos, centroids, headings,
                window_size, dot_color=(255,255,255), dot_radius=4,
-               pre=30, post=60, coordinates=None, overlay_trajectory=False,
-               plot_options={}, overlay_options={}):
+               pre=30, post=60, scaled_window_size=None):
     
     """Generate a grid movie and return it as an array of frames.
 
@@ -589,52 +589,32 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
     post: int, default=60
         Number of frames after syllable onset to include in the movie
 
-    coordinates: dict, default=None
-        Dictionary mapping session names to keypoint coordinates as 
-        ndarrays of shape (n_frames, n_bodyparts, 2). Required when
-        `overlay_trajectory=True`
-
-    overlay_trajectory: bool, default=False
-        Whether to overlay trajectory of keypoints on the grid movie. 
-        If True, `coordinates` must be provided.
-
-    overlay_options: dict, default={}
-        Dictionary of options for overlaying trajectory (see
-        :py:func:`keypoint_moseq.viz.overlay_trajectory_on_video`).
-
-    plot_options: dict, default={}
-        Dictionary of options for overlaying trajectory (see 
-        :py:func:`keypoint_moseq.viz.overlay_keypoints_on_image`).
+    scaled_window_size: int, default=None
+        Window size after scaling the video. If None, the no scaling
+        is performed (i.e. `scaled_window_size = window_size`)
 
     Returns
     -------
-    frames: array of shape `(rows, cols, post+pre, window_size, window_size, 3)`
-        Array of frames in the grid movie
-    """
-    if overlay_trajectory:
-        assert coordinates is not None, fill(
-            '`coordinates` must be provided if `overlay_trajectory` is True')
+    frames: array of shape `(post+pre, width, height, 3)`
+        Array of frames in the grid movie where:: 
 
-        trajectories = get_trajectories(
-            instances, coordinates, pre=pre, post=post, 
-            centroids=centroids, headings=headings)
-            
+            width = rows * scaled_window_size
+            height = cols * scaled_window_size
+    """     
+    if scaled_window_size is None:
+        scaled_window_size = window_size
+
     tiles = []
     for i,(key,start,end) in enumerate(instances):
-        tile = _grid_movie_tile(
+        tiles.append(_grid_movie_tile(
             key, start, end, videos, centroids, headings, 
-            dot_color=dot_color, window_size=window_size,
-            pre=pre, post=post, dot_radius=dot_radius)
-        
-        if overlay_trajectory:
-            trajectory = trajectories[i] + window_size//2
-            tile = overlay_trajectory_on_video(
-                tile, trajectory, pre, plot_options=plot_options, **overlay_options)
-        tiles.append(tile)
+            dot_color, window_size, scaled_window_size,
+            pre, post, dot_radius))
 
-    tiles = np.stack(tiles).reshape(rows, cols, post+pre, window_size, window_size, 3)
+    tiles = np.stack(tiles).reshape(rows, cols, post+pre, scaled_window_size, scaled_window_size, 3)
     frames = np.concatenate(np.concatenate(tiles,axis=2),axis=2)
     return frames
+
 
 def get_grid_movie_window_size(sampled_instances, centroids, headings,
                                coordinates, pre, post, pctl=90, 
@@ -685,7 +665,6 @@ def get_grid_movie_window_size(sampled_instances, centroids, headings,
     ax_distances = np.max(np.abs(all_trajectories), axis=1)
     window_size = np.percentile(ax_distances, pctl) * fudge_factor * 2
     window_size = int(np.ceil(window_size / blocksize) * blocksize)
-    print(window_size)
     return window_size
 
 
@@ -693,11 +672,10 @@ def generate_grid_movies(
     results=None, output_dir=None, name=None, project_dir=None,
     results_path=None, video_dir=None, video_paths=None, rows=4, 
     cols=6, filter_size=9, pre=30, post=60, min_frequency=0.005, 
-    min_duration=3, dot_radius=4, dot_color=(255,255,255), 
+    min_duration=3, dot_radius=4, dot_color=(255,255,255), quality=7,
     window_size=None, use_reindexed=True, coordinates=None, 
-    bodyparts=None, use_bodyparts=None, skeleton=[], quality=7, 
-    sampling_options={},  overlay_trajectory=False, plot_options={},
-    overlay_options={}, video_extension=None, **kwargs):
+    bodyparts=None, use_bodyparts=None, sampling_options={},  
+    video_extension=None, max_video_size=4000, **kwargs):
     
     """
     Generate grid movies for a modeled dataset.
@@ -786,8 +764,7 @@ def generate_grid_movies(
     coordinates: dict, default=None
         Dictionary mapping session names to keypoint coordinates as 
         ndarrays of shape (n_frames, n_bodyparts, 2). Required when
-        `window_size=None`, when `overlay_trajectory=True`, and for 
-        density-based sampling (i.e. when 
+        `window_size=None`, and for density-based sampling (i.e. when 
         `sampling_options['mode']=='density'`; see 
         :py:func:`keypoint_moseq.util.sample_instances`).
 
@@ -800,22 +777,6 @@ def generate_grid_movies(
         Ordered list of bodyparts used for modeling. Required when 
         `coordinates` is provided and bodyparts were reindexed 
         for modeling. 
-
-    skeleton : list, default=[]
-        List of edges that define the skeleton, where each edge is a
-        pair of bodypart names or a pair of indexes.
-
-    overlay_trajectory: bool, default=False
-        Whether to overlay trajectory of keypoints on the grid movie. 
-        If True, `coordinates` must be provided.
-
-    overlay_options: dict, default={}
-        Dictionary of options for overlaying trajectory (see
-        :py:func:`keypoint_moseq.viz.overlay_trajectory_on_video`).
-
-    plot_options: dict, default={}
-        Dictionary of options for overlaying trajectory (see 
-        :py:func:`keypoint_moseq.viz.overlay_keypoints_on_image`).
 
     quality: int, default=7
         Quality of the grid movies. Higher values result in higher
@@ -833,15 +794,18 @@ def generate_grid_movies(
         animal. If provided explicitly, `window_size` should be a
         multiple of 16 or imageio will complain.
 
+    max_video_size: int, default=4000
+        Maximum size of the grid movie in pixels. If the grid movie
+        is larger than this, it will be downsampled.
+
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """
     assert (video_dir is not None) or (video_paths is not None), fill(
         'You must provide either `video_dir` or `video_paths`') 
 
-    if overlay_trajectory or window_size is None:
+    if window_size is None:
         assert coordinates is not None, fill(
-            '`coordinates` must be provided if `overlay_trajectory` is True '
-            'or `window_size` is None')     
+            '`coordinates` must be provided if `window_size` is None')     
     
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
@@ -864,7 +828,7 @@ def generate_grid_movies(
         
     videos = {k: OpenCVReader(path) for k,path in video_paths.items()}
     fps = list(videos.values())[0].fps
-    
+
     syllable_key = 'syllables' + ('_reindexed' if use_reindexed else '')
     syllables = {k:v[syllable_key] for k,v in results.items()}
     centroids = {k:v['centroid'] for k,v in results.items()}
@@ -893,23 +857,25 @@ def generate_grid_movies(
             sampled_instances, centroids, headings, 
             coordinates, pre, post)
         
-    if len(skeleton)>0 and overlay_trajectory: 
-        if isinstance(skeleton[0][0],str):
-            assert use_bodyparts is not None, fill(
-                'If skeleton edges are specified using bodypart names, '
-                '`use_bodyparts` must be specified')
-            plot_options['edges'] = get_edges(use_bodyparts, skeleton)
-        else: plot_options['edges'] = skeleton
-    
+    # in practice we may need a smaller window...
+    scaled_window_size = max_video_size/max(rows,cols)
+    scaled_window_size = int(np.floor(scaled_window_size / 16) * 16)
+    scaled_window_size = min(scaled_window_size, window_size)
+    scale_factor = scaled_window_size / window_size
+
+    if scale_factor < 1:
+        warnings.warn('\n'+fill(
+            f'Videos will be downscaled by a factor of {scale_factor:.2f} '
+            f'so that the grid movies are under {max_video_size} pixels. '
+            'Use `max_video_size` to increase or decrease this size limit.')+'\n\n')
+        
     for syllable,instances in tqdm.tqdm(
         sampled_instances.items(), desc='Generating grid movies'):
         
         frames = grid_movie(
             instances, rows, cols, videos, centroids, headings,
-            window_size=window_size, dot_color=dot_color, pre=pre, post=post,
-            dot_radius=dot_radius, overlay_trajectory=overlay_trajectory,
-            coordinates=coordinates, plot_options=plot_options,
-            overlay_options=overlay_options)
+            window_size=window_size, scaled_window_size=scaled_window_size,
+            dot_color=dot_color, pre=pre, post=post, dot_radius=dot_radius)
 
         path = os.path.join(output_dir, f'syllable{syllable}.mp4')
         write_video_clip(frames, path, fps=fps, quality=quality)
