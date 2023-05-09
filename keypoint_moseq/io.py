@@ -14,6 +14,8 @@ import pandas as pd
 from datetime import datetime
 from textwrap import fill
 from vidio.read import OpenCVReader
+import matplotlib.pyplot as plt
+import tabulate
 
 
 from jax_moseq.utils import batch
@@ -693,9 +695,32 @@ def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
         return filepath.replace(os.path.sep, path_sep)
     else:
         return os.path.basename(filepath)
-    
 
-def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5):
+
+def _print_colored_table(row_labels, col_labels, values):
+    try:
+        from IPython.display import display
+        display_available = True
+    except ImportError:
+        display_available = False
+
+    title = 'Proportion of NaNs'
+    df = pd.DataFrame(values, index=row_labels, columns=col_labels)
+    
+    if display_available:
+        def colorize(val):
+            color = plt.get_cmap("Reds")(val*0.8)
+            return f'background-color: rgba({int(color[0]*255)}, {int(color[1]*255)}, {int(color[2]*255)}, {color[3]})'  
+        colored_df = df.style.applymap(colorize).set_caption('Proportion of NaNs')
+        display(colored_df)
+        return colored_df
+    else:
+        print(title)
+        print(tabulate(df, headers='keys', tablefmt="simple_grid", showindex=True))
+
+def check_nan_proportions(coordinates, bodyparts, 
+                          warning_threshold=0.5,
+                          breakdown=False, **kwargs):
     """
     Check if any bodyparts have a high proportion of NaNs.
     
@@ -712,26 +737,43 @@ def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5):
     warning_threshold: float, default=0.5
         If the proportion of NaNs for a bodypart is greater than
         `warning_threshold`, then a warning is printed.
+        
+    breakdown: bool, default=False
+        Whether to print a table detailing the proportion of NaNs
+        for each bodyparts in each array of `coordinates`.
     """
-    any_warnings = False
-    for filename, coords in coordinates.items():
-        nan_proportion = np.isnan(coords).any(-1).mean(0)
-        for bp, prop in zip(bodyparts, nan_proportion):
-            if prop > warning_threshold:
-                warnings.warn(f'\n{bp} is NaN in {prop*100:.1f}% of frames from {filename}')
-                any_warnings = True
-    if any_warnings:
-        warnings.warn(
-            '\n\nBodyparts with a high proportion of NaNs may cause problems '
-            'during modeling. They can be excluded through the `use_bodyparts` '
-            'setting in the config.')
+    if breakdown:
+        keys = sorted(coordinates.keys())
+        nan_props = [np.isnan(coordinates[k]).any(-1).mean(0) for k in keys]
+        _print_colored_table(keys, bodyparts, nan_props)
+    else:
+        all_coords = np.concatenate(list(coordinates.values()))
+        nan_props = np.isnan(all_coords).any(-1).mean(0)
+        if np.any(nan_props > warning_threshold):
+            bps = [bp for bp,p in zip(bodyparts,nan_props) if p > warning_threshold]
+            warnings.warn(
+                '\nThe following bodyparts are missing (NaN) in at '
+                'least {}% of frames:\n - {}\n\n'.format(warning_threshold*100, '\n - '.join(bps))
+                +fill(
+                    'This may cause problems during modeling. Bodyparts '
+                    'can be excluded with the "use_bodyparts" setting in the '
+                    'config. For a file-by-file breakdown of the fraction of '
+                    'NaNs for each bodypart, use')
+                +'\n\n`kpms.check_nan_proportions(coordinates, bodyparts, breakdown=True)`')
+
 
 
 def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
-                            path_in_name=False, remove_extension=True, 
-                            return_bodyparts=False):
+                            path_in_name=False, remove_extension=True):
     """
     Load tracking results from deeplabcut csv or hdf5 files.
+
+    For single-animal tracking, each file yields a single key/value 
+    pair in the returned `coordinates` and `confidences` dictionaries. For
+    multi-animal tracking, a key/vaue pair will be generated for each
+    tracked individual. For example a single file called `two_mice.h5`
+    with individuals "mouseA" and "mouseB" will yield the pair of
+    keys `'two_mice_mouseA', 'two_mice_mouseB'`. 
 
     Parameters
     ----------
@@ -763,9 +805,6 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
         Whether to remove the file extension from the name of the tracking
         results.
 
-    return_bodyparts: bool, default=False
-        Whether to return a list of bodypart names.
-
     Returns
     -------
     coordinates: dict
@@ -777,7 +816,8 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
         of shape (n_frames, n_bodyparts)
 
     bodyparts: list of str
-        List of bodypart names. Only returned if `return_bodyparts` is True.
+        List of bodypart names. The order of the names matches the order
+        of the bodyparts in `coordinates` and `confidences`.
     """
     filepaths = list_files_with_exts(
         filepath_pattern, ['.csv','.h5','.hdf5'], recursive=recursive)
@@ -786,35 +826,45 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
 
     coordinates,confidences = {},{}
     for filepath in tqdm.tqdm(filepaths, desc='Loading from deeplabcut'):
-        try: 
-            ext = os.path.splitext(filepath)[1]
-            if ext=='.h5': df = pd.read_hdf(filepath)
-            if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0) 
 
-            bodyparts = list(list(zip(*df.columns.to_list()))[1][::3])      
+        ext = os.path.splitext(filepath)[1]
+        if ext=='.h5': df = pd.read_hdf(filepath)
+        if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0) 
+        
+        name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
+        bodyparts = df.columns.get_level_values('bodyparts').unique().tolist()   
+        
+        if 'individuals' in df.columns.names:
+            for ind in df.columns.get_level_values('individuals').unique():
+                ind_df = df.xs(ind, axis=1, level='individuals')
+                arr = ind_df.to_numpy().reshape(len(ind_df), -1, 3)
+                coordinates[f'{name}_{ind}'] = arr[:,:,:-1]
+                confidences[f'{name}_{ind}'] = arr[:,:,-1]
+        else:
             arr = df.to_numpy().reshape(len(df), -1, 3)
-
-            name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
             coordinates[name] = arr[:,:,:-1]
             confidences[name] = arr[:,:,-1]
 
-        except Exception as e: 
-            print(fill(f'Error loading {filepath}: {e}'))
+        # except Exception as e: 
+        #     print(fill(f'Error loading {filepath}: {e}'))
     
     if len(coordinates) > 0:
         check_nan_proportions(coordinates, bodyparts)
 
-    if return_bodyparts: 
-        return coordinates,confidences,bodyparts
-    else: return coordinates,confidences
+    return coordinates,confidences,bodyparts
 
 
 
 def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
-                       path_in_name=False, return_bodyparts=False,
-                       remove_extension=True):
+                       path_in_name=False, remove_extension=True):
     """
-    Load keypoints from sleap hdf5 files.
+    Load keypoints from sleap hdf5 files. 
+
+    For single-animal tracking, each file yields a single key/value 
+    pair in the returned `coordinates` and `confidences` dictionaries. For
+    multi-animal tracking, a key/vaue pair will be generated for each track.
+    For example a single file called `two_mice.h5` will yield the pair of
+    keys `'two_mice_track0', 'two_mice_track1'`.
 
     Parameters
     ----------
@@ -845,9 +895,6 @@ def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
     remove_extension: bool, default=True
         Whether to remove the file extension from the name of the tracking
         results.
-    
-    return_bodyparts: bool, default=False
-        Whether to return a list of bodypart names.
 
     Returns
     -------
@@ -860,7 +907,8 @@ def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
         of shape (n_frames, n_bodyparts)
 
     bodyparts: list of str
-        List of bodypart names. Only returned if `return_bodyparts` is True.
+        List of bodypart names. The order of the names matches the order
+        of the bodyparts in `coordinates` and `confidences`.
     """
     filepaths = list_files_with_exts(
         filepath_pattern, ['.h5','.hdf5'], recursive=recursive)
@@ -888,9 +936,7 @@ def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
     if len(coordinates) > 0:
         check_nan_proportions(coordinates, bodyparts)
 
-    if return_bodyparts: 
-        return coordinates,confidences,bodyparts
-    else: return coordinates,confidences
+    return coordinates,confidences,bodyparts
 
 # hdf5 save/load routines modified from
 # https://gist.github.com/nirum/b119bbbd32d22facee3071210e08ecdf
