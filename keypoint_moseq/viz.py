@@ -675,7 +675,7 @@ def generate_grid_movies(
     min_duration=3, dot_radius=4, dot_color=(255,255,255), quality=7,
     window_size=None, use_reindexed=True, coordinates=None, 
     bodyparts=None, use_bodyparts=None, sampling_options={},  
-    video_extension=None, max_video_size=4000, **kwargs):
+    video_extension=None, max_video_size=1920, **kwargs):
     
     """
     Generate grid movies for a modeled dataset.
