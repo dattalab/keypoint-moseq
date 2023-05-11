@@ -24,15 +24,9 @@ A fine starting point is 5-10 keypoints. For rodents, we recommend omitting the 
 
 Multiple animals
 ----------------
-For multi-animal experiments where the animals are comparable in size and shape (e.g. same sex and strain), it is best to fit a single model to all the data from both animals. The results will be two or more syllable sequences for each video. 
+- For multi-animal experiments where the animals are comparable in size and shape (e.g. same sex and strain), it is best to fit a single model to all the data from both animals, which will result in two or more syllable sequences for each video. To load multi-animal data from SLEAP or DeepLabCut, the same functions can be used as for single-animal data, and each tracked animal will be added as a separate key/value pair in the ``coordinates`` and ``confidences`` dictionaries. In SLEAP, for example, a single file called ``two_mice.h5`` will generate a pair of keys ``'two_mice_track0', 'two_mice_track1'``. In DeepLabCut, the name of each individual will be used as a suffix, e.g. ``'two_mice_mouseA', 'two_mice_mouseB'``. These keys can then be used at the end of modeling to access syllables for each animal.
 
-- SLEAP 
-   Load with ``coordinates, confidences = kpms.load_sleap_results(sleap_results)``. For each "track" in each SLEAP file, a separate key/vaue pair will be generated in the ``coordinates`` and ``confidences`` dictionaries. For example a single file called ``two_mice.h5`` will generate a pair of keys ``'two_mice_track0', 'two_mice_track1'``. These keys can then be used at the end of modeling to access syllables for each mouse.
-   
-- DeepLabCut
-   Currently we do not provide native support for multi-animal DeepLabCut (maDLC). If you would like to use Keypoint MoSeq with maDLC, please get in touch (calebsw@gmail.com) and we will add this feature. 
-
-For multi-animal experiments where the animals differ in size (e.g. adults and pups), it is best to fit separate models. If the tracking data is contained in a single file, the ``use_bodyparts`` config option can be used to limit modeling to the subset of keypoints belonging to each animal respectively. If the tracking data for each type of animal is in separate files, then simply restrict to the appropriate files when loading the data. 
+- For multi-animal experiments where the animals differ in size (e.g. adults and pups), it is best to fit separate models. If the tracking data is contained in a single file, the ``use_bodyparts`` config option can be used to limit modeling to the subset of keypoints belonging to each animal respectively. If the tracking data for each type of animal is in separate files, then simply restrict to the appropriate files when loading the data. 
 
 
 Keypoints are noisy
