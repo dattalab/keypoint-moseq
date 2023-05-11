@@ -212,7 +212,6 @@ def resume_fitting(*, params, hypparams, labels, iteration, mask, num_iters,
                      num_iters=num_iters, **kwargs)
 
 
-
 def extract_results(*, params, states, labels, save_results=True, 
                     project_dir=None, name=None, results_path=None, 
                     **kwargs): 

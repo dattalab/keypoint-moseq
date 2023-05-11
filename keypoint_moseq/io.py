@@ -307,12 +307,12 @@ def setup_project(project_dir, deeplabcut_config=None, sleap_file=None,
                     ' valid yaml file')
                 
             if 'multianimalproject' in dlc_config and dlc_config['multianimalproject']:
-                raise NotImplementedError(
-                    'Config initialization from multi-animal deeplabcut'
-                    ' projects is not yet supported')
-                
-            dlc_options['bodyparts'] = dlc_config['bodyparts']
-            dlc_options['use_bodyparts'] = dlc_config['bodyparts']
+                dlc_options['bodyparts'] = dlc_config['multianimalbodyparts']
+                dlc_options['use_bodyparts'] = dlc_config['multianimalbodyparts']
+            else:
+                dlc_options['bodyparts'] = dlc_config['bodyparts']
+                dlc_options['use_bodyparts'] = dlc_config['bodyparts']
+
             dlc_options['skeleton'] = dlc_config['skeleton']
             dlc_options['video_dir'] = os.path.join(dlc_config['project_path'],'videos')
 
@@ -683,6 +683,108 @@ def load_results(project_dir=None, name=None, path=None):
     return load_hdf5(path)
 
 
+def save_results_as_csv(project_dir=None, name=None, h5_path=None, 
+                        save_dir=None, use_bodyparts=None,
+                        path_sep='-', **kwargs):
+    """
+    Convert modeling results from h5 to csv format.
+
+    The input h5 file is assumed to contain modeling outputs for one
+    or more recordings. This function creates a directory and then
+    saves a separate csv file for each.
+
+    The path to the input h5 file can be specified directly via
+    `results_path`. Otherwise it is assumed to be
+    `{project_dir}/{name}/results.h5`. The path to the output
+    directory can be specified directly via `save_dir`. Otherwise
+    it will be set to `{project_dir}/{name}/results`. Any files
+    already in the output directory will be overwritten.
+    
+    Parameters
+    ----------
+    project_dir: str, default=None
+        Project directory; required if `h5_path` or `save_dir` is not provided.
+
+    name: str, default=None
+        Name of the model; required if `h5_path` or `save_dir` is not provided.
+
+    h5_path: str, default=None
+        Path to the h5 file containing modeling results.
+
+    save_dir: str, default=None
+        Path to the directory where the csv files will be saved.
+
+    use_bodyparts: list, default=None
+        List of bodyparts that were used for modeling. If provided,
+        will be used for the csv column names corresponding to 
+        `estimated_coordinates`. Otherwise, the bodyparts will be
+        named `bodypart0`, `bodypart1` etc.
+
+    path_sep: str, default='-'
+        If a path separator ("/" or "\") is present in the recording name, 
+        it will be replaced with `path_sep` when saving the csv file.
+    """
+
+    if h5_path is None:
+        assert project_dir is not None and name is not None, fill(
+            'Provide either a `h5_path` or a `project_dir` and `name`')
+        h5_path = os.path.join(project_dir, name, 'results.h5')
+
+    if save_dir is None:
+        assert project_dir is not None and name is not None, fill(
+            'Provide either a `save_dir` or a `project_dir` and `name`')
+        save_dir = os.path.join(project_dir, name, 'results')
+
+    if not os.path.exists(save_dir): 
+        os.makedirs(save_dir)
+
+    with h5py.File(h5_path, 'r') as results:
+        for key in tqdm.tqdm(results.keys(), desc='Saving to csv'):
+            column_names, data = [], []
+
+            if 'syllables_reindexed' in results[key].keys():
+                column_names.append(['syllables reindexed'])
+                data.append(results[key]['syllables_reindexed'][()].reshape(-1,1))
+
+            if 'syllables' in results[key].keys():
+                column_names.append(['syllables non-reindexed'])
+                data.append(results[key]['syllables'][()].reshape(-1,1))
+
+            if 'centroid' in results[key].keys():
+                d = results[key]['centroid'].shape[1]
+                column_names.append(['centroid x', 'centroid y', 'centroid z'][:d])
+                data.append(results[key]['centroid'][()])
+
+            if 'heading' in results[key].keys():
+                column_names.append(['heading'])
+                data.append(results[key]['heading'][()].reshape(-1,1))
+
+            if 'estimated_coordinates' in results[key].keys():
+                k,d = results[key]['estimated_coordinates'].shape[1:]
+                if use_bodyparts is None:
+                    use_bodyparts = [f'bodypart{i}' for i in range(k)]
+                for i, bp in enumerate(use_bodyparts):
+                    column_names.append([f'estimated {bp} x', f'estimated {bp} y', f'{bp} z'][:d])
+                    data.append(results[key]['estimated_coordinates'][:,i,:])
+
+            if 'latent_state' in results[key].keys():
+                latent_dim = results[key]['latent_state'].shape[1]
+                column_names.append([f'latent_state {i}' for i in range(latent_dim)])
+                data.append(results[key]['latent_state'][()])
+
+            dfs = [pd.DataFrame(arr, columns=cols) for arr,cols in zip(data,column_names)]
+            df = pd.concat(dfs, axis=1)
+
+            for col in df.select_dtypes(include=[np.floating]).columns:
+                df[col] = df[col].astype(float).round(4)
+
+            save_name = key.replace(os.path.sep, path_sep)
+            save_path = os.path.join(save_dir, save_name)
+            df.to_csv(f'{save_path}.csv', index=False)
+
+
+
+
 def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
     """
     Create a name from a filepath. Either return the name of the file
@@ -717,6 +819,7 @@ def _print_colored_table(row_labels, col_labels, values):
     else:
         print(title)
         print(tabulate(df, headers='keys', tablefmt="simple_grid", showindex=True))
+
 
 def check_nan_proportions(coordinates, bodyparts, 
                           warning_threshold=0.5,

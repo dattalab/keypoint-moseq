@@ -33,13 +33,13 @@ Install the appropriate conda environment for your platform::
    # Mac (CPU-only)
    conda env create -f conda_envs/environment.mac_cpu.yml
 
-[Windows users only!] update pytables::
-
-   conda update -c conda-forge pytables
-
 Activate the new environment::
 
    conda activate keypoint_moseq
+
+*Windows users only:* install pytables::
+
+   conda install -c conda-forge pytables
 
 To use the keypoint_moseq environment in a notebook, either launch jupyterlab (`jupyter lab`) or register the environment as a jupyter notebook kernel as follows::
 
@@ -76,9 +76,9 @@ Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 
    pip install keypoint-moseq
 
-[Windows users only!] update pytables::
+*Windows users only:* install pytables::
 
-   conda update -c conda-forge pytables
+   conda install -c conda-forge pytables
 
 Make the environment available to jupyter::
 
