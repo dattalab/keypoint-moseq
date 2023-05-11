@@ -19,10 +19,10 @@ Use conda environment files to automatically install the appropriate GPU drivers
 Install the appropriate conda environment for your platform::
 
    # Windows (CPU-only)
-   conda env create -f conda_envs/environment.win64_cpu.yml
+   conda env create -f conda_envs\environment.win64_cpu.yml
 
    # Windows (GPU)
-   conda env create -f conda_envs/environment.win64_gpu.yml
+   conda env create -f conda_envs\environment.win64_gpu.yml
 
    # Linux (CPU-only)
    conda env create -f conda_envs/environment.linux_cpu.yml
