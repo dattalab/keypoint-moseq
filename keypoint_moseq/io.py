@@ -855,14 +855,12 @@ def check_nan_proportions(coordinates, bodyparts,
         if np.any(nan_props > warning_threshold):
             bps = [bp for bp,p in zip(bodyparts,nan_props) if p > warning_threshold]
             warnings.warn(
-                '\nThe following bodyparts are missing (NaN) in at '
-                'least {}% of frames:\n - {}\n\n'.format(warning_threshold*100, '\n - '.join(bps))
-                +fill(
-                    'This may cause problems during modeling. Bodyparts '
-                    'can be excluded with the "use_bodyparts" setting in the '
-                    'config. For a file-by-file breakdown of the fraction of '
-                    'NaNs for each bodypart, use')
-                +'\n\n`kpms.check_nan_proportions(coordinates, bodyparts, breakdown=True)`')
+                 '\nCoordinates for the following bodyparts are missing (set to NaN) in at least '
+                 '{}% of frames:\n - {}\n\n'.format(warning_threshold*100, '\n - '.join(bps)))
+            warnings.warn(
+                'This may cause problems during modeling. See '
+                'https://keypoint-moseq.readthedocs.io/en/latest/FAQs.html#high-proportion-of-nans'
+                ' for additional information.')
 
 
 

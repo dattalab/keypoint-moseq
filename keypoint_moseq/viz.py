@@ -798,6 +798,7 @@ def generate_grid_movies(
         Maximum size of the grid movie in pixels. If the grid movie
         is larger than this, it will be downsampled.
 
+        
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """
     assert (video_dir is not None) or (video_paths is not None), fill(
