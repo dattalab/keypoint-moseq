@@ -33,6 +33,10 @@ Install the appropriate conda environment for your platform::
    # Mac (CPU-only)
    conda env create -f conda_envs/environment.mac_cpu.yml
 
+[Windows users only!] update pytables::
+
+   conda update -c conda-forge pytables
+
 Activate the new environment::
 
    conda activate keypoint_moseq
@@ -45,15 +49,15 @@ To use the keypoint_moseq environment in a notebook, either launch jupyterlab (`
 Install using pip
 ~~~~~~~~~~~~~~~~~
 
+..note::
+   If you are using Windows with a GPU, CUDA 11.1 / cuDNN 8.2 is required. If you have a different version of CUDA installed, then follow the directions to `Install using conda`_.
+
 Create a new conda environment::
 
    conda create -n keypoint_moseq python=3.9
    conda activate keypoint_moseq
 
-   # Include the following line if installing on Windows
-   # conda install -c conda-forge pytables
-
-Install jax using one of the lines below::
+Install jax using one of the lines below. 
 
    # MacOS or Linux (CPU)
    pip install "jax[cpu]==0.3.22"
@@ -71,6 +75,10 @@ Install jax using one of the lines below::
 Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 
    pip install keypoint-moseq
+
+[Windows users only!] update pytables::
+
+   conda update -c conda-forge pytables
 
 Make the environment available to jupyter::
 
