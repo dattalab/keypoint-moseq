@@ -60,8 +60,6 @@ html_static_path = ['_static']
 
 nb_execution_mode = "off"
 
-autodoc_mock_imports = ['jaxlib']
-
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for

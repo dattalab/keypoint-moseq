@@ -49,15 +49,17 @@ To use the keypoint_moseq environment in a notebook, either launch jupyterlab (`
 Install using pip
 ~~~~~~~~~~~~~~~~~
 
-..note::
+.. note::
+
    If you are using Windows with a GPU, CUDA 11.1 / cuDNN 8.2 is required. If you have a different version of CUDA installed, then follow the directions to `Install using conda`_.
+
 
 Create a new conda environment::
 
    conda create -n keypoint_moseq python=3.9
    conda activate keypoint_moseq
 
-Install jax using one of the lines below. 
+Install jax using one of the lines below::
 
    # MacOS or Linux (CPU)
    pip install "jax[cpu]==0.3.22"
@@ -70,7 +72,6 @@ Install jax using one of the lines below.
 
    # Windows (GPU)
    pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl
-
 
 Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 
