@@ -3,6 +3,4 @@ sphinx==4.4.0
 sphinx-rtd-theme
 autodocsumm
 myst-nb
-jax==0.3.22
-jaxlib==0.3.22
 requests>=2.5.0
