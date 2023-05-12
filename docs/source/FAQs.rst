@@ -52,7 +52,7 @@ If your keypoint tracking data contains a high proportion of NaNs, you may get t
 
    kpms.check_nan_proportions(coordinates, bodyparts, breakdown=True)
 
-- Rerun keypoint detection with a lower threshold for missing data. In general, keypoint tracking algorithms such as SLEAP and DeepLabCut will mark a keypoint as NaN in a given frame if its confidence is below a certain level. In SLEAP, this level can be adjusted using the ``--peak_threshold`` argument when `running inference from the command line <https://sleap.ai/notebooks/Training_and_inference_on_an_example_dataset.html#inference>`_::
+- Rerun keypoint detection with a lower threshold for missing data. In general, keypoint tracking algorithms such as SLEAP and DeepLabCut will mark a keypoint as NaN in a given frame if its confidence is below a certain level. In SLEAP, this level can be adjusted using the argument ``--peak_threshold`` when `running inference from the command line <https://sleap.ai/notebooks/Training_and_inference_on_an_example_dataset.html#inference>`_, e.g.::
 
    sleap-track VIDEO [other_args] --peak_threshold 0.05
 
@@ -115,10 +115,10 @@ Choosing the target syllable duration
 -------------------------------------
 For rodents we recommend a target duration of ~400ms (i.e. 12 frames at 30fps), since this timescale has been validated through analyses of behavior and neural activity in previous studies. In the `keypoint-MoSeq paper <https://www.biorxiv.org/content/10.1101/2023.03.16.532307v2>`_, we use changepoint analysis to support the choice of 400ms as the target duration. To repeat this analysis, follow the changepoints tutorial. For other animals or head-fixed setups, the target duration may be different, and depends mainly on the timescale of behavior that you are interested in.
 
+
 Number of model fitting iterations
 ----------------------------------
 It may be necessary to re-run the fitting process a few times to choose a good value for the `kappa` hyperparameter. During these initial runs, fitting need only be run until the syllable durations stabilize. This typically takes <10 for the initial (AR only) stage of fitting, and 10-50 iterations for the second (full model) stage. After setting ``kappa``, continue fitting until the syllable sequence stabilizes, e.g. 200-500 iterations. In our experience, the model fit improves somewhat from 200 to 500 iterations, but not after that.
-
 
 
 Detecting existing syllables in new data
@@ -136,6 +136,50 @@ If you already have a trained a MoSeq model and would like to apply it to new da
                               project_dir=project_dir, pca=kpms.load_pca(project_dir),
                               **config(), **checkpoint)
 
+
+Continue model fitting but with new data
+----------------------------------------
+If you already trained keypoint MoSeq model, but would like to improve it using newly collected data (without starting from scratch), then follow the recipe below. Briefly, the code shows how to load model parameters from a saved checkpoint and then use them as the starting point for a new round of model fitting.::
+
+   import keypoint_moseq as kpms
+
+   project_dir = 'project/directory'
+   config = lambda: kpms.load_config(project_dir)
+   name = 'name_of_model' (e.g. '2023_03_16-15_50_11')
+   
+   # load and format new data (e.g. from DeepLabCut)
+   coordinates, confidences,bodyparts = kpms.load_deeplabcut_results(dlc_results_directory)
+   data, labels = kpms.format_data(coordinates, confidences=confidences, **config())
+
+   # load previously saved PCA and model checkpoint
+   pca = kpms.load_pca(project_dir)
+   checkpoint = kpms.load_checkpoint(project_dir=project_dir, name=name)
+
+   # initialize a new model using saved parameters
+   model = kpms.init_model(data, pca=pca, params=checkpoint['params'], **config())
+
+   # continue fitting, now with the new data
+   model, history, name = kpms.fit_model(model, data, labels, num_iters=20, project_dir=project_dir)
+
+
+Interpreting model outputs
+--------------------------
+The final output of keypoint MoSeq is a results .h5 file (and optionally a directory of .csv files) that contain the following information:
+
+- Syllables (reindexed) 
+   The syllable label assigned to each frame. The syllable labels are reindexed so that the most common syllable is labeled 0, the second most common is labeled 1, etc. Generally there will be a core set of syllables that are used a nontrivial number of times (perhaps a few dozen), and then a long tail of syllables that are used extremely rarely. The long tail should be ignored (we typically use a frequency cutoff of 0.5%). To plot the distribution of syllable frequencies, use ``kpms.plot_syllable_frequencies(name=name, project_dir=project_dir)``.
+
+- Syllables (non-reindexed)
+   The non-reindexed syllable label assigned to each frame (i.e. the state indexes assigned by the model). Unless you are doing something unusual, you should ignore these.
+
+- Centroid and heading
+   The centroid and heading of the animal in each frame, as estimated by the model. 
+
+- Estimated keypoint coordinates
+   The denoised coordinates of each keypoint in each frame, as estimated by the model. These coordinates reflect the model's estimate of the "true" location of keypoint, once noise has been removed. They may be useful if the original coordinates are noisy or frequently non-detected. It's important to note, however, that these coordinates are mainly a byproduct of the model fitting process, and have not been formally validated as a replacement for the original detections. So use with caution!
+
+- Latent state
+   Low-dimensional representation of the animal's pose in each frame. These are similar to PCA scores, are modified to reflect the pose dynamics and noise estimates inferred by the model. 
 
 
 Troubleshooting

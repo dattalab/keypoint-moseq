@@ -259,7 +259,7 @@ def plot_syllable_frequencies(results=None, path=None, project_dir=None,
     syllables = {k:res[syllable_key] for k,res in results.items()}
     frequencies = get_frequencies(syllables)
     frequencies = frequencies[frequencies>min_frequency]
-    xmax = max(minlength, len(frequencies))
+    xmax = max(minlength, np.max(np.nonzero(frequencies>min_frequency)[0])+1)
 
     fig, ax = plt.subplots()
     ax.bar(range(len(frequencies)),frequencies,width=1)
@@ -272,8 +272,8 @@ def plot_syllable_frequencies(results=None, path=None, project_dir=None,
 
 
 def plot_duration_distribution(results=None, path=None, project_dir=None, 
-                               name=None, use_reindexed=True, lim=None,
-                               num_bins=30, fps=None, show_median=True):
+                               name=None, lim=None, num_bins=30, fps=None, 
+                               show_median=True):
     """
     Plot a histogram showing the frequency of each syllable.
     
@@ -322,9 +322,8 @@ def plot_duration_distribution(results=None, path=None, project_dir=None,
     """
     if results is None:
         results = load_results(path=path, name=name, project_dir=project_dir)
-
-    syllable_key = 'syllables' if not use_reindexed else 'syllables_reindexed'
-    syllables = {k:res[syllable_key] for k,res in results.items()}
+        
+    syllables = {k:res['syllables'] for k,res in results.items()}
     durations = get_durations(syllables)
     
     if lim is None:
