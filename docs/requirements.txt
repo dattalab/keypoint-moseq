@@ -6,4 +6,3 @@ myst-nb
 jax==0.3.22
 jaxlib==0.3.22
 requests>=2.5.0
--e .
