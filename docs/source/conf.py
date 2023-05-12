@@ -18,11 +18,6 @@ import sys
 project = 'Keypoint MoSeq'
 author = 'Caleb Weinreb'
 
-
-import keypoint_moseq
-release = keypoint_moseq.__version__
-version = release.split('+')[0]
-
 # -- General configuration ---------------------------------------------------
 
 # Add any Sphinx extension module names here, as strings. They can be

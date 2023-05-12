@@ -141,7 +141,7 @@ If you already have a trained a MoSeq model and would like to apply it to new da
 Troubleshooting
 ===============
 
-We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version, which is currently |version|. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following inside the ``keypoint_moseq`` conda environment::
+We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following inside the ``keypoint_moseq`` conda environment::
    
     pip install --U keypoint_moseq 
 
