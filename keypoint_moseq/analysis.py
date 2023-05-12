@@ -54,11 +54,13 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
         boolean flag whether to include data for bodyparts
     smooth_heading : bool, optional
         boolean flag whether smooth the computed heading, by default True
+    
     Returns
     -------
     moseq_df : pandas.DataFrame
         the dataframe that contains kinematic data for each frame
     """
+
     # load model results
     results_dict = load_results(base_dir, model_name)
     # load index file
@@ -149,6 +151,7 @@ def compute_stats_df(moseq_df, threshold=0.005, groupby=['group', 'uuid', 'file_
         the column name of the syllable column to be summarize by, by default 'syllables_reindexed'
     normalize : bool, optional
         boolean falg whether to normalize by counts, by default True
+    
     Returns
     -------
     stats_df : pandas.DataFrame
@@ -199,6 +202,7 @@ def robust_min(v):
     ----------
     v : numpy.array
         the array to find robust minimum from
+    
     Returns
     -------
     float
@@ -214,6 +218,7 @@ def robust_max(v):
     ----------
     v : numpy.array
         the array to find robust maximum from
+    
     Returns
     -------
     float
@@ -231,6 +236,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=10
                                  groupby_list=['group', 'uuid'], range_type='robust',
                                  scalars=['heading', 'velocity_px_s']):
     """create a summary dataframe to visualize the data as the MoSeq fingerprint (behvavoiral summary) plot
+    
     Parameters
     ----------
     scalar_df : pandas.DataFrame
@@ -247,6 +253,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=10
         the range type to use for the heatmap, by default 'robust'
     scalars : list, optional
         the list of scalars to include in the fingerprint, by default ['heading', 'velocity_px_s']
+    
     Returns
     -------
     fingerprint_df : pandas.DataFrame
@@ -310,6 +317,7 @@ def plotting_fingerprint(summary, range_dict, preprocessor_type='minmax', num_le
                          figsize=(10, 15), plot_columns=['heading', 'velocity_px_s', 'MoSeq'],
                          col_names=[('Heading', 'a.u.'), ('velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
     """plot the fingerprint plot from fingerprint dataframe
+    
     Parameters
     ----------
     summary : pandas.DataFrame
@@ -332,6 +340,7 @@ def plotting_fingerprint(summary, range_dict, preprocessor_type='minmax', num_le
         the columns to plot the fingerprint, by default ['heading','velocity_px_s', 'MoSeq']
     col_names : list, optional
         column names for the fingerprint plot, by default [('Heading','a.u.'),('velocity','px/s'), ('MoSeq','Syllable ID')]
+    
     Raises
     ------
     Exception
@@ -447,15 +456,19 @@ def plotting_fingerprint(summary, range_dict, preprocessor_type='minmax', num_le
 
 
 def get_tie_correction(x, N_m):
-    """
-   assign tied rank values to the average of the ranks they would have received if they had not been tied for Kruskal-Wallis helper function.
+    """assign tied rank values to the average of the ranks they would have received if they had not been tied for Kruskal-Wallis helper function.
 
-    Args:
-    x (pd.Series): syllable usages for a single session.
-    N_m (int): Number of total sessions.
-
-    Returns:
-    corrected_rank (float): average of the inputted tied rank
+    Parameters
+    ----------
+    x : pd.Series
+        syllable usages for a single session.
+    N_m : int
+        Number of total sessions.
+    
+    Returns
+    -------
+    corrected_rank : float
+        average of the inputted tied ranks.
     """
 
     vc = x.value_counts()
@@ -465,24 +478,34 @@ def get_tie_correction(x, N_m):
     return tie_sum / (12.0 * (N_m - 1))
 
 
-def run_manual_KW_test(df_usage, merged_usages_all, num_groups, n_per_group, cum_group_idx, n_perm=10000, seed=0):
-    """
+def run_manual_KW_test(df_usage, merged_usages_all, num_groups, n_per_group, cum_group_idx, n_perm=10000, seed=42):
+    """ Run a manual Kruskal-Wallis test compare the results agree with the scipy.stats.kruskal function.
 
-    Run a manual Kruskal-Wallis test compare the results agree with the scipy.stats.s
+    Parameters
+    ----------
+    df_usage : pandas.DataFrame
+        DataFrame with syllable usages. shape = (N_m, n_syllables)
+    merged_usages_all : np.array
+        numpy array format of the df_usage DataFrame.
+    num_groups : int
+        Number of unique groups
+    n_per_group : list
+        list of value counts for sessions per group. len == num_groups.
+    cum_group_idx : list
+        list of indices for different groups. len == num_groups + 1.
+    n_perm : int, optional
+        Number of permuted samples to generate, by default 10000
+    seed : int, optional
+        Random seed used to initialize the pseudo-random number generator, by default 42
 
-    Args:
-    df_usage (pandas.DataFrame): DataFrame containing only pre-computed syllable stats. shape = (N_m, n_syllables)
-    merged_usages_all (np.array): numpy array format of the df_usage DataFrame.
-    num_groups (int): Number of unique groups
-    n_per_group (list): list of value counts for sessions per group. len == num_groups.
-    cum_group_idx (list): list of indices for different groups. len == num_groups + 1.
-    n_perm (int): Number of permuted samples to generate.
-    seed (int): Random seed used to initialize the pseudo-random number generator.
-
-    Returns:
-    h_all (np.array): Array of H-stats computed for given n_syllables; shape = (n_perms, N_s)
-    real_ranks (np.array): Array of syllable ranks, shape = (N_m, n_syllables)
-    X_ties (np.array): 1-D list of tied ranks, where if value > 0, then rank is tied. len(X_ties) = n_syllables
+    Returns
+    -------
+    h_all : np.array
+        Array of H-stats computed for given n_syllables; shape = (n_perms, N_s)
+    real_ranks : np.array
+        Array of syllable ranks, shape = (N_m, n_syllables)
+    X_ties : np.array
+        1-D list of tied ranks, where if value > 0, then rank is tied. len(X_ties) = n_syllables
     """
 
     N_m, N_s = merged_usages_all.shape
@@ -530,22 +553,33 @@ def run_manual_KW_test(df_usage, merged_usages_all, num_groups, n_per_group, cum
 
 
 def dunns_z_test_permute_within_group_pairs(df_usage, vc, real_ranks, X_ties, N_m, group_names, rnd, n_perm):
-    """
-    Run Dunn's z-test statistic on combinations of all group pairs, handling pre-computed tied ranks.
+    """Run Dunn's z-test statistic on combinations of all group pairs, handling pre-computed tied ranks.
 
-    Args:
-    df_usage (pandas.DataFrame): DataFrame containing only pre-computed syllable stats.
-    vc (pd.Series): value counts of sessions in each group.
-    real_ranks (np.array): Array of syllable ranks.
-    X_ties (np.array): 1-D list of tied ranks, where if value > 0, then rank is tied
-    N_m (int): Number of sessions.
-    group_names (pd.Index): Index list of unique group names.
-    rnd (np.random.RandomState): Pseudo-random number generator.
-    n_perm (int): Number of permuted samples to generate.
-
-    Returns:
-    null_zs_within_group (dict): dict of group pair keys paired with vector of Dunn's z-test statistics of the null hypothesis.
-    real_zs_within_group (dict): dict of group pair keys paired with vector of Dunn's z-test statistics
+    Parameters
+    ----------
+    df_usage : pandas.DataFrame
+        DataFrame containing only pre-computed syllable stats.
+    vc : pd.Series
+        value counts of sessions in each group.
+    real_ranks : np.array
+        Array of syllable ranks.
+    X_ties : np.array
+        1-D list of tied ranks, where if value > 0, then rank is tied
+    N_m : int
+        Number of sessions.
+    group_names : pd.Index
+        Index list of unique group names.
+    rnd : np.random.RandomState
+        Pseudo-random number generator.
+    n_perm : int
+        Number of permuted samples to generate.
+    
+    Returns
+    -------
+    null_zs_within_group : dict
+        dict of group pair keys paired with vector of Dunn's z-test statistics of the null hypothesis.
+    real_zs_within_group : dict
+        dict of group pair keys paired with vector of Dunn's z-test statistics
     """
 
     null_zs_within_group = {}
@@ -583,22 +617,33 @@ def dunns_z_test_permute_within_group_pairs(df_usage, vc, real_ranks, X_ties, N_
 
 
 def compute_pvalues_for_group_pairs(real_zs_within_group, null_zs, df_k_real, group_names, n_perm=10000, thresh=0.05, mc_method="fdr_bh"):
-    """
-    Adjust the p-values from Dunn's z-test statistics and computes the resulting significant syllables with the adjusted p-values.
+    """Adjust the p-values from Dunn's z-test statistics and computes the resulting significant syllables with the adjusted p-values.
 
-    Args:
-    real_zs_within_group (dict): dict of group pair keys paired with vector of Dunn's z-test statistics
-    null_zs  (dict): dict of group pair keys paired with vector of Dunn's z-test statistics of the null hypothesis.
-    df_k_real (pandas.DataFrame): DataFrame of KW test results.
-    group_names (pd.Index): Index list of unique group names.
-    n_perm (int): Number of permuted samples to generate.
-    thresh (float): Alpha threshold to consider syllable significant.
-    mc_method (str): Multiple Corrections method to use.
-    verbose (bool): indicates whether to print out the significant syllable results
+    Parameters
+    ----------
+    real_zs_within_group : dict
+        dict of group pair keys paired with vector of Dunn's z-test statistics
+    null_zs : dict
+        dict of group pair keys paired with vector of Dunn's z-test statistics of the null hypothesis.
+    df_k_real : pandas.DataFrame
+        DataFrame of KW test results.
+    group_names : pd.Index
+        Index list of unique group names.
+    n_perm : int, optional
+        Number of permuted samples to generate, by default 10000
+    thresh : float, optional
+        Alpha threshold to consider syllable significant, by default 0.05
+    mc_method : str, optional
+        Multiple Corrections method to use, by default "fdr_bh"
+    verbose : bool, optional
+        indicates whether to print out the significant syllable results, by default False
 
-    Returns:
-    df_pval_corrected (pandas.DataFrame): DataFrame containing Dunn's test results with corrected p-values.
-    significant_syllables (list): List of corrected KW significant syllables (syllables with p-values < thresh)
+    Returns
+    -------
+    df_pval_corrected : pandas.DataFrame
+        DataFrame containing Dunn's test results with corrected p-values.
+    significant_syllables : list
+        List of corrected KW significant syllables (syllables with p-values < thresh).
     """
 
     # do empirical p-val calculation for all group permutation
@@ -621,6 +666,32 @@ def compute_pvalues_for_group_pairs(real_zs_within_group, null_zs, df_k_real, gr
 
 
 def run_kruskal(stats_df, statistic='frequency', n_perm=10000, seed=42, thresh=0.05, mc_method='fdr_bh'):
+    """Run Kruskal-Wallis test on syllable usage data.
+    
+    Parameters
+    ----------
+    stats_df : pandas.DataFrame
+        DataFrame containing syllable usage data.
+    statistic : str, optional
+        Statistic to use for KW test, by default 'frequency'
+    n_perm : int, optional
+        Number of permutations to run, by default 10000
+    seed : int, optional
+        Random seed, by default 42
+    thresh : float, optional
+        Alpha threshold to consider syllable significant, by default 0.05
+    mc_method : str, optional
+        Multiple Corrections method to use, by default "fdr_bh"
+    
+    Returns
+    -------
+    df_k_real : pandas.DataFrame
+        DataFrame containing KW test results.
+    df_pval_corrected : pandas.DataFrame
+        DataFrame containing Dunn's test results with corrected p-values.
+    significant_syllables : list
+        List of corrected KW significant syllables (syllables with p-values < thresh).
+    """
     rnd = np.random.RandomState(seed=seed)
     # get grouped mean data
     grouped_data = stats_df.pivot_table(
@@ -707,9 +778,10 @@ def run_kruskal(stats_df, statistic='frequency', n_perm=10000, seed=42, thresh=0
 # frequency plot stuff
 def sort_syllables_by_stat_difference(stats_df, ctrl_group, exp_group, stat='frequency'):
     """sort syllables by the difference in the stat between the control and experimental group
+
     Parameters
     ----------
-    complete_df : pandas.DataFrame
+    stats_df : pandas.DataFrame
         the complete dataframe that contains kinematic data for each frame
     ctrl_group : str
         the name of the control group
@@ -717,6 +789,7 @@ def sort_syllables_by_stat_difference(stats_df, ctrl_group, exp_group, stat='fre
         the name of the experimental group
     stat : str, optional
         the statistic to use for finding the syllable differences between two groups, by default 'frequency'
+    
     Returns
     -------
     list
@@ -743,13 +816,11 @@ def sort_syllables_by_stat(stats_df, stat='frequency'):
 
     Parameters
     ----------
-    complete_df : pandas.DataFrame
+    stats_df : pandas.DataFrame
         the stats dataframe that contains kinematic data and the syllable label for each session and each syllable
     stat : str, optional
         the statistic to sort on, by default 'frequency'
-    max_sylls : int, optional
-        the maximum number of syllables to include, by default None
-
+   
     Returns
     -------
     ordering : list
@@ -817,16 +888,16 @@ def plot_syll_stats_with_sem(stats_df, progress_paths, plot_sig=True, thresh=0.0
     ----------
     stats_df : pandas.DataFrame
         the dataframe that contains kinematic data and the syllable label
-    syll_info : dict, optional
-        the dictionary that contains syllable information, ie. names and short descriptions, by default None
-    sig_sylls : dict, optional
-        dictionary of significantly different syllables between groups, by default None
+    progress_paths : dict
+        the dictionary that contains the paths to the files in the progress.
+    plot_sig : bool, optional
+        whether to plot the significant syllables, by default True
+    thresh : float, optional
+        the threshold for significance, by default 0.05
     stat : str, optional
         the statistic to plot, by default 'frequency'
     ordering : str, optional
         the ordering of the syllables, by default 'stat'
-    max_sylls : int, optional
-        the maximum number of syllables to include, by default 40
     groups : list, optional
         the list of groups to plot, by default None
     ctrl_group : str, optional
@@ -937,6 +1008,8 @@ def get_transitions(label_sequence):
     -------
     transitions : np.ndarray
         the sequence of syllable transitions
+    locs : np.ndarray
+        the locations of the syllable transitions
     """
 
     arr = deepcopy(label_sequence)
@@ -960,6 +1033,7 @@ def get_syllable_statistics(data, fill_value=-5, max_syllable=100, count='freque
         the maximum number of syllables to include, by default 100
     count : str, optional
         the type of statistic to calculate, by default 'frequency'
+    
     Returns
     -------
     frequencies : dict
@@ -1029,6 +1103,7 @@ def n_gram_transition_matrix(labels, n=2, max_label=99):
         the number of successive states in the sequence, by default 2
     max_label : int, optional
         the maximum number of the syllable labels to include, by default 99
+    
     Returns
     -------
     trans_mat : np.ndarray
@@ -1044,12 +1119,14 @@ def n_gram_transition_matrix(labels, n=2, max_label=99):
 
 def normalize_transition_matrix(init_matrix, normalize):
     """normalize the transition matrices
+    
     Parameters
     ----------
     init_matrix : numpy.ndarray
         the initial transition matrix to be normalized 
     normalize : str
         the method to normalize the transition matrix
+    
     Returns
     -------
     init_matrix : numpy.ndarray
@@ -1070,10 +1147,11 @@ def normalize_transition_matrix(init_matrix, normalize):
 def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
                           smoothing=0.0, combine=False, disable_output=False) -> list:
     """compute the transition matrix for the syllable labels
+    
     Parameters
     ----------
     labels : list or np.ndarray
-        session state lists
+        syllable labels per session
     max_syllable : int, optional
         the maximum number of syllables to include, by default 100
     normalize : str, optional
@@ -1084,6 +1162,7 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
         whether to combine the transition matrices for all the sessions, by default False
     disable_output : bool, optional
         whether to disable the progress bar, by default False
+    
     Returns
     -------
     all_mats : list
@@ -1125,6 +1204,7 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
 
 def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigram'):
     """get the transition matrices for each group
+    
     Parameters
     ----------
     labels : list or np.ndarray
@@ -1137,6 +1217,7 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
         the maximum number of syllables to include
     normalize : str, optional
         the method to normalize the transition matrix, by default 'bigram'
+    
     Returns
     -------
     trans_mats : list
@@ -1164,6 +1245,17 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
 
 
 def visualize_transition_bigram(group, trans_mats, normalize='bigram'):
+    """visualize the transition matrices for each group
+    
+    Parameters
+    ----------
+    group : list or np.ndarray
+        the groups in the project
+    trans_mats : list
+        the list of transition matrices for each group
+    normalize : str, optional
+        the method to normalize the transition matrix, by default 'bigram'
+    """
 
     # infer max_syllables
     max_syllables = trans_mats[0].shape[0]
@@ -1185,6 +1277,23 @@ def visualize_transition_bigram(group, trans_mats, normalize='bigram'):
 
 
 def generate_transition_matrices(progress_paths, normalize='bigram', syll_key='syllables_reindexed'):
+    """generate the transition matrices for each session
+
+    Parameters
+    ----------
+    progress_paths : dict
+        the dictionary of paths to the files in the analysis progress
+    normalize : str, optional
+        the method to normalize the transition matrix, by default 'bigram'
+    syll_key : str, optional
+        the key to the syllable list in the progress file, by default 'syllables_reindexed'
+    
+    Returns
+    -------
+    trans_mats : list
+        the list of transition matrices for each group
+
+    """
 
     trans_mats, usages = None, None
     # get max syllable labels
@@ -1220,6 +1329,21 @@ def generate_transition_matrices(progress_paths, normalize='bigram', syll_key='s
 
 
 def plot_transition_graph_group(groups, trans_mats, usages, layout='circular', node_scaling=2000):
+    """plot the transition graph for each group
+    
+    Parameters
+    ----------
+    groups : list
+        the list of groups to plot
+    trans_mats : list
+        the list of transition matrices for each group
+    usages : list
+        the list of syllable usage for each group
+    layout : str, optional
+        the layout of the graph, by default 'circular'
+    node_scaling : int, optional
+        the scaling factor for the node size, by default 2000
+    """
     # Figure out the number of rows for the plot
     n_row = ceil(len(groups)/2)
     fig, all_axes = plt.subplots(n_row, 2, figsize=(16, 8*n_row))
@@ -1255,6 +1379,22 @@ def plot_transition_graph_group(groups, trans_mats, usages, layout='circular', n
 
 
 def plot_transition_graph_difference(groups, trans_mats, usages, layout='circular', node_scaling=3000):
+    """plot the difference of transition graph between groups
+    
+    Parameters
+    ----------
+    groups : list
+        the list of groups to plot
+    trans_mats : list
+        the list of transition matrices for each group
+    usages : list
+        the list of syllable usage for each group
+    layout : str, optional
+        the layout of the graph, by default 'circular'
+    node_scaling : int, optional
+        the scaling factor for the node size, by default 3000
+    """
+
     # find combinations
     group_combinations = list(combinations(groups, 2))
     # create group index dict
@@ -1545,7 +1685,7 @@ def track_progress(model_dirname, project_dir, input_dir, filename='progress.yam
 
 
 def update_model_progress(progress_paths, model_dirname, progress_filepath):
-    """
+    """update the progress file for a specified model name
 
     Parameters
     ----------

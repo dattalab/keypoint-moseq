@@ -77,13 +77,14 @@ class GroupSettingWidgets:
     """
 
     def __init__(self, index_filepath):
+        """Initialize the group setting widget
+        
+        Parameters
+        ----------
+        index_filepath : str
+            path to the index file
         """
-        Initialize all the Group Setting widgets, parses the index yaml file into a pandas DataFrame that is compatible to be displayed using QGrid.
-
-        Args:
-        index_filepath (str): Path to index file (moseq2-index.yaml) containing session metadata and grouping info.
-        """
-
+        
         self.index_filepath = index_filepath
         style = {'description_width': 'initial',
                  'display': 'flex-grow', 'align_items': 'stretch'}
@@ -155,11 +156,12 @@ class GroupSettingWidgets:
         return index_data, df
 
     def update_table(self, b=None):
-        """
-        Update table upon "Set Button" click
+        """Update table upon "Set Button" click
 
-        Args:
-        b (button click)
+        Parameters
+        ----------
+        b : button click, optional
+            button click to udpate table, by default None
         """
 
         self.update_index_button.button_style = 'info'
@@ -172,12 +174,13 @@ class GroupSettingWidgets:
             self.qgrid_widget.edit_cell(i, 'group', self.group_input.value)
 
     def update_clicked(self, b=None):
-        """
-        Update the index file with the current table state upon Save button click.
+        """Update the index file with the current table state upon Save button click.
 
-        Args:
-        b (button click)
-        """
+         Parameters
+        ----------
+        b : button click, optional
+            button click to update and save the table, by default None
+        """       
 
         files = self.index_dict['files']
 
@@ -194,13 +197,14 @@ class GroupSettingWidgets:
         self.update_index_button.icon = 'check'
 
     def clear_clicked(self, b=None):
-        """
-        Clear the display.
+        """Clear the display.
 
-        Args:
-        b (ipywidgets.Button click): callback from button when user clicks the button.
-        Returns:
+        Parameters
+        ----------
+        b : button click, optional
+            callback from button when user clicks the button, by default None
         """
+
         clear_output()
 
 
@@ -209,13 +213,13 @@ class InteractiveVideoViewer:
     """
 
     def __init__(self, syll_vid_dir):
-        """
-        initialize the video viewer widget.
+        """Initialize the interactive video viewer widget
 
-        Args:
-        syll_vid_dir (str): Path to base directory containing all syllable movies to show
+        Parameters
+        ----------
+        syll_vid_dir : str
+            path to the syllable video directory
         """
-
         self.sess_select = widgets.Dropdown(options=self.create_syllable_path_dict(syll_vid_dir),
                                             description='Syllable:', disabled=False, continuous_update=True)
 
@@ -225,11 +229,12 @@ class InteractiveVideoViewer:
         self.clear_button.on_click(self.clear_on_click)
 
     def create_syllable_path_dict(self, syll_vid_dir):
-        """
-        Create a dictionary of all syllable videos in the syllable video directory.
+        """Create a dictionary of all syllable videos in the syllable video directory.
 
-        Args:
-        syll_vid_dir (str): Path to syllable video directory.
+        Parameters
+        ----------
+        syll_vid_dir : str
+            Path to syllable video directory.
         """
 
         syll_vid_dict = {}
@@ -248,21 +253,23 @@ class InteractiveVideoViewer:
         return syll_vid_dict
 
     def clear_on_click(self, b=None):
-        """
-        Clear the cell output
+        """Clear the cell output
 
-        Args:
-        b (button click)
+        Parameters
+        ----------
+        b : button click, optional
+            clear javascript output, by default None
         """
 
         clear_output()
 
     def get_video(self, input_file):
-        """
-        Returns a div containing a video object to display.
+        """Returns a div containing a video object to display.
 
-        Args:
-        input_file (str): Path to session extraction video to view.
+        Parameters
+        ----------
+        input_file: str
+            Path to session extraction video to view.
         """
 
         # get video dimensions
@@ -310,11 +317,13 @@ class InteractiveVideoViewer:
 
 
 class SyllableLabelerWidgets:
+    """The syllable labeler widgets for labeling syllables.
+    """
 
     def __init__(self):
+        """Initialize the syllable labeler widgets.
         """
-        launch the widget for labelling syllables with name and descriptions using the crowd movies.
-        """
+
         self.clear_button = widgets.Button(
             description='Clear Output', disabled=False, tooltip='Close Cell Output')
 
@@ -393,19 +402,22 @@ class SyllableLabelerWidgets:
         """
         Clear the cell output
 
-        Args:
-        b (button click)
+        Parameters
+        ----------
+        b: button click, optional
+            Button click to clear the javascript output
         """
 
         clear_output()
         del self
 
     def on_next(self, event=None):
-        """
-        trigger an view update when the user clicks the "Next" button.
+        """trigger an view update when the user clicks the "Next" button.
 
-        Args:
-        event (ipywidgets.ButtonClick): User clicks next button.
+        Parameters
+        ----------
+        event: ipywidgets.ButtonClick
+            User clicks next button.
         """
 
         # Updating dict
@@ -426,11 +438,12 @@ class SyllableLabelerWidgets:
         self.write_syll_info(curr_syll=self.syll_select.index)
 
     def on_prev(self, event=None):
-        """
-        trigger an view update when the user clicks the "Previous" button.
+        """trigger an view update when the user clicks the "Previous" button.
 
-        Args:
-        event (ipywidgets.ButtonClick): User clicks 'previous' button.
+        Parameters
+        ----------
+        event: ipywidgets.ButtonClick
+            User clicks previous button.
         """
 
         # Update syllable information dict
@@ -451,11 +464,11 @@ class SyllableLabelerWidgets:
         self.write_syll_info(curr_syll=self.syll_select.index)
 
     def on_set(self, event=None):
-        """
-        save the dict to syllable information file.
-
-        Args:
-        event (ipywidgets.ButtonClick): User clicks the 'Save' button.
+        """save the dict to syllable information file.
+        Parameters
+        ----------
+        event: ipywidgets.ButtonClick
+            User clicks save button.
         """
 
         # Update dict
@@ -469,17 +482,24 @@ class SyllableLabelerWidgets:
 
 
 class SyllableLabeler(SyllableLabelerWidgets):
+    """Syllable Labeler control component.
+    """
 
     def __init__(self, base_dir, model_name, index_file, movie_type, syll_info_path):
-        """
-        Initialize syllable labeler widget with class context parameters, and create the syllable information dict.
-
-        Args:
-        model_fit (dict): Loaded trained model dict.
-        index_file (str): Path to saved index file.
-        max_sylls (int): Maximum number of syllables to preview and label.
-        select_median_duration_instances (bool): boolean flag to select examples with syallable duration closer to median.
-        save_path (str): Path to save syllable label information dictionary.
+        """Initialize the SyllableLabeler
+        
+        Parameters
+        ----------
+        base_dir: str
+            Base directory for the model.
+        model_name: str
+            Name of the model.
+        index_file: str
+            Path to the index file.
+        movie_type: str
+            Type of movie to load.
+        syll_info_path: str
+            Path to the syllable information file.
         """
 
         super().__init__()
@@ -530,6 +550,19 @@ class SyllableLabeler(SyllableLabelerWidgets):
         self.syll_select.options = self.option_dict
 
     def _initialize_syll_info_dict(self, movie_dir):
+        """Initialize the syllable information dictionary.
+
+        Parameters
+        ----------
+        movie_dir : str
+            Path to the movie directory.
+
+        Returns
+        -------
+        dict
+            Dictionary with syllable information.
+        """
+
         grid_movie_files = sorted(glob(os.path.join(self.base_dir, self.model_name, 'grid_movies',
                                   '*.mp4')), key=lambda x: int(os.path.basename(x).split('.')[0][8:]))
         crowd_movie_files = sorted(glob(os.path.join(self.base_dir, self.model_name,
@@ -537,8 +570,12 @@ class SyllableLabeler(SyllableLabelerWidgets):
         return {i: {'label': '', 'desc': '', 'movie_path': [grid_movie_files[i], crowd_movie_files[i]], 'group_info': {}} for i in range(len(grid_movie_files))}
 
     def write_syll_info(self, curr_syll=None):
-        """
-        Write current syllable info data to a YAML file.
+        """Write current syllable info data to a YAML file.
+
+        Parameters
+        ----------
+        curr_syll : int
+            Current syllable index.
         """
 
         # Dropping group info from dict
@@ -561,8 +598,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
             self.syll_select._initializing_traits_ = False
 
     def get_group_df(self):
-        """
-        Populate syllable information dict with usage and scalar information.
+        """Populate syllable information dict with usage and scalar information.
         """
         print('Computing Syllable Statistics...')
         moseq_df = compute_moseq_df(
@@ -586,11 +622,12 @@ class SyllableLabeler(SyllableLabelerWidgets):
                     (stats_df.group == group) & (stats_df.syllable == syll_key))]['velocity_px_s_mean'].values[0]
 
     def set_group_info_widgets(self, group_info):
-        """
-        read the syllable information into a pandas DataFrame and display it as a table.
+        """Read the syllable information into a pandas DataFrame and display it as a table.
 
-        Args:
-        group_info (dict): Dictionary of grouped current syllable information
+        Parameters
+        ----------
+        group_info : dict
+            Dictionary of grouped current syllable information.
         """
 
         full_df = pd.DataFrame(group_info)
@@ -617,11 +654,12 @@ class SyllableLabeler(SyllableLabelerWidgets):
         self.info_boxes.children = [self.syll_info_lbl, ipy_output, ]
 
     def interactive_syllable_labeler(self, syllables):
-        """
-        create a Bokeh Div object to display the current video path.
+        """Create a Bokeh Div object to display the current video path.
 
-        Args:
-        syllables (int or ipywidgets.DropDownMenu): Current syllable to label
+        Parameters
+        ----------
+        syllables : int or ipywidgets.DropDownMenu
+            Dictionary of syllable information.
         """
 
         self.set_button.button_style = 'primary'
