@@ -6,10 +6,13 @@
 Code usage
 ==========
 
-Besides the tutorials there are a few ways to learn how to use keypoint-MoSeq:
-   - Use the docstrings. All functions in keypoint-MoSeq have docstrings that explain their inputs, outputs and purpose. The docstrings can be accessed on this site using the search bar. They can also be accessed while coding using ``help(function_name)`` or by adding a question mark, as in ``function_name?``.
-   - Join our `slack workspace <https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A>`_. We are happy to answer questions and help troubleshoot issues.
-   - Search the `github issues <https://github.com/dattalab/keypoint-moseq/issues>`_ to see if anyone else has had a similar question.
+**Besides the tutorials there are a few ways to learn how to use keypoint-MoSeq:**
+
+- Use the docstrings. All functions in keypoint-MoSeq have docstrings that explain their inputs, outputs and purpose. The docstrings can be accessed on this site using the search bar. They can also be accessed while coding using ``help(function_name)`` or by adding a question mark, as in ``function_name?``.
+
+- Join our `slack workspace <https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A>`_. We are happy to answer questions and help troubleshoot issues.
+
+- Search the `github issues <https://github.com/dattalab/keypoint-moseq/issues>`_ to see if anyone else has had a similar question.
 
 Input data
 ==========
@@ -22,9 +25,37 @@ How many/which keypoints?
 -------------------------
 A fine starting point is 5-10 keypoints. For rodents, we recommend omitting the tail. The most important aspect is that the keypoints are informative and provide a holistic description of the animal's pose. If you are already tracking 4 keypoints along the spine, for example, adding 4 more may not add much new information. Note that it is always possible to exclude keypoints from modeling using the ``use_bodyparts`` setting in the config.
 
+Multiple animals
+----------------
+- **For multi-animal experiments where the animals are comparable in size and shape** (e.g. same sex and strain), it is best to fit a single model to all the data from both animals, which will result in two or more syllable sequences for each video. To load multi-animal data from SLEAP or DeepLabCut, the same functions can be used as for single-animal data, and each tracked animal will be added as a separate key/value pair in the ``coordinates`` and ``confidences`` dictionaries. In SLEAP, for example, a single file called ``two_mice.h5`` will generate a pair of keys ``'two_mice_track0', 'two_mice_track1'``. In DeepLabCut, the name of each individual will be used as a suffix, e.g. ``'two_mice_mouseA', 'two_mice_mouseB'``. These keys can then be used at the end of modeling to access syllables for each animal.
+
+- **For multi-animal experiments where the animals differ in size** (e.g. adults and pups), it is best to fit separate models. If the tracking data is contained in a single file, the ``use_bodyparts`` config option can be used to limit modeling to the subset of keypoints belonging to each animal respectively. If the tracking data for each type of animal is in separate files, then simply restrict to the appropriate files when loading the data. 
+
+
 Keypoints are noisy
 -------------------
 In general, keypoint-MoSeq is tolerant to noise in keypoint tracking. During fitting, the model tries to detect and downweight tracking errors. It also takes advantage of neural network-based confidence estimates when they are available (which is typically the case for DeepLabCut and SLEAP). A good rule of thumb is to watch a video of the tracked keypoints. If you can tell what the animal is doing from the keypoints alone, then they likely provide a good starting point for keypoint-MoSeq.
+
+High proportion of NaNs
+-----------------------
+If your keypoint tracking data contains a high proportion of NaNs, you may get the following warning when loading it with keypoint-MoSeq:
+
+.. image:: _static/nan_warning.png
+   :align: center
+
+.. raw:: html
+
+   <br />
+
+
+- Check if the NaNs are occuring in a specific subset of sessions. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic sessions. For a session-by-session breakdown of NaNs, run::
+
+   kpms.check_nan_proportions(coordinates, bodyparts, breakdown=True)
+
+- Rerun keypoint detection with a lower threshold for missing data. In general, keypoint tracking algorithms such as SLEAP and DeepLabCut will mark a keypoint as NaN in a given frame if its confidence is below a certain level. In SLEAP, this level can be adjusted using the argument ``--peak_threshold`` when `running inference from the command line <https://sleap.ai/notebooks/Training_and_inference_on_an_example_dataset.html#inference>`_, e.g.::
+
+   sleap-track VIDEO [other_args] --peak_threshold 0.05
+
 
 Should I preprocess keypoints?
 ------------------------------
@@ -34,11 +65,18 @@ Head-fixed animals
 ------------------
 We have only tested keypoint-MoSeq on freely moving animals, using either 2D keypoint detections from a top-down/bottom-up camera, or 3D keypoint detections inferred from multiple camera angles. But head-fixed animals could work in principle. In that case, one may wish to prevent keypoint-MoSeq from inferring heading angle and performing egocentric alignment. This can be done by setting ``fix_heading=True`` in the config.
 
+Non-rodents
+-----------
+Keypoint-MoSeq has only been validated on rodents (mice, rats, and anecdotal success with naked mole rats), but there is no reason in principle that it wouldn't work on other species such as insects. If you try it on another species, please let us know how it goes! A key consideration for non-rodents is setting the target syllable duration, which may differ from the 400ms, which we recommend for rodents. For additional information, see :ref:`Choosing the target syllable duration <target duration>`.
+
+
 Loading data from methods other than SLEAP or DeepLabCut
 --------------------------------------------------------
 Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detections. You can write a custom loading function or get in touch and request it as a new feature. 
-   - If writing your own data loader, the output should be a ``coordinates`` dictionary that maps session names to arrays of shape ``(num_frames, num_keypoints, num_dimensions)``, where ``num_dimensions`` is 2 or 3. The keypoint axis should correspond to the `bodyparts` list in the config. You can also include a ``confidences`` dictionary that maps session names to arrays of shape ``(num_frames, num_keypoints)``. If your loader applies to a commonly used keypoint inference method, please let us know! We'd love to add it for others to use.
-   -  We are also happy to help write a loader for your data. Just open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and describe the method you used for keypoint tracking and the format of the data, including the file format, how it is organized into directories, and how the output files are typically named (especially in relation to the corresponding videos). If possible, also send one or more example files to calebsw@gmail.com. 
+
+- If writing your own data loader, the output should be a ``coordinates`` dictionary that maps session names to arrays of shape ``(num_frames, num_keypoints, num_dimensions)``, where ``num_dimensions`` is 2 or 3. The keypoint axis should correspond to the `bodyparts` list in the config. You can also include a ``confidences`` dictionary that maps session names to arrays of shape ``(num_frames, num_keypoints)``. If your loader applies to a commonly used keypoint inference method, please let us know! We'd love to add it for others to use.
+
+-  We are also happy to help write a loader for your data. Just open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and describe the method you used for keypoint tracking and the format of the data, including the file format, how it is organized into directories, and how the output files are typically named (especially in relation to the corresponding videos). If possible, also send one or more example files to calebsw@gmail.com. 
 
 
 Size variation between animals
@@ -52,24 +90,35 @@ Modeling
 
 Validating model outputs
 ------------------------
-To confirm that model fitting was successful, you can check the following:
-   - Syllables have the target duration. You can check the median duration by inspecting the plots generated during fitting (as shown below). You can also plot the distribution of syllable durations using ``kpms.plot_duration_distribution(name=name, project_dir=project_dir)``. If the median duration is below/above the target value, adjust the ``kappa`` hyperparameter and re-fit the model. Initially it may be necessary to change `kappa` by a factor of 10 or more. 
-   - The syllable labels stabilized during the last few iterations of model fitting. This can be checked by inspection of the heatmaps generated during model fitting (e.g. the right-most subplot below).
-   - The trajectory plots for each syllable are distinct and depict recognizable behaviors.
-   - The grid movies for each syllable are distinct and internally consistent. 
+**To confirm that model fitting was successful, you can check the following:**
+
+- Syllables have the target duration. You can check the median duration by inspecting the plots generated during fitting (as shown below). You can also plot the distribution of syllable durations using ``kpms.plot_duration_distribution(name=name, project_dir=project_dir)``. If the median duration is below/above the target value, adjust the ``kappa`` hyperparameter and re-fit the model. Initially it may be necessary to change `kappa` by a factor of 10 or more. 
+
+- The syllable labels stabilized during the last few iterations of model fitting. This can be checked by inspection of the heatmaps generated during model fitting (e.g. the right-most subplot below).
+
+- The trajectory plots for each syllable are distinct and depict recognizable behaviors.
+
+- The grid movies for each syllable are distinct and internally consistent. 
 
 .. image:: _static/fitting_progress.png
    :align: center
 
+.. raw:: html
+
+   <br />
+
+
+
+.. _target duration:
 
 Choosing the target syllable duration
 -------------------------------------
 For rodents we recommend a target duration of ~400ms (i.e. 12 frames at 30fps), since this timescale has been validated through analyses of behavior and neural activity in previous studies. In the `keypoint-MoSeq paper <https://www.biorxiv.org/content/10.1101/2023.03.16.532307v2>`_, we use changepoint analysis to support the choice of 400ms as the target duration. To repeat this analysis, follow the changepoints tutorial. For other animals or head-fixed setups, the target duration may be different, and depends mainly on the timescale of behavior that you are interested in.
 
+
 Number of model fitting iterations
 ----------------------------------
 It may be necessary to re-run the fitting process a few times to choose a good value for the `kappa` hyperparameter. During these initial runs, fitting need only be run until the syllable durations stabilize. This typically takes <10 for the initial (AR only) stage of fitting, and 10-50 iterations for the second (full model) stage. After setting ``kappa``, continue fitting until the syllable sequence stabilizes, e.g. 200-500 iterations. In our experience, the model fit improves somewhat from 200 to 500 iterations, but not after that.
-
 
 
 Detecting existing syllables in new data
@@ -88,11 +137,55 @@ If you already have a trained a MoSeq model and would like to apply it to new da
                               **config(), **checkpoint)
 
 
+Continue model fitting but with new data
+----------------------------------------
+If you already trained keypoint MoSeq model, but would like to improve it using newly collected data (without starting from scratch), then follow the recipe below. Briefly, the code shows how to load model parameters from a saved checkpoint and then use them as the starting point for a new round of model fitting.::
+
+   import keypoint_moseq as kpms
+
+   project_dir = 'project/directory'
+   config = lambda: kpms.load_config(project_dir)
+   name = 'name_of_model' (e.g. '2023_03_16-15_50_11')
+   
+   # load and format new data (e.g. from DeepLabCut)
+   coordinates, confidences,bodyparts = kpms.load_deeplabcut_results(dlc_results_directory)
+   data, labels = kpms.format_data(coordinates, confidences=confidences, **config())
+
+   # load previously saved PCA and model checkpoint
+   pca = kpms.load_pca(project_dir)
+   checkpoint = kpms.load_checkpoint(project_dir=project_dir, name=name)
+
+   # initialize a new model using saved parameters
+   model = kpms.init_model(data, pca=pca, params=checkpoint['params'], **config())
+
+   # continue fitting, now with the new data
+   model, history, name = kpms.fit_model(model, data, labels, num_iters=20, project_dir=project_dir)
+
+
+Interpreting model outputs
+--------------------------
+The final output of keypoint MoSeq is a results .h5 file (and optionally a directory of .csv files) that contain the following information:
+
+- Syllables (reindexed) 
+   The syllable label assigned to each frame. The syllable labels are reindexed so that the most common syllable is labeled 0, the second most common is labeled 1, etc. Generally there will be a core set of syllables that are used a nontrivial number of times (perhaps a few dozen), and then a long tail of syllables that are used extremely rarely. The long tail should be ignored (we typically use a frequency cutoff of 0.5%). To plot the distribution of syllable frequencies, use ``kpms.plot_syllable_frequencies(name=name, project_dir=project_dir)``.
+
+- Syllables (non-reindexed)
+   The non-reindexed syllable label assigned to each frame (i.e. the state indexes assigned by the model). Unless you are doing something unusual, you should ignore these.
+
+- Centroid and heading
+   The centroid and heading of the animal in each frame, as estimated by the model. 
+
+- Estimated keypoint coordinates
+   The denoised coordinates of each keypoint in each frame, as estimated by the model. These coordinates reflect the model's estimate of the "true" location of keypoint, once noise has been removed. They may be useful if the original coordinates are noisy or frequently non-detected. It's important to note, however, that these coordinates are mainly a byproduct of the model fitting process, and have not been formally validated as a replacement for the original detections. So use with caution!
+
+- Latent state
+   Low-dimensional representation of the animal's pose in each frame. These are similar to PCA scores, are modified to reflect the pose dynamics and noise estimates inferred by the model. 
+
 
 Troubleshooting
 ===============
 
-We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version, which is currently |version|. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following inside the ``keypoint_moseq`` conda environment::
+We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following inside the ``keypoint_moseq`` conda environment::
    
     pip install --U keypoint_moseq 
 

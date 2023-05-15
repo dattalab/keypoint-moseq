@@ -4,7 +4,6 @@ import numpy as np
 import tqdm
 import jax
 import warnings
-warnings.formatwarning = lambda msg, *a: str(msg)
 from textwrap import fill
 from datetime import datetime
 
@@ -211,7 +210,6 @@ def resume_fitting(*, params, hypparams, labels, iteration, mask, num_iters,
 
     return fit_model(model, data, labels, start_iter=iteration+1, 
                      num_iters=num_iters, **kwargs)
-
 
 
 def extract_results(*, params, states, labels, save_results=True, 

@@ -12,18 +12,11 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../'))
-
 
 # -- Project information -----------------------------------------------------
 
 project = 'Keypoint MoSeq'
 author = 'Caleb Weinreb'
-
-
-import keypoint_moseq
-release = keypoint_moseq.__version__
-version = release.split('+')[0]
 
 # -- General configuration ---------------------------------------------------
 

@@ -1,5 +1,10 @@
+# use double-precision by default
 from jax import config
 config.update("jax_enable_x64", True)
+
+# simple warning formatting
+import warnings
+warnings.formatwarning = lambda msg, *a: str(msg)
 
 from .util import *
 

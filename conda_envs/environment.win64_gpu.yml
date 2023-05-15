@@ -7,7 +7,6 @@ channels:
 
 dependencies:
   - python=3.9
-  - conda-forge::pytables
   - cudatoolkit=11.1
   - cudnn=8.2
   - cuda-nvcc
