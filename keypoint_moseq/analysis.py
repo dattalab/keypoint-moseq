@@ -29,6 +29,8 @@ from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 from copy import deepcopy
 from cytoolz import sliding_window
 
+from keypoint_moseq.util import stateseq_stats
+
 # imports for changepoint analysis
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.ndimage import gaussian_filter1d, convolve1d
@@ -1046,7 +1048,7 @@ def get_syllable_statistics(data, fill_value=-5, max_syllable=100, count='freque
 
     use_frequency = count == 'frequency'
     if not use_frequency and count != 'frames':
-        print('Inputted count is incorrect or not supported. Use "frequency" or "frames".')
+        print(' Inputted count is incorrect or not supported. Use "frequency" or "frames".')
         print('Calculating statistics by syllable frequency')
         use_frequency = True
 
@@ -1230,17 +1232,31 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
 
     # Computing transition matrices for each given group
     for plt_group in group:
-        # Get sessions to include in trans_mat
+        # list of sessions in the group
         use_labels = [lbl for lbl, grp in zip(
             labels, label_group) if grp == plt_group]
+        # find stack np array shape
+        row_num = len(use_labels)
+        max_len = max([len(lbl) for lbl in use_labels])
+        # Get sessions to include in trans_mat
+        
         trans_mats.append(get_transition_matrix(use_labels,
                                                 normalize=normalize,
                                                 combine=True,
                                                 max_syllable=max_sylls))
 
+        # initialize the numpy array with -1
+        lbl_data = -np.ones((row_num, max_len), dtype='int')
+        for i, lbl in enumerate(use_labels):
+            # only include the max syllables to avoid different array shapes
+            lbl = lbl[lbl<max_sylls]
+            lbl_data[i, :len(lbl)] = lbl
+        mask = lbl_data != -1
+
         # Getting frequency information for node scaling
-        frequencies.append(get_syllable_statistics(
-            use_labels, max_syllable=max_sylls)[0])
+        frequency_count = stateseq_stats(lbl_data, mask)[0]
+    
+        frequencies.append(frequency_count/frequency_count.sum())
     return trans_mats, frequencies
 
 
@@ -1412,7 +1428,7 @@ def plot_transition_graph_difference(groups, trans_mats, usages, layout='circula
         tm_diff = trans_mats[left_ind] - trans_mats[right_ind]
         # left usage minus right usage
         usages_diff = np.array(
-            list(usages[left_ind].values())) - np.array(list(usages[right_ind].values()))
+            list(usages[left_ind])) - np.array(list(usages[right_ind]))
         normlized_usg_abs_diff = (
             np.abs(usages_diff)/np.abs(usages_diff).sum())*node_scaling+500
 
