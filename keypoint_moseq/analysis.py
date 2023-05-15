@@ -56,7 +56,7 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
         boolean flag whether to include data for bodyparts
     smooth_heading : bool, optional
         boolean flag whether smooth the computed heading, by default True
-    
+
     Returns
     -------
     moseq_df : pandas.DataFrame
@@ -153,7 +153,7 @@ def compute_stats_df(moseq_df, threshold=0.005, groupby=['group', 'uuid', 'file_
         the column name of the syllable column to be summarize by, by default 'syllables_reindexed'
     normalize : bool, optional
         boolean falg whether to normalize by counts, by default True
-    
+
     Returns
     -------
     stats_df : pandas.DataFrame
@@ -204,7 +204,7 @@ def robust_min(v):
     ----------
     v : numpy.array
         the array to find robust minimum from
-    
+
     Returns
     -------
     float
@@ -220,7 +220,7 @@ def robust_max(v):
     ----------
     v : numpy.array
         the array to find robust maximum from
-    
+
     Returns
     -------
     float
@@ -238,7 +238,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=10
                                  groupby_list=['group', 'uuid'], range_type='robust',
                                  scalars=['heading', 'velocity_px_s']):
     """create a summary dataframe to visualize the data as the MoSeq fingerprint (behvavoiral summary) plot
-    
+
     Parameters
     ----------
     scalar_df : pandas.DataFrame
@@ -255,7 +255,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=10
         the range type to use for the heatmap, by default 'robust'
     scalars : list, optional
         the list of scalars to include in the fingerprint, by default ['heading', 'velocity_px_s']
-    
+
     Returns
     -------
     fingerprint_df : pandas.DataFrame
@@ -319,7 +319,7 @@ def plotting_fingerprint(summary, range_dict, preprocessor_type='minmax', num_le
                          figsize=(10, 15), plot_columns=['heading', 'velocity_px_s', 'MoSeq'],
                          col_names=[('Heading', 'a.u.'), ('velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
     """plot the fingerprint plot from fingerprint dataframe
-    
+
     Parameters
     ----------
     summary : pandas.DataFrame
@@ -342,7 +342,7 @@ def plotting_fingerprint(summary, range_dict, preprocessor_type='minmax', num_le
         the columns to plot the fingerprint, by default ['heading','velocity_px_s', 'MoSeq']
     col_names : list, optional
         column names for the fingerprint plot, by default [('Heading','a.u.'),('velocity','px/s'), ('MoSeq','Syllable ID')]
-    
+
     Raises
     ------
     Exception
@@ -466,7 +466,7 @@ def get_tie_correction(x, N_m):
         syllable usages for a single session.
     N_m : int
         Number of total sessions.
-    
+
     Returns
     -------
     corrected_rank : float
@@ -575,7 +575,7 @@ def dunns_z_test_permute_within_group_pairs(df_usage, vc, real_ranks, X_ties, N_
         Pseudo-random number generator.
     n_perm : int
         Number of permuted samples to generate.
-    
+
     Returns
     -------
     null_zs_within_group : dict
@@ -669,7 +669,7 @@ def compute_pvalues_for_group_pairs(real_zs_within_group, null_zs, df_k_real, gr
 
 def run_kruskal(stats_df, statistic='frequency', n_perm=10000, seed=42, thresh=0.05, mc_method='fdr_bh'):
     """Run Kruskal-Wallis test on syllable usage data.
-    
+
     Parameters
     ----------
     stats_df : pandas.DataFrame
@@ -684,7 +684,7 @@ def run_kruskal(stats_df, statistic='frequency', n_perm=10000, seed=42, thresh=0
         Alpha threshold to consider syllable significant, by default 0.05
     mc_method : str, optional
         Multiple Corrections method to use, by default "fdr_bh"
-    
+
     Returns
     -------
     df_k_real : pandas.DataFrame
@@ -791,7 +791,7 @@ def sort_syllables_by_stat_difference(stats_df, ctrl_group, exp_group, stat='fre
         the name of the experimental group
     stat : str, optional
         the statistic to use for finding the syllable differences between two groups, by default 'frequency'
-    
+
     Returns
     -------
     list
@@ -822,7 +822,7 @@ def sort_syllables_by_stat(stats_df, stat='frequency'):
         the stats dataframe that contains kinematic data and the syllable label for each session and each syllable
     stat : str, optional
         the statistic to sort on, by default 'frequency'
-   
+
     Returns
     -------
     ordering : list
@@ -1022,6 +1022,7 @@ def get_transitions(label_sequence):
 
     return transitions, locs
 
+
 def n_gram_transition_matrix(labels, n=2, max_label=99):
     """the transition matrix for n-grams
     Parameters
@@ -1032,7 +1033,7 @@ def n_gram_transition_matrix(labels, n=2, max_label=99):
         the number of successive states in the sequence, by default 2
     max_label : int, optional
         the maximum number of the syllable labels to include, by default 99
-    
+
     Returns
     -------
     trans_mat : np.ndarray
@@ -1048,14 +1049,14 @@ def n_gram_transition_matrix(labels, n=2, max_label=99):
 
 def normalize_transition_matrix(init_matrix, normalize):
     """normalize the transition matrices
-    
+
     Parameters
     ----------
     init_matrix : numpy.ndarray
         the initial transition matrix to be normalized 
     normalize : str
         the method to normalize the transition matrix
-    
+
     Returns
     -------
     init_matrix : numpy.ndarray
@@ -1076,7 +1077,7 @@ def normalize_transition_matrix(init_matrix, normalize):
 def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
                           smoothing=0.0, combine=False, disable_output=False) -> list:
     """compute the transition matrix for the syllable labels
-    
+
     Parameters
     ----------
     labels : list or np.ndarray
@@ -1091,7 +1092,7 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
         whether to combine the transition matrices for all the sessions, by default False
     disable_output : bool, optional
         whether to disable the progress bar, by default False
-    
+
     Returns
     -------
     all_mats : list
@@ -1133,7 +1134,7 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
 
 def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigram'):
     """get the transition matrices for each group
-    
+
     Parameters
     ----------
     labels : list or np.ndarray
@@ -1146,7 +1147,7 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
         the maximum number of syllables to include
     normalize : str, optional
         the method to normalize the transition matrix, by default 'bigram'
-    
+
     Returns
     -------
     trans_mats : list
@@ -1166,7 +1167,7 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
         row_num = len(use_labels)
         max_len = max([len(lbl) for lbl in use_labels])
         # Get sessions to include in trans_mat
-        
+
         trans_mats.append(get_transition_matrix(use_labels,
                                                 normalize=normalize,
                                                 combine=True,
@@ -1176,20 +1177,20 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
         lbl_data = -np.ones((row_num, max_len), dtype='int')
         for i, lbl in enumerate(use_labels):
             # only include the max syllables to avoid different array shapes
-            lbl = lbl[lbl<max_sylls]
+            lbl = lbl[lbl < max_sylls]
             lbl_data[i, :len(lbl)] = lbl
         mask = lbl_data != -1
 
         # Getting frequency information for node scaling
         frequency_count = stateseq_stats(lbl_data, mask)[0]
-    
+
         frequencies.append(frequency_count/frequency_count.sum())
     return trans_mats, frequencies
 
 
 def visualize_transition_bigram(group, trans_mats, normalize='bigram'):
     """visualize the transition matrices for each group
-    
+
     Parameters
     ----------
     group : list or np.ndarray
@@ -1230,7 +1231,7 @@ def generate_transition_matrices(progress_paths, normalize='bigram', syll_key='s
         the method to normalize the transition matrix, by default 'bigram'
     syll_key : str, optional
         the key to the syllable list in the progress file, by default 'syllables_reindexed'
-    
+
     Returns
     -------
     trans_mats : list
@@ -1273,7 +1274,7 @@ def generate_transition_matrices(progress_paths, normalize='bigram', syll_key='s
 
 def plot_transition_graph_group(groups, trans_mats, usages, layout='circular', node_scaling=2000):
     """plot the transition graph for each group
-    
+
     Parameters
     ----------
     groups : list
@@ -1323,7 +1324,7 @@ def plot_transition_graph_group(groups, trans_mats, usages, layout='circular', n
 
 def plot_transition_graph_difference(groups, trans_mats, usages, layout='circular', node_scaling=3000):
     """plot the difference of transition graph between groups
-    
+
     Parameters
     ----------
     groups : list
