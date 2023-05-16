@@ -1302,9 +1302,9 @@ def plot_transition_graph_group(groups, trans_mats, usages, layout='circular', n
             pos = nx.spring_layout(G)
         nodelist = G.nodes()
         # normalize the usage values
-        sum_usages = sum(usages[i].values())
+        sum_usages = sum(usages[i])
         normalized_usages = np.array(
-            [u/sum_usages for u in usages[i].values()]) * node_scaling + 500
+            [u/sum_usages for u in usages[i]]) * node_scaling + 500
         nx.draw_networkx_nodes(G, pos,
                                nodelist=nodelist,
                                node_size=normalized_usages,
