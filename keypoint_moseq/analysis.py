@@ -1566,7 +1566,7 @@ def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts
     return changepoints, changescores, coordinates_ego, derivatives, threshold
 
 
-def track_progress(model_dirname, project_dir, input_dir, filename='progress.yaml', overwrite=False):
+def track_progress(model_dirname, project_dir, filename='progress.yaml', overwrite=False):
     """track progress and the filepaths of a project
 
     Parameters
@@ -1575,8 +1575,6 @@ def track_progress(model_dirname, project_dir, input_dir, filename='progress.yam
         name of the model directory
     project_dir : str
         base directory of the project
-    input_dir : str
-        name of the input video data directory
     filename : str, optional
         filename of progress file, by default 'progress.yaml'.
     overwrite : bool, optional
@@ -1595,13 +1593,15 @@ def track_progress(model_dirname, project_dir, input_dir, filename='progress.yam
             print(f'Loading progress from {progress_filepath}')
             with open(progress_filepath, 'r') as f:
                 progress = yaml.safe_load(f)
+                # check if the progress model name is the same as the current model name
+                if progress['model_name'] != model_dirname:
+                    progress = update_model_progress(progress, model_dirname, progress_filepath)
             return progress
 
     # generate a new progress file
     progress = {}
     progress['base_dir'] = project_dir
     progress['config_file'] = os.path.join(project_dir, 'config.yml')
-    progress['data_dir'] = input_dir
     progress['model_name'] = model_dirname
     progress['progress_filepath'] = progress_filepath
     progress['model_dir'] = os.path.join(project_dir, model_dirname)
