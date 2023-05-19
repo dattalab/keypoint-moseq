@@ -661,8 +661,8 @@ def get_grid_movie_window_size(sampled_instances, centroids, headings,
         post=post, centroids=centroids, headings=headings)
     
     all_trajectories = np.concatenate(all_trajectories, axis=0)
-    ax_distances = np.max(np.abs(all_trajectories), axis=1)
-    window_size = np.percentile(ax_distances, pctl) * fudge_factor * 2
+    max_distances = np.nanmax(np.abs(all_trajectories), axis=1)
+    window_size = np.percentile(max_distances, pctl) * fudge_factor * 2
     window_size = int(np.ceil(window_size / blocksize) * blocksize)
     return window_size
 
