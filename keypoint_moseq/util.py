@@ -4,14 +4,11 @@ import glob
 import tqdm
 import warnings
 from textwrap import fill
-import jax, jax.numpy as jnp, jax.random as jr
-from jax.tree_util import tree_map
+import jax, jax.numpy as jnp
 from itertools import groupby
-from functools import partial
 from scipy.ndimage import median_filter, convolve1d
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
-from jaxlib.xla_extension import DeviceArray as jax_array
 from jax_moseq.models.keypoint_slds import inverse_rigid_transform
 na = jnp.newaxis
 
