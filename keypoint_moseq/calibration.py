@@ -255,17 +255,22 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
     def update_img(crop_size, sample_ix, x, y):
         
         key,frame,bodypart = sample_key = sample_keys[sample_ix]
+        image = sample_images[sample_key]
+        h,w = image.shape[:2]
+
         keypoint_ix = bodyparts.index(bodypart)
-        xys = coordinates[key][frame]
+        xys = coordinates[key][frame].copy()
+        xys[:,1] = h-xys[:,1]
         masked_nodes = np.nonzero(~np.isnan(xys).any(1))[0]
         confs = confidences[key][frame]
         
         if x and y:
-            annotations_stream.annotations.update({sample_key:(x,y)})
+            annotations_stream.annotations.update({sample_key:(x,h-y)})
             annotations_stream.event()
 
         if sample_key in annotations_stream.annotations: 
             point = np.array(annotations_stream.annotations[sample_key])
+            point[1] = h-point[1]
         else: point = xys[keypoint_ix]
           
         colorvals = np.linspace(0,1,len(bodyparts))
@@ -274,8 +279,7 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
             color='bodypart', cmap='autumn', size=15, framewise=True, marker='x', line_width=3)
         
         label = f'{bodypart}, confidence = {confs[keypoint_ix]:.5f}'
-        h,w = sample_images[sample_key].shape[:2]
-        rgb = hv.RGB(sample_images[sample_key], bounds=(0,2*h,w,h), label=label).opts(
+        rgb = hv.RGB(image, bounds=(0,0,w,h), label=label).opts(
             framewise=True, xaxis='bare', yaxis='bare', frame_width=250)
 
         xlim = (xys[keypoint_ix,0]-crop_size/2,xys[keypoint_ix,0]+crop_size/2)
@@ -287,14 +291,12 @@ def _noise_calibration_widget(project_dir, coordinates, confidences,
             if len(masked_edges)>0:
                 edge_data = (*masked_edges.T, colorvals[masked_edges[:,0]])
 
-                    
         sizes = np.where(np.arange(len(xys))==keypoint_ix, 10, 6)[masked_nodes]
         masked_bodyparts = [bodyparts[i] for i in masked_nodes]
         nodes = hv.Nodes((*xys[masked_nodes].T, masked_nodes, masked_bodyparts, sizes), vdims=['name','size'])        
         graph = hv.Graph((edge_data, nodes), vdims='ecolor').opts(
             node_color='name', node_cmap=keypoint_colormap, tools=[],
-            edge_color='ecolor', edge_cmap=keypoint_colormap, 
-            node_size='size',  invert_yaxis=True)
+            edge_color='ecolor', edge_cmap=keypoint_colormap, node_size='size')
 
         return (rgb*graph*hv_point).opts(data_aspect=1, xlim=xlim, ylim=ylim, toolbar=None)
     
