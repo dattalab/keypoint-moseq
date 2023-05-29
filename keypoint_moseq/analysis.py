@@ -323,7 +323,8 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=10
     return fingerprints, ranges.loc[range_idx]
 
 
-def plotting_fingerprint(summary, range_dict, preprocessor_type='minmax', num_level=1, level_names=['Group'], vmin=None, vmax=None,
+def plotting_fingerprint(summary, range_dict, save_dir, preprocessor_type='minmax', 
+                         num_level=1, level_names=['Group'], vmin=None, vmax=None,
                          figsize=(10, 15), plot_columns=['heading', 'velocity_px_s', 'MoSeq'],
                          col_names=[('Heading', 'a.u.'), ('velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
     """plot the fingerprint plot from fingerprint dataframe
@@ -463,7 +464,11 @@ def plotting_fingerprint(summary, range_dict, preprocessor_type='minmax', num_le
         cb.set_xlabel('Min Max')
     else:
         cb.set_xlabel('Percentage Usage')
-
+    
+    # saving the figure
+    makedirs(save_dir, exist_ok=True)
+    fig.savefig(join(save_dir, 'moseq_fingerprint.pdf'))
+    fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
 
 def get_tie_correction(x, N_m):
     """assign tied rank values to the average of the ranks they would have received if they had not been tied for Kruskal-Wallis helper function.
