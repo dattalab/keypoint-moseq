@@ -72,7 +72,7 @@ def view_syllable_movies(progress_paths, movie_type='grid'):
     display(viewer.clear_button, viewer.sess_select, selout)
 
 
-def label_syllables(progress_paths, movie_type='grid'):
+def label_syllables(pproject_dir, model_dirname, movie_type='grid'):
     """label syllables in the syllable grid movie
 
     Parameters
@@ -84,17 +84,10 @@ def label_syllables(progress_paths, movie_type='grid'):
     output_notebook()
 
     # check if syll_info.yaml exists
-    syll_info_path = progress_paths.get('syll_info_path', None)
-    if syll_info_path is None:
-        syll_info_path = os.path.join(
-            progress_paths['base_dir'], 'syll_info.yaml')
-        progress_paths['syll_info_path'] = syll_info_path
-        with open(progress_paths['progress_filepath'], 'w') as f:
-            yaml.safe_dump(progress_paths, f, default_flow_style=False)
+    syll_info_path = join(project_dir, model_dirname, "syll_info.yaml")
+    index_path = join(project_dir, "index.yaml")
 
-
-    labeler = SyllableLabeler(progress_paths['base_dir'], progress_paths['model_name'],
-                              progress_paths['index_file'], movie_type, progress_paths['syll_info_path'])
+    labeler = SyllableLabeler(pproject_dir, model_dirname, index_path, movie_type, syll_info_path)
     output = widgets.interactive_output(labeler.interactive_syllable_labeler, {'syllables': labeler.syll_select})
     display(labeler.clear_button, labeler.syll_select, output)
 

@@ -51,7 +51,7 @@ def read_yaml(yaml_file):
         return yaml.safe_load(f)
 
 
-def show_trajectory_gif(progress_paths):
+def show_trajectory_gif(project_dir, model_dirname):
     """show trajectory gif for syllable labeling
 
     Parameters
@@ -60,8 +60,7 @@ def show_trajectory_gif(progress_paths):
         dictionary of paths and filenames for progress tracking
     """
 
-    trajectory_gif = os.path.join(
-        progress_paths['trajectory_plot_dir'], 'all_trajectories.gif')
+    trajectory_gif = os.path.join(project_dir, model_dirname, 'trajectory_plots', 'all_trajectories.gif')
 
     if os.path.exists(trajectory_gif):
         with open(trajectory_gif, 'rb') as file:
