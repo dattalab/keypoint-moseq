@@ -8,21 +8,19 @@ from keypoint_moseq.widgets import GroupSettingWidgets, InteractiveVideoViewer, 
 from keypoint_moseq.io import load_results
 output_notebook()
 
-def interactive_group_setting(progress_paths):
+def interactive_group_setting(project_dir, model_dirname):
     """start the interactive group setting widget
 
     Parameters
     ----------
-    progress_paths : dict
-        the dictionary containing the progress and the filepaths of the project
+    project_dir : str
+        the path to the project directory
+    model_dirname : str
+        the name of the model directory
 
-    Returns
-    -------
-    progress_paths : dict
-        the dictionary containing the progress and the filepaths of the project with index path updated
     """
 
-    index_filepath = os.path.join(progress_paths['base_dir'], 'index.yaml')
+    index_filepath = os.path.join(project_dir, 'index.yaml')
 
     if os.path.exists(index_filepath):
         with open(index_filepath, 'r') as f:
@@ -30,7 +28,7 @@ def interactive_group_setting(progress_paths):
     else:
         # generate a new index file
         results_dict = load_results(
-            project_dir=progress_paths['base_dir'], name=progress_paths['model_name'])
+            project_dir=project_dir, name=model_dirname)
         files = []
         for session in results_dict.keys():
             file_dict = {'filename': session, 'group': 'default',
@@ -42,18 +40,10 @@ def interactive_group_setting(progress_paths):
         with open(index_filepath, 'w') as f:
             yaml.safe_dump(index_data, f, default_flow_style=False)
 
-    # update progress file to ensure index_file is in progress.yaml
-    progress_paths['index_file'] = index_filepath
-    with open(progress_paths['progress_filepath'], 'w') as f:
-        yaml.safe_dump(progress_paths, f, default_flow_style=False)
-
     # display the widget
     index_grid = GroupSettingWidgets(index_filepath)
     display(index_grid.clear_button, index_grid.group_set)
     display(index_grid.qgrid_widget)
-
-    return progress_paths
-
 
 def view_syllable_movies(progress_paths, movie_type='grid'):
     """view the syllable grid movie or crowd movie
