@@ -895,7 +895,7 @@ def _validate_and_order_syll_stats_params(complete_df, stat='frequency', orderin
     return ordering, groups, colors, figsize
 
 
-def plot_syll_stats_with_sem(stats_df, progress_paths, plot_sig=True, thresh=0.05, stat='frequency',
+def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plot_sig=True, thresh=0.05, stat='frequency',
                              ordering='stat', groups=None, ctrl_group=None, exp_group=None, colors=None, join=False, figsize=(8, 4)):
     """plot syllable statistics with standard error of the mean
 
@@ -903,8 +903,12 @@ def plot_syll_stats_with_sem(stats_df, progress_paths, plot_sig=True, thresh=0.0
     ----------
     stats_df : pandas.DataFrame
         the dataframe that contains kinematic data and the syllable label
-    progress_paths : dict
-        the dictionary that contains the paths to the files in the progress.
+    project_dir : str
+        the project directory
+    model_dirname : str
+        the model directory name
+    save_dir : str
+        the path to save the analysis plots
     plot_sig : bool, optional
         whether to plot the significant syllables, by default True
     thresh : float, optional
@@ -1007,6 +1011,9 @@ def plot_syll_stats_with_sem(stats_df, progress_paths, plot_sig=True, thresh=0.0
     plt.xlabel(xlabel, fontsize=12)
     sns.despine()
 
+    # save the figure
+    fig.savefig(join(save_dir, f'{stat}_{ordering}_stats.png'))
+    fig.savefig(join(save_dir, f'{stat}_{ordering}_stats.svg'))
     return fig, legend
 
 
