@@ -1012,8 +1012,8 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plo
     sns.despine()
 
     # save the figure
+    fig.savefig(join(save_dir, f'{stat}_{ordering}_stats.pdf'))
     fig.savefig(join(save_dir, f'{stat}_{ordering}_stats.png'))
-    fig.savefig(join(save_dir, f'{stat}_{ordering}_stats.svg'))
     return fig, legend
 
 
@@ -1208,7 +1208,7 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
     return trans_mats, frequencies
 
 
-def visualize_transition_bigram(group, trans_mats, normalize='bigram'):
+def visualize_transition_bigram(group, trans_mats, save_dir, normalize='bigram'):
     """visualize the transition matrices for each group
 
     Parameters
@@ -1238,9 +1238,13 @@ def visualize_transition_bigram(group, trans_mats, normalize='bigram'):
         ax[i].set_xlabel('Outgoing syllable')
         ax[i].set_title(g)
         ax[i].set_xticks(np.arange(0, max_syllables, 4))
+    
+    #saving the figures
+    fig.savefig(os.path.join(save_dir, 'transition_matrices.pdf'))
+    fig.savefig(os.path.join(save_dir, 'transition_matrices.png'))
 
 
-def generate_transition_matrices(progress_paths, normalize='bigram', syll_key='syllables_reindexed'):
+def generate_transition_matrices(project_dir, model_dirname, normalize='bigram', max_syllable=None, syll_key='syllables_reindexed'):
     """generate the transition matrices for each session
 
     Parameters
@@ -1260,6 +1264,8 @@ def generate_transition_matrices(progress_paths, normalize='bigram', syll_key='s
     """
 
     trans_mats, usages = None, None
+    # index file
+    index_file = os.path.join(project_dir, 'index.yaml')
     # get max syllable labels
     if progress_paths.get('grid_movie_dir') is None or progress_paths.get('index_file') is None:
         print('No syllable movies or index file found. Please generate syllable movies and the index file first, and make sure the paths are recorded in progress.yaml.')
@@ -1284,7 +1290,7 @@ def generate_transition_matrices(progress_paths, normalize='bigram', syll_key='s
             print('Group(s):', ', '.join(group))
 
             results_dict = load_results(
-                project_dir=progress_paths['base_dir'], name=progress_paths['model_name'])
+                project_dir=project_dir, name=model_dirname)
             model_labels = [results_dict[session][syll_key]
                             for session in sessions]
             trans_mats, usages = get_group_trans_mats(
@@ -1292,7 +1298,7 @@ def generate_transition_matrices(progress_paths, normalize='bigram', syll_key='s
     return trans_mats, usages, group
 
 
-def plot_transition_graph_group(groups, trans_mats, usages, layout='circular', node_scaling=2000):
+def plot_transition_graph_group(groups, trans_mats, usages, save_dir, layout='circular', node_scaling=2000):
     """plot the transition graph for each group
 
     Parameters
@@ -1340,6 +1346,9 @@ def plot_transition_graph_group(groups, trans_mats, usages, layout='circular', n
     # turn off the axis spines
     for sub_ax in ax:
         sub_ax.axis('off')
+    #saving the figures
+    fig.savefig(os.path.join(save_dir, 'transition_graphs.pdf'))
+    fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
 
 
 def plot_transition_graph_difference(groups, trans_mats, usages, layout='circular', node_scaling=3000):
@@ -1416,6 +1425,9 @@ def plot_transition_graph_difference(groups, trans_mats, usages, layout='circula
                        Line2D([0], [0], marker='o', color='w', label=f'Down-regulated usage', markerfacecolor='w', markeredgecolor='b', markersize=10)]
     plt.legend(handles=legend_elements, bbox_to_anchor=(
         1.04, 3), loc='upper left', borderaxespad=0)
+    #saving the figures
+    fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.pdf'))
+    fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.png'))
 
 
 def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts,
