@@ -50,6 +50,11 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
     """compute moseq dataframe from results dict that contains all kinematic values by frame
     Parameters
     ----------
+    base_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
+    
     results_dict : dict
         dictionary of results from model fitting
     use_bodyparts : bool
@@ -66,14 +71,17 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
     # load model results
     results_dict = load_results(base_dir, model_name)
     # load index file
-    if index_file is not None:
-        with open(index_file, 'r') as file:
-            index_data = yaml.safe_load(file)
+    index_filepath = os.path.join(base_dir, 'index.yaml')
+    if os.path.exists(index_filepath):
+        with open(index_filepath, 'r') as f:
+            index_data = yaml.safe_load(f)
         # create a file dictionary for each session
         file_info = {}
         for session in index_data['files']:
             file_info[session['filename']] = {'uuid': session['uuid'],
                                               'group': session['group']}
+    else:
+        print('index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first')
 
     session_name = []
     centroid = []
@@ -93,7 +101,7 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
         velocity.append(np.concatenate(
             ([0], np.sqrt(np.square(np.diff(v['centroid'], axis=0)).sum(axis=1)) * fps)))
 
-        if index_file is not None:
+        if file_info is not None:
             # find the uuid and group for each session from index data
             s_uuid.append([file_info[k]['uuid']]*n_frame)
             s_group.append([file_info[k]['group']]*n_frame)
