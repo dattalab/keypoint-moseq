@@ -28,6 +28,7 @@ from collections import defaultdict, OrderedDict
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 from copy import deepcopy
 from cytoolz import sliding_window
+from os.path import join, exists
 
 from keypoint_moseq.util import stateseq_stats
 
@@ -460,13 +461,15 @@ def plotting_fingerprint(summary, range_dict, save_dir, preprocessor_type='minma
     plt.colorbar(pc, cax=cb, orientation='horizontal')
 
     # specify labels for feature scaling
-    if preprocessor:
+    if preprocessor_type == 'minmax':
         cb.set_xlabel('Min Max')
+    elif preprocessor_type == 'standard':
+        cb.set_xlabel('Standardized')
     else:
         cb.set_xlabel('Percentage Usage')
     
     # saving the figure
-    makedirs(save_dir, exist_ok=True)
+    os.makedirs(save_dir, exist_ok=True)
     fig.savefig(join(save_dir, 'moseq_fingerprint.pdf'))
     fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
 
