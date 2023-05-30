@@ -44,6 +44,7 @@ def interactive_group_setting(project_dir, model_dirname):
     index_grid = GroupSettingWidgets(index_filepath)
     display(index_grid.clear_button, index_grid.group_set)
     display(index_grid.qgrid_widget)
+    return index_filepath
 
 def view_syllable_movies(progress_paths, movie_type='grid'):
     """view the syllable grid movie or crowd movie
@@ -72,7 +73,7 @@ def view_syllable_movies(progress_paths, movie_type='grid'):
     display(viewer.clear_button, viewer.sess_select, selout)
 
 
-def label_syllables(pproject_dir, model_dirname, movie_type='grid'):
+def label_syllables(project_dir, model_dirname, movie_type='grid'):
     """label syllables in the syllable grid movie
 
     Parameters
@@ -84,10 +85,10 @@ def label_syllables(pproject_dir, model_dirname, movie_type='grid'):
     output_notebook()
 
     # check if syll_info.yaml exists
-    syll_info_path = join(project_dir, model_dirname, "syll_info.yaml")
-    index_path = join(project_dir, "index.yaml")
+    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+    index_path = os.path.join(project_dir, "index.yaml")
 
-    labeler = SyllableLabeler(pproject_dir, model_dirname, index_path, movie_type, syll_info_path)
+    labeler = SyllableLabeler(project_dir, model_dirname, index_path, movie_type, syll_info_path)
     output = widgets.interactive_output(labeler.interactive_syllable_labeler, {'syllables': labeler.syll_select})
     display(labeler.clear_button, labeler.syll_select, output)
 
