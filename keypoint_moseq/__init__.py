@@ -39,7 +39,6 @@ from .viz import (
 )
 
 from .analysis import (
-    track_progress,
     compute_moseq_df, 
     compute_stats_df, 
     plotting_fingerprint,
