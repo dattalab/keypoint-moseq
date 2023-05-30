@@ -31,6 +31,8 @@ from bokeh.models import Div, CustomJS, Slider
 from ipywidgets import HBox, VBox
 from bokeh.models.widgets import PreText
 from keypoint_moseq.analysis import compute_moseq_df, compute_stats_df
+from keypoint_moseq.viz import generate_grid_movies, generate_crowd_movies, generate_trajectory_plots
+from keypoint_moseq.io import load_deeplabcut_results, load_sleap_results, load_config
 
 
 def read_yaml(yaml_file):
@@ -228,114 +230,6 @@ class GroupSettingWidgets:
         clear_output()
 
 
-class InteractiveVideoViewer:
-    """The interactive video viewer widget for viewing grid movies or crowd movies.
-    """
-
-    def __init__(self, syll_vid_dir):
-        """Initialize the interactive video viewer widget
-
-        Parameters
-        ----------
-        syll_vid_dir : str
-            path to the syllable video directory
-        """
-        self.sess_select = widgets.Dropdown(options=self.create_syllable_path_dict(syll_vid_dir),
-                                            description='Syllable:', disabled=False, continuous_update=True)
-
-        self.clear_button = widgets.Button(
-            description='Clear Output', disabled=False, tooltip='Close Cell Output')
-
-        self.clear_button.on_click(self.clear_on_click)
-
-    def create_syllable_path_dict(self, syll_vid_dir):
-        """Create a dictionary of all syllable videos in the syllable video directory.
-
-        Parameters
-        ----------
-        syll_vid_dir : str
-            Path to syllable video directory.
-        """
-
-        syll_vid_dict = {}
-        try:
-            files = sorted(glob(os.path.join(syll_vid_dir, '*.mp4')),
-                           key=lambda x: int(os.path.basename(x).split('.')[0][8:]))
-        except ValueError:
-            print(
-                'Syllable name not in the format of "syllable#.mp4", syllable videos will not be sorted.')
-            files = glob(os.path.join(syll_vid_dir, '*.mp4'))
-
-        for file in files:
-            file_name = os.path.basename(file)
-            syll_vid_dict[file_name] = file
-
-        return syll_vid_dict
-
-    def clear_on_click(self, b=None):
-        """Clear the cell output
-
-        Parameters
-        ----------
-        b : button click, optional
-            clear javascript output, by default None
-        """
-
-        clear_output()
-
-    def get_video(self, input_file):
-        """Returns a div containing a video object to display.
-
-        Parameters
-        ----------
-        input_file: str
-            Path to session extraction video to view.
-        """
-
-        # get video dimensions
-        vid = imageio.get_reader(input_file, 'ffmpeg')
-        video_dims = vid.get_meta_data()['size']
-
-        # input_file goes through encode and decode so it won't carry semantic meanings anymore
-        file_name = input_file
-
-        # Open videos in encoded urls
-        # Implementation from: https://github.com/jupyter/notebook/issues/1024#issuecomment-338664139
-        vid = io.open(input_file, 'r+b').read()
-        encoded = base64.b64encode(vid)
-        input_file = encoded.decode('ascii')
-
-        video_div = f"""
-                        <h2>{file_name}</h2>
-                        <video
-                            src="data:video/mp4;base64, {input_file}"; alt="data:video/mp4;base64, {input_file}"; id="preview";
-                            height="{video_dims[1]}"; width="{video_dims[0]}"; preload="auto";
-                            style="float: center; type: "video/mp4"; margin: 0px 10px 10px 0px;
-                            border="2"; autoplay controls loop>
-                        </video>
-                        <script>
-                            document.querySelector('video').playbackRate = 0.1;
-                        </script>
-                     """
-
-        div = Div(text=video_div, style={
-                  'width': '100%', 'align-items': 'center', 'display': 'contents'})
-
-        slider = Slider(start=0, end=4, value=1, step=0.1,
-                        format="0[.]00", title=f"Playback Speed")
-
-        callback = CustomJS(
-            args=dict(slider=slider),
-            code="""
-                    document.querySelector('video').playbackRate = slider.value;
-                 """
-        )
-
-        slider.js_on_change('value', callback)
-        show(slider)
-        show(div)
-
-
 class SyllableLabelerWidgets:
     """The syllable labeler widgets for labeling syllables.
     """
@@ -524,17 +418,24 @@ class SyllableLabeler(SyllableLabelerWidgets):
 
         super().__init__()
 
+        # find or generate movies
         if movie_type == 'grid':
-            movie_dir = os.path.join(base_dir, model_name, 'grid_movies')
+            movie_files=glob(os.path.join(base_dir, model_name, 'grid_movies', '*.mp4'))
+            if len(movie_files) == 0:
+                print('No grid movies found in the directory. Generating grid movies')
+
+        if movie_type == 'crowd':
+            movie_files=glob(os.path.join(base_dir, model_name, 'crowd_movies', '*.mp4'))
         else:
-            movie_dir = os.path.join(base_dir, model_name, 'crowd_movies')
+            raise NotImplementedError('Movie type not implemented.')
 
         try:
             input_file = glob(os.path.join(movie_dir, '*.mp4'))[0]
             vid = imageio.get_reader(input_file, 'ffmpeg')
             video_dims = vid.get_meta_data()['size']
         except IndexError:
-            print('No syllable movies found in the directory.')
+            print('No syllable movies found in the directory. ')
+
 
         self.base_dir = base_dir
         self.model_name = model_name
