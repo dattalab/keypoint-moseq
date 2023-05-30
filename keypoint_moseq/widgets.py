@@ -51,7 +51,7 @@ def read_yaml(yaml_file):
         return yaml.safe_load(f)
 
 
-def show_trajectory_gif(project_dir, model_dirname):
+def show_trajectory_gif(project_dir, model_dirname, video_dir=None, keypoint_data_type='deeplabcut'):
     """show trajectory gif for syllable labeling
 
     Parameters
@@ -68,7 +68,28 @@ def show_trajectory_gif(project_dir, model_dirname):
         out = widgets.Image(value=image, format='gif')
         display(out)
     else:
-        print('All trajectory gif not found. Please generate trajecotry gif first.')
+        print('All trajectory gif not found. Geneerating now...')
+        # if video_dir not specified, find it in the config file
+        if video_dir is None:
+            video_dir = load_config(project_dir).get('video_dir', None)
+        # if video_dir is still None, raise an error
+        if video_dir is None:
+            raise Exception('Unable to find video directory. Please specify video directory.')
+        
+        if keypoint_data_type == 'deeplabcut':
+            coordinates, _, _ = load_deeplabcut_results(video_dir)
+        elif keypoint_data_type == 'sleap':
+            coordinates, _, _ = load_sleap_results(video_dir)
+        else:
+            raise NotImplementedError('Input type not supported.')
+        
+        config_data = load_config(project_dir)
+        generate_trajectory_plots(coordinates=coordinates, name=model_dirname, project_dir=project_dir, **config_data)
+        with open(trajectory_gif, 'rb') as file:
+            image = file.read()
+        out = widgets.Image(value=image, format='gif')
+        display(out)
+
 
 
 class GroupSettingWidgets:
