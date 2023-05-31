@@ -1599,3 +1599,18 @@ def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts
     coordinates_ego = unbatch(np.array(Y_ego), labels)
     derivatives = unbatch(dy_zscored.reshape(Y_ego.shape), labels)
     return changepoints, changescores, coordinates_ego, derivatives, threshold
+
+
+def generate_index(project_dir, model_dirname, index_filepath):
+    # generate a new index file
+    results_dict = load_results(project_dir=project_dir, name=model_dirname)
+    files = []
+    for session in results_dict.keys():
+        file_dict = {'filename': session, 'group': 'default',
+                        'uuid': str(uuid.uuid4())}
+        files.append(file_dict)
+
+    index_data = {'files': files}
+    # write to file and progress_paths
+    with open(index_filepath, 'w') as f:
+        yaml.safe_dump(index_data, f, default_flow_style=False)

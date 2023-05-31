@@ -261,7 +261,7 @@ class SyllableLabelerWidgets:
         # text input widgets
         self.lbl_name_input = widgets.Text(value='',
                                            placeholder='Syllable Name',
-                                           tooltip='2 word name for syllable')
+                                           tooltip='name for the syllable')
 
         self.desc_input = widgets.Text(value='',
                                        placeholder='Short description of behavior',
@@ -399,7 +399,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
     """Syllable Labeler control component.
     """
 
-    def __init__(self, base_dir, model_name, index_file, movie_type, syll_info_path):
+    def __init__(self, project_dir, model_dirname, index_path, syll_info_path, video_dir, keypoint_data_type, movie_type):
         """Initialize the SyllableLabeler
         
         Parameters
@@ -417,43 +417,30 @@ class SyllableLabeler(SyllableLabelerWidgets):
         """
 
         super().__init__()
-
-        # find or generate movies
         if movie_type == 'grid':
-            movie_files=glob(os.path.join(base_dir, model_name, 'grid_movies', '*.mp4'))
-            if len(movie_files) == 0:
-                print('No grid movies found in the directory. Generating grid movies')
-
-        if movie_type == 'crowd':
-            movie_files=glob(os.path.join(base_dir, model_name, 'crowd_movies', '*.mp4'))
+            movies = glob(os.path.join(project_dir, model_dirname, 'grid_movies', '*.mp4'))
+        elif movie_type == 'crowd':
+            movies = glob(os.path.join(project_dir, model_dirname, 'crowd_movies', '*.mp4'))
         else:
-            raise NotImplementedError('Movie type not implemented.')
+            raise ValueError('movie_type must be either grid or crowd.')
 
         try:
-            input_file = glob(os.path.join(movie_dir, '*.mp4'))[0]
+            input_file = movies[0]
             vid = imageio.get_reader(input_file, 'ffmpeg')
             video_dims = vid.get_meta_data()['size']
         except IndexError:
             print('No syllable movies found in the directory. ')
 
 
-        self.base_dir = base_dir
-        self.model_name = model_name
-        self.index_file = index_file
-        self.sorted_index = read_yaml(yaml_file=index_file)
+        self.base_dir = project_dir
+        self.model_name = model_dirname
+        self.index_file = index_path
+        self.sorted_index = read_yaml(yaml_file=index_path)
         self.movie_type = movie_type
         self.syll_info_path = syll_info_path
         self.video_dims = video_dims
-
-        # check if syllable info file exists
-        if os.path.exists(syll_info_path):
-            self.syll_info = read_yaml(syll_info_path)
-        else:
-            self.syll_info = self._initialize_syll_info_dict(self.model_name)
-            # Write to file
-            with open(self.syll_info_path, 'w') as f:
-                yaml.safe_dump(self.syll_info, f, default_flow_style=False)
-
+        self.syll_info = read_yaml(syll_info_path)
+        
         # Initialize button callbacks
         self.next_button.on_click(self.on_next)
         self.prev_button.on_click(self.on_prev)
@@ -465,30 +452,11 @@ class SyllableLabeler(SyllableLabelerWidgets):
 
         # Get dropdown options with labels
         self.option_dict = {f'{i} - {x["label"]}': self.syll_info[i]
-                            for i, x in enumerate(self.syll_info.values())}
+                            for i, x in enumerate(self.syll_info.values()) if len(x['movie_path']) >0}
 
         # Set the syllable dropdown options
         self.syll_select.options = self.option_dict
 
-    def _initialize_syll_info_dict(self, movie_dir):
-        """Initialize the syllable information dictionary.
-
-        Parameters
-        ----------
-        movie_dir : str
-            Path to the movie directory.
-
-        Returns
-        -------
-        dict
-            Dictionary with syllable information.
-        """
-
-        grid_movie_files = sorted(glob(os.path.join(self.base_dir, self.model_name, 'grid_movies',
-                                  '*.mp4')), key=lambda x: int(os.path.basename(x).split('.')[0][8:]))
-        crowd_movie_files = sorted(glob(os.path.join(self.base_dir, self.model_name,
-                                   'crowd_movies', '*.mp4')), key=lambda x: int(os.path.basename(x).split('.')[0][8:]))
-        return {i: {'label': '', 'desc': '', 'movie_path': [grid_movie_files[i], crowd_movie_files[i]], 'group_info': {}} for i in range(len(grid_movie_files))}
 
     def write_syll_info(self, curr_syll=None):
         """Write current syllable info data to a YAML file.
@@ -533,14 +501,16 @@ class SyllableLabeler(SyllableLabelerWidgets):
         self.group_syll_info = deepcopy(self.syll_info)
         for syll_key, syll_info in self.group_syll_info.items():
             for group in self.groups:
-                # initialize group info dict
-                syll_info['group_info'][group] = {}
-                syll_info['group_info'][group]['frequency'] = stats_df[(
-                    (stats_df.group == group) & (stats_df.syllable == syll_key))]['frequency'].values[0]
-                syll_info['group_info'][group]['duration (s)'] = stats_df[(
-                    (stats_df.group == group) & (stats_df.syllable == syll_key))]['duration'].values[0]
-                syll_info['group_info'][group]['velocity (pixel/s)'] = stats_df[(
-                    (stats_df.group == group) & (stats_df.syllable == syll_key))]['velocity_px_s_mean'].values[0]
+                # make sure dataframe exists
+                if len(stats_df[((stats_df.group == group) & (stats_df.syllable == syll_key))]) > 0:
+                    # initialize group info dict
+                    syll_info['group_info'][group] = {}
+                    syll_info['group_info'][group]['frequency'] = stats_df[(
+                        (stats_df.group == group) & (stats_df.syllable == syll_key))]['frequency'].values[0]
+                    syll_info['group_info'][group]['duration (s)'] = stats_df[(
+                        (stats_df.group == group) & (stats_df.syllable == syll_key))]['duration'].values[0]
+                    syll_info['group_info'][group]['velocity (pixel/s)'] = stats_df[(
+                        (stats_df.group == group) & (stats_df.syllable == syll_key))]['velocity_px_s_mean'].values[0]
 
     def set_group_info_widgets(self, group_info):
         """Read the syllable information into a pandas DataFrame and display it as a table.
