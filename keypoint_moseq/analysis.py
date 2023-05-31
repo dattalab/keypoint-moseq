@@ -943,7 +943,7 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plo
 
     # get syllable info
     syll_info = None
-    syll_info_path = progress_paths.get('syll_info_path')
+    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
     if syll_info_path is not None:
         if os.path.exists(syll_info_path):
             with open(syll_info_path, 'r') as f:
@@ -951,7 +951,8 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plo
 
     # get significant syllables
     sig_sylls = None
-    if plot_sig:
+    
+    if plot_sig and len(stats_df['group'].unique()) > 1:
         # run kruskal wallis and dunn's test
         _, _, sig_pairs = run_kruskal(stats_df, statistic=stat, thresh=thresh)
         # plot significant syllables for control and experimental group
@@ -995,7 +996,7 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plo
         for o in (ordering):
             mean_xlabels.append(f'{syll_info[o]["label"]} - {o}')
 
-        plt.xticks(range(len(syll_info)), mean_xlabels, rotation=90)
+        plt.xticks(range(len(mean_xlabels)), mean_xlabels, rotation=90)
 
     # if a list of significant syllables is given, mark the syllables above the x-axis
     if sig_sylls is not None:
@@ -1015,8 +1016,8 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plo
     sns.despine()
 
     # save the figure
-    fig.savefig(join(save_dir, f'{stat}_{ordering}_stats.pdf'))
-    fig.savefig(join(save_dir, f'{stat}_{ordering}_stats.png'))
+    fig.savefig(os.path.join(save_dir, f'{stat}_{ordering}_stats.pdf'))
+    fig.savefig(os.path.join(save_dir, f'{stat}_{ordering}_stats.png'))
     return fig, legend
 
 
