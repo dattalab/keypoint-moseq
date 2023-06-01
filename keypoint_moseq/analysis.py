@@ -146,7 +146,7 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
     return moseq_df
 
 
-def compute_stats_df(moseq_df, threshold=0.005, groupby=['group', 'uuid', 'file_name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
+def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'uuid', 'file_name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
     """summary statistics for syllable frequencies and kinematic values
     Parameters
     ----------
