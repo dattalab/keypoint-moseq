@@ -93,7 +93,6 @@ def show_trajectory_gif(project_dir, model_dirname, video_dir=None, keypoint_dat
         display(out)
 
 
-
 class GroupSettingWidgets:
     """The group setting widget for setting group names in the index file.
     """
@@ -335,8 +334,8 @@ class SyllableLabelerWidgets:
         """
 
         # Updating dict
-        self.syll_info[self.syll_select.index]['label'] = self.lbl_name_input.value
-        self.syll_info[self.syll_select.index]['desc'] = self.desc_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]]['label'] = self.lbl_name_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]]['desc'] = self.desc_input.value
 
         # Handle cycling through syllable labels
         if self.syll_select.index < len(self.syll_select.options) - 1:
@@ -346,8 +345,8 @@ class SyllableLabelerWidgets:
             self.syll_select.index = 0
 
         # Updating input values with current dict entries
-        self.lbl_name_input.value = self.syll_info[self.syll_select.index]['label']
-        self.desc_input.value = self.syll_info[self.syll_select.index]['desc']
+        self.lbl_name_input.value = self.syll_info[self.syll_list[self.syll_select.index]]['label']
+        self.desc_input.value = self.syll_info[self.syll_list[self.syll_select.index]]['desc']
 
         self.write_syll_info(curr_syll=self.syll_select.index)
 
@@ -361,8 +360,8 @@ class SyllableLabelerWidgets:
         """
 
         # Update syllable information dict
-        self.syll_info[self.syll_select.index]['label'] = self.lbl_name_input.value
-        self.syll_info[self.syll_select.index]['desc'] = self.desc_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]]['label'] = self.lbl_name_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]]['desc'] = self.desc_input.value
 
         # Handle cycling through syllable labels
         if self.syll_select.index != 0:
@@ -372,8 +371,8 @@ class SyllableLabelerWidgets:
             self.syll_select.index = len(self.syll_select.options) - 1
 
         # Reloading previously inputted text area string values
-        self.lbl_name_input.value = self.syll_info[self.syll_select.index]['label']
-        self.desc_input.value = self.syll_info[self.syll_select.index]['desc']
+        self.lbl_name_input.value = self.syll_info[self.syll_list[self.syll_select.index]]['label']
+        self.desc_input.value = self.syll_info[self.syll_list[self.syll_select.index]]['desc']
 
         self.write_syll_info(curr_syll=self.syll_select.index)
 
@@ -386,8 +385,8 @@ class SyllableLabelerWidgets:
         """
 
         # Update dict
-        self.syll_info[self.syll_select.index]['label'] = self.lbl_name_input.value
-        self.syll_info[self.syll_select.index]['desc'] = self.desc_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]]['label'] = self.lbl_name_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]]['desc'] = self.desc_input.value
 
         self.write_syll_info(curr_syll=self.syll_select.index)
 
@@ -417,20 +416,6 @@ class SyllableLabeler(SyllableLabelerWidgets):
         """
 
         super().__init__()
-        if movie_type == 'grid':
-            movies = glob(os.path.join(project_dir, model_dirname, 'grid_movies', '*.mp4'))
-        elif movie_type == 'crowd':
-            movies = glob(os.path.join(project_dir, model_dirname, 'crowd_movies', '*.mp4'))
-        else:
-            raise ValueError('movie_type must be either grid or crowd.')
-
-        try:
-            input_file = movies[0]
-            vid = imageio.get_reader(input_file, 'ffmpeg')
-            video_dims = vid.get_meta_data()['size']
-        except IndexError:
-            print('No syllable movies found in the directory. ')
-
 
         self.base_dir = project_dir
         self.model_name = model_dirname
@@ -438,9 +423,11 @@ class SyllableLabeler(SyllableLabelerWidgets):
         self.sorted_index = read_yaml(yaml_file=index_path)
         self.movie_type = movie_type
         self.syll_info_path = syll_info_path
-        self.video_dims = video_dims
-        self.syll_info = read_yaml(syll_info_path)
-        
+        # read in syllable information file and subset only those with crowd movies
+        temp_syll_info = read_yaml(syll_info_path)
+        self.syll_info = {k: v for k, v in temp_syll_info.items() if len(v['movie_path']) == 2}
+        self.syll_list = sorted(list(self.syll_info.keys()))
+
         # Initialize button callbacks
         self.next_button.on_click(self.on_next)
         self.prev_button.on_click(self.on_prev)
@@ -452,8 +439,8 @@ class SyllableLabeler(SyllableLabelerWidgets):
 
         # Get dropdown options with labels
         self.option_dict = {f'{i} - {x["label"]}': self.syll_info[i]
-                            for i, x in enumerate(self.syll_info.values()) if len(x['movie_path']) >0}
-
+                            for i, x in self.syll_info.items()}
+        
         # Set the syllable dropdown options
         self.syll_select.options = self.option_dict
 
@@ -471,15 +458,21 @@ class SyllableLabeler(SyllableLabelerWidgets):
         tmp = deepcopy(self.syll_info)
         for v in tmp.values():
             v['group_info'] = {}
-
+        
+        # read in the syllable information file
+        temp_syll_info = read_yaml(self.syll_info_path)
+        for k, v in temp_syll_info.items():
+            if k in tmp.keys():
+                temp_syll_info[k]=tmp[k]
+        
         # Write to file
         with open(self.syll_info_path, 'w') as f:
-            yaml.safe_dump(tmp, f, default_flow_style=False)
+            yaml.safe_dump(temp_syll_info, f, default_flow_style=False)
 
         if curr_syll is not None:
             # Update the syllable dropdown options
             self.option_dict = {f'{i} - {x["label"]}': self.syll_info[i]
-                                for i, x in enumerate(self.syll_info.values())}
+                                for i, x in self.syll_info.items()}
 
             self.syll_select._initializing_traits_ = True
             self.syll_select.options = self.option_dict
@@ -542,7 +535,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
             for ot in output_tables:
                 show(ot)
 
-        self.info_boxes.children = [self.syll_info_lbl, ipy_output, ]
+        self.info_boxes.children = [self.syll_info_lbl, ipy_output]
 
     def interactive_syllable_labeler(self, syllables):
         """Create a Bokeh Div object to display the current video path.
@@ -567,27 +560,26 @@ class SyllableLabeler(SyllableLabelerWidgets):
 
         # Update scalar values
         self.set_group_info_widgets(
-            self.group_syll_info[self.syll_select.index]['group_info'])
-
+            self.group_syll_info[self.syll_list[self.syll_select.index]]['group_info'])
+ 
         # Get current movie path
         if self.movie_type == 'grid':
             cm_path = syllables['movie_path'][0]
         else:
             cm_path = syllables['movie_path'][1]
 
-        video_dims = self.video_dims
-
         # open the video and encode to be displayed in jupyter notebook
         # Implementation from: https://github.com/jupyter/notebook/issues/1024#issuecomment-338664139
         video = io.open(cm_path, 'r+b').read()
         encoded = base64.b64encode(video)
+        video_dims = imageio.get_reader(cm_path, 'ffmpeg').get_meta_data()['size']
 
         # Create syllable crowd movie HTML div to embed
         video_div = f"""
-                        <h2>{self.syll_select.index}: {syllables['label']}</h2>
+                        <h2>{self.syll_list[self.syll_select.index]}: {syllables['label']}</h2>
                         <video
                             src="data:video/mp4;base64,{encoded.decode("ascii")}"; alt="data:{cm_path}"; height="{video_dims[1]}"; width="{video_dims[0]}"; preload="true";
-                            style="float: left; type: "video/mp4"; margin: 0px 10px 10px 0px;
+                            style="float: left"; type: "video/mp4"; margin: 0px 10px 10px 0px;
                             border="2"; autoplay controls loop>
                         </video>
                     """
@@ -605,7 +597,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
                  """
         )
 
-        slider.js_on_change('value', callback)
+        # slider.js_on_change('value', callback)
 
         layout = column([div, self.cm_lbl, slider])
 
