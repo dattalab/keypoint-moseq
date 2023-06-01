@@ -1227,21 +1227,26 @@ def visualize_transition_bigram(group, trans_mats, save_dir, normalize='bigram')
 
     # infer max_syllables
     max_syllables = trans_mats[0].shape[0]
+    
     fig, ax = plt.subplots(1, len(group), figsize=(
         12, 15), sharex=False, sharey=True)
     title_map = dict(bigram='Bigram', columns='Incoming', rows='Outgoing')
     color_lim = max([x.max() for x in trans_mats])
+    if len(group) == 1:
+        axs = [ax]
+    else:
+        axs = ax.flat
     for i, g in enumerate(group):
-        h = ax[i].imshow(trans_mats[i][:max_syllables,
+        h = axs[i].imshow(trans_mats[i][:max_syllables,
                          :max_syllables], cmap='cubehelix', vmax=color_lim)
         if i == 0:
-            ax[i].set_ylabel('Incoming syllable')
+            axs[i].set_ylabel('Incoming syllable')
             plt.yticks(np.arange(0, max_syllables, 4))
-        cb = fig.colorbar(h, ax=ax[i], fraction=0.046, pad=0.04)
+        cb = fig.colorbar(h, ax=axs[i], fraction=0.046, pad=0.04)
         cb.set_label(f'{title_map[normalize]} transition probability')
-        ax[i].set_xlabel('Outgoing syllable')
-        ax[i].set_title(g)
-        ax[i].set_xticks(np.arange(0, max_syllables, 4))
+        axs[i].set_xlabel('Outgoing syllable')
+        axs[i].set_title(g)
+        axs[i].set_xticks(np.arange(0, max_syllables, 4))
     
     #saving the figures
     fig.savefig(os.path.join(save_dir, 'transition_matrices.pdf'))
@@ -1270,35 +1275,30 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
     trans_mats, usages = None, None
     # index file
     index_file = os.path.join(project_dir, 'index.yaml')
-    # get max syllable labels
-    if progress_paths.get('grid_movie_dir') is None or progress_paths.get('index_file') is None:
-        print('No syllable movies or index file found. Please generate syllable movies and the index file first, and make sure the paths are recorded in progress.yaml.')
-    else:
-        # get the number of max syllable to include
-        max_syllables = len(os.listdir(progress_paths.get('grid_movie_dir')))
-        if max_syllables == 0:
-            print('No syllable movies found. Please generate syllable moives and make sure the path is recorded in progress.yaml.')
-        else:
-            print('maximum syllable to include:', max_syllables)
-            # get session info from index file
-            index_file = progress_paths.get('index_file')
-            with open(index_file, 'r') as f:
-                index_data = yaml.safe_load(f)
-            label_group = [session_info['group']
-                           for session_info in index_data['files']]
-            uuids = [session_info['uuid']
-                     for session_info in index_data['files']]
-            sessions = [session_info['filename']
-                        for session_info in index_data['files']]
-            group = sorted(list(set(label_group)))
-            print('Group(s):', ', '.join(group))
+    if not os.path.exists(index_file):
+        generate_index(project_dir, model_dirname, index_file)
+    
+    with open(index_file, 'r') as f:
+        index_data = yaml.safe_load(f)
+    label_group = [session_info['group']
+                    for session_info in index_data['files']]
+    uuids = [session_info['uuid']
+                for session_info in index_data['files']]
+    sessions = [session_info['filename']
+                for session_info in index_data['files']]
+    group = sorted(list(set(label_group)))
+    print('Group(s):', ', '.join(group))
 
-            results_dict = load_results(
-                project_dir=project_dir, name=model_dirname)
-            model_labels = [results_dict[session][syll_key]
-                            for session in sessions]
-            trans_mats, usages = get_group_trans_mats(
-                model_labels, label_group, group, max_sylls=max_syllables, normalize=normalize)
+    results_dict = load_results(
+        project_dir=project_dir, name=model_dirname)
+    model_labels = [results_dict[session][syll_key]
+                    for session in sessions]
+    if max_syllable is None:
+        max_syllable = max([np.max(lbl) for lbl in model_labels])
+    print('maximum syllable to include:', max_syllable)
+
+    trans_mats, usages = get_group_trans_mats(
+        model_labels, label_group, group, max_sylls=max_syllable, normalize=normalize)
     return trans_mats, usages, group
 
 
