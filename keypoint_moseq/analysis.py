@@ -859,7 +859,7 @@ def sort_syllables_by_stat(stats_df, stat='frequency'):
     return ordering, relabel_mapping
 
 
-def _validate_and_order_syll_stats_params(complete_df, stat='frequency', ordering='stat', groups=None, ctrl_group=None, exp_group=None, colors=None, figsize=(10, 5)):
+def _validate_and_order_syll_stats_params(complete_df, stat='frequency', order='stat', groups=None, ctrl_group=None, exp_group=None, colors=None, figsize=(10, 5)):
 
     if not isinstance(figsize, (tuple, list)):
         print('Invalid figsize. Input a integer-tuple or list of len(figsize) = 2. Setting figsize to (10, 5)')
@@ -881,10 +881,10 @@ def _validate_and_order_syll_stats_params(complete_df, stat='frequency', orderin
         raise ValueError(
             f'Invalid stat entered: {stat}. Must be a column in the supplied dataframe.')
 
-    if ordering == "stat":
+    if order == "stat":
         ordering, _ = sort_syllables_by_stat(
             complete_df, stat=stat)
-    elif ordering == "diff":
+    elif order == "diff":
         if ctrl_group is None or exp_group is None or not np.all(np.isin([ctrl_group, exp_group], groups)):
             raise ValueError(
                 f'Attempting to sort by {stat} differences, but {ctrl_group} or {exp_group} not in {groups}.')
@@ -899,7 +899,7 @@ def _validate_and_order_syll_stats_params(complete_df, stat='frequency', orderin
 
 
 def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plot_sig=True, thresh=0.05, stat='frequency',
-                             ordering='stat', groups=None, ctrl_group=None, exp_group=None, colors=None, join=False, figsize=(8, 4)):
+                             order='stat', groups=None, ctrl_group=None, exp_group=None, colors=None, join=False, figsize=(8, 4)):
     """plot syllable statistics with standard error of the mean
 
     Parameters
@@ -968,11 +968,11 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plo
                 'No control or experimental group specified. Not plotting significant syllables.')
 
     xlabel = f'Syllables sorted by {stat}'
-    if ordering == 'diff':
+    if order == 'diff':
         xlabel += ' difference'
     ordering, groups, colors, figsize = _validate_and_order_syll_stats_params(stats_df,
                                                                               stat=stat,
-                                                                              ordering=ordering,
+                                                                              order=order,
                                                                               groups=groups,
                                                                               ctrl_group=ctrl_group,
                                                                               exp_group=exp_group,
@@ -1016,8 +1016,8 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plo
     sns.despine()
 
     # save the figure
-    fig.savefig(os.path.join(save_dir, f'{stat}_{ordering}_stats.pdf'))
-    fig.savefig(os.path.join(save_dir, f'{stat}_{ordering}_stats.png'))
+    fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.pdf'))
+    fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.png'))
     return fig, legend
 
 
@@ -1355,7 +1355,7 @@ def plot_transition_graph_group(groups, trans_mats, usages, save_dir, layout='ci
     fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
 
 
-def plot_transition_graph_difference(groups, trans_mats, usages, layout='circular', node_scaling=3000):
+def plot_transition_graph_difference(groups, trans_mats, usages, save_dir, layout='circular', node_scaling=3000):
     """plot the difference of transition graph between groups
 
     Parameters
@@ -1374,6 +1374,7 @@ def plot_transition_graph_difference(groups, trans_mats, usages, layout='circula
 
     # find combinations
     group_combinations = list(combinations(groups, 2))
+
     # create group index dict
     group_idx_dict = {group: idx for idx, group in enumerate(groups)}
 
@@ -1427,8 +1428,7 @@ def plot_transition_graph_difference(groups, trans_mats, usages, layout='circula
                        Line2D([0], [0], marker='o', color='w', label=f'Up-regulated usage',
                               markerfacecolor='w', markeredgecolor='r', markersize=10),
                        Line2D([0], [0], marker='o', color='w', label=f'Down-regulated usage', markerfacecolor='w', markeredgecolor='b', markersize=10)]
-    plt.legend(handles=legend_elements, bbox_to_anchor=(
-        1.04, 3), loc='upper left', borderaxespad=0)
+    plt.legend(handles=legend_elements, loc='upper left', borderaxespad=0)
     #saving the figures
     fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.pdf'))
     fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.png'))
