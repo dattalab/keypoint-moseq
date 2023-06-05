@@ -1,4 +1,3 @@
-import joblib
 import os
 import numpy as np
 import tqdm
@@ -9,9 +8,9 @@ from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_checkpoint, format_data, save_hdf5
-from keypoint_moseq.util import get_durations, get_frequencies, pad_along_axis, reindex_by_frequency
+from keypoint_moseq.util import reindex_by_frequency
 from jax_moseq.models.keypoint_slds import estimate_coordinates, resample_model, init_model
-from jax_moseq.utils import check_for_nans, batch, unbatch
+from jax_moseq.utils import check_for_nans, unbatch
 
 class StopResampling(Exception):
     pass
