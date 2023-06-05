@@ -72,7 +72,12 @@ Keypoint-MoSeq has only been validated on rodents (mice, rats, and anecdotal suc
 
 Loading data from methods other than SLEAP or DeepLabCut
 --------------------------------------------------------
-Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detections. Currently we support SLEAP, DeepLabCut, anipose, and SLEAP-anipose (see :py:func:`keypoint_moseq.io.load_keypoints`). For methods not on this list, you can write a custom loading function or get in touch and request it as a new feature. 
+Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detections. Currently we support SLEAP, DeepLabCut, anipose, and SLEAP-anipose. For methods not on this list, you can write a custom loading function or get in touch and request it as a new feature. 
+
+- If using one of the supported formats, data can be loaded as follows, optionally replacing ``'deeplabcut'`` with one of the following: ``'sleap', 'anipose', 'anipose-sleap'``. The file formats expected in each case are described in the docstirng for :py:func:`keypoint_moseq.io.load_keypoints`::
+
+   coordinates, confidences, bodyparts = kpms.load_keypoints(keypoint_data_path, 'deeplabcut')
+
 
 - If writing your own data loader, the output should be a ``coordinates`` dictionary that maps session names to arrays of shape ``(num_frames, num_keypoints, num_dimensions)``, where ``num_dimensions`` is 2 or 3. The keypoint axis should correspond to the `bodyparts` list in the config. You can also include a ``confidences`` dictionary that maps session names to arrays of shape ``(num_frames, num_keypoints)``. If your loader applies to a commonly used keypoint inference method, please let us know! We'd love to add it for others to use.
 
