@@ -1109,7 +1109,7 @@ def generate_trajectory_plots(
     project_dir=None, results_path=None, pre=5, post=15, 
     min_frequency=0.005, min_duration=3, use_reindexed=True, 
     use_estimated_coords=False, skeleton=[], bodyparts=None, 
-    use_bodyparts=None, num_samples=40, keypoint_colormap='autumn',
+    use_bodyparts=None, num_samples=50, keypoint_colormap='autumn',
     plot_options={}, sampling_options={'mode':'density'},
     padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2},
     save_individually=True, save_gifs=True, save_mp4s=False, fps=30, 
@@ -1202,7 +1202,7 @@ def generate_trajectory_plots(
         List of edges that define the skeleton, where each edge is a
         pair of bodypart names or a pair of indexes.
 
-    num_samples: int, default=40
+    num_samples: int, default=50
         Number of samples to used to compute the average trajectory.
         Also used to set `n_neighbors` when sampling syllable instances
         in `density` mode. 
@@ -1297,7 +1297,7 @@ def generate_trajectory_plots(
 
     syllables = sorted(trajectories.keys())
     titles = [f'Syllable {syllable}' for syllable in syllables]
-    Xs = np.nanmean(np.array([trajectories[syllable] for syllable in syllables]),axis=1)  
+    Xs = np.nanmedian(np.array([trajectories[syllable] for syllable in syllables]),axis=1)  
     
     if Xs.shape[-1]==3:
         projection_planes = [''.join(sorted(plane.lower())) for plane in projection_planes]
