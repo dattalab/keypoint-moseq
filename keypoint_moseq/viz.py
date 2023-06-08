@@ -935,7 +935,7 @@ def get_limits(coordinates, pctl=1, blocksize=None,
         padding = np.mod(lims[0]-lims[1], blocksize)/2
         lims[0] -= padding
         lims[1] += padding
-        lims = lims.astype(int)
+        lims = np.ceil(lims).astype(int)
     
     return lims
 
