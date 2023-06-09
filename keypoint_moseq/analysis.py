@@ -320,7 +320,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=10
 
 def plotting_fingerprint(summary, range_dict, save_dir, preprocessor_type='minmax', 
                          num_level=1, level_names=['Group'], vmin=None, vmax=None,
-                         figsize=(10, 15), plot_columns=['heading', 'velocity_px_s', 'MoSeq'],
+                         figsize=(10, 15), fontsize=5, plot_columns=['heading', 'velocity_px_s', 'MoSeq'],
                          col_names=[('Heading', 'a.u.'), ('velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
     """plot the fingerprint plot from fingerprint dataframe
 
@@ -395,10 +395,10 @@ def plotting_fingerprint(summary, range_dict, save_dir, preprocessor_type='minma
     # plot the level(s)
     for i in range(num_level):
         temp_ax = fig.add_subplot(gs[0, i])
-        temp_ax.set_title(level_names[i], fontsize=20)
+        temp_ax.set_title(level_names[i], fontsize=fontsize*2)
         temp_ax.imshow(level_plot[i][:, np.newaxis],
                        aspect='auto', cmap='Set3')
-        plt.yticks(level_ticks[i], levels[i][level_ticks[i]], fontsize=20)
+        plt.yticks(level_ticks[i], levels[i][level_ticks[i]], fontsize=fontsize*2)
 
         temp_ax.get_xaxis().set_ticks([])
 
@@ -430,7 +430,7 @@ def plotting_fingerprint(summary, range_dict, save_dir, preprocessor_type='minma
     for i, col in enumerate(plot_columns):
         name = name_map[col]
         temp_ax = fig.add_subplot(gs[0, i + num_level])
-        temp_ax.set_title(name[0], fontsize=20)
+        temp_ax.set_title(name[0], fontsize=fontsize*2)
         data = plot_dict[col]
 
         # top to bottom is 0-20 for y axis
@@ -443,12 +443,13 @@ def plotting_fingerprint(summary, range_dict, save_dir, preprocessor_type='minma
 
         pc = temp_ax.imshow(
             data, aspect='auto', interpolation='none', vmin=vmin, vmax=vmax, extent=extent)
-        temp_ax.set_xlabel(name[1], fontsize=10)
+        temp_ax.set_xlabel(name[1], fontsize=int(fontsize*1.5))
         temp_ax.set_xticks(np.linspace(
             np.ceil(extent[0]), np.floor(extent[1]), 6).astype(int))
         # https://stackoverflow.com/questions/14908576/how-to-remove-frame-from-matplotlib-pyplot-figure-vs-matplotlib-figure-frame
         temp_ax.set_yticks([])
         temp_ax.axis = 'tight'
+        plt.xticks(fontsize=fontsize)
 
     # plot colorbar
     cb = fig.add_subplot(gs[1, -1])
