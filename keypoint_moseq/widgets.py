@@ -136,7 +136,7 @@ class GroupSettingWidgets:
             [self.group_input, self.save_button, self.update_index_button])
 
         self.index_dict, self.df = self.index_to_dataframe(self.index_filepath)
-        self.qgrid_widget = qgrid.show_grid(self.df[['group', 'uuid', 'filename']],
+        self.qgrid_widget = qgrid.show_grid(self.df[['group', 'filename']],
                                             column_options=self.col_opts,
                                             column_definitions=self.col_defs,
                                             show_toolbar=False)

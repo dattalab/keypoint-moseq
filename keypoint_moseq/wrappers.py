@@ -1,5 +1,4 @@
 import os
-import uuid
 import yaml
 import numpy as np
 from bokeh.io import output_notebook, show

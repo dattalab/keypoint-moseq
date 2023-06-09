@@ -6,7 +6,6 @@ from tqdm.auto import tqdm
 import networkx as nx
 import warnings
 import os
-import uuid
 import yaml
 
 import numpy as np
@@ -79,8 +78,7 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
         # create a file dictionary for each session
         file_info = {}
         for session in index_data['files']:
-            file_info[session['filename']] = {'uuid': session['uuid'],
-                                              'group': session['group']}
+            file_info[session['filename']] = {'group': session['group']}
     else:
         print('index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first')
 
@@ -91,7 +89,6 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
     syllables = []
     syllables_reindexed = []
     frame_index = []
-    s_uuid = []
     s_group = []
 
     for k, v in results_dict.items():
@@ -103,12 +100,10 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
             ([0], np.sqrt(np.square(np.diff(v['centroid'], axis=0)).sum(axis=1)) * fps)))
 
         if file_info is not None:
-            # find the uuid and group for each session from index data
-            s_uuid.append([file_info[k]['uuid']]*n_frame)
+            # find the group for each session from index data
             s_group.append([file_info[k]['group']]*n_frame)
         else:
             # no index data
-            s_uuid.append([uuid.uuid4()]*n_frame)
             s_group.append(['default']*n_frame)
         frame_index.append(np.arange(n_frame))
 
@@ -131,7 +126,6 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
     moseq_df['syllable'] = np.concatenate(syllables)
     moseq_df['syllables_reindexed'] = np.concatenate(syllables_reindexed)
     moseq_df['frame_index'] = np.concatenate(frame_index)
-    moseq_df['uuid'] = np.concatenate(s_uuid)
     moseq_df['group'] = np.concatenate(s_group)
 
     # compute syllable onset
@@ -146,7 +140,7 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
     return moseq_df
 
 
-def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'uuid', 'file_name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
+def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'file_name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
     """summary statistics for syllable frequencies and kinematic values
     Parameters
     ----------
@@ -155,7 +149,7 @@ def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'uuid', 'file_name
     threshold : float, optional
         usge threshold for the syllable to be included, by default 0.005
     groupby : list, optional
-        the list of column names to group by, by default ['group','uuid', 'session_name']
+        the list of column names to group by, by default ['group', 'session_name']
     fps : int, optional
         frame per second information of the recording, by default 30
     syll_key : str, optional
@@ -244,7 +238,7 @@ def _apply_to_col(df, fn, **kwargs):
 
 
 def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=100,
-                                 groupby_list=['group', 'uuid'], range_type='robust',
+                                 groupby_list=['group', 'file_name'], range_type='robust',
                                  scalars=['heading', 'velocity_px_s']):
     """create a summary dataframe to visualize the data as the MoSeq fingerprint (behvavoiral summary) plot
 
@@ -259,7 +253,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=10
     n_bins : int, optional
         the number of bins to use for the histogram, by default 100
     groupby_list : list, optional
-        the list of column names to group by, by default ['group','uuid']
+        the list of column names to group by, by default ['group','file_name']
     range_type : str, optional
         the range type to use for the heatmap, by default 'robust'
     scalars : list, optional
@@ -713,7 +707,7 @@ def run_kruskal(stats_df, statistic='frequency', n_perm=10000, seed=42, thresh=0
     rnd = np.random.RandomState(seed=seed)
     # get grouped mean data
     grouped_data = stats_df.pivot_table(
-        index=["group", "uuid"], columns="syllable", values=statistic).replace(np.nan, 0).reset_index()
+        index=["group", "file_name"], columns="syllable", values=statistic).replace(np.nan, 0).reset_index()
     # compute KW constants
     vc = grouped_data.group.value_counts().loc[grouped_data.group.unique()]
     n_per_group = vc.values
@@ -723,8 +717,8 @@ def run_kruskal(stats_df, statistic='frequency', n_perm=10000, seed=42, thresh=0
     num_groups = len(group_names)
 
     # get all syllable usage data
-    df_only_stats = grouped_data.drop(["group", "uuid"], axis=1)
-    syllable_data = grouped_data.drop(["group", "uuid"], axis=1).values
+    df_only_stats = grouped_data.drop(["group", "file_name"], axis=1)
+    syllable_data = grouped_data.drop(["group", "file_name"], axis=1).values
 
     N_m, N_s = syllable_data.shape
 
@@ -1282,8 +1276,6 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
         index_data = yaml.safe_load(f)
     label_group = [session_info['group']
                     for session_info in index_data['files']]
-    uuids = [session_info['uuid']
-                for session_info in index_data['files']]
     sessions = [session_info['filename']
                 for session_info in index_data['files']]
     group = sorted(list(set(label_group)))
@@ -1607,11 +1599,194 @@ def generate_index(project_dir, model_dirname, index_filepath):
     results_dict = load_results(project_dir=project_dir, name=model_dirname)
     files = []
     for session in results_dict.keys():
-        file_dict = {'filename': session, 'group': 'default',
-                        'uuid': str(uuid.uuid4())}
+        file_dict = {'filename': session, 'group': 'default'}
         files.append(file_dict)
 
     index_data = {'files': files}
     # write to file and progress_paths
     with open(index_filepath, 'w') as f:
         yaml.safe_dump(index_data, f, default_flow_style=False)
+
+
+def get_behavioral_distance(index, model_file, whiten='all',
+                            distances=['ar[init]', 'scalars'],
+                            max_syllable=None, resample_idx=-1,
+                            dist_options={},
+                            sort_labels_by_usage=True, count='usage'):
+    """
+    Compute the behavioral distance (square) matrices with respect to a predefined set of variables.
+    
+    Args:
+    index (str): Path to index file
+    model_file (str): Path to trained model
+    whiten (str): Indicates whether to whiten all PCs at once or each one at a time. Options = ['all', 'each']
+    distances (list or str): type of distance(s) to compute. Available options = ['scalars', 'ar[init]', 'ar[dtw]', 'pca[dtw]', 'combined']
+    max_syllable (int): the index of the maximum number of syllables to include
+    resample_idx (int): Indicates the parsing method according to the shape of the labels array.
+    dist_options (dict): Dictionary holding each distance operations configurable parameters
+    sort_labels_by_usage (bool): boolean flag that indicates whether to relabel syllables by count ordering
+    count (str): method to compute syllable mean usage, either 'usage' or 'frames'. 
+    
+    Returns:
+    dist_dict (dict): Dictionary containing all computed behavioral square distance matrices
+    """
+
+    dist_dict = {}
+
+    defaults = {
+        'scalars': {
+            'nlags': 10,
+            'zscore': False
+            },
+        'ar[init]': {
+            'sim_points': 10
+            }
+        }
+    if isinstance(distances, str):
+        distances = [distances]
+
+    for k in defaults:
+        dist_options[k] = {**defaults[k], **dist_options.get(k, dict())}
+    print(dist_options)
+
+    model_fit = parse_model_results(model_file, resample_idx=resample_idx,
+                                    map_uuid_to_keys=True,
+                                    sort_labels_by_usage=sort_labels_by_usage,
+                                    count=count)
+
+    # make sure the index only uses (a) files that exist and (b) files in the model fit
+    # master uuid list...uuid exists in PCA file, model file, and index
+
+    uuid_set = set(model_fit['labels']) & set(index['files'])
+
+    # only keep animals that were modeled and in the files within the sorted_index
+    in_uuid_set = curry(keyfilter)(lambda x: x in uuid_set)
+    index['files'] = in_uuid_set(index['files'])
+    model_fit['labels'] = in_uuid_set(model_fit['labels'])
+
+    if max_syllable is None:
+        max_syllable = -np.inf
+        for lbl in model_fit['labels'].values():
+            if lbl.max() > max_syllable:
+                max_syllable = lbl.max() + 1
+
+    for dist in distances:
+        if dist.lower() in ['ar[init]', 'ar[dtw]']:
+
+            ar_mat = model_fit['model_parameters']['ar_mat']
+            npcs = ar_mat[0].shape[0]
+            nlags = ar_mat[0].shape[1] // npcs
+
+            scores = h5_to_dict(index['pca_path'], 'scores')
+
+            for k, v in scores.items():
+                scores[k] = scores[k][:, :npcs]
+
+            scores = whiten_pcs(scores, whiten)
+            init = get_init_points(scores, model_fit['labels'],
+                                   nlags=nlags, npcs=npcs, max_syllable=max_syllable)
+
+            if dist.lower() == 'ar[init]':
+                dist_dict['ar[init]'] = get_behavioral_distance_ar(ar_mat,
+                                                                   init_point=init,
+                                                                   **dist_options['ar[init]'],
+                                                                   max_syllable=max_syllable,
+                                                                   dist='correlation')
+            elif dist.lower() == 'ar[dtw]':
+                dist_dict['ar[dtw]'] = get_behavioral_distance_ar(ar_mat,
+                                                                  init_point=init,
+                                                                  **dist_options['ar[dtw]'],
+                                                                  max_syllable=max_syllable,
+                                                                  dist='dtw')
+        elif dist.lower() == 'scalars':
+            scalar_map = get_scalar_map(index)
+            scalar_ave = get_scalar_triggered_average(scalar_map,
+                                                      model_fit['labels'],
+                                                      max_syllable=max_syllable,
+                                                      **dist_options['scalars'])
+
+            if 'nlags' in dist_options['scalars'].keys():
+                scalar_nlags = dist_options['scalars']['nlags']
+            else:
+                scalar_nlags = None
+
+            for k, v in scalar_ave.items():
+                key = f'scalar[{k}]'
+                if scalar_nlags is None:
+                    scalar_nlags = v.shape[1] // 2
+                v = v[:, scalar_nlags + 1:]
+                dist_dict[key] = squareform(pdist(v, 'correlation'))
+
+        elif dist.lower() == 'pca[dtw]':
+
+            slice_fun = get_syllable_slices(
+                labels=list(model_fit['labels'].values()),
+                label_uuids=list(model_fit['labels'].keys()),
+                index=index)
+
+            pca_scores = h5_to_dict(index['pca_path'], 'scores')
+            pca_scores = normalize_pcs(pca_scores, method=dist_options['pca[dtw]']['normalize'])
+            use_options = deepcopy(dist_options['pca[dtw]'])
+            use_options.pop('normalize')
+            parallel = use_options.pop('parallel')
+
+            pc_slices = []
+            for syllable in tqdm(range(max_syllable), desc='Retrieving Syllable Aligned PC Slices'):
+                pc_slice = retrieve_pcs_from_slices(slice_fun(syllable),
+                                                    pca_scores,
+                                                    **use_options)
+                pc_slices.append(pc_slice)
+
+            lens = [_.shape[0] for _ in pc_slices]
+            pc_mat = np.concatenate(pc_slices, axis=0)
+
+            # all lengths need to be equal for our current, naive subsampling implementation
+            if len(set(lens)) != 1:
+                warnings.warn('Number of example per syllable not equal, returning full matrix')
+                dist_dict['pca[dtw]'] = pc_mat
+                dist_dict['pca[dtw] (syllables)'] = lens
+            else:
+                print('Computing DTW matrix (this may take a minute)...')
+                full_dist_mat = dtw_ndim.distance_matrix(pc_mat, parallel=parallel, show_progress=True)
+                reduced_mat = reformat_dtw_distances(full_dist_mat, len(pc_slices))
+                dist_dict['pca[dtw]'] = reduced_mat
+        elif dist.lower() == 'combined':
+
+            npcs = dist_options['pca[dtw]'].get('npcs', 10)
+            scalar_map = get_scalar_map(index)
+            incl_keys = dist_options['combined'].pop('include_scalars')
+
+            scalar_dict = process_scalars(scalar_map,
+                                          include_keys=incl_keys,
+                                          zscore=dist_options['scalars'].get('zscore', False))
+
+            pca_scores = h5_to_dict(index['pca_path'], 'scores')
+            pca_scores = normalize_pcs(pca_scores, method=dist_options['pca[dtw]']['normalize'])
+
+            pca_scores = {k: np.concatenate([v[:, :npcs], scalar_dict[k].T], axis=1) for k, v in pca_scores.items() if k in scalar_dict}
+
+            use_options = deepcopy(dist_options['pca[dtw]'])
+            use_options.pop('normalize')
+            parallel = use_options.pop('parallel')
+            use_options['npcs'] += len(incl_keys)
+
+            slice_fun = get_syllable_slices(
+                labels=[model_fit['labels'][k] for k in pca_scores],
+                label_uuids=list(pca_scores.keys()),
+                index=index,
+                trim_nans=False)
+
+            pc_slices = []
+            for syllable in tqdm(range(max_syllable), desc='Retrieving Syllable Aligned PC Slices'):
+                pc_slice = retrieve_pcs_from_slices(slice_fun(syllable),
+                                                    pca_scores,
+                                                    **use_options)
+                pc_slices.append(pc_slice)
+
+            pc_mat = np.concatenate(pc_slices, axis=0)
+
+            full_dist_mat = dtw_ndim.distance_matrix(pc_mat, parallel=parallel, show_progress=True)
+            reduced_mat = reformat_dtw_distances(full_dist_mat, len(pc_slices))
+            dist_dict['combined'] = reduced_mat
+
+    return dist_dict
