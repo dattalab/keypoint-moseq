@@ -45,6 +45,18 @@ To use the keypoint_moseq environment in a notebook, either launch jupyterlab (`
 
    python -m ipykernel install --user --name=keypoint_moseq
 
+To set up your environment to use the analysis features in the notebook, run the following from the command line::
+
+   # navigate to keypoint-moseq directory
+   cd path/keypoint-moseq
+
+   # activate the keypoint_moseq environment
+   conda activate keypoint_moseq
+
+   # run the setup script
+   ./nb_extensions.sh
+   
+
 
 Install using pip
 ~~~~~~~~~~~~~~~~~
@@ -84,4 +96,16 @@ Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 Make the environment available to jupyter::
 
    python -m ipykernel install --user --name=keypoint_moseq
+
+
+To set up your environment to use the analysis features in the notebook, run the following from the command line::
+
+   # navigate to keypoint-moseq directory
+   cd path/keypoint-moseq
+
+   # activate the keypoint_moseq environment
+   conda activate keypoint_moseq
+
+   # run the setup script
+   ./nb_extensions.sh
 
