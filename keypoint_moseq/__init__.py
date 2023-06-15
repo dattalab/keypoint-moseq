@@ -50,6 +50,8 @@ from .analysis import (
     visualize_transition_bigram,
     plot_transition_graph_group,
     plot_transition_graph_difference,
+    get_behavioral_distance,
+    plot_dendrogram,
 )
 
 from jax_moseq.models.keypoint_slds import (

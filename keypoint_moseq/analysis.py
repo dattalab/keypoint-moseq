@@ -29,14 +29,16 @@ from copy import deepcopy
 from cytoolz import sliding_window
 from os.path import join, exists
 
-from keypoint_moseq.util import stateseq_stats
+from keypoint_moseq.util import stateseq_stats, sample_instances, get_trajectories
+from scipy.spatial.distance import squareform, pdist
+from scipy.cluster.hierarchy import linkage, dendrogram
 
 # imports for changepoint analysis
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.ndimage import gaussian_filter1d, convolve1d
 from scipy.signal import argrelextrema
-from keypoint_moseq.util import filter_angle, filtered_derivative, permute_cyclic
-from keypoint_moseq.io import format_data, load_results
+from keypoint_moseq.util import filter_angle, filtered_derivative, permute_cyclic, get_syllable_instances
+from keypoint_moseq.io import format_data, load_results, load_deeplabcut_results
 from jax_moseq.models.keypoint_slds import align_egocentric
 from jax_moseq.utils import unbatch
 na = np.newaxis
@@ -54,7 +56,7 @@ def compute_moseq_df(base_dir, model_name, index_file, *, fps=30, smooth_heading
         the path to the project directory
     model_name : str
         the name of the model directory
-    
+
     results_dict : dict
         dictionary of results from model fitting
     use_bodyparts : bool
@@ -318,7 +320,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=10
     return fingerprints, ranges.loc[range_idx]
 
 
-def plotting_fingerprint(summary, range_dict, save_dir, preprocessor_type='minmax', 
+def plotting_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minmax',
                          num_level=1, level_names=['Group'], vmin=None, vmax=None,
                          figsize=(10, 15), fontsize=5, plot_columns=['heading', 'velocity_px_s', 'MoSeq'],
                          col_names=[('Heading', 'a.u.'), ('velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
@@ -398,7 +400,8 @@ def plotting_fingerprint(summary, range_dict, save_dir, preprocessor_type='minma
         temp_ax.set_title(level_names[i], fontsize=fontsize*2)
         temp_ax.imshow(level_plot[i][:, np.newaxis],
                        aspect='auto', cmap='Set3')
-        plt.yticks(level_ticks[i], levels[i][level_ticks[i]], fontsize=fontsize*2)
+        plt.yticks(level_ticks[i], levels[i]
+                   [level_ticks[i]], fontsize=fontsize*2)
 
         temp_ax.get_xaxis().set_ticks([])
 
@@ -462,11 +465,13 @@ def plotting_fingerprint(summary, range_dict, save_dir, preprocessor_type='minma
         cb.set_xlabel('Standardized')
     else:
         cb.set_xlabel('Percentage Usage')
-    
+
     # saving the figure
-    os.makedirs(save_dir, exist_ok=True)
-    fig.savefig(join(save_dir, 'moseq_fingerprint.pdf'))
-    fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        fig.savefig(join(save_dir, 'moseq_fingerprint.pdf'))
+        fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
+
 
 def get_tie_correction(x, N_m):
     """assign tied rank values to the average of the ranks they would have received if they had not been tied for Kruskal-Wallis helper function.
@@ -946,7 +951,7 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plo
 
     # get significant syllables
     sig_sylls = None
-    
+
     if plot_sig and len(stats_df['group'].unique()) > 1:
         # run kruskal wallis and dunn's test
         _, _, sig_pairs = run_kruskal(stats_df, statistic=stat, thresh=thresh)
@@ -1011,8 +1016,11 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir, plo
     sns.despine()
 
     # save the figure
-    fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.pdf'))
-    fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.png'))
+    # saving the figure
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True) 
+        fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.pdf'))
+        fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.png'))
     return fig, legend
 
 
@@ -1222,7 +1230,7 @@ def visualize_transition_bigram(group, trans_mats, save_dir, normalize='bigram')
 
     # infer max_syllables
     max_syllables = trans_mats[0].shape[0]
-    
+
     fig, ax = plt.subplots(1, len(group), figsize=(
         12, 15), sharex=False, sharey=True)
     title_map = dict(bigram='Bigram', columns='Incoming', rows='Outgoing')
@@ -1233,7 +1241,7 @@ def visualize_transition_bigram(group, trans_mats, save_dir, normalize='bigram')
         axs = ax.flat
     for i, g in enumerate(group):
         h = axs[i].imshow(trans_mats[i][:max_syllables,
-                         :max_syllables], cmap='cubehelix', vmax=color_lim)
+                                        :max_syllables], cmap='cubehelix', vmax=color_lim)
         if i == 0:
             axs[i].set_ylabel('Incoming syllable')
             plt.yticks(np.arange(0, max_syllables, 4))
@@ -1242,10 +1250,13 @@ def visualize_transition_bigram(group, trans_mats, save_dir, normalize='bigram')
         axs[i].set_xlabel('Outgoing syllable')
         axs[i].set_title(g)
         axs[i].set_xticks(np.arange(0, max_syllables, 4))
-    
-    #saving the figures
-    fig.savefig(os.path.join(save_dir, 'transition_matrices.pdf'))
-    fig.savefig(os.path.join(save_dir, 'transition_matrices.png'))
+
+    # saving the figures
+    # saving the figure
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        fig.savefig(os.path.join(save_dir, 'transition_matrices.pdf'))
+        fig.savefig(os.path.join(save_dir, 'transition_matrices.png'))
 
 
 def generate_transition_matrices(project_dir, model_dirname, normalize='bigram', max_syllable=None, syll_key='syllables_reindexed'):
@@ -1272,11 +1283,11 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
     index_file = os.path.join(project_dir, 'index.yaml')
     if not os.path.exists(index_file):
         generate_index(project_dir, model_dirname, index_file)
-    
+
     with open(index_file, 'r') as f:
         index_data = yaml.safe_load(f)
     label_group = [session_info['group']
-                    for session_info in index_data['files']]
+                   for session_info in index_data['files']]
     sessions = [session_info['filename']
                 for session_info in index_data['files']]
     group = sorted(list(set(label_group)))
@@ -1343,9 +1354,12 @@ def plot_transition_graph_group(groups, trans_mats, usages, save_dir, layout='ci
     # turn off the axis spines
     for sub_ax in ax:
         sub_ax.axis('off')
-    #saving the figures
-    fig.savefig(os.path.join(save_dir, 'transition_graphs.pdf'))
-    fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
+    # saving the figures
+    # saving the figure
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        fig.savefig(os.path.join(save_dir, 'transition_graphs.pdf'))
+        fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
 
 
 def plot_transition_graph_difference(groups, trans_mats, usages, save_dir, layout='circular', node_scaling=3000):
@@ -1422,9 +1436,12 @@ def plot_transition_graph_difference(groups, trans_mats, usages, save_dir, layou
                               markerfacecolor='w', markeredgecolor='r', markersize=10),
                        Line2D([0], [0], marker='o', color='w', label=f'Down-regulated usage', markerfacecolor='w', markeredgecolor='b', markersize=10)]
     plt.legend(handles=legend_elements, loc='upper left', borderaxespad=0)
-    #saving the figures
-    fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.pdf'))
-    fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.png'))
+    # saving the figures
+    # saving the figure
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.pdf'))
+        fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.png'))
 
 
 def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts,
@@ -1596,6 +1613,17 @@ def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts
 
 
 def generate_index(project_dir, model_dirname, index_filepath):
+    """generate index file
+
+    Parameters
+    ----------
+    project_dir : str
+        path to project directory
+    model_dirname : str
+        model directory name
+    index_filepath : str
+        path to index file
+    """
     # generate a new index file
     results_dict = load_results(project_dir=project_dir, name=model_dirname)
     files = []
@@ -1609,185 +1637,135 @@ def generate_index(project_dir, model_dirname, index_filepath):
         yaml.safe_dump(index_data, f, default_flow_style=False)
 
 
-def get_behavioral_distance(index, model_file, whiten='all',
-                            distances=['ar[init]', 'scalars'],
-                            max_syllable=None, resample_idx=-1,
-                            dist_options={},
-                            sort_labels_by_usage=True, count='usage'):
+def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data_type, min_frequency=0.005, pre=5, post=15, min_duration=3, num_samples=40):
+    """compute behavioral distance based on the trajectory correlation metric
+
+    Parameters
+    ----------
+    project_dir : str
+        path to project directory
+    model_dirname : str
+        model directory name
+    video_dir : str
+        path to video directory
+    keypoint_data_type : str
+        keypoint data type
+    min_frequency : float, optional
+        the minimum threshold for syllable usage to include in the dendrogram, by default 0.005
+    pre : int, optional
+        frames before syllable onset, by default 5
+    post : int, optional
+        frames after syllable onset, by default 15
+    min_duration : int, optional
+        min duration of syllable to include, by default 3
+    num_samples : int, optional
+        the number of samples, by default 40
+
+    Returns
+    -------
+    Z : ndarray
+        linkage matrix of behavioral distance
+    syllable_keys : list
+        list of syllable keys
+       
+
+    Raises
+    ------
+    Exception
+        video directory not found
+    NotImplementedError
+        keypoint data type not supported
     """
-    Compute the behavioral distance (square) matrices with respect to a predefined set of variables.
-    
-    Args:
-    index (str): Path to index file
-    model_file (str): Path to trained model
-    whiten (str): Indicates whether to whiten all PCs at once or each one at a time. Options = ['all', 'each']
-    distances (list or str): type of distance(s) to compute. Available options = ['scalars', 'ar[init]', 'ar[dtw]', 'pca[dtw]', 'combined']
-    max_syllable (int): the index of the maximum number of syllables to include
-    resample_idx (int): Indicates the parsing method according to the shape of the labels array.
-    dist_options (dict): Dictionary holding each distance operations configurable parameters
-    sort_labels_by_usage (bool): boolean flag that indicates whether to relabel syllables by count ordering
-    count (str): method to compute syllable mean usage, either 'usage' or 'frames'. 
-    
-    Returns:
-    dist_dict (dict): Dictionary containing all computed behavioral square distance matrices
+    #find videos
+    if video_dir is None:
+        video_dir = load_config(project_dir).get('video_dir', None)
+    if video_dir is None:
+        raise Exception(
+            'Unable to find video directory. Please specify video directory.')
+    # load coordinate results
+    if keypoint_data_type == 'deeplabcut':
+        coordinates, _, _ = load_deeplabcut_results(video_dir)
+    elif keypoint_data_type == 'sleap':
+        coordinates, _, _ = load_sleap_results(video_dir)
+    else:
+        raise NotImplementedError('Input type not supported.')
+
+    results = load_results(project_dir=project_dir, name=model_dirname)
+    # TODO: add support for estimated coordinates
+    syllables = {k: v['syllables_reindexed'] for k, v in results.items()}
+    centroids = {k: v['centroid'] for k, v in results.items()}
+    headings = {k: v['heading'] for k, v in results.items()}
+    # get syllable instances that meet criteria
+    syllable_instances = get_syllable_instances(
+        syllables, pre=pre, post=post, min_duration=min_duration,
+        min_frequency=min_frequency, min_instances=num_samples)
+
+    if len(syllable_instances) == 0:
+        warnings.warn(fill(
+            'No syllables with sufficient instances to make a trajectory plot. '
+            'This usually occurs when all frames have the same syllable label '
+            '(use `plot_syllable_frequencies` to check if this is the case)'))
+        return
+    # sample instances 
+    sampled_instances = sample_instances(syllable_instances, num_samples, 
+                                        coordinates=coordinates, centroids=centroids, 
+                                        headings=headings, mode='density', n_neighbors=num_samples)
+    # get trajectories
+    trajectories = {syllable: get_trajectories(
+        instances, coordinates, pre=pre, post=post, 
+        centroids=centroids, headings=headings
+        ) for syllable,instances in sampled_instances.items()}
+    # get mean trajefctories
+    syllable_keys = sorted(trajectories.keys())
+    # Xs shape is (n_syllables, n_frames, num_keypoints, xy)
+    Xs = np.nanmean(np.array([trajectories[syllable] for syllable in syllable_keys]),axis=1)
+    # reshape to (n_syllables, n_frames*num_keypoints*xy)
+    Xs = Xs.reshape(Xs.shape[0],-1)
+
+    # get distances and transform back to 1-d array
+    Z = linkage(pdist(Xs, metric='correlation'), 'complete')
+    return Z, list(syllable_keys)
+
+
+
+def plot_dendrogram(project_dir, model_dirname, video_dir=None, keypoint_data_type='deeplabcut', min_frequency=0.005, save_dir=None, figsize=(10, 5)):
+    """plot similarity dendrogram
+
+    Parameters
+    ----------
+    project_dir : str
+        path to project directory
+    model_dirname : str
+        model directory name
+    video_dir : str, optional
+        path to video dir, by default None
+    keypoint_data_type : str, optional
+        keypoint data type, by default 'deeplabcut'
+    min_frequency : float, optional
+        the minimum threshold for syllable usage to include in the dendrogram, by default 0.005
+    save_dir : str, optional
+        path to the directory to save the figure, by default None
+    figsize : tuple, optional
+        the size of the figure, by default (10, 5)
     """
+    Z, syllable_keys = get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data_type, min_frequency)
+    sns.set_style('whitegrid', {'axes.grid' : False})
+    fig, ax = plt.subplots(figsize=figsize)
+    # get syllable info
+    syll_info = None
+    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+    if syll_info_path is not None:
+        if os.path.exists(syll_info_path):
+            with open(syll_info_path, 'r') as f:
+                syll_info = yaml.safe_load(f)
+    syll_info = pd.DataFrame(syll_info).T.sort_index()
+    syll_info = syll_info[syll_info.index.isin(syllable_keys)]
+    labels = (syll_info['label']+"-" +syll_info.index.astype(str)).to_numpy()
 
-    dist_dict = {}
-
-    defaults = {
-        'scalars': {
-            'nlags': 10,
-            'zscore': False
-            },
-        'ar[init]': {
-            'sim_points': 10
-            }
-        }
-    if isinstance(distances, str):
-        distances = [distances]
-
-    for k in defaults:
-        dist_options[k] = {**defaults[k], **dist_options.get(k, dict())}
-    print(dist_options)
-
-    model_fit = parse_model_results(model_file, resample_idx=resample_idx,
-                                    map_uuid_to_keys=True,
-                                    sort_labels_by_usage=sort_labels_by_usage,
-                                    count=count)
-
-    # make sure the index only uses (a) files that exist and (b) files in the model fit
-    # master uuid list...uuid exists in PCA file, model file, and index
-
-    uuid_set = set(model_fit['labels']) & set(index['files'])
-
-    # only keep animals that were modeled and in the files within the sorted_index
-    in_uuid_set = curry(keyfilter)(lambda x: x in uuid_set)
-    index['files'] = in_uuid_set(index['files'])
-    model_fit['labels'] = in_uuid_set(model_fit['labels'])
-
-    if max_syllable is None:
-        max_syllable = -np.inf
-        for lbl in model_fit['labels'].values():
-            if lbl.max() > max_syllable:
-                max_syllable = lbl.max() + 1
-
-    for dist in distances:
-        if dist.lower() in ['ar[init]', 'ar[dtw]']:
-
-            ar_mat = model_fit['model_parameters']['ar_mat']
-            npcs = ar_mat[0].shape[0]
-            nlags = ar_mat[0].shape[1] // npcs
-
-            scores = h5_to_dict(index['pca_path'], 'scores')
-
-            for k, v in scores.items():
-                scores[k] = scores[k][:, :npcs]
-
-            scores = whiten_pcs(scores, whiten)
-            init = get_init_points(scores, model_fit['labels'],
-                                   nlags=nlags, npcs=npcs, max_syllable=max_syllable)
-
-            if dist.lower() == 'ar[init]':
-                dist_dict['ar[init]'] = get_behavioral_distance_ar(ar_mat,
-                                                                   init_point=init,
-                                                                   **dist_options['ar[init]'],
-                                                                   max_syllable=max_syllable,
-                                                                   dist='correlation')
-            elif dist.lower() == 'ar[dtw]':
-                dist_dict['ar[dtw]'] = get_behavioral_distance_ar(ar_mat,
-                                                                  init_point=init,
-                                                                  **dist_options['ar[dtw]'],
-                                                                  max_syllable=max_syllable,
-                                                                  dist='dtw')
-        elif dist.lower() == 'scalars':
-            scalar_map = get_scalar_map(index)
-            scalar_ave = get_scalar_triggered_average(scalar_map,
-                                                      model_fit['labels'],
-                                                      max_syllable=max_syllable,
-                                                      **dist_options['scalars'])
-
-            if 'nlags' in dist_options['scalars'].keys():
-                scalar_nlags = dist_options['scalars']['nlags']
-            else:
-                scalar_nlags = None
-
-            for k, v in scalar_ave.items():
-                key = f'scalar[{k}]'
-                if scalar_nlags is None:
-                    scalar_nlags = v.shape[1] // 2
-                v = v[:, scalar_nlags + 1:]
-                dist_dict[key] = squareform(pdist(v, 'correlation'))
-
-        elif dist.lower() == 'pca[dtw]':
-
-            slice_fun = get_syllable_slices(
-                labels=list(model_fit['labels'].values()),
-                label_uuids=list(model_fit['labels'].keys()),
-                index=index)
-
-            pca_scores = h5_to_dict(index['pca_path'], 'scores')
-            pca_scores = normalize_pcs(pca_scores, method=dist_options['pca[dtw]']['normalize'])
-            use_options = deepcopy(dist_options['pca[dtw]'])
-            use_options.pop('normalize')
-            parallel = use_options.pop('parallel')
-
-            pc_slices = []
-            for syllable in tqdm(range(max_syllable), desc='Retrieving Syllable Aligned PC Slices'):
-                pc_slice = retrieve_pcs_from_slices(slice_fun(syllable),
-                                                    pca_scores,
-                                                    **use_options)
-                pc_slices.append(pc_slice)
-
-            lens = [_.shape[0] for _ in pc_slices]
-            pc_mat = np.concatenate(pc_slices, axis=0)
-
-            # all lengths need to be equal for our current, naive subsampling implementation
-            if len(set(lens)) != 1:
-                warnings.warn('Number of example per syllable not equal, returning full matrix')
-                dist_dict['pca[dtw]'] = pc_mat
-                dist_dict['pca[dtw] (syllables)'] = lens
-            else:
-                print('Computing DTW matrix (this may take a minute)...')
-                full_dist_mat = dtw_ndim.distance_matrix(pc_mat, parallel=parallel, show_progress=True)
-                reduced_mat = reformat_dtw_distances(full_dist_mat, len(pc_slices))
-                dist_dict['pca[dtw]'] = reduced_mat
-        elif dist.lower() == 'combined':
-
-            npcs = dist_options['pca[dtw]'].get('npcs', 10)
-            scalar_map = get_scalar_map(index)
-            incl_keys = dist_options['combined'].pop('include_scalars')
-
-            scalar_dict = process_scalars(scalar_map,
-                                          include_keys=incl_keys,
-                                          zscore=dist_options['scalars'].get('zscore', False))
-
-            pca_scores = h5_to_dict(index['pca_path'], 'scores')
-            pca_scores = normalize_pcs(pca_scores, method=dist_options['pca[dtw]']['normalize'])
-
-            pca_scores = {k: np.concatenate([v[:, :npcs], scalar_dict[k].T], axis=1) for k, v in pca_scores.items() if k in scalar_dict}
-
-            use_options = deepcopy(dist_options['pca[dtw]'])
-            use_options.pop('normalize')
-            parallel = use_options.pop('parallel')
-            use_options['npcs'] += len(incl_keys)
-
-            slice_fun = get_syllable_slices(
-                labels=[model_fit['labels'][k] for k in pca_scores],
-                label_uuids=list(pca_scores.keys()),
-                index=index,
-                trim_nans=False)
-
-            pc_slices = []
-            for syllable in tqdm(range(max_syllable), desc='Retrieving Syllable Aligned PC Slices'):
-                pc_slice = retrieve_pcs_from_slices(slice_fun(syllable),
-                                                    pca_scores,
-                                                    **use_options)
-                pc_slices.append(pc_slice)
-
-            pc_mat = np.concatenate(pc_slices, axis=0)
-
-            full_dist_mat = dtw_ndim.distance_matrix(pc_mat, parallel=parallel, show_progress=True)
-            reduced_mat = reformat_dtw_distances(full_dist_mat, len(pc_slices))
-            dist_dict['combined'] = reduced_mat
-
-    return dist_dict
+    dendrogram(Z, distance_sort=False, no_plot=False, labels=labels, color_threshold=None, leaf_font_size=15, leaf_rotation=90, ax=ax)
+    # saving the figure
+    # saving the figure
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        fig.savefig(join(save_dir, 'syllable_dendrogram.pdf'))
+        fig.savefig(join(save_dir, 'syllable_dendrogram.png'))
