@@ -70,7 +70,7 @@ def show_trajectory_gif(project_dir, model_dirname, video_dir=None, keypoint_dat
         out = widgets.Image(value=image, format='gif')
         display(out)
     else:
-        print('All trajectory gif not found. Geneerating now...')
+        print('All trajectory gif not found. Generating now...')
         # if video_dir not specified, find it in the config file
         if video_dir is None:
             video_dir = load_config(project_dir).get('video_dir', None)
