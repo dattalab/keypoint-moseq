@@ -5,6 +5,7 @@ import imageio
 import warnings
 import logging
 import numpy as np
+import plotly
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
@@ -160,7 +161,7 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
     d = len(pca.mean_)//(k-1)  
     Gamma = np.array(center_embedding(k))
     edges = get_edges(use_bodyparts, skeleton)
-    cmap = plt.cm.get_cmap(keypoint_colormap)
+    cmap = plt.colormaps[keypoint_colormap]
     plot_n_pcs = min(plot_n_pcs, pca.components_.shape[0])
     
     if d==2: dims_list,names = [[0,1]],['xy']
@@ -1800,3 +1801,179 @@ def generate_crowd_movies(
         path = os.path.join(output_dir, f'syllable{syllable}.mp4')
         write_video_clip(frames, path, fps=fps, quality=quality)
             
+def matplotlib_colormap_to_plotly(cmap):
+    """
+    Convert a matplotlib colormap to a plotly colormap.
+
+    Parameters
+    ----------
+    cmap: str
+        Name of a matplotlib colormap.
+
+    Returns
+    -------
+    pl_colorscale: list
+        Plotly colormap.
+    """
+    cmap = plt.colormaps[cmap]
+    pl_entries=255
+    h = 1.0/(pl_entries-1)
+    pl_colorscale = []
+    for k in range(pl_entries):
+        C = (np.array(cmap(k*h)[:3])*255).astype(np.uint8)
+        pl_colorscale.append([k*h, 'rgb'+str((C[0], C[1], C[2]))])
+    return pl_colorscale
+
+
+def add_3D_pose_to_plotly_fig(fig, coords, edges, keypoint_colormap='autumn',
+                              node_size=6.0, linewidth=3.0, visible=True,
+                              opacity=1):
+    """
+    Add a 3D pose to a plotly figure.
+
+    Parameters
+    ----------
+    fig: plotly figure
+        Figure to which the pose should be added.
+
+    coords: ndarray (N,3)
+        3D coordinates of the pose.
+
+    edges: list of index pairs
+        Skeleton edges
+
+    keypoint_colormap: str, default='autumn'
+        Colormap to use for coloring keypoints.
+
+    node_size: float, default=6.0
+        Size of keypoints.
+
+    linewidth: float, default=3.0
+        Width of skeleton edges.
+        
+    visibility: bool, default=True
+        Initial visibility state of the nodes and edges
+        
+    opacity: float, default=1
+        Opacity of the nodes and edges (0-1)
+    """
+    marker = {
+        'size':node_size, 
+        'color':np.linspace(0,1,len(coords)),
+        'colorscale': matplotlib_colormap_to_plotly(keypoint_colormap),
+        'line': dict(color='black', width=0.2),
+        'opacity': opacity}
+    
+    line = {
+        'width': linewidth, 
+        'color': f'rgba(0,0,0,{opacity})'}
+    
+    fig.add_trace(plotly.graph_objs.Scatter3d(
+        x=coords[:,0], y=coords[:,1], z=coords[:,2], 
+        mode='markers', visible=visible, marker=marker))
+
+    for e in edges:
+        fig.add_trace(plotly.graph_objs.Scatter3d(
+            x=coords[e,0], y=coords[e,1], z=coords[e,2],
+            mode='lines', visible=visible, line=line))
+
+
+def plot_pcs_3D(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
+             savefig=True, project_dir=None, scale=1, plot_n_pcs=10, 
+             node_size=6.0, linewidth=3.0, height=400, mean_pose_opacity=0.4,
+             **kwargs):
+    """
+    Visualize the components of a fitted PCA model based on 3D components.
+
+    For each PC, a subplot shows the mean pose (semi-transparent) along
+    with a perturbation of the mean pose in the direction of the PC. 
+
+    Parameters
+    ----------
+    pca : :py:func:`sklearn.decomposition.PCA`
+        Fitted PCA model
+
+    use_bodyparts : list of str
+        List of bodyparts to that are used in the model; used to index
+        bodypart names in the skeleton.
+
+    skeleton : list
+        List of edges that define the skeleton, where each edge is a
+        pair of bodypart names.
+
+    keypoint_colormap : str
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    savefig : bool, True
+        Whether to save the figure to a file. If true, the figure is
+        saved to `{project_dir}/pcs.html
+
+    project_dir : str, default=None
+        Path to the project directory. Required if `savefig` is True.
+
+    scale : float, default=0.5
+        Scale factor for the perturbation of the mean pose.
+
+    plot_n_pcs : int, default=10
+        Number of PCs to plot. 
+
+    node_size : float, default=30.0
+        Size of the keypoints in the figure.
+        
+    linewidth: float, default=2.0
+        Width of edges in skeleton
+        
+    mean_pose_opacity: float, default=0.4
+        Opacity of the mean pose
+    """
+    k = len(use_bodyparts)
+    d = len(pca.mean_)//(k-1)  
+    Gamma = np.array(center_embedding(k))
+    edges = get_edges(use_bodyparts, skeleton)
+    plot_n_pcs = min(plot_n_pcs, pca.components_.shape[0])
+    magnitude = np.sqrt((pca.mean_**2).mean()) * scale
+    ymean = Gamma @ pca.mean_.reshape(k-1,d)
+    
+    from plotly.subplots import make_subplots
+    fig = make_subplots(rows=1, cols=1, specs=[[{'type': 'scatter3d'}]])
+    
+    def visibility_mask(i):
+        visible = np.zeros((len(edges)+1)*(plot_n_pcs+1))
+        visible[-(len(edges)+1):] = 1
+        visible[(len(edges)+1)*i:(len(edges)+1)*(i+1)]=1
+        return visible > 0
+    
+    steps = []
+    for i in range(plot_n_pcs):
+        coords = Gamma @ (pca.mean_ + magnitude*pca.components_[i]).reshape(k-1,d)
+        
+        add_3D_pose_to_plotly_fig(
+            fig, coords, edges, visible=(i==0),
+            node_size=node_size, linewidth=linewidth,
+            keypoint_colormap=keypoint_colormap)
+
+        steps.append(dict(
+            method='update', label=f'PC {i+1}',
+            args=[{'visible': visibility_mask(i)}]))
+        
+    add_3D_pose_to_plotly_fig(
+        fig, ymean, edges, opacity=mean_pose_opacity,
+        node_size=node_size, linewidth=linewidth,
+        keypoint_colormap=keypoint_colormap)
+
+    fig.update_layout(
+        height=height, showlegend=False, 
+        sliders=[dict(steps=steps)],
+        scene=dict(
+            xaxis=dict(showgrid=False, showbackground=False),
+            yaxis=dict(showgrid=False, showbackground=False),
+            zaxis=dict(showgrid=False, showline=True, linecolor='black'),
+            bgcolor='white'),
+        margin=dict(l=20, r=20, b=0, t=0, pad=10))
+    
+    if savefig:
+        assert project_dir is not None, fill(
+            'The `savefig` option requires a `project_dir`')
+        fig.write_html(os.path.join(project_dir,f'pcs.html'))
+
+    fig.show()

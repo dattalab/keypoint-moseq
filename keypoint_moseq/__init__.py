@@ -29,6 +29,7 @@ from .fitting import (
 
 from .viz import (
     plot_pcs, 
+    plot_pcs_3D,
     plot_scree, 
     plot_progress, 
     plot_syllable_frequencies,
