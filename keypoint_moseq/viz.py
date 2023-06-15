@@ -517,7 +517,8 @@ def write_video_clip(frames, path, fps=30, quality=7):
 
 def _grid_movie_tile(key, start, end, videos, centroids, headings, 
                      dot_color, window_size, scaled_window_size,
-                     pre, post, dot_radius):
+                     pre, post, dot_radius, overlay_keypoints, 
+                     edges, coordinates, plot_options):
     
     scale_factor = scaled_window_size/window_size
     cs = centroids[key][start-pre:start+post]
@@ -529,6 +530,12 @@ def _grid_movie_tile(key, start, end, videos, centroids, headings,
     tile = []
     frames = videos[key][start-pre:start+post]
     for ii,(frame,c) in enumerate(zip(frames,cs)):
+
+        if overlay_keypoints:
+            coords = coordinates[key][start-pre+ii]
+            frame = overlay_keypoints_on_image(
+                frame, coords, edges=edges, **plot_options)
+
         frame = cv2.warpAffine(frame,np.float32(M),(window_size,window_size))
         frame = cv2.resize(frame, (scaled_window_size,scaled_window_size))
         if 0 <= ii-pre <= end-start and dot_radius>0:
@@ -540,7 +547,9 @@ def _grid_movie_tile(key, start, end, videos, centroids, headings,
 
 def grid_movie(instances, rows, cols, videos, centroids, headings,
                window_size, dot_color=(255,255,255), dot_radius=4,
-               pre=30, post=60, scaled_window_size=None):
+               pre=30, post=60, scaled_window_size=None, edges=[],
+               overlay_keypoints=False, coordinates=None,
+               plot_options={}):
     
     """Generate a grid movie and return it as an array of frames.
 
@@ -592,6 +601,21 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
         Window size after scaling the video. If None, the no scaling
         is performed (i.e. `scaled_window_size = window_size`)
 
+    overlay_keypoints: bool, default=False
+        If True, overlay the pose skeleton on the video frames.
+
+    edges: list of tuples, default=[]
+        List of edges defining pose skeleton. Used when 
+        `overlay_keypoints=True`.
+
+    coordinates: dict, default=None
+        Dictionary mapping video names to arrays of shape `(n_frames, 2)`.
+        Used when `overlay_keypoints=True`.
+
+    plot_options: dict, default={}
+        Dictionary of options to pass to `overlay_keypoints_on_image`.
+        Used when `overlay_keypoints=True`.
+
     Returns
     -------
     frames: array of shape `(post+pre, width, height, 3)`
@@ -604,11 +628,11 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
         scaled_window_size = window_size
 
     tiles = []
-    for i,(key,start,end) in enumerate(instances):
+    for key,start,end in instances:
         tiles.append(_grid_movie_tile(
-            key, start, end, videos, centroids, headings, 
-            dot_color, window_size, scaled_window_size,
-            pre, post, dot_radius))
+            key, start, end, videos, centroids, headings, dot_color, 
+            window_size, scaled_window_size, pre, post, dot_radius, 
+            overlay_keypoints, edges, coordinates, plot_options))
 
     tiles = np.stack(tiles).reshape(rows, cols, post+pre, scaled_window_size, scaled_window_size, 3)
     frames = np.concatenate(np.concatenate(tiles,axis=2),axis=2)
@@ -674,7 +698,9 @@ def generate_grid_movies(
     min_duration=3, dot_radius=4, dot_color=(255,255,255), quality=7,
     window_size=None, use_reindexed=True, coordinates=None, 
     bodyparts=None, use_bodyparts=None, sampling_options={},  
-    video_extension=None, max_video_size=1920, **kwargs):
+    video_extension=None, max_video_size=1920, skeleton=[],
+    overlay_keypoints=False, plot_options={}, 
+    keypoint_colormap='autumn', **kwargs):
     
     """
     Generate grid movies for a modeled dataset.
@@ -763,8 +789,8 @@ def generate_grid_movies(
     coordinates: dict, default=None
         Dictionary mapping session names to keypoint coordinates as 
         ndarrays of shape (n_frames, n_bodyparts, 2). Required when
-        `window_size=None`, and for density-based sampling (i.e. when 
-        `sampling_options['mode']=='density'`; see 
+        `window_size=None`, or `overlay_keypoints=True`, or if using 
+        density-based sampling (i.e. when `sampling_options['mode']=='density'`; see 
         :py:func:`keypoint_moseq.util.sample_instances`).
 
     bodyparts: list of str, default=None
@@ -797,15 +823,26 @@ def generate_grid_movies(
         Maximum size of the grid movie in pixels. If the grid movie
         is larger than this, it will be downsampled.
 
+    overlay_keypoints: bool, default=False
+        Whether to overlay the keypoints on the grid movie.
+
+    skeleton: list of tuples, default=[]
+        List of tuples specifying the skeleton. Used when 
+        `overlay_keypoints=True`.
+
+    keypoint_colormap: str, default='autumn'
+        Colormap used to color keypoints. Used when
+        `overlay_keypoints=True`.
         
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """
     assert (video_dir is not None) or (video_paths is not None), fill(
         'You must provide either `video_dir` or `video_paths`') 
 
-    if window_size is None:
+    if window_size is None or overlay_keypoints:
         assert coordinates is not None, fill(
-            '`coordinates` must be provided if `window_size` is None')     
+            '`coordinates` must be provided if `window_size` is None '
+            'or `overlay_keypoints` is True')
     
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
@@ -817,6 +854,17 @@ def generate_grid_movies(
     
     if not (bodyparts is None or use_bodyparts is None or coordinates is None):
         coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+
+    edges = []
+    if len(skeleton)>0 and overlay_keypoints: 
+        if isinstance(skeleton[0][0],str):
+            assert use_bodyparts is not None, fill(
+                'If skeleton edges are specified using bodypart names, '
+                '`use_bodyparts` must be specified')
+            edges = get_edges(use_bodyparts, skeleton)
+        else: edges = skeleton
+
+    plot_options.update({'keypoint_colormap':keypoint_colormap})
 
     if results is None: results = load_results(
         name=name, project_dir=project_dir, path=results_path)
@@ -873,9 +921,11 @@ def generate_grid_movies(
         sampled_instances.items(), desc='Generating grid movies'):
         
         frames = grid_movie(
-            instances, rows, cols, videos, centroids, headings,
+            instances, rows, cols, videos, centroids, headings, edges=edges,
             window_size=window_size, scaled_window_size=scaled_window_size,
-            dot_color=dot_color, pre=pre, post=post, dot_radius=dot_radius)
+            dot_color=dot_color, pre=pre, post=post, dot_radius=dot_radius,
+            overlay_keypoints=overlay_keypoints, coordinates=coordinates,
+            plot_options=plot_options)
 
         path = os.path.join(output_dir, f'syllable{syllable}.mp4')
         write_video_clip(frames, path, fps=fps, quality=quality)
