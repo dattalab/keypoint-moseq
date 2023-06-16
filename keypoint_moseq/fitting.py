@@ -66,6 +66,7 @@ def fit_model(model,
               states_in_history=True,
               plot_every_n_iters=10,  
               save_progress_figs=True,
+              parallel_kalman=True,
               **kwargs):
 
     """
@@ -145,6 +146,10 @@ def fit_model(model,
 
     save_progress_figs : bool, default=True
         If True, save the progress plots to disk.
+
+    parallel_kalman : bool, default=True,
+        Use parallel implementation of Kalman sampling, which can be faster
+        but has a significantly longer jit time.
         
     Returns
     -------
@@ -177,7 +182,8 @@ def fit_model(model,
         for iteration in pbar:
 
             try: model = _wrapped_resample(
-                data, model, pbar=pbar, ar_only=ar_only, verbose=verbose)
+                data, model, pbar=pbar, ar_only=ar_only, verbose=verbose,
+                parallel_kalman = parallel_kalman)
             except StopResampling: break
 
             if history_every_n_iters>0 and (iteration%history_every_n_iters)==0:
@@ -307,7 +313,9 @@ def extract_results(*, params, states, labels, save_results=True,
 
 def apply_model(*, params, coordinates, confidences=None, num_iters=20, 
                 ar_only=False, save_results=True, verbose=False,
-                project_dir=None, name=None, results_path=None, **kwargs): 
+                project_dir=None, name=None, results_path=None,
+                parallel_kalman=True,
+                **kwargs):
     """
     Apply a model to new data.
 
@@ -349,6 +357,10 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
     results_path : str, default=None
         Optional path for saving model outputs.
 
+    parallel_kalman : bool, default=True,
+        Use parallel implementation of Kalman sampling, which can be faster
+        but has a significantly longer jit time.
+    
     Returns
     -------
     results_dict : dict
@@ -369,7 +381,8 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
         for iteration in pbar:
             try: model = _wrapped_resample(
                     data, model, pbar=pbar, ar_only=ar_only, 
-                    states_only=True, verbose=verbose)
+                    states_only=True, verbose=verbose,
+                    parallel_kalman = parallel_kalman)
             except StopResampling: break
 
     return extract_results(
