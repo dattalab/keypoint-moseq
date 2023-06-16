@@ -10,6 +10,10 @@ from .util import *
 
 from .io import *
 
+from .wrappers import *
+
+from .widgets import *
+
 from .calibration import (
     noise_calibration,
 )
@@ -42,6 +46,12 @@ from .analysis import (
     plot_syll_stats_with_sem,
     get_group_trans_mats,
     changepoint_analysis,
+    generate_transition_matrices,
+    visualize_transition_bigram,
+    plot_transition_graph_group,
+    plot_transition_graph_difference,
+    get_behavioral_distance,
+    plot_dendrogram,
 )
 
 from jax_moseq.models.keypoint_slds import (

@@ -72,16 +72,15 @@ def concatenate_stateseqs(stateseqs, mask=None):
 
     Parameters
     ----------
-    stateseqs: dict or ndarray, shape (..., t)
-        Dictionary mapping names to 1d arrays, or a single
-        multi-dimensional array representing a batch of state sequences
-        where the last dim indexes time
+    stateseqs: ndarray of shape (..., t), or dict or list of such arrays
+        Batch of state sequences where the last dim indexes time, or a
+        dict/list containing state sequences as 1d arrays.
 
-    mask: ndarray, shape (..., >=t), default=None
+    mask: ndarray of shape (..., >=t), default=None
         Binary indicator for which elements of `stateseqs` are valid,
-        e.g. when state sequences of different lengths have been padded.
-        If `mask` contains more time-points than `stateseqs`, the
-        initial extra time-points will be ignored.
+        used in the case where `stateseqs` is an ndarray. If `mask` 
+        contains more time-points than `stateseqs`, the initial extra 
+        time-points will be ignored.
 
     Returns
     -------
@@ -90,6 +89,8 @@ def concatenate_stateseqs(stateseqs, mask=None):
     """
     if isinstance(stateseqs, dict):
         stateseq_flat = np.hstack(list(stateseqs.values()))
+    elif isinstance(stateseqs, list):
+        stateseq_flat = np.hstack(stateseqs)
     elif mask is not None:
         stateseq_flat = stateseqs[mask[:,-stateseqs.shape[1]:]>0]
     else: stateseq_flat = stateseqs.flatten()
@@ -104,8 +105,15 @@ def get_durations(stateseqs, mask=None):
 
     Parameters
     ----------
-    stateseqs: dict or ndarray of shape (..., t)
+    stateseqs: ndarray of shape (..., t), or dict or list of such arrays
+        Batch of state sequences where the last dim indexes time, or a
+        dict/list containing state sequences as 1d arrays.
+
     mask: ndarray of shape (..., >=t), default=None
+        Binary indicator for which elements of `stateseqs` are valid,
+        used in the case where `stateseqs` is an ndarray. If `mask` 
+        contains more time-points than `stateseqs`, the initial extra 
+        time-points will be ignored.
 
     Returns
     -------
@@ -135,9 +143,15 @@ def get_frequencies(stateseqs, mask=None, num_states=None, runlength=True):
 
     Parameters
     ----------
-    stateseqs: dict or ndarray of shape (..., t)
+    stateseqs: ndarray of shape (..., t), or dict or list of such arrays
+        Batch of state sequences where the last dim indexes time, or a
+        dict/list containing state sequences as 1d arrays.
 
     mask: ndarray of shape (..., >=t), default=None
+        Binary indicator for which elements of `stateseqs` are valid,
+        used in the case where `stateseqs` is an ndarray. If `mask` 
+        contains more time-points than `stateseqs`, the initial extra 
+        time-points will be ignored.
 
     num_states: int, default=None
         Number of different states. If None, the number of states will
@@ -172,6 +186,7 @@ def get_frequencies(stateseqs, mask=None, num_states=None, runlength=True):
     counts = np.bincount(stateseq_flat, minlength=num_states)
     frequencies = counts/counts.sum()
     return frequencies
+
 
 
 def reindex_by_frequency(stateseqs, mask=None):
