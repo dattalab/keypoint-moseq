@@ -397,9 +397,9 @@ def noise_calibration(project_dir, coordinates, confidences, *,
 
     coordinates: dict
         Keypoint coordinates for a collection of sessions. Values
-        must be numpy arrays of shape (T,K,D) where K is the number
-        of keypoints and D={2 or 3}. Keys can be any unique str,
-        but must start with the name of a videofile in `video_dir`. 
+        must be numpy arrays of shape (T,K,2) where K is the number
+        of keypoints. Keys can be any unique str, but must start with 
+        the name of a videofile in `video_dir`. 
 
     confidences: dict
         Nonnegative confidence values for the keypoints in 
@@ -425,10 +425,11 @@ def noise_calibration(project_dir, coordinates, confidences, *,
     verbose: bool, default=False
         Print progress.
     """
+    dim = list(coordinates.values())[0].shape[-1]
+    assert dim == 2, 'Calibration is only supported for 2D keypoints.'
+
     confidences = {k:v+conf_pseudocount for k,v in confidences.items()}
-    
-    sample_keys = sample_error_frames(
-        confidences, bodyparts, use_bodyparts)
+    sample_keys = sample_error_frames(confidences, bodyparts, use_bodyparts)
 
     annotations = load_annotations(project_dir)
     sample_keys.extend(annotations.keys())
