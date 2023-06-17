@@ -7,7 +7,7 @@ from keypoint_moseq.io import update_config
 from keypoint_moseq.util import find_matching_videos, get_edges
 
 def sample_error_frames(confidences, bodyparts, use_bodyparts,
-                        num_bins=10, num_samples=100, num_videos=10,
+                        num_bins=10, num_samples=100,
                         conf_pseudocount=1e-3):
     """
     Randomly sample frames, enriching for those with low confidence 
@@ -33,10 +33,6 @@ def sample_error_frames(confidences, bodyparts, use_bodyparts,
     num_samples: int, default=100
         Total number of frames to sample
 
-    num_videos: int, default=10
-        Maximum number of videos to use. Fewer videos helps with
-        faster frame loading.
-
     conf_pseudocount: float, default=1e-3
         Pseudocount used to augment keypoint confidences.
         
@@ -47,11 +43,7 @@ def sample_error_frames(confidences, bodyparts, use_bodyparts,
         (key, frame_number, bodypart)
 
     """
-    confidences = {k:v+conf_pseudocount for k,v in confidences.items()}
-    all_videos = sorted(confidences.keys())
-    num_videos = min(num_videos, len(all_videos))
-    use_videos = np.random.choice(all_videos, num_videos, replace=False)
-    
+    confidences = {k:v+conf_pseudocount for k,v in confidences.items()}    
     all_confs = np.concatenate([v.flatten() for v in confidences.values()])
     min_conf, max_conf = np.nanmin(all_confs), np.nanmax(all_confs)
     thresholds = np.logspace(np.log10(min_conf), np.log10(max_conf), num_bins)
