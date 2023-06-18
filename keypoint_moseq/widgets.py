@@ -53,7 +53,7 @@ def read_yaml(yaml_file):
         return yaml.safe_load(f)
 
 
-def show_trajectory_gif(project_dir, model_dirname, video_dir=None, keypoint_data_type='deeplabcut'):
+def show_trajectory_gif(project_dir, model_dirname):
     """show trajectory gif for syllable labeling
 
     Parameters
@@ -61,37 +61,19 @@ def show_trajectory_gif(project_dir, model_dirname, video_dir=None, keypoint_dat
     progress_paths : dict
         dictionary of paths and filenames for progress tracking
     """
+    trajectory_gifs_path = os.path.join(
+        project_dir, model_dirname, 'trajectory_plots', 'all_trajectories.gif')
+    
+    assert os.path.exists(trajectory_gifs_path), (
+        f'Trajectory plots not found at {trajectory_gifs_path}. '
+        'See documentation for generating trajectory plots: '
+        'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#visualization')
 
-    trajectory_gif = os.path.join(project_dir, model_dirname, 'trajectory_plots', 'all_trajectories.gif')
-
-    if os.path.exists(trajectory_gif):
-        with open(trajectory_gif, 'rb') as file:
-            image = file.read()
-        out = widgets.Image(value=image, format='gif')
-        display(out)
-    else:
-        print('All trajectory gif not found. Generating now...')
-        # if video_dir not specified, find it in the config file
-        if video_dir is None:
-            video_dir = load_config(project_dir).get('video_dir', None)
-        # if video_dir is still None, raise an error
-        if video_dir is None:
-            raise Exception('Unable to find video directory. Please specify video directory.')
-        
-        if keypoint_data_type == 'deeplabcut':
-            coordinates, _, _ = load_deeplabcut_results(video_dir)
-        elif keypoint_data_type == 'sleap':
-            coordinates, _, _ = load_sleap_results(video_dir)
-        else:
-            raise NotImplementedError('Input type not supported.')
-        
-        config_data = load_config(project_dir)
-        generate_trajectory_plots(coordinates=coordinates, name=model_dirname, project_dir=project_dir, **config_data)
-        with open(trajectory_gif, 'rb') as file:
-            image = file.read()
-        out = widgets.Image(value=image, format='gif')
-        display(out)
-
+    with open(trajectory_gifs_path, 'rb') as file:
+        image = file.read()
+    out = widgets.Image(value=image, format='gif')
+    display(out)
+ 
 
 class GroupSettingWidgets:
     """The group setting widget for setting group names in the index file.
@@ -136,7 +118,7 @@ class GroupSettingWidgets:
             [self.group_input, self.save_button, self.update_index_button])
 
         self.index_dict, self.df = self.index_to_dataframe(self.index_filepath)
-        self.qgrid_widget = qgrid.show_grid(self.df[['group', 'filename']],
+        self.qgrid_widget = qgrid.show_grid(self.df[['group', 'name']],
                                             column_options=self.col_opts,
                                             column_definitions=self.col_defs,
                                             show_toolbar=False)
@@ -398,7 +380,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
     """Syllable Labeler control component.
     """
 
-    def __init__(self, project_dir, model_dirname, index_path, syll_info_path, video_dir, keypoint_data_type, movie_type):
+    def __init__(self, project_dir, model_dirname, index_path, syll_info_path, movie_type):
         """Initialize the SyllableLabeler
         
         Parameters
