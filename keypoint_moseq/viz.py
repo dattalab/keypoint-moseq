@@ -108,7 +108,8 @@ def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3,2)):
           
 def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
              savefig=True, project_dir=None, scale=1, plot_n_pcs=10, 
-             axis_size=(2,1.5), ncols=5, node_size=30.0, linewidth=2.0, **kwargs):
+             axis_size=(2,1.5), ncols=5, node_size=30.0, linewidth=2.0, 
+             interactive=True, **kwargs):
     """
     Visualize the components of a fitted PCA model.
 
@@ -156,6 +157,9 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
         
     linewidth: float, default=2.0
         Width of edges in skeleton
+
+    interactive : bool, default=True
+        For 3D data, whether to generate an interactive 3D plot.
     """
     k = len(use_bodyparts)
     d = len(pca.mean_)//(k-1)  
@@ -163,11 +167,15 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
     edges = get_edges(use_bodyparts, skeleton)
     cmap = plt.colormaps[keypoint_colormap]
     plot_n_pcs = min(plot_n_pcs, pca.components_.shape[0])
+
+    magnitude = np.sqrt((pca.mean_**2).mean()) * scale
+    ymean = Gamma @ pca.mean_.reshape(k-1,d)
+    ypcs = (pca.mean_ + magnitude*pca.components_).reshape(-1,k-1,d)
+    ypcs = Gamma[np.newaxis] @ ypcs[:plot_n_pcs]
     
     if d==2: dims_list,names = [[0,1]],['xy']
     if d==3: dims_list,names = [[0,1],[0,2]],['xy','xz']
-    
-    magnitude = np.sqrt((pca.mean_**2).mean()) * scale
+
     for dims,name in zip(dims_list,names):
         nrows = int(np.ceil(plot_n_pcs/ncols))
         fig,axs = plt.subplots(nrows, ncols, sharex=True, sharey=True)
@@ -175,21 +183,18 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
             if i >= plot_n_pcs:
                 ax.axis('off')
                 continue
-
-            ymean = Gamma @ pca.mean_.reshape(k-1,d)[:,dims]
-            y = Gamma @ (pca.mean_ + magnitude*pca.components_[i]).reshape(k-1,d)[:,dims]
             
             for e in edges:  
-                ax.plot(*ymean[e].T, color=cmap(e[0]/(k-1)), 
+                ax.plot(*ymean[:,dims][e].T, color=cmap(e[0]/(k-1)), 
                         zorder=0, alpha=0.25, linewidth=linewidth)
-                ax.plot(*y[e].T, color='k', 
+                ax.plot(*ypcs[i][:,dims][e].T, color='k', 
                         zorder=2, linewidth=linewidth+.2)
-                ax.plot(*y[e].T, color=cmap(e[0]/(k-1)), 
+                ax.plot(*ypcs[i][:,dims][e].T, color=cmap(e[0]/(k-1)), 
                         zorder=3, linewidth=linewidth)
                 
-            ax.scatter(*ymean.T, c=np.arange(k), cmap=cmap, s=node_size, 
+            ax.scatter(*ymean[:,dims].T, c=np.arange(k), cmap=cmap, s=node_size, 
                        zorder=1, alpha=0.25, linewidth=0)
-            ax.scatter(*y.T, c=np.arange(k), cmap=cmap, s=node_size, 
+            ax.scatter(*ypcs[i][:,dims].T, c=np.arange(k), cmap=cmap, s=node_size, 
                        zorder=4, edgecolor='k', linewidth=0.2)
             
             ax.set_title(f'PC {i+1}', fontsize=10)
@@ -204,6 +209,11 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
                 'The `savefig` option requires a `project_dir`')
             plt.savefig(os.path.join(project_dir,f'pcs-{name}.pdf'))
         plt.show()
+
+    if interactive and d==3:
+        plot_pcs_3D(ymean, ypcs, edges, keypoint_colormap, savefig, 
+                    project_dir, node_size/3, linewidth*2)
+
         
 
 def plot_syllable_frequencies(results=None, path=None, project_dir=None, 
@@ -1027,7 +1037,7 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
     """
     fill_color = 'k' if invert else 'w'
     if isinstance(keypoint_colormap, list): colors = keypoint_colormap
-    else: colors = plt.cm.get_cmap(keypoint_colormap)(np.linspace(0,1,Xs[0].shape[1]))
+    else: colors = plt.colormaps[keypoint_colormap](np.linspace(0,1,Xs[0].shape[1]))
 
     n_cols = min(n_cols, len(Xs))
     n_rows = np.ceil(len(Xs)/n_cols)
@@ -1095,6 +1105,7 @@ def plot_trajectories(titles, Xs, lims, edges=[], n_cols=4, invert=False,
 
     return fig,ax,rasters
 
+
 def save_gif(image_list, gif_filename, duration=0.5):
     # Convert NumPy arrays to PIL Image objects
     pil_images = [Image.fromarray(np.uint8(img)) for img in image_list]
@@ -1102,6 +1113,8 @@ def save_gif(image_list, gif_filename, duration=0.5):
     # Save the PIL Images as an animated GIF
     pil_images[0].save(gif_filename, save_all=True, append_images=pil_images[1:], 
                        duration=int(duration*1000), loop=0)
+
+
 
 
 
@@ -1114,7 +1127,7 @@ def generate_trajectory_plots(
     plot_options={}, sampling_options={'mode':'density'},
     padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2},
     save_individually=True, save_gifs=True, save_mp4s=False, fps=30, 
-    projection_planes=['xy','xz'], **kwargs):
+    projection_planes=['xy','xz'], interactive=True, **kwargs):
     """
     Generate trajectory plots for a modeled dataset.
 
@@ -1243,6 +1256,10 @@ def generate_trajectory_plots(
         coordinates. A separate plot will be saved for each plane with 
         the name of the plane (e.g. 'xy') as a suffix. This argument is 
         ignored for 2D data.
+
+    interactive: bool, default=True
+        For 3D data, whether to create an visualization that can be 
+        rotated and zoomed. This argument is ignored for 2D data.
     """
     if output_dir is None:
         assert project_dir is not None and name is not None, fill(
@@ -1311,13 +1328,13 @@ def generate_trajectory_plots(
         all_Xs = [Xs]
         suffixes = ['']
 
-    for Xs,suffix in zip(all_Xs,suffixes):
-        lims = get_limits(Xs, pctl=0, **padding)
+    for Xs_2D,suffix in zip(all_Xs,suffixes):
+        lims = get_limits(Xs_2D, pctl=0, **padding)
 
         # individual plots
         if save_individually:
             desc = 'Generating trajectory plots'
-            for title,X in tqdm.tqdm(zip(titles,Xs), desc=desc, total=len(titles)):
+            for title,X in tqdm.tqdm(zip(titles,Xs_2D), desc=desc, total=len(titles)):
 
                 fig,ax,rasters = plot_trajectories(
                     [title], X[None], lims, edges=edges, 
@@ -1339,7 +1356,7 @@ def generate_trajectory_plots(
 
         # grid plot
         fig,ax,rasters = plot_trajectories(
-            titles, Xs, lims, edges=edges, 
+            titles, Xs_2D, lims, edges=edges, 
             return_rasters=(save_gifs or save_mp4s),
             **plot_options)
 
@@ -1355,7 +1372,9 @@ def generate_trajectory_plots(
             path = os.path.join(output_dir, f'all_trajectories{suffix}.mp4')
             write_video_clip(rasters, path, fps=use_fps)
 
-
+    if interactive and Xs.shape[-1]==3:
+        plot_trajectories_3D(Xs, titles, edges, output_dir, **plot_options)
+        
 
 def overlay_keypoints_on_image(
     image, coordinates, edges=[], keypoint_colormap='autumn',
@@ -1400,7 +1419,7 @@ def overlay_keypoints_on_image(
     else: canvas = image
 
     # get colors from matplotlib and convert to 0-255 range for openc
-    colors = plt.get_cmap(keypoint_colormap)(np.linspace(0,1,coordinates.shape[0]))
+    colors = plt.colormaps(keypoint_colormap)(np.linspace(0,1,coordinates.shape[0]))
     colors = [tuple([int(c) for c in cs[:3]*255]) for cs in colors]
 
     # overlay skeleton
@@ -1422,9 +1441,9 @@ def overlay_keypoints_on_image(
 
 
 def overlay_trajectory_on_video(
-        frames, trajectory, smoothing_kernel=1, highlight=None, 
-        min_opacity=0.2, max_opacity=1, num_ghosts=5, interval=2, 
-        plot_options={}):
+    frames, trajectory, smoothing_kernel=1, highlight=None, 
+    min_opacity=0.2, max_opacity=1, num_ghosts=5, interval=2, 
+    plot_options={}, edges=[]):
     
     """
     Overlay a trajectory of keypoints on a video.
@@ -1442,7 +1461,7 @@ def overlay_trajectory_on_video(
                     if i+j < start or i+j > end:
                         plot_options['opacity'] *= highlight_factor
                 frames[i+j] = overlay_keypoints_on_image(
-                    frames[i+j], trajectory[i], **plot_options)
+                    frames[i+j], trajectory[i], edges=edges, **plot_options)
     return frames
 
 def overlay_keypoints_on_video(
@@ -1540,9 +1559,6 @@ def overlay_keypoints_on_video(
                 writer.append_data(image)
 
 
-
-
-
 def crowd_movie(
     instances, coordinates, centroids, lims, pre=30, post=60,
     edges=[], plot_options={}):
@@ -1599,7 +1615,7 @@ def crowd_movie(
         xy = coordinates[key][start-pre:start+post,:,:2]
         xy = np.clip(xy, *lims[:,:2]) - lims[0,:2]
         frames = overlay_trajectory_on_video(
-            frames, xy, plot_options=plot_options)
+            frames, xy, plot_options=plot_options, edges=edges)
 
         dot_radius=5
         dot_color=(255,255,255)
@@ -1801,6 +1817,8 @@ def generate_crowd_movies(
         path = os.path.join(output_dir, f'syllable{syllable}.mp4')
         write_video_clip(frames, path, fps=fps, quality=quality)
             
+
+
 def matplotlib_colormap_to_plotly(cmap):
     """
     Convert a matplotlib colormap to a plotly colormap.
@@ -1826,8 +1844,7 @@ def matplotlib_colormap_to_plotly(cmap):
 
 
 def add_3D_pose_to_plotly_fig(fig, coords, edges, keypoint_colormap='autumn',
-                              node_size=6.0, linewidth=3.0, visible=True,
-                              opacity=1):
+                              node_size=6.0, linewidth=3.0, visible=True, opacity=1):
     """
     Add a 3D pose to a plotly figure.
 
@@ -1861,7 +1878,7 @@ def add_3D_pose_to_plotly_fig(fig, coords, edges, keypoint_colormap='autumn',
         'size':node_size, 
         'color':np.linspace(0,1,len(coords)),
         'colorscale': matplotlib_colormap_to_plotly(keypoint_colormap),
-        'line': dict(color='black', width=0.2),
+        'line': dict(color='black', width=0.5),
         'opacity': opacity}
     
     line = {
@@ -1878,10 +1895,10 @@ def add_3D_pose_to_plotly_fig(fig, coords, edges, keypoint_colormap='autumn',
             mode='lines', visible=visible, line=line))
 
 
-def plot_pcs_3D(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
-             savefig=True, project_dir=None, scale=1, plot_n_pcs=10, 
-             node_size=6.0, linewidth=3.0, height=400, mean_pose_opacity=0.4,
-             **kwargs):
+def plot_pcs_3D(ymean, ypcs, edges, keypoint_colormap, savefig, 
+                project_dir=None, node_size=6, linewidth=2, height=400, 
+                mean_pose_opacity=0.2):
+
     """
     Visualize the components of a fitted PCA model based on 3D components.
 
@@ -1890,62 +1907,48 @@ def plot_pcs_3D(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
 
     Parameters
     ----------
-    pca : :py:func:`sklearn.decomposition.PCA`
-        Fitted PCA model
+    ymean : ndarray (num_bodyparts, 3)
+        Mean pose.
 
-    use_bodyparts : list of str
-        List of bodyparts to that are used in the model; used to index
-        bodypart names in the skeleton.
+    ypcs : ndarray (num_pcs, num_bodyparts, 3)
+        Perturbations of the mean pose in the direction of each PC.
 
-    skeleton : list
-        List of edges that define the skeleton, where each edge is a
-        pair of bodypart names.
+    edges : list of index pairs
+        Skeleton edges.
 
     keypoint_colormap : str
         Name of a matplotlib colormap to use for coloring the keypoints.
 
-    savefig : bool, True
+    savefig : bool
         Whether to save the figure to a file. If true, the figure is
         saved to `{project_dir}/pcs.html
 
     project_dir : str, default=None
         Path to the project directory. Required if `savefig` is True.
 
-    scale : float, default=0.5
-        Scale factor for the perturbation of the mean pose.
-
-    plot_n_pcs : int, default=10
-        Number of PCs to plot. 
-
     node_size : float, default=30.0
         Size of the keypoints in the figure.
         
     linewidth: float, default=2.0
         Width of edges in skeleton
+
+    height : int, default=400
+        Height of the figure in pixels.
         
     mean_pose_opacity: float, default=0.4
         Opacity of the mean pose
-    """
-    k = len(use_bodyparts)
-    d = len(pca.mean_)//(k-1)  
-    Gamma = np.array(center_embedding(k))
-    edges = get_edges(use_bodyparts, skeleton)
-    plot_n_pcs = min(plot_n_pcs, pca.components_.shape[0])
-    magnitude = np.sqrt((pca.mean_**2).mean()) * scale
-    ymean = Gamma @ pca.mean_.reshape(k-1,d)
-    
+    """    
     from plotly.subplots import make_subplots
     fig = make_subplots(rows=1, cols=1, specs=[[{'type': 'scatter3d'}]])
     
     def visibility_mask(i):
-        visible = np.zeros((len(edges)+1)*(plot_n_pcs+1))
+        visible = np.zeros((len(edges)+1)*(len(ypcs)+1))
         visible[-(len(edges)+1):] = 1
         visible[(len(edges)+1)*i:(len(edges)+1)*(i+1)]=1
         return visible > 0
     
     steps = []
-    for i in range(plot_n_pcs):
-        coords = Gamma @ (pca.mean_ + magnitude*pca.components_[i]).reshape(k-1,d)
+    for i,coords in enumerate(ypcs):
         
         add_3D_pose_to_plotly_fig(
             fig, coords, edges, visible=(i==0),
@@ -1968,12 +1971,92 @@ def plot_pcs_3D(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
             xaxis=dict(showgrid=False, showbackground=False),
             yaxis=dict(showgrid=False, showbackground=False),
             zaxis=dict(showgrid=False, showline=True, linecolor='black'),
-            bgcolor='white'),
+            bgcolor='white', aspectmode='data'),
         margin=dict(l=20, r=20, b=0, t=0, pad=10))
     
     if savefig:
         assert project_dir is not None, fill(
             'The `savefig` option requires a `project_dir`')
-        fig.write_html(os.path.join(project_dir,f'pcs.html'))
+        save_path = os.path.join(project_dir,f'pcs.html')
+        fig.write_html(save_path)
+        print(f'Saved interactive plot to {save_path}')
 
     fig.show()
+    
+    
+def plot_trajectories_3D(Xs, titles, edges, output_dir,
+                         keypoint_colormap='autumn', node_size=8, 
+                         linewidth=3, height=500, skiprate=1):
+    """
+    Visualize a set of 3D trajectories.
+
+    Parameters
+    ----------
+    Xs : list of ndarrays (num_syllables, num_frames, num_bodyparts, 3)
+        Trajectories to visualize.
+
+    titles : list of str
+        Title for each trajectory.
+
+    edges : list of index pairs
+        Skeleton edges.
+
+    output_dir : str
+        Path to save the interactive plot.
+
+    keypoint_colormap : str, default='autumn'
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    node_size : float, default=8.0
+        Size of the keypoints in the figure.
+
+    linewidth: float, default=3.0
+        Width of edges in skeleton
+
+    height : int, default=500
+        Height of the figure in pixels.
+
+    skiprate : int, default=1
+        Plot every `skiprate` frames.
+    """
+    from plotly.subplots import make_subplots
+    fig = make_subplots(rows=1, cols=1, specs=[[{'type': 'scatter3d'}]])
+    Xs = Xs[:,::skiprate]
+    
+    def visibility_mask(i):
+        n = (len(edges)+1)*len(Xs[1])
+        visible = np.zeros(n*len(Xs))
+        visible[n*i:n*(i+1)]=1
+        return visible > 0
+    
+    steps = []
+    for i,X in enumerate(Xs):
+        opacities = np.linspace(.3,1,len(X)+1)[1:]**2
+        for coords,opacity in zip(X, opacities):
+        
+            add_3D_pose_to_plotly_fig(
+                fig, coords, edges, visible=(i==0),
+                node_size=node_size, linewidth=linewidth,
+                keypoint_colormap=keypoint_colormap, opacity=opacity)
+
+        steps.append(dict(
+            method='update', label=titles[i],
+            args=[{'visible': visibility_mask(i)}]))
+
+    fig.update_layout(
+        height=height, showlegend=False, 
+        sliders=[dict(steps=steps)],
+        scene=dict(
+            xaxis=dict(showgrid=False, showbackground=False),
+            yaxis=dict(showgrid=False, showbackground=False),
+            zaxis=dict(showgrid=False, showline=True, linecolor='black'),
+            bgcolor='white', aspectmode='data'),
+        margin=dict(l=20, r=20, b=0, t=0, pad=10))
+    
+    if output_dir is not None:
+        save_path = os.path.join(output_dir, f'all_trajectories.html')
+        fig.write_html(save_path)
+        print(f'Saved interactive trajectories plot to {save_path}')
+
+    fig.show()
+    
