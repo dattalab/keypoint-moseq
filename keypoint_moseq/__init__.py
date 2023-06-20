@@ -10,8 +10,6 @@ from .util import *
 
 from .io import *
 
-from .wrappers import *
-
 from .widgets import *
 
 from .calibration import (
@@ -38,9 +36,7 @@ from .viz import (
     generate_trajectory_plots,
 )
 
-from .analysis import (
-    compute_moseq_df, 
-    compute_stats_df, 
+from .analysis import ( 
     plot_fingerprint,
     create_fingerprint_dataframe, 
     plot_syll_stats_with_sem,
@@ -52,6 +48,8 @@ from .analysis import (
     plot_transition_graph_difference,
     get_behavioral_distance,
     plot_dendrogram,
+    interactive_group_setting,
+    label_syllables
 )
 
 from jax_moseq.models.keypoint_slds import (

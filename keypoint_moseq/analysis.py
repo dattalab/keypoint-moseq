@@ -29,6 +29,12 @@ from copy import deepcopy
 from cytoolz import sliding_window
 from os.path import join, exists
 
+from keypoint_moseq.widgets import GroupSettingWidgets, SyllableLabeler
+
+from glob import glob
+from keypoint_moseq.widgets import GroupSettingWidgets, SyllableLabeler
+
+
 from keypoint_moseq.util import stateseq_stats, sample_instances, get_trajectories
 from scipy.spatial.distance import squareform, pdist
 from scipy.cluster.hierarchy import linkage, dendrogram
@@ -43,165 +49,31 @@ from jax_moseq.models.keypoint_slds import align_egocentric
 from jax_moseq.utils import unbatch
 na = np.newaxis
 
-# imports for syllable transitions
-
-# plot transition graphs
+output_notebook()
 
 
-def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
-    """compute moseq dataframe from results dict that contains all kinematic values by frame
+def interactive_group_setting(project_dir, model_dirname):
+    """start the interactive group setting widget
+
     Parameters
     ----------
-    base_dir : str
+    project_dir : str
         the path to the project directory
-    model_name : str
+    model_dirname : str
         the name of the model directory
-    results_dict : dict
-        dictionary of results from model fitting
-    use_bodyparts : bool
-        boolean flag whether to include data for bodyparts
-    smooth_heading : bool, optional
-        boolean flag whether smooth the computed heading, by default True
 
-    Returns
-    -------
-    moseq_df : pandas.DataFrame
-        the dataframe that contains kinematic data for each frame
     """
 
-    # load model results
-    results_dict = load_results(base_dir, model_name)
+    index_filepath = os.path.join(project_dir, 'index.yaml')
 
-    # load index file
-    index_filepath = os.path.join(base_dir, 'index.yaml')
-    if os.path.exists(index_filepath):
-        with open(index_filepath, 'r') as f:
-            index_data = yaml.safe_load(f)
+    if not os.path.exists(index_filepath):
+        generate_index(project_dir, model_dirname, index_filepath)
 
-        # create a file dictionary for each session
-        file_info = {}
-        for session in index_data['files']:
-            file_info[session['name']] = {'group': session['group']}
-    else:
-        print('index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first')
-
-    session_name = []
-    centroid = []
-    velocity = []
-    heading = []
-    syllables = []
-    syllables_reindexed = []
-    frame_index = []
-    s_group = []
-
-    for k, v in results_dict.items():
-        n_frame = v['centroid'].shape[0]
-        session_name.append([str(k)] * n_frame)
-        centroid.append(v['centroid'])
-        # velocity is pixel per second
-        velocity.append(np.concatenate(
-            ([0], np.sqrt(np.square(np.diff(v['centroid'], axis=0)).sum(axis=1)) * fps)))
-
-        if file_info is not None:
-            # find the group for each session from index data
-            s_group.append([file_info[k]['group']]*n_frame)
-        else:
-            # no index data
-            s_group.append(['default']*n_frame)
-        frame_index.append(np.arange(n_frame))
-
-        if smooth_heading:
-            heading.append(filter_angle(v['heading']))
-        else:
-            heading.append(v['heading'])
-
-        # add syllable data
-        syllables.append(v['syllables'])
-        syllables_reindexed.append(v['syllables_reindexed'])
-
-    # construct dataframe
-    moseq_df = pd.DataFrame(np.concatenate(
-        session_name), columns=['name'])
-    moseq_df = pd.concat([moseq_df, pd.DataFrame(np.concatenate(centroid), columns=[
-                         'centroid_x', 'centroid_y'])], axis=1)
-    moseq_df['heading'] = np.concatenate(heading)
-    moseq_df['velocity_px_s'] = np.concatenate(velocity)
-    moseq_df['syllable'] = np.concatenate(syllables)
-    moseq_df['syllables_reindexed'] = np.concatenate(syllables_reindexed)
-    moseq_df['frame_index'] = np.concatenate(frame_index)
-    moseq_df['group'] = np.concatenate(s_group)
-
-    # compute syllable onset
-    change = np.diff(moseq_df['syllable']) != 0
-    indices = np.where(change)[0]
-    indices += 1
-    indices = np.concatenate(([0], indices))
-
-    onset = np.full(moseq_df.shape[0], False)
-    onset[indices] = True
-    moseq_df['onset'] = onset
-    return moseq_df
-
-
-def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
-    """summary statistics for syllable frequencies and kinematic values
-    Parameters
-    ----------
-    moseq_df : pandas.DataFrame
-        the dataframe that contains kinematic data for each frame
-    threshold : float, optional
-        usge threshold for the syllable to be included, by default 0.005
-    groupby : list, optional
-        the list of column names to group by, by default ['group', 'session_name']
-    fps : int, optional
-        frame per second information of the recording, by default 30
-    syll_key : str, optional
-        the column name of the syllable column to be summarize by, by default 'syllables_reindexed'
-    normalize : bool, optional
-        boolean falg whether to normalize by counts, by default True
-
-    Returns
-    -------
-    stats_df : pandas.DataFrame
-        the summary statistics dataframe for syllable frequencies and kinematic values
-    """
-
-    # filter out syllables that are used less than threshold in all sessions
-    raw_frequency = (moseq_df.groupby('syllable').count()[
-                     'frame_index']/moseq_df.shape[0]).reset_index().rename(columns={'frame_index': 'counts'})
-    syll_include = raw_frequency[raw_frequency['counts']
-                                 > threshold]['syllable']
-    filtered_df = moseq_df[moseq_df['syllable'].isin(syll_include)].copy()
-
-    frequencies = (filtered_df.groupby(groupby)[syll_key]
-                   .value_counts(normalize=normalize)
-                   .unstack(fill_value=0)
-                   .reset_index()
-                   .melt(id_vars=groupby)
-                   .set_index(groupby + [syll_key]))
-    frequencies.columns = ['frequency']
-
-    # TODO: hard-coded heading for now, could add other scalars
-    features = filtered_df.groupby(
-        groupby + [syll_key])[['heading', 'velocity_px_s']].agg(['mean', 'std', 'min', 'max'])
-
-    features.columns = ['_'.join(col).strip()
-                        for col in features.columns.values]
-
-    # get durations
-    trials = filtered_df['onset'].cumsum()
-    trials.name = 'trials'
-    durations = filtered_df.groupby(
-        groupby + [syll_key] + [trials])['onset'].count()
-    # average duration in seconds
-    durations = durations.groupby(groupby + [syll_key]).mean() / fps
-    durations.name = 'duration'
-    durations.fillna(0)
-
-    stats_df = frequencies.join(durations).join(features).reset_index()
-    stats_df = stats_df.rename(columns={'syllables_reindexed': 'syllable'})
-    return stats_df
-
+    # display the widget
+    index_grid = GroupSettingWidgets(index_filepath)
+    display(index_grid.clear_button, index_grid.group_set)
+    display(index_grid.qgrid_widget)
+    return index_filepath
 
 # fingerprint
 def robust_min(v):
@@ -474,6 +346,69 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
         fig.savefig(join(save_dir, 'moseq_fingerprint.pdf'))
         fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
 
+
+def label_syllables(project_dir, model_dirname, movie_type='grid'):
+    """label syllables in the syllable grid movie
+
+    Parameters
+    ----------
+    project_dir : str
+        the path to the project directory
+    model_dirname : str
+        the name of the model directory
+    movie_type : str, optional
+        the type of movie to label, ('grid' or 'crowd')
+    """
+
+    output_notebook()
+
+    grid_movies = glob(os.path.join(project_dir, model_dirname, 'grid_movies', '*.mp4'))
+    crowd_movies = glob(os.path.join(project_dir, model_dirname, 'crowd_movies', '*.mp4'))
+
+    if movie_type == 'grid':
+        assert len(grid_movies) > 0, (
+            'No grid movies found. Please run `generate_grid_movies` as described in the docs: '
+            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
+        
+    elif movie_type == 'crowd':
+        assert len(crowd_movies) > 0, (
+            'No crowd movies found. Please run `generate_crowd_movies` as described in the docs: '
+            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
+
+    # construct the syllable info path
+    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+
+    # generate a new syll_info yaml file
+    if not os.path.exists(syll_info_path):
+        # parse model results
+        model_results = load_results(project_dir, model_dirname)
+        unique_sylls = np.unique(np.concatenate([file['syllables_reindexed'] for file in model_results.values()]))
+        # construct the syllable dictionary
+        syll_dict = {int(i): {'label': '', 'desc': '', 'movie_path': [], 'group_info': {}} for i in unique_sylls}
+        # record the movie paths
+        for movie_path in grid_movies:
+            syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
+            syll_dict[syll_index]['movie_path'].append(movie_path)
+        for movie_path in crowd_movies:
+            syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
+            syll_dict[syll_index]['movie_path'].append(movie_path)
+
+        # write to file
+        print(syll_info_path)
+        with open(syll_info_path, 'w') as file:
+            yaml.safe_dump(syll_dict, file, default_flow_style=False)
+
+    # construct the index path
+    index_path = os.path.join(project_dir, "index.yaml")
+
+    # create index.yaml if it does not exist
+    if not os.path.exists(index_path):
+        print('index.yaml does not exist, creating one...')
+        generate_index(project_dir, model_dirname, index_path)
+
+    labeler = SyllableLabeler(project_dir, model_dirname, index_path, syll_info_path, movie_type)
+    output = widgets.interactive_output(labeler.interactive_syllable_labeler, {'syllables': labeler.syll_select})
+    display(labeler.clear_button, labeler.syll_select, output)
 
 
 def get_tie_correction(x, N_m):
