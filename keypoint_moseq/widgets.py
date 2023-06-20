@@ -76,6 +76,7 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
     centroid = []
     velocity = []
     heading = []
+    angular_velocity = []
     syllables = []
     syllables_reindexed = []
     frame_index = []
@@ -98,9 +99,15 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
         frame_index.append(np.arange(n_frame))
 
         if smooth_heading:
-            heading.append(filter_angle(v['heading']))
+            session_heading = filter_angle(v['heading'])
         else:
-            heading.append(v['heading'])
+            session_heading = v['heading']
+
+        # heading in radian
+        heading.append(session_heading)
+        # compute angular velocity (radian per second)
+        angular_velocity.append(np.concatenate(
+            ([0], np.diff(session_heading) * fps)))
 
         # add syllable data
         syllables.append(v['syllables'])
@@ -112,6 +119,7 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
     moseq_df = pd.concat([moseq_df, pd.DataFrame(np.concatenate(centroid), columns=[
                          'centroid_x', 'centroid_y'])], axis=1)
     moseq_df['heading'] = np.concatenate(heading)
+    moseq_df['angular_velocity'] = np.concatenate(angular_velocity)
     moseq_df['velocity_px_s'] = np.concatenate(velocity)
     moseq_df['syllable'] = np.concatenate(syllables)
     moseq_df['syllables_reindexed'] = np.concatenate(syllables_reindexed)
@@ -170,7 +178,7 @@ def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'name'], fps=30, s
 
     # TODO: hard-coded heading for now, could add other scalars
     features = filtered_df.groupby(
-        groupby + [syll_key])[['heading', 'velocity_px_s']].agg(['mean', 'std', 'min', 'max'])
+        groupby + [syll_key])[['heading', 'angular_velocity', 'velocity_px_s']].agg(['mean', 'std', 'min', 'max'])
 
     features.columns = ['_'.join(col).strip()
                         for col in features.columns.values]
