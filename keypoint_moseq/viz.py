@@ -527,15 +527,20 @@ def _grid_movie_tile(key, start, end, videos, centroids, headings,
     c = r @ c - window_size//2
     M = [[ np.cos(h), np.sin(h),-c[0]], [-np.sin(h), np.cos(h),-c[1]]]
     
+    if videos is not None:
+        frames = videos[key][start-pre:start+post]
+    else:
+        w,h = (cs.max(0) + window_size//2 + 1).astype(int)
+        frames = np.zeros((pre+post,h,w,3),dtype=np.uint8)
+
     tile = []
-    frames = videos[key][start-pre:start+post]
     for ii,(frame,c) in enumerate(zip(frames,cs)):
 
         if overlay_keypoints:
             coords = coordinates[key][start-pre+ii]
             frame = overlay_keypoints_on_image(
                 frame, coords, edges=edges, **plot_options)
-
+            
         frame = cv2.warpAffine(frame,np.float32(M),(window_size,window_size))
         frame = cv2.resize(frame, (scaled_window_size,scaled_window_size))
         if 0 <= ii-pre <= end-start and dot_radius>0:
@@ -554,9 +559,9 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
     """Generate a grid movie and return it as an array of frames.
 
     Grid movies show many instances of a syllable. Each instance
-    contains a snippet of a video, centered on the animal and synchronized
-    to the onset of the syllable. A dot appears at syllable onset and 
-    disappears at syllable offset.
+    contains a snippet of video (and/or keypoint-overlay) centered 
+    on the animal and synchronized to the onset of the syllable. 
+    A dot appears at syllable onset and disappears at syllable offset.
 
     Parameters
     ----------
@@ -569,9 +574,10 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
     rows: int, cols : int
         Number of rows and columns in the grid movie grid
     
-    videos: dict
+    videos: dict or None
         Dictionary mapping video names to video readers. Frames from
-        each reader should be accessible via `__getitem__(int or slice)`
+        each reader should be accessible via `__getitem__(int or slice)`.
+        If None, the the grid movie will not include video frames.
 
     centroids: dict
         Dictionary mapping video names to arrays of shape `(n_frames, 2)`
@@ -624,6 +630,11 @@ def grid_movie(instances, rows, cols, videos, centroids, headings,
             width = rows * scaled_window_size
             height = cols * scaled_window_size
     """     
+    if videos is None:
+        assert overlay_keypoints, fill(
+            'If no videos are provided, then `overlay_keypoints` must '
+            'be True. Otherwise there is nothing to show')
+        
     if scaled_window_size is None:
         scaled_window_size = window_size
 
@@ -699,8 +710,8 @@ def generate_grid_movies(
     window_size=None, use_reindexed=True, coordinates=None, 
     bodyparts=None, use_bodyparts=None, sampling_options={},  
     video_extension=None, max_video_size=1920, skeleton=[],
-    overlay_keypoints=False, plot_options={}, 
-    keypoint_colormap='autumn', **kwargs):
+    overlay_keypoints=False, keypoints_only=False, fps=30,
+    plot_options={}, keypoint_colormap='autumn', **kwargs):
     
     """
     Generate grid movies for a modeled dataset.
@@ -823,21 +834,35 @@ def generate_grid_movies(
         Maximum size of the grid movie in pixels. If the grid movie
         is larger than this, it will be downsampled.
 
-    overlay_keypoints: bool, default=False
-        Whether to overlay the keypoints on the grid movie.
-
     skeleton: list of tuples, default=[]
         List of tuples specifying the skeleton. Used when 
         `overlay_keypoints=True`.
+
+    overlay_keypoints: bool, default=False
+        Whether to overlay the keypoints on the grid movie.
+
+    keypoints_only: bool, default=False
+        Whether to only show the keypoints (i.e. no video frames).
+        Overrides `overlay_keypoints`. When this option is used,
+        the framerate should be explicitly specified using `fps`.
+
+    fps: int, default=30
+        Framerate of the grid movie. When `keypoints_only=False`,
+        this parameter is ignored and the framerate is determined
+        inferred from the video files.
 
     keypoint_colormap: str, default='autumn'
         Colormap used to color keypoints. Used when
         `overlay_keypoints=True`.
         
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
-    """
-    assert (video_dir is not None) or (video_paths is not None), fill(
-        'You must provide either `video_dir` or `video_paths`') 
+    """    
+    if not keypoints_only:
+        assert (video_dir is not None) or (video_paths is not None), fill(
+            'Either `video_dir` or `video_paths` is required unless `keypoints_only=True`')
+    elif not overlay_keypoints:
+        warnings.warn('Setting `overlay_keypoints=True` since `keypoints_only=True`')
+        overlay_keypoints = True
 
     if window_size is None or overlay_keypoints:
         assert coordinates is not None, fill(
@@ -869,13 +894,15 @@ def generate_grid_movies(
     if results is None: results = load_results(
         name=name, project_dir=project_dir, path=results_path)
     
-    if video_paths is None:
+    if video_paths is None and not keypoints_only:
         video_paths = find_matching_videos(
             results.keys(), video_dir, as_dict=True, 
             video_extension=video_extension)
         
-    videos = {k: OpenCVReader(path) for k,path in video_paths.items()}
-    fps = list(videos.values())[0].fps
+        videos = {k: OpenCVReader(path) for k,path in video_paths.items()}
+        fps = list(videos.values())[0].fps
+    else: 
+        videos = None
 
     syllable_key = 'syllables' + ('_reindexed' if use_reindexed else '')
     syllables = {k:v[syllable_key] for k,v in results.items()}
