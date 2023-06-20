@@ -32,6 +32,7 @@ from ipywidgets import HBox, VBox
 from bokeh.models.widgets import PreText
 from keypoint_moseq.viz import generate_grid_movies, generate_crowd_movies, generate_trajectory_plots
 from keypoint_moseq.io import load_deeplabcut_results, load_sleap_results, load_config, load_results
+from keypoint_moseq.util import filter_angle
 
 
 def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
