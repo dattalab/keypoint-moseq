@@ -32,7 +32,7 @@ from ipywidgets import HBox, VBox
 from bokeh.models.widgets import PreText
 from keypoint_moseq.viz import generate_grid_movies, generate_crowd_movies, generate_trajectory_plots
 from keypoint_moseq.io import load_deeplabcut_results, load_sleap_results, load_config, load_results
-from keypoint_moseq.util import filter_angle
+from keypoint_moseq.util import filter_angle, get_frequencies
 
 
 def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
@@ -138,7 +138,7 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
     return moseq_df
 
 
-def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
+def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupby=['group', 'name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
     """summary statistics for syllable frequencies and kinematic values
     Parameters
     ----------
@@ -160,21 +160,27 @@ def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'name'], fps=30, s
     stats_df : pandas.DataFrame
         the summary statistics dataframe for syllable frequencies and kinematic values
     """
+    # compute runlength encoding for syllables
+    
+    # load model results
+    results_dict = load_results(base_dir, model_name)
+    syllables = {k:res[syll_key] for k,res in results_dict.items()}
+    # frequencies is array of frequencies for sorted syllables [syll_0, syll_1...]
+    frequencies=get_frequencies(syllables)
+    syll_include=np.where(frequencies>min_frequency)[0]
+
+    # construct frequency dataframe
+    frequency_df = []
+    for k, v in results_dict.items():
+        syll_freq=get_frequencies(v[syll_key])
+        df=pd.DataFrame({'name': k,
+                         syll_key: np.arange(len(syll_freq)),
+                         'frequency': syll_freq})
+        frequency_df.append(df)
+    frequency_df = pd.concat(frequency_df)
 
     # filter out syllables that are used less than threshold in all sessions
-    raw_frequency = (moseq_df.groupby('syllable').count()[
-                     'frame_index']/moseq_df.shape[0]).reset_index().rename(columns={'frame_index': 'counts'})
-    syll_include = raw_frequency[raw_frequency['counts']
-                                 > threshold]['syllable']
-    filtered_df = moseq_df[moseq_df['syllable'].isin(syll_include)].copy()
-
-    frequencies = (filtered_df.groupby(groupby)[syll_key]
-                   .value_counts(normalize=normalize)
-                   .unstack(fill_value=0)
-                   .reset_index()
-                   .melt(id_vars=groupby)
-                   .set_index(groupby + [syll_key]))
-    frequencies.columns = ['frequency']
+    filtered_df = moseq_df[moseq_df[syll_key].isin(syll_include)].copy()
 
     # TODO: hard-coded heading for now, could add other scalars
     features = filtered_df.groupby(
@@ -191,10 +197,12 @@ def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'name'], fps=30, s
     # average duration in seconds
     durations = durations.groupby(groupby + [syll_key]).mean() / fps
     durations.name = 'duration'
-    durations.fillna(0)
+    # only keep the columns we need
+    durations = durations.fillna(0).reset_index()[['name', syll_key, 'duration']]
 
-    stats_df = frequencies.join(durations).join(features).reset_index()
-    stats_df = stats_df.rename(columns={'syllables_reindexed': 'syllable'})
+    stats_df = pd.merge(features, frequency_df, on=['name', syll_key])
+    stats_df = pd.merge(stats_df, durations, on=['name', syll_key])
+    stats_df = stats_df.rename(columns={syll_key: 'syllable'})
     return stats_df
 
 
