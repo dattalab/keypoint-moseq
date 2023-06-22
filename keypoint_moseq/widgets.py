@@ -169,15 +169,34 @@ def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupb
     frequencies=get_frequencies(syllables)
     syll_include=np.where(frequencies>min_frequency)[0]
 
+    # add group information
+    # load index file
+    index_filepath = os.path.join(base_dir, 'index.yaml')
+    if os.path.exists(index_filepath):
+        with open(index_filepath, 'r') as f:
+            index_data = yaml.safe_load(f)
+
+        # create a file dictionary for each session
+        file_info = {}
+        for session in index_data['files']:
+            file_info[session['name']] = {'group': session['group']}
+    else:
+        print('index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first')
+
     # construct frequency dataframe
     frequency_df = []
     for k, v in results_dict.items():
         syll_freq=get_frequencies(v[syll_key])
         df=pd.DataFrame({'name': k,
+                         'group': file_info[k]['group'],
                          syll_key: np.arange(len(syll_freq)),
                          'frequency': syll_freq})
         frequency_df.append(df)
     frequency_df = pd.concat(frequency_df)
+    if 'name' not in groupby:
+        frequency_df.drop(columns=['name'], inplace=True)
+    frequency_df=frequency_df.groupby(groupby + [syll_key]).mean().reset_index()
+    print(frequency_df.columns)
 
     # filter out syllables that are used less than threshold in all sessions
     filtered_df = moseq_df[moseq_df[syll_key].isin(syll_include)].copy()
@@ -188,6 +207,7 @@ def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupb
 
     features.columns = ['_'.join(col).strip()
                         for col in features.columns.values]
+    features.reset_index(inplace=True)
 
     # get durations
     trials = filtered_df['onset'].cumsum()
@@ -198,10 +218,10 @@ def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupb
     durations = durations.groupby(groupby + [syll_key]).mean() / fps
     durations.name = 'duration'
     # only keep the columns we need
-    durations = durations.fillna(0).reset_index()[['name', syll_key, 'duration']]
-
-    stats_df = pd.merge(features, frequency_df, on=['name', syll_key])
-    stats_df = pd.merge(stats_df, durations, on=['name', syll_key])
+    durations = durations.fillna(0).reset_index()[groupby + [syll_key, 'duration']]
+    
+    stats_df = pd.merge(features, frequency_df, on=groupby+[syll_key])
+    stats_df = pd.merge(stats_df, durations, on=groupby+[syll_key])
     stats_df = stats_df.rename(columns={syll_key: 'syllable'})
     return stats_df
 
@@ -641,10 +661,9 @@ class SyllableLabeler(SyllableLabelerWidgets):
     def get_group_df(self):
         """Populate syllable information dict with usage and scalar information.
         """
-        print('Computing Syllable Statistics...')
         moseq_df = compute_moseq_df(
-            self.base_dir, self.model_name, self.index_file)
-        stats_df = compute_stats_df(moseq_df, groupby=['group'])[
+            self.base_dir, self.model_name)
+        stats_df = compute_stats_df(self.base_dir, self.model_name, moseq_df, groupby=['group'])[
             ['group', 'syllable', 'frequency', 'duration', 'heading_mean', 'velocity_px_s_mean']]
 
         # Get all unique groups in df
