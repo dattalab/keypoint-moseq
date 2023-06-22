@@ -35,7 +35,7 @@ from glob import glob
 from keypoint_moseq.widgets import GroupSettingWidgets, SyllableLabeler
 
 
-from keypoint_moseq.util import stateseq_stats, sample_instances, get_trajectories
+from keypoint_moseq.util import stateseq_stats, sample_instances, get_trajectories, get_frequencies
 from scipy.spatial.distance import squareform, pdist
 from scipy.cluster.hierarchy import linkage, dendrogram
 
@@ -1098,7 +1098,8 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
     return all_mats
 
 
-def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigram'):
+
+def get_group_trans_mats(labels, label_group, group, syll_include, normalize='bigram'):
     """get the transition matrices for each group
 
     Parameters
@@ -1126,35 +1127,26 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
 
     # Computing transition matrices for each given group
     for plt_group in group:
-        # list of sessions in the group
+        # list of syll labels in sessions in the group
         use_labels = [lbl for lbl, grp in zip(
             labels, label_group) if grp == plt_group]
         # find stack np array shape
         row_num = len(use_labels)
         max_len = max([len(lbl) for lbl in use_labels])
         # Get sessions to include in trans_mat
-
+        # subset only syllable included
         trans_mats.append(get_transition_matrix(use_labels,
                                                 normalize=normalize,
-                                                combine=True,
-                                                max_syllable=max_sylls))
-
-        # initialize the numpy array with -1
-        lbl_data = -np.ones((row_num, max_len), dtype='int')
-        for i, lbl in enumerate(use_labels):
-            # only include the max syllables to avoid different array shapes
-            lbl = lbl[lbl < max_sylls]
-            lbl_data[i, :len(lbl)] = lbl
-        mask = lbl_data != -1
-
+                                                combine=True)[syll_include, :][:, syll_include])
+        
         # Getting frequency information for node scaling
-        frequency_count = stateseq_stats(lbl_data, mask)[0]
+        group_frequencies = get_frequencies(use_labels)[syll_include]
 
-        frequencies.append(frequency_count/frequency_count.sum())
+        frequencies.append(group_frequencies)
     return trans_mats, frequencies
 
 
-def visualize_transition_bigram(group, trans_mats, save_dir=None, normalize='bigram'):
+def visualize_transition_bigram(group, trans_mats, syll_include, save_dir=None, normalize='bigram'):
     """visualize the transition matrices for each group
 
     Parameters
@@ -1171,7 +1163,7 @@ def visualize_transition_bigram(group, trans_mats, save_dir=None, normalize='big
     max_syllables = trans_mats[0].shape[0]
 
     fig, ax = plt.subplots(1, len(group), figsize=(
-        12, 15), sharex=False, sharey=True)
+        20, 20), sharex=False, sharey=True)
     title_map = dict(bigram='Bigram', columns='Incoming', rows='Outgoing')
     color_lim = max([x.max() for x in trans_mats])
     if len(group) == 1:
@@ -1183,12 +1175,12 @@ def visualize_transition_bigram(group, trans_mats, save_dir=None, normalize='big
                                         :max_syllables], cmap='cubehelix', vmax=color_lim)
         if i == 0:
             axs[i].set_ylabel('Incoming syllable')
-            plt.yticks(np.arange(0, max_syllables, 4))
+            plt.yticks(np.arange(len(syll_include)), syll_include)
         cb = fig.colorbar(h, ax=axs[i], fraction=0.046, pad=0.04)
         cb.set_label(f'{title_map[normalize]} transition probability')
         axs[i].set_xlabel('Outgoing syllable')
         axs[i].set_title(g)
-        axs[i].set_xticks(np.arange(0, max_syllables, 4))
+        axs[i].set_xticks(np.arange(len(syll_include)), syll_include)
 
     # saving the figures
     # saving the figure
@@ -1199,7 +1191,7 @@ def visualize_transition_bigram(group, trans_mats, save_dir=None, normalize='big
 
 
 def generate_transition_matrices(project_dir, model_dirname, normalize='bigram', 
-                                 max_syllable=None, syll_key='syllables_reindexed'):
+                                 min_frequency=0.005, syll_key='syllables_reindexed'):
     """generate the transition matrices for each session
 
     Parameters
@@ -1233,20 +1225,21 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
     group = sorted(list(set(label_group)))
     print('Group(s):', ', '.join(group))
 
+    # load model reuslts
     results_dict = load_results(
         project_dir=project_dir, name=model_dirname)
-    model_labels = [results_dict[session][syll_key]
-                    for session in sessions]
-    if max_syllable is None:
-        max_syllable = max([np.max(lbl) for lbl in model_labels])
-    print('maximum syllable to include:', max_syllable)
+
+    # filter out syllables by freqency
+    model_labels = [results_dict[session][syll_key] for session in sessions]
+    frequencies=get_frequencies(model_labels)
+    syll_include=np.where(frequencies>min_frequency)[0]
 
     trans_mats, usages = get_group_trans_mats(
-        model_labels, label_group, group, max_sylls=max_syllable, normalize=normalize)
-    return trans_mats, usages, group
+        model_labels, label_group, group, syll_include=syll_include, normalize=normalize)
+    return trans_mats, usages, group, syll_include
 
 
-def plot_transition_graph_group(groups, trans_mats, usages, save_dir=None, layout='circular', node_scaling=2000):
+def plot_transition_graph_group(groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=2000):
     """plot the transition graph for each group
 
     Parameters
@@ -1268,12 +1261,14 @@ def plot_transition_graph_group(groups, trans_mats, usages, save_dir=None, layou
     ax = all_axes.flat
 
     for i in range(len(groups)):
+        print(groups[i])
         G = nx.from_numpy_array(trans_mats[i]*100)
         widths = nx.get_edge_attributes(G, 'weight')
         if layout == 'circular':
             pos = nx.circular_layout(G)
         else:
             pos = nx.spring_layout(G)
+        # get node list
         nodelist = G.nodes()
         # normalize the usage values
         sum_usages = sum(usages[i])
@@ -1288,7 +1283,7 @@ def plot_transition_graph_group(groups, trans_mats, usages, save_dir=None, layou
                                width=list(widths.values()),
                                edge_color='black', ax=ax[i], alpha=0.6)
         nx.draw_networkx_labels(G, pos=pos,
-                                labels=dict(zip(nodelist, nodelist)),
+                                labels=dict(zip(nodelist, syll_include)),
                                 font_color='black', ax=ax[i])
         ax[i].set_title(groups[i])
     # turn off the axis spines
@@ -1302,7 +1297,7 @@ def plot_transition_graph_group(groups, trans_mats, usages, save_dir=None, layou
         fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
 
 
-def plot_transition_graph_difference(groups, trans_mats, usages, save_dir=None, layout='circular', node_scaling=3000):
+def plot_transition_graph_difference(groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=3000):
     """plot the difference of transition graph between groups
 
     Parameters
@@ -1361,7 +1356,7 @@ def plot_transition_graph_difference(groups, trans_mats, usages, save_dir=None, 
                                    'blue' if u > 0 else 'red' for u in widths.values()],
                                ax=ax[i], alpha=0.6)
         nx.draw_networkx_labels(G, pos=pos,
-                                labels=dict(zip(nodelist, nodelist)),
+                                labels=dict(zip(nodelist, syll_include)),
                                 font_color='black', ax=ax[i])
         ax[i].set_title(pair[0] + ' - ' + pair[1])
 
