@@ -965,7 +965,7 @@ def load_keypoints(filepath_pattern, format, recursive=True, path_sep='-',
     assert len(filepaths)>0, fill(
         f'No files with extensions {extensions} found for {filepath_pattern}')
     
-    coordinates,confidences = {},{}
+    coordinates,confidences,bodyparts = {},{},None
     for filepath in tqdm.tqdm(filepaths, desc=f'Loading keypoints'):
         try:
             name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
@@ -975,8 +975,10 @@ def load_keypoints(filepath_pattern, format, recursive=True, path_sep='-',
         except Exception as e:
             print(fill(f'Error loading {filepath}: {e}'))
 
-    if len(coordinates) > 0:
-        check_nan_proportions(coordinates, bodyparts)
+    assert len(coordinates)>0, fill(
+        f'No valid results found for {filepath_pattern}')
+
+    check_nan_proportions(coordinates, bodyparts)
     return coordinates,confidences,bodyparts
 
 
