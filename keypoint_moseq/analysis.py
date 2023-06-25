@@ -230,29 +230,22 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
     else:
         preprocessor = None
 
-    # ensure number of groups is not over the number of available levels
-    if num_level > len(summary.index.names):
-        raise Exception('Too many levels to unpack. num_level should be less than', len(
-            summary.index.names))
-
     name_map = dict(zip(plot_columns, col_names))
+
+    # get level label (group)
+    level = summary.index.get_level_values(0)
+    level_label = LabelEncoder().fit_transform(level)
+    find_mid = (np.diff(np.r_[0, np.argwhere(
+            np.diff(level_label)).ravel(), len(level_label)])/2).astype('int32')
+    level_ticks = np.r_[0, np.argwhere(
+            np.diff(level_label)).ravel()] + find_mid        
 
     levels = []
     level_plot = []
     level_ticks = []
-    for i in range(num_level):
-        level = summary.index.get_level_values(i)
-        level_label = LabelEncoder().fit_transform(level)
-        find_mid = (np.diff(np.r_[0, np.argwhere(
-            np.diff(level_label)).ravel(), len(level_label)])/2).astype('int32')
-        # store level value
-        levels.append(level)
-        level_plot.append(level_label)
-        level_ticks.append(np.r_[0, np.argwhere(
-            np.diff(level_label)).ravel()] + find_mid)
 
-    # col_num = number of grouping/level + column in summary
-    col_num = num_level + len(plot_columns)
+    # col_num = 1 (for group level) + column in summary
+    col_num = 1 + len(plot_columns)
 
     # https://matplotlib.org/stable/tutorials/intermediate/gridspec.html
     fig = plt.figure(1, figsize=figsize, facecolor='white')
@@ -260,16 +253,15 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
     gs = GridSpec(2, col_num, wspace=0.1, hspace=0.1,
                   width_ratios=[1]*num_level+[8]*(col_num-num_level), height_ratios=[10, 0.1], figure=fig)
 
-    # plot the level(s)
-    for i in range(num_level):
-        temp_ax = fig.add_subplot(gs[0, i])
-        temp_ax.set_title(level_names[i], fontsize=fontsize)
-        temp_ax.imshow(level_plot[i][:, np.newaxis],
-                       aspect='auto', cmap='Set3')
-        plt.yticks(level_ticks[i], levels[i]
-                   [level_ticks[i]], fontsize=fontsize)
+    # plot the group level
+    temp_ax = fig.add_subplot(gs[0, 0])
+    temp_ax.set_title('Label', fontsize=fontsize)
+    temp_ax.imshow(level_label[:, np.newaxis],
+                    aspect='auto', cmap='Set3')
+    plt.yticks(level_ticks, level
+                [level_ticks], fontsize=fontsize)
 
-        temp_ax.get_xaxis().set_ticks([])
+    temp_ax.get_xaxis().set_ticks([])
 
     # compile data to plot while recording vmin and vmax in the data
     plot_dict = {}
