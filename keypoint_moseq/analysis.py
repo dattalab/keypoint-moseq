@@ -343,8 +343,11 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
     # saving the figure
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
-        fig.savefig(join(save_dir, 'moseq_fingerprint.pdf'))
-        fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
+    else:
+        save_dir=os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(join(save_dir, 'moseq_fingerprint.pdf'))
+    fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
 
 
 def label_syllables(project_dir, model_dirname, movie_type='grid'):
@@ -957,9 +960,12 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir=None
     # save the figure
     # saving the figure
     if save_dir is not None:
-        os.makedirs(save_dir, exist_ok=True) 
-        fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.pdf'))
-        fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.png'))
+        os.makedirs(save_dir, exist_ok=True)
+    else:
+        save_dir=os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.pdf'))
+    fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.png'))
     return fig, legend
 
 
@@ -1186,8 +1192,11 @@ def visualize_transition_bigram(group, trans_mats, syll_include, save_dir=None, 
     # saving the figure
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
-        fig.savefig(os.path.join(save_dir, 'transition_matrices.pdf'))
-        fig.savefig(os.path.join(save_dir, 'transition_matrices.png'))
+    else:
+        save_dir=os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(os.path.join(save_dir, 'transition_matrices.pdf'))
+    fig.savefig(os.path.join(save_dir, 'transition_matrices.png'))
 
 
 def generate_transition_matrices(project_dir, model_dirname, normalize='bigram', 
@@ -1293,8 +1302,11 @@ def plot_transition_graph_group(groups, trans_mats, usages, syll_include, save_d
     # saving the figure
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
-        fig.savefig(os.path.join(save_dir, 'transition_graphs.pdf'))
-        fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
+    else:
+        save_dir=os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(os.path.join(save_dir, 'transition_graphs.pdf'))
+    fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
 
 
 def plot_transition_graph_difference(groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=3000):
@@ -1374,6 +1386,9 @@ def plot_transition_graph_difference(groups, trans_mats, usages, syll_include, s
     # saving the figures
     # saving the figure
     if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+    else:
+        save_dir=os.path.join(project_dir, model_dirname, 'figures')
         os.makedirs(save_dir, exist_ok=True)
         fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.pdf'))
         fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.png'))
@@ -1698,9 +1713,12 @@ def plot_dendrogram(project_dir, model_dirname, video_dir=None, keypoint_data_ty
     labels = (syll_info['label']+"-" +syll_info.index.astype(str)).to_numpy()
 
     dendrogram(Z, distance_sort=False, no_plot=False, labels=labels, color_threshold=None, leaf_font_size=15, leaf_rotation=90, ax=ax)
-    # saving the figure
+
     # saving the figure
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
-        fig.savefig(join(save_dir, 'syllable_dendrogram.pdf'))
-        fig.savefig(join(save_dir, 'syllable_dendrogram.png'))
+    else:
+        save_dir=os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(join(save_dir, 'syllable_dendrogram.pdf'))
+    fig.savefig(join(save_dir, 'syllable_dendrogram.png'))
