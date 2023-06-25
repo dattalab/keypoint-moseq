@@ -112,7 +112,7 @@ def _apply_to_col(df, fn, **kwargs):
     return df.apply(fn, axis=0, **kwargs)
 
 
-def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=25,
+def create_fingerprint_dataframe(moseq_df, stats_df, n_bins = 50,
                                  groupby_list=['group', 'name'], range_type='robust',
                                  scalars=['heading', 'velocity_px_s']):
     """create a summary dataframe to visualize the data as the MoSeq fingerprint (behvavoiral summary) plot
@@ -142,28 +142,25 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=25
         the range dataframe of the values with the selcted range type
     """
 
-    # deep copy the dfs
-    scalar_df = scalar_df.copy()
-    mean_df = mean_df.copy()
-    # rescale velocity to cm/s
-    vel_cols = [c for c in scalars if 'velocity' in c]
-    vel_cols_stats = [f'{c}_{stat_type}' for c in scalars if 'velocity' in c]
+    # set statistics to plot to mean
+    stat_type='mean'
 
-    if len(vel_cols) > 0:
-        scalar_df[vel_cols] *= 30
-        mean_df[vel_cols_stats] *= 30
+    # deep copy the dfs
+    moseq_df = moseq_df.copy()
+    stats_df = stats_df.copy()
 
     # pivot mean_df to be groupby x syllable
-    syll_summary = mean_df.pivot_table(
+    syll_summary =stats_df.pivot_table(
         index=groupby_list, values='frequency', columns='syllable')
     syll_summary.columns = pd.MultiIndex.from_arrays(
         [['MoSeq'] * syll_summary.shape[1], syll_summary.columns])
     min_p = syll_summary.min().min()
     max_p = syll_summary.max().max()
 
-    ranges = scalar_df.reset_index(drop=True)[scalars].agg(
+    ranges = moseq_df.reset_index(drop=True)[scalars].agg(
         ['min', 'max', robust_min, robust_max])
     # add syllable ranges to this df
+    # robust mode would exclude the extreme values
     ranges['MoSeq'] = [min_p, max_p, min_p, max_p]
     range_idx = ['min', 'max'] if range_type == 'full' else [
         'robust_min', 'robust_max']
@@ -177,12 +174,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=25
         binned_data.index.name = 'bin'
         return binned_data
 
-    # use total number of syllables
-    if n_bins is None:
-        # num of bins (default to match the total number of syllables)
-        n_bins = syll_summary.shape[1] + 1
-
-    binned_scalars = scalar_df.groupby(groupby_list)[scalars].apply(
+    binned_scalars = moseq_df.groupby(groupby_list)[scalars].apply(
         _apply_to_col, fn=bin_scalars, range_type=range_type, n_bins=n_bins)
 
     scalar_fingerprint = binned_scalars.pivot_table(
@@ -197,7 +189,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=25
 def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minmax',
                          num_level=1, level_names=['Group'], vmin=None, vmax=None,
                          figsize=(10, 6), fontsize=12, plot_columns=['heading', 'velocity_px_s', 'MoSeq'],
-                         col_names=[('Heading', 'a.u.'), ('velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
+                         col_names=[('Heading', 'a.u.'), ('Velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
     """plot the fingerprint plot from fingerprint dataframe
 
     Parameters
