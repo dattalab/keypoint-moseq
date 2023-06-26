@@ -149,7 +149,7 @@ def create_fingerprint_dataframe(moseq_df, stats_df, n_bins = 50,
     moseq_df = moseq_df.copy()
     stats_df = stats_df.copy()
 
-    # pivot mean_df to be groupby x syllable
+    # pivot stats_df to be groupby x syllable
     syll_summary =stats_df.pivot_table(
         index=groupby_list, values='frequency', columns='syllable')
     syll_summary.columns = pd.MultiIndex.from_arrays(
@@ -251,7 +251,7 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
     fig = plt.figure(1, figsize=figsize, facecolor='white')
 
     gs = GridSpec(2, col_num, wspace=0.1, hspace=0.1,
-                  width_ratios=[1]*num_level+[8]*(col_num-num_level), height_ratios=[10, 0.1], figure=fig)
+                  width_ratios=[1]+[8]*(col_num-1), height_ratios=[10, 0.1], figure=fig)
 
     # plot the group level
     temp_ax = fig.add_subplot(gs[0, 0])
@@ -290,7 +290,7 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
     # plot the data
     for i, col in enumerate(plot_columns):
         name = name_map[col]
-        temp_ax = fig.add_subplot(gs[0, i + num_level])
+        temp_ax = fig.add_subplot(gs[0, i + 1])
         temp_ax.set_title(name[0], fontsize=fontsize)
         data = plot_dict[col]
 
