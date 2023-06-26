@@ -186,10 +186,12 @@ def create_fingerprint_dataframe(moseq_df, stats_df, n_bins = 50,
 
 
 
-def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minmax',
-                         num_level=1, level_names=['Group'], vmin=None, vmax=None,
-                         figsize=(10, 6), fontsize=12, plot_columns=['heading', 'velocity_px_s', 'MoSeq'],
-                         col_names=[('Heading', 'a.u.'), ('Velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
+def plot_fingerprint(project_dir, model_dirname, moseq_df, stats_df, n_bins = 50, range_type='robust',
+                     save_dir=None, preprocessor_type='minmax',
+                     vmin=None, vmax=None,
+                     color_bar=False,
+                     figsize=(10, 6), fontsize=12, plot_columns=['heading', 'velocity_px_s', 'MoSeq'],
+                     col_names=[('Heading', 'a.u.'), ('Velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
     """plot the fingerprint plot from fingerprint dataframe
 
     Parameters
@@ -220,6 +222,7 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
     Exception
         too many levels to unpack. num_level should be less than the number of levels in the summary dataframe
     """
+    summary, range_dict = create_fingerprint_dataframe(moseq_df, stats_df, n_bins, range_type=range_type)
 
     from sklearn.preprocessing import MinMaxScaler, StandardScaler
     assert preprocessor_type in ['minmax', 'standard', 'none']
@@ -313,16 +316,17 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
         plt.xticks(fontsize=int(fontsize*.75))
 
     # plot colorbar
-    # cb = fig.add_subplot(gs[1, -1])
-    # plt.colorbar(pc, cax=cb, orientation='horizontal')
+    if color_bar:
+        cb = fig.add_subplot(gs[1, -1])
+        plt.colorbar(pc, cax=cb, orientation='horizontal')
 
-    # specify labels for feature scaling
-    # if preprocessor_type == 'minmax':
-    #     cb.set_xlabel('Min Max')
-    # elif preprocessor_type == 'standard':
-    #     cb.set_xlabel('Standardized')
-    # else:
-    #     cb.set_xlabel('Percentage Usage')
+        # specify labels for feature scaling
+        if preprocessor_type == 'minmax':
+            cb.set_xlabel('Min Max')
+        elif preprocessor_type == 'standard':
+            cb.set_xlabel('Standardized')
+        else:
+            cb.set_xlabel('Percentage Usage')
 
     # saving the figure
     if save_dir is not None:
