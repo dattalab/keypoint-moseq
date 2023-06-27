@@ -243,10 +243,6 @@ def plot_fingerprint(project_dir, model_dirname, moseq_df, stats_df, n_bins = 50
     level_ticks = np.r_[0, np.argwhere(
             np.diff(level_label)).ravel()] + find_mid        
 
-    levels = []
-    level_plot = []
-    level_ticks = []
-
     # col_num = 1 (for group level) + column in summary
     col_num = 1 + len(plot_columns)
 
