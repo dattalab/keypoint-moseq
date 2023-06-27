@@ -304,6 +304,7 @@ def plot_fingerprint(project_dir, model_dirname, moseq_df, stats_df, n_bins = 50
         pc = temp_ax.imshow(
             data, aspect='auto', interpolation='none', vmin=vmin, vmax=vmax, extent=extent)
         temp_ax.set_xlabel(name[1], fontsize=fontsize)
+
         temp_ax.set_xticks(np.linspace(
             np.ceil(extent[0]), np.floor(extent[1]), 6).astype(int))
         # https://stackoverflow.com/questions/14908576/how-to-remove-frame-from-matplotlib-pyplot-figure-vs-matplotlib-figure-frame
@@ -334,7 +335,7 @@ def plot_fingerprint(project_dir, model_dirname, moseq_df, stats_df, n_bins = 50
     fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
 
 
-def label_syllables(project_dir, model_dirname, movie_type='grid'):
+def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
     """label syllables in the syllable grid movie
 
     Parameters
@@ -393,7 +394,7 @@ def label_syllables(project_dir, model_dirname, movie_type='grid'):
         print('index.yaml does not exist, creating one...')
         generate_index(project_dir, model_dirname, index_path)
 
-    labeler = SyllableLabeler(project_dir, model_dirname, index_path, syll_info_path, movie_type)
+    labeler = SyllableLabeler(project_dir, model_dirname, moseq_df, index_path, syll_info_path, movie_type)
     output = widgets.interactive_output(labeler.interactive_syllable_labeler, {'syllables': labeler.syll_select})
     display(labeler.clear_button, labeler.syll_select, output)
 
