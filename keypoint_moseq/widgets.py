@@ -577,7 +577,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
     """Syllable Labeler control component.
     """
 
-    def __init__(self, project_dir, model_dirname, index_path, syll_info_path, movie_type):
+    def __init__(self, project_dir, model_dirname, moseq_df, index_path, syll_info_path, movie_type):
         """Initialize the SyllableLabeler
 
         Parameters
@@ -615,7 +615,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
         self.clear_button.on_click(self.clear_on_click)
 
         # generate by group syllable statistics dictionary
-        self.get_group_df()
+        self.get_group_df(moseq_df)
 
         # Get dropdown options with labels
         self.option_dict = {f'{i} - {x["label"]}': self.syll_info[i]
@@ -658,11 +658,9 @@ class SyllableLabeler(SyllableLabelerWidgets):
             self.syll_select.index = curr_syll
             self.syll_select._initializing_traits_ = False
 
-    def get_group_df(self):
+    def get_group_df(self, moseq_df):
         """Populate syllable information dict with usage and scalar information.
         """
-        moseq_df = compute_moseq_df(
-            self.base_dir, self.model_name)
         stats_df = compute_stats_df(self.base_dir, self.model_name, moseq_df, groupby=['group'])[
             ['group', 'syllable', 'frequency', 'duration', 'heading_mean', 'velocity_px_s_mean']]
 
