@@ -1137,7 +1137,7 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize='bi
     return trans_mats, frequencies
 
 
-def visualize_transition_bigram(group, trans_mats, syll_include, save_dir=None, normalize='bigram'):
+def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, syll_include, save_dir=None, normalize='bigram'):
     """visualize the transition matrices for each group
 
     Parameters
@@ -1233,7 +1233,7 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
     return trans_mats, usages, group, syll_include
 
 
-def plot_transition_graph_group(groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=2000):
+def plot_transition_graph_group(project_dir, model_dirname, groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=2000):
     """plot the transition graph for each group
 
     Parameters
@@ -1250,12 +1250,22 @@ def plot_transition_graph_group(groups, trans_mats, usages, syll_include, save_d
         the scaling factor for the node size, by default 2000
     """
     # Figure out the number of rows for the plot
+
+    # get syllable info
+    syll_info = None
+    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+    if syll_info_path is not None:
+        if os.path.exists(syll_info_path):
+            with open(syll_info_path, 'r') as f:
+                syll_info = yaml.safe_load(f)
+    # prepare syll labels
+    syll_label = [syll_info[i]['label'] for i in syll_include]
+
     n_row = ceil(len(groups)/2)
-    fig, all_axes = plt.subplots(n_row, 2, figsize=(16, 8*n_row))
+    fig, all_axes = plt.subplots(n_row, 2, figsize=(20, 10*n_row))
     ax = all_axes.flat
 
     for i in range(len(groups)):
-        print(groups[i])
         G = nx.from_numpy_array(trans_mats[i]*100)
         widths = nx.get_edge_attributes(G, 'weight')
         if layout == 'circular':
@@ -1267,7 +1277,7 @@ def plot_transition_graph_group(groups, trans_mats, usages, syll_include, save_d
         # normalize the usage values
         sum_usages = sum(usages[i])
         normalized_usages = np.array(
-            [u/sum_usages for u in usages[i]]) * node_scaling + 500
+            [u/sum_usages for u in usages[i]]) * node_scaling + 1000
         nx.draw_networkx_nodes(G, pos,
                                nodelist=nodelist,
                                node_size=normalized_usages,
@@ -1277,7 +1287,7 @@ def plot_transition_graph_group(groups, trans_mats, usages, syll_include, save_d
                                width=list(widths.values()),
                                edge_color='black', ax=ax[i], alpha=0.6)
         nx.draw_networkx_labels(G, pos=pos,
-                                labels=dict(zip(nodelist, syll_include)),
+                                labels=dict(zip(nodelist, syll_label)),
                                 font_color='black', ax=ax[i])
         ax[i].set_title(groups[i])
     # turn off the axis spines
@@ -1294,7 +1304,7 @@ def plot_transition_graph_group(groups, trans_mats, usages, syll_include, save_d
     fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
 
 
-def plot_transition_graph_difference(groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=3000):
+def plot_transition_graph_difference(project_dir, model_dirname, groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=3000):
     """plot the difference of transition graph between groups
 
     Parameters
@@ -1310,6 +1320,16 @@ def plot_transition_graph_difference(groups, trans_mats, usages, syll_include, s
     node_scaling : int, optional
         the scaling factor for the node size, by default 3000
     """
+
+    # get syllable info
+    syll_info = None
+    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+    if syll_info_path is not None:
+        if os.path.exists(syll_info_path):
+            with open(syll_info_path, 'r') as f:
+                syll_info = yaml.safe_load(f)
+    # prepare syll labels
+    syll_label = [syll_info[i]['label'] for i in syll_include]
 
     # find combinations
     group_combinations = list(combinations(groups, 2))
@@ -1353,7 +1373,7 @@ def plot_transition_graph_difference(groups, trans_mats, usages, syll_include, s
                                    'blue' if u > 0 else 'red' for u in widths.values()],
                                ax=ax[i], alpha=0.6)
         nx.draw_networkx_labels(G, pos=pos,
-                                labels=dict(zip(nodelist, syll_include)),
+                                labels=dict(zip(nodelist, syll_label)),
                                 font_color='black', ax=ax[i])
         ax[i].set_title(pair[0] + ' - ' + pair[1])
 
@@ -1375,8 +1395,8 @@ def plot_transition_graph_difference(groups, trans_mats, usages, syll_include, s
     else:
         save_dir=os.path.join(project_dir, model_dirname, 'figures')
         os.makedirs(save_dir, exist_ok=True)
-        fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.pdf'))
-        fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.png'))
+    fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.pdf'))
+    fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.png'))
 
 
 def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts,
