@@ -995,14 +995,15 @@ def load_keypoints(filepath_pattern, format, extension=None, recursive=True,
         try:
             name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
             new_coordinates,new_confidences,bodyparts = loader(filepath, name)
+
+            if set(new_coordinates.keys()) & set(coordinates.keys()):
+                raise ValueError(fill(
+                    f'Duplicate names found in {filepath_pattern}: '
+                    f'{set(new_coordinates.keys()) & set(coordinates.keys())}. '
+                    f'Please use `path_in_name=True` to avoid this error.'))
+            
         except Exception as e:
             print(fill(f'Error loading {filepath}: {e}'))
-
-        if set(new_coordinates.keys()) & set(coordinates.keys()):
-            raise ValueError(fill(
-                f'Duplicate names found in {filepath_pattern}: '
-                f'{set(new_coordinates.keys()) & set(coordinates.keys())}. '
-                f'Please use `path_in_name=True` to avoid this error.'))
 
         coordinates.update(new_coordinates)
         confidences.update(new_confidences)
