@@ -735,6 +735,7 @@ def generate_grid_movies(
         - `syllables_reindexed` is required if `use_reindexed=True`
         - `centroid` is always required
         - `heading` is always required
+        
 
         If `results=None`, results will be loaded using either 
         `results_path` or  `project_dir` and `name`.

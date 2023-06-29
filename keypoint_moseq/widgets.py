@@ -196,7 +196,6 @@ def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupb
     if 'name' not in groupby:
         frequency_df.drop(columns=['name'], inplace=True)
     frequency_df=frequency_df.groupby(groupby + [syll_key]).mean().reset_index()
-    print(frequency_df.columns)
 
     # filter out syllables that are used less than threshold in all sessions
     filtered_df = moseq_df[moseq_df[syll_key].isin(syll_include)].copy()

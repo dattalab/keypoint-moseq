@@ -44,18 +44,9 @@ Activate the new environment::
 To use the keypoint_moseq environment in a notebook, either launch jupyterlab (`jupyter lab`) or register the environment as a jupyter notebook kernel as follows::
 
    python -m ipykernel install --user --name=keypoint_moseq
-
-To set up your environment to use the analysis features in the notebook, run the following from the command line::
-
-   # navigate to keypoint-moseq directory
-   cd path/keypoint-moseq
-
-   # activate the keypoint_moseq environment
-   conda activate keypoint_moseq
-
-   # run the setup script
-   ./nb_extensions.sh
    
+
+Next follow `Install jupyter extensions`_ to use the interactive analysis tools. 
 
 
 Install using pip
@@ -98,14 +89,20 @@ Make the environment available to jupyter::
    python -m ipykernel install --user --name=keypoint_moseq
 
 
-To set up your environment to use the analysis features in the notebook, run the following from the command line::
+Next follow `Install jupyter extensions`_ to use the interactive analysis tools. 
 
-   # navigate to keypoint-moseq directory
-   cd path/keypoint-moseq
 
-   # activate the keypoint_moseq environment
-   conda activate keypoint_moseq
+Install jupyter extensions
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   # run the setup script
-   ./nb_extensions.sh
+To use the interactive widgets in the analysis notebook, install the required jupyter extensions by running the following lines from a terminal in which the ``keypoint_moseq`` environment is active::
+
+   # Install and Enable widget extensions configurator
+   jupyter nbextension install --py jupyter_nbextensions_configurator --sys-prefix
+   jupyter nbextension enable --py --sys-prefix widgetsnbextension
+   jupyter nbextension enable --py --sys-prefix  --py qgrid
+
+   # Install bokeh extensions
+   jupyter nbextension install --sys-prefix --symlink --py jupyter_bokeh
+   jupyter nbextension enable jupyter_bokeh --py --sys-prefix
 
