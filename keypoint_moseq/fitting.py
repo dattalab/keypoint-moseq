@@ -8,7 +8,6 @@ from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_checkpoint, format_data, save_hdf5
-from keypoint_moseq.util import reindex_by_frequency
 from jax_moseq.models.keypoint_slds import estimate_coordinates, resample_model, init_model
 from jax_moseq.utils import check_for_nans, unbatch
 
@@ -224,12 +223,11 @@ def extract_results(*, params, states, labels, save_results=True,
 
         results.h5
         ├──session_name1
-        │  ├──syllables             # model state sequence (z), shape=(T,)
-        │  ├──syllables_reindexed   # states reindexed by frequency, shape=(T,)
-        │  ├──estimated_coordinates # model predicted coordinates, shape=(T,n_keypoints,dim)
-        │  ├──latent_state          # model latent state (x), shape=(T,latent_dim)
-        │  ├──centroid              # model centroid (v), shape=(T,dim)
-        │  └──heading               # model heading (h), shape=(T,)
+        │  ├──syllable      # model state sequence (z), shape=(T,)
+        │  ├──est_coords    # model predicted coordinates, shape=(T,n_keypoints,dim)
+        │  ├──latent_state  # model latent state (x), shape=(T,latent_dim)
+        │  ├──centroid      # model centroid (v), shape=(T,dim)
+        │  └──heading       # model heading (h), shape=(T,)
         ⋮
 
     Parameters
@@ -280,7 +278,6 @@ def extract_results(*, params, states, labels, save_results=True,
     lagged_labels = [(key,start+nlags,end) for key,start,end in labels]
     syllables = unbatch(states['z'], lagged_labels)
     syllables = {k: np.pad(z[nlags:], (nlags,0), mode='edge') for k,z in syllables.items()}
-    syllables_reindexed = reindex_by_frequency(syllables)
     
     # extract estimated coords, latent state, centroid, and heading
     estimated_coords = unbatch(estimated_coords, labels)
@@ -290,9 +287,8 @@ def extract_results(*, params, states, labels, save_results=True,
 
     results_dict = {
         session_name : {
-            'syllables' : syllables[session_name],
-            'syllables_reindexed' : syllables_reindexed[session_name],
-            'estimated_coordinates' : estimated_coords[session_name],
+            'syllable' : syllables[session_name],
+            'est_coords' : estimated_coords[session_name],
             'latent_state' : latent_state[session_name],
             'centroid' : centroid[session_name],
             'heading' : heading[session_name]

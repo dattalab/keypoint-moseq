@@ -189,33 +189,6 @@ def get_frequencies(stateseqs, mask=None, num_states=None, runlength=True):
     return frequencies
 
 
-
-def reindex_by_frequency(stateseqs, mask=None):
-    """
-    Reindex a sequence of syllables by frequency. The most frequent
-    syllable will be assigned 0, the second most frequent 1, etc.
-    For a more detailed  description of the function parameters, 
-    see :py:func:`keypoint_moseq.util.concatenate_stateseqs`
-
-    Parameters
-    ----------
-    stateseqs: dict or ndarray of shape (..., t)
-
-    mask: ndarray of shape (..., >=t), default=None
-
-    Returns
-    -------
-    stateseqs_reindexed: ndarray
-        The reindexed state sequences in the same format as `stateseqs`
-    """
-    frequency = get_frequencies(stateseqs, mask=mask)
-    o = np.argsort(np.argsort(frequency)[::-1])
-    if isinstance(stateseqs, dict):
-        stateseqs_reindexed = {k: o[seq] for k,seq in stateseqs.items()}
-    else: stateseqs_reindexed = o[stateseqs]
-    return stateseqs_reindexed
-
-
 def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
     """
     This function lists all the files matching a pattern and with a

@@ -370,7 +370,7 @@ def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
     if not os.path.exists(syll_info_path):
         # parse model results
         model_results = load_results(project_dir, model_dirname)
-        unique_sylls = np.unique(np.concatenate([file['syllables_reindexed'] for file in model_results.values()]))
+        unique_sylls = np.unique(np.concatenate([file['syllable'] for file in model_results.values()]))
         # construct the syllable dictionary
         syll_dict = {int(i): {'label': '', 'desc': '', 'movie_path': [], 'group_info': {}} for i in unique_sylls}
         # record the movie paths
@@ -1137,7 +1137,8 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize='bi
     return trans_mats, frequencies
 
 
-def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, syll_include, save_dir=None, normalize='bigram'):
+def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, syll_include, 
+                                save_dir=None, normalize='bigram', figsize=(12,6)):
     """visualize the transition matrices for each group
 
     Parameters
@@ -1148,13 +1149,14 @@ def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, s
         the list of transition matrices for each group
     normalize : str, optional
         the method to normalize the transition matrix, by default 'bigram'
+    figsize : tuple, optional
+        the figure size, by default (12,6)
     """
 
     # infer max_syllables
     max_syllables = trans_mats[0].shape[0]
 
-    fig, ax = plt.subplots(1, len(group), figsize=(
-        20, 20), sharex=False, sharey=True)
+    fig, ax = plt.subplots(1, len(group), figsize=figsize, sharex=False, sharey=True)
     title_map = dict(bigram='Bigram', columns='Incoming', rows='Outgoing')
     color_lim = max([x.max() for x in trans_mats])
     if len(group) == 1:
@@ -1185,7 +1187,7 @@ def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, s
 
 
 def generate_transition_matrices(project_dir, model_dirname, normalize='bigram', 
-                                 min_frequency=0.005, syll_key='syllables_reindexed'):
+                                 min_frequency=0.005):
     """generate the transition matrices for each session
 
     Parameters
@@ -1194,14 +1196,11 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
         the dictionary of paths to the files in the analysis progress
     normalize : str, optional
         the method to normalize the transition matrix, by default 'bigram'
-    syll_key : str, optional
-        the key to the syllable list in the progress file, by default 'syllables_reindexed'
 
     Returns
     -------
     trans_mats : list
         the list of transition matrices for each group
-
     """
 
     trans_mats, usages = None, None
@@ -1224,7 +1223,7 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
         project_dir=project_dir, name=model_dirname)
 
     # filter out syllables by freqency
-    model_labels = [results_dict[session][syll_key] for session in sessions]
+    model_labels = [results_dict[session]['syllable'] for session in sessions]
     frequencies=get_frequencies(model_labels)
     syll_include=np.where(frequencies>min_frequency)[0]
 
@@ -1623,7 +1622,6 @@ def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data
     syllable_keys : list
         list of syllable keys
        
-
     Raises
     ------
     Exception
@@ -1647,7 +1645,7 @@ def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data
 
     results = load_results(project_dir=project_dir, name=model_dirname)
     # TODO: add support for estimated coordinates
-    syllables = {k: v['syllables_reindexed'] for k, v in results.items()}
+    syllables = {k: v['syllable'] for k, v in results.items()}
     centroids = {k: v['centroid'] for k, v in results.items()}
     headings = {k: v['heading'] for k, v in results.items()}
     # get syllable instances that meet criteria

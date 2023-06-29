@@ -715,8 +715,8 @@ def save_results_as_csv(project_dir=None, name=None, h5_path=None,
     use_bodyparts: list, default=None
         List of bodyparts that were used for modeling. If provided,
         will be used for the csv column names corresponding to 
-        `estimated_coordinates`. Otherwise, the bodyparts will be
-        named `bodypart0`, `bodypart1` etc.
+        `est_coords`. Otherwise, the bodyparts will be named 
+        `bodypart0`, `bodypart1` etc.
 
     path_sep: str, default='-'
         If a path separator ("/" or "\") is present in the recording name, 
@@ -740,13 +740,9 @@ def save_results_as_csv(project_dir=None, name=None, h5_path=None,
         for key in tqdm.tqdm(results.keys(), desc='Saving to csv'):
             column_names, data = [], []
 
-            if 'syllables_reindexed' in results[key].keys():
-                column_names.append(['syllables reindexed'])
-                data.append(results[key]['syllables_reindexed'][()].reshape(-1,1))
-
-            if 'syllables' in results[key].keys():
-                column_names.append(['syllables non-reindexed'])
-                data.append(results[key]['syllables'][()].reshape(-1,1))
+            if 'syllable' in results[key].keys():
+                column_names.append(['syllable'])
+                data.append(results[key]['syllable'][()].reshape(-1,1))
 
             if 'centroid' in results[key].keys():
                 d = results[key]['centroid'].shape[1]
@@ -757,13 +753,13 @@ def save_results_as_csv(project_dir=None, name=None, h5_path=None,
                 column_names.append(['heading'])
                 data.append(results[key]['heading'][()].reshape(-1,1))
 
-            if 'estimated_coordinates' in results[key].keys():
-                k,d = results[key]['estimated_coordinates'].shape[1:]
+            if 'est_coords' in results[key].keys():
+                k,d = results[key]['est_coords'].shape[1:]
                 if use_bodyparts is None:
                     use_bodyparts = [f'bodypart{i}' for i in range(k)]
                 for i, bp in enumerate(use_bodyparts):
-                    column_names.append([f'estimated {bp} x', f'estimated {bp} y', f'{bp} z'][:d])
-                    data.append(results[key]['estimated_coordinates'][:,i,:])
+                    column_names.append([f'est {bp} x', f'est {bp} y', f'{bp} z'][:d])
+                    data.append(results[key]['est_coords'][:,i,:])
 
             if 'latent_state' in results[key].keys():
                 latent_dim = results[key]['latent_state'].shape[1]
