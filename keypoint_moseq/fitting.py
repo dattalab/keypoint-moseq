@@ -5,12 +5,15 @@ import jax
 import warnings
 from textwrap import fill
 from datetime import datetime
+import shutil
 
 from keypoint_moseq.viz import plot_progress
-from keypoint_moseq.io import save_checkpoint, format_data, save_hdf5
+from keypoint_moseq.io import save_checkpoint, format_data, save_hdf5, save_kappa_scan_checkpoint
 from keypoint_moseq.util import reindex_by_frequency
 from jax_moseq.models.keypoint_slds import estimate_coordinates, resample_model, init_model
 from jax_moseq.utils import check_for_nans, unbatch
+
+from keypoint_moseq.util import get_durations
 
 class StopResampling(Exception):
     pass
@@ -473,3 +476,170 @@ def update_hypparams(model_dict, **kwargs):
         f'The following hypparams were not found {not_updated}'))
 
     return model_dict
+
+
+def kappa_scan(
+    data,
+    labels,
+    scan_name = None,
+    name_fmt = None,
+    save_models = 'all',
+    save_durations = True,
+    save_progress_figs = True,
+    project_dir = None,
+    init_model_kwargs = {},
+    fit_model_kwargs = {},
+    plot_model_progress = None,
+    verbose = False,
+    **model_config,
+    ):
+    """
+    save_models: whether to keep data from the model fits (including any potential plots)
+    save_durations: whether to keep median duration data in a summary file for the whole scan
+    """
+
+    # --- Check arguments
+
+    if scan_name is None:
+        scan_name = f"scan-{datetime.now().strftime('%Y_%m_%d-%H_%M_%S')}"
+    if name_fmt is None:
+        name_fmt = ("{scan_name}-iter{scan_iter}-{current_time}")
+
+    assert (save_models == 'all' or save_models == 'best' or 
+            save_models is False), fill(
+        "Parameter `save_models` must be one of 'all', 'best', or False.")
+    
+    plot_every_n_fit_iters = 0
+    if isinstance(plot_model_progress, int):
+        plot_every_n_fit_iters = plot_model_progress
+    else:
+        assert plot_model_progress is False or plot_model_progress == 'each', fill(
+            "Parameter `plot_model_progress` must be None, False, 'each', or an "
+            "integer to be passsed on to `plot_every_n_iters`.")
+    
+    if save_durations or save_models is not False:
+        if project_dir is None:
+            assert project_dir, fill(
+                'To save durations or models from of a kappa scan, provide '
+                'a `project_dir`. Otherwise set `save_models=False`, '
+                '`save_durations=False`, and `plot_model_progress = False`')
+
+
+    # --- Set up variables for iteration
+
+    scan_config = model_config['kappa_scan']
+    kappas = np.logspace(
+        np.log10(scan_config['min_kappa']),
+        np.log10(scan_config['max_kappa']),
+        scan_config['n_iter'])
+    median_durations = []
+    med_dur_histories = []
+    model_names = []
+    best_i = None
+
+    
+
+    # --- Perform kappa scan
+
+    for i_kappa, kappa in enumerate(kappas):
+
+        # Set up fit parameters
+        model_name = name_fmt.format(
+            scan_name = scan_name,
+            scan_iter = i_kappa,
+            current_time = str(datetime.now().strftime('%Y_%m_%d-%H_%M_%S')))
+        fit_kwargs = {**fit_model_kwargs, **dict(
+            name = model_name,
+            project_dir = project_dir,
+            plot_every_n_iters = plot_every_n_fit_iters,
+            save_progress_figs = save_progress_figs,
+            verbose = fit_model_kwargs.get('verbose', verbose),
+            save_every_n_iters = (fit_model_kwargs.get('save_ever_n_iters', 0)
+                                  if save_models is not False else 0)
+        )}
+        if plot_model_progress is None: fit_kwargs.pop('plot_every_n_iters')
+        if save_models == 'all' or save_models == 'best': fit_kwargs.pop('save_every_n_iters')
+        
+
+        # Initialize a model fit with the desired kappa
+        if verbose: print(f"Initializing model with kappa={kappa}.")
+        model = init_model(data, **{
+            **model_config,
+            **init_model_kwargs,
+            **dict(
+                trans_hypparams = {
+                    **model_config['trans_hypparams'],
+                    'kappa': kappa
+                }
+            )})
+
+        # Fit the initialized model
+        if verbose: print(f"Fitting said model with kappa={kappa}.")
+        model, history, model_name = fit_model(
+            model, data, labels,
+            **fit_kwargs)
+        model_names.append(model_name)
+        
+        # Calculate resulting median duration
+        if verbose: print(f"Calculating duration distribution.")
+        z = np.array(model['states']['z'])
+        mask = np.array(data['mask'])
+        median_duration = np.median(get_durations(z,mask))
+        median_durations.append(median_duration)
+
+        # calculate durations through history to check for convergence
+        history_iters = np.array(sorted(history.keys()))
+        past_stateseqs = [history[i]['states']['z'] 
+                          for i in history_iters 
+                          if 'states' in history[i]]
+        med_dur_history = [np.median(get_durations(z,mask)) for z in past_stateseqs]
+        med_dur_history.append(med_dur_history)
+
+
+        # Keep track of best model and delete unecessary model directories
+
+        def _delete_model_with_name(name):
+            if project_dir is None: return
+            path = os.path.join(project_dir, name)
+            if os.path.exists(path): shutil.rmtree(path)
+
+        if best_i is None or (
+            abs(median_duration - scan_config['target_duration']) < 
+            abs(median_durations[best_i] - scan_config['target_duration'])):
+            if save_models == 'best' and best_i is not None:
+                # Delete previous best model
+                _delete_model_with_name(model_name)
+            best_i = i_kappa
+        elif save_models == 'best':
+            # Delete this model, it was not better than the previous best
+            _delete_model_with_name(model_name)
+
+
+        # Plot and save results of fit
+
+        if plot_model_progress == 'each':
+            plot_progress(model, data, history, i_kappa, name=model_name, 
+                savefig=save_progress_figs, project_dir=project_dir)
+
+        if save_durations:
+            save_kappa_scan_checkpoint(
+                kappas[:i_kappa+1], median_durations,
+                i_kappa, scan_config['target_duration'], kappas[best_i],
+                med_dur_histories,
+                model_names = (
+                    model_names
+                    if (save_models == 'all') else None),
+                best_model_name = (
+                    model_names[best_i]
+                    if (save_models == 'best') else None),
+                name = scan_name, project_dir = project_dir)
+            
+    return best_i, kappas, median_durations, med_dur_histories
+
+        
+
+
+
+
+
+    

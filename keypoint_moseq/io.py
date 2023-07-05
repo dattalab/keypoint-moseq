@@ -83,6 +83,8 @@ def generate_config(project_dir, **kwargs):
         'added_noise_level': 0.1,
         'PCA_fitting_num_frames': 1000000,
         'conf_threshold': 0.5,
+        'kappa_scan': {'min_kappa': 1e2, 'max_kappa': 1e12, 'n_iter': 2,
+                       'target_duration': 12}
 #         'kappa_scan_target_duration': 12,
 #         'kappa_scan_min': 1e2,
 #         'kappa_scan_max': 1e12,
@@ -654,6 +656,45 @@ def save_checkpoint(model, data, history, labels, iteration,
         
     joblib.dump(save_dict, path)
     return save_dict
+
+
+def save_kappa_scan_checkpoint(
+        kappas, median_durations,
+        iteration, target_duration, best_kappa,
+        fitting_median_durations,
+        path=None, name=None, project_dir=None,
+        model_names = None, best_model_name = None):
+    
+    
+    if path is None: 
+        assert project_dir is not None and name is not None, fill(
+            '`name` and `project_dir` are required if no `path` is given.')
+        path = os.path.join(project_dir, f'{name}.p')
+
+    dirname = os.path.dirname(path)
+    if not os.path.exists(dirname): 
+        print(fill(f'Creating the directory {dirname}'))
+        os.makedirs(dirname)
+    
+    save_dict = {
+        'iteration'       : iteration,
+        'name'            : name,
+        'kappas'          : kappas,
+        'median_durations': median_durations,
+        'target_duration' : target_duration,
+        'best_kappa'      : best_kappa,
+        'fitting_median_durations': fitting_median_durations
+        }
+
+    if best_model_name is not None:
+        save_dict['best_model'] = best_model_name
+
+    if model_names is not None:
+        save_dict['model_names'] = model_names
+        
+    joblib.dump(save_dict, path)
+    return save_dict
+
 
     
 def load_results(project_dir=None, name=None, path=None):
