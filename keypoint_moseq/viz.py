@@ -6,6 +6,9 @@ import warnings
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.cm
+import matplotlib.colors
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
 from textwrap import fill
@@ -489,6 +492,56 @@ def plot_progress(model, data, history, iteration, path=None,
     return fig,axs
 
     
+
+def plot_kappa_scan(
+    kappas, med_dur_histories, med_durs=None, best_i = None,
+    path=None, project_dir=None, name=None, savefig=True,
+    fig_size=None,):
+
+    if fig_size is None: fig_size = (5, 3)
+    fig, axs = plt.subplots(1, 2, figsize = fig_size)
+    
+
+    if med_durs is None: med_durs = [hist[-1] for hist in med_dur_histories]
+
+    if best_i is not None:
+        axs[0].axvline(kappas[best_i], ls = '--', color = '.5')
+    axs[0].plot(kappas, med_durs, 'o')
+    axs[0].set_xscale('log')
+    axs[0].set_xlabel("Kappa")
+    axs[0].set_ylabel("Median duration")
+
+    cmap = matplotlib.cm.get_cmap("viridis")
+    norm = matplotlib.colors.LogNorm(vmin = kappas[0], vmax = kappas[1])
+    for i, (kappa, hist) in enumerate(zip(kappas, med_dur_histories)):        
+        axs[1].plot(hist, 'o-', color = cmap(norm(kappa)))
+    axs[1].set_xlabel("Iteration")
+    axs[1].set_ylabel("Median duration")
+
+    divider = make_axes_locatable(axs[1])
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    cbar = plt.colorbar(
+        matplotlib.cm.ScalarMappable(norm = norm, cmap = cmap),
+        cax = cax)
+    cbar.set_label("Kappa")
+
+
+    if name is not None:
+        fig.suptitle(name)
+    plt.tight_layout()
+
+    if savefig:
+        if path is None:
+            assert name is not None and project_dir is not None, fill(
+                'The `savefig` option requires either a `path` '
+                'or a `name` and `project_dir`')
+            path = os.path.join(project_dir, f'{name}_results.pdf')
+        plt.savefig(path)  
+    plt.show()
+
+    return fig, axs
+
+
 def write_video_clip(frames, path, fps=30, quality=7):
     """
     Write a video clip to a file.
