@@ -51,7 +51,7 @@ def _wrapped_resample(data, model, pbar=None, **resample_options):
     return model
 
 
-def _check_early_stopping(duration_history, current_model, data, tol, window):
+def _keep_duration_history(duration_history, current_model, data, window):
     """
     Maintain recent median durations and signal if the fitting has converged.
     window >= 2"""
@@ -60,10 +60,10 @@ def _check_early_stopping(duration_history, current_model, data, tol, window):
     z = np.array(jax.device_get(current_model['states']['z']))
     mask = np.array(data['mask'])
     duration_history = np.array([*duration_history[-window + 1:], np.median(get_durations(z,mask))])
-    print("[early_stop]", tol, duration_history, abs(np.diff(duration_history)) < tol)
-    stop_fitting = (abs(np.diff(duration_history)) <= tol).sum() == window - 1
-    return duration_history, stop_fitting
+    return duration_history
     
+def _check_converged(metric_history, tol, window):
+    return (abs(np.diff(metric_history)) <= tol).sum() == window - 1
 
 
 def fit_model(model,
@@ -201,8 +201,8 @@ def fit_model(model,
             except StopResampling: break
 
             if tol is not None:
-                med_durs_history, early_stop = _check_early_stopping(
-                    med_durs_history, model, data, tol, window = 5)
+                med_durs_history = _keep_duration_history(med_durs_history, model, data, window = 5)
+                early_stop = _check_converged(med_durs_history, tol, window = 5)
             else: early_stop = False
 
             if history_every_n_iters>0 and ((iteration%history_every_n_iters)==0 or early_stop):
@@ -516,6 +516,7 @@ def kappa_scan(
     fit_model_kwargs = {},
     plot_model_progress = None,
     verbose = False,
+    warning_convergence_tol = 2,
     **model_config,
     ):
     """
@@ -530,9 +531,10 @@ def kappa_scan(
     if name_fmt is None:
         name_fmt = ("{scan_name}-iter{scan_iter}-{current_time}")
 
+    if save_models is True: save_models = 'all'
     assert (save_models == 'all' or save_models == 'best' or 
             save_models is False), fill(
-        "Parameter `save_models` must be one of 'all', 'best', or False.")
+        "Parameter `save_models` must be one of 'all', 'best', or a boolean.")
     
     plot_every_n_fit_iters = 0
     if isinstance(plot_model_progress, int):
@@ -618,7 +620,7 @@ def kappa_scan(
                           for i in history_iters 
                           if 'states' in history[i]]
         med_dur_history = [np.median(get_durations(z,mask)) for z in past_stateseqs]
-        med_dur_history.append(med_dur_history)
+        med_dur_histories.append(med_dur_history)
 
 
         # Keep track of best model and delete unecessary model directories
@@ -658,7 +660,19 @@ def kappa_scan(
                     model_names[best_i]
                     if (save_models == 'best') else None),
                 name = scan_name, project_dir = project_dir)
-            
+        
+        if warning_convergence_tol is not None and not _check_converged(
+            med_dur_history[-5:], warning_convergence_tol, window = 5):
+            warnings.warn(fill(
+                f"Fitting with kappa={kappa} did not converge. Increase `num_iters` "
+                 "in `fit_model_kwargs`, or to silence this warning increase "
+                 "`warning_convergence_tol`."))
+
+    if ((scan_config['target_duration'] < np.min(median_durations)) or
+        (scan_config['target_duration'] > np.max(median_durations))):
+        warnings.warn(fill(
+            "Target duratiuon did not lie within durations achieved by kappa_scan."))
+    
     return best_i, kappas, median_durations, med_dur_histories
 
         
