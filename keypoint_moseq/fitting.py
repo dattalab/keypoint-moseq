@@ -51,6 +51,21 @@ def _wrapped_resample(data, model, pbar=None, **resample_options):
     return model
 
 
+def _check_early_stopping(duration_history, current_model, data, tol, window):
+    """
+    Maintain recent median durations and signal if the fitting has converged.
+    window >= 2"""
+    assert type(window) == int and window >= 2, fill(
+        f"Early stopping window must be an integer greater than 1, but got {window}.")
+    z = np.array(jax.device_get(current_model['states']['z']))
+    mask = np.array(data['mask'])
+    duration_history = np.array([*duration_history[-window + 1:], np.median(get_durations(z,mask))])
+    print("[early_stop]", tol, duration_history, abs(np.diff(duration_history)) < tol)
+    stop_fitting = (abs(np.diff(duration_history)) <= tol).sum() == window - 1
+    return duration_history, stop_fitting
+    
+
+
 def fit_model(model,
               data,
               labels,
@@ -69,6 +84,7 @@ def fit_model(model,
               states_in_history=True,
               plot_every_n_iters=10,  
               save_progress_figs=True,
+              tol = None,
               **kwargs):
 
     """
@@ -175,29 +191,38 @@ def fit_model(model,
         print(fill(f'Outputs will be saved to {savedir}'))
 
     if history is None: history = {}
+    if tol is not None: med_durs_history = []
 
     with tqdm.trange(start_iter, num_iters+1) as pbar:
         for iteration in pbar:
 
             try: model = _wrapped_resample(
-                data, model, pbar=pbar, ar_only=ar_only, verbose=verbose)
+                data, model, pbar=pbar, ar_only=ar_only, verbose=verbose)        
             except StopResampling: break
 
-            if history_every_n_iters>0 and (iteration%history_every_n_iters)==0:
+            if tol is not None:
+                med_durs_history, early_stop = _check_early_stopping(
+                    med_durs_history, model, data, tol, window = 5)
+            else: early_stop = False
+
+            if history_every_n_iters>0 and ((iteration%history_every_n_iters)==0 or early_stop):
                 history = _update_history(history, iteration, model, 
                                         include_states=states_in_history)
                 
-            if plot_every_n_iters>0 and (iteration%plot_every_n_iters)==0:
+            if plot_every_n_iters>0 and ((iteration%plot_every_n_iters)==0 or early_stop):
                 plot_progress(model, data, history, iteration, name=name, 
                             savefig=save_progress_figs, project_dir=project_dir)
 
-            if save_every_n_iters>0 and (iteration%save_every_n_iters)==0:
+            if save_every_n_iters>0 and ((iteration%save_every_n_iters)==0 or early_stop):
                 save_checkpoint(model, data, history, labels, iteration, name=name,
                                 project_dir=project_dir,save_history=save_history, 
                                 save_states=save_states, save_data=save_data)
                 
+            if early_stop:
+                print('Early termination of fitting: converged (see `tol` parameter).')
+                break
 
-
+                
     return model, history, name
     
     
