@@ -30,190 +30,6 @@ from keypoint_moseq.io import load_results
 from keypoint_moseq.util import filter_angle, get_frequencies
 
 
-def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
-    """compute moseq dataframe from results dict that contains all kinematic values by frame
-    Parameters
-    ----------
-    base_dir : str
-        the path to the project directory
-    model_name : str
-        the name of the model directory
-    results_dict : dict
-        dictionary of results from model fitting
-    use_bodyparts : bool
-        boolean flag whether to include data for bodyparts
-    smooth_heading : bool, optional
-        boolean flag whether smooth the computed heading, by default True
-
-    Returns
-    -------
-    moseq_df : pandas.DataFrame
-        the dataframe that contains kinematic data for each frame
-    """
-
-    # load model results
-    results_dict = load_results(base_dir, model_name)
-
-    # load index file
-    index_filepath = os.path.join(base_dir, 'index.yaml')
-    if os.path.exists(index_filepath):
-        with open(index_filepath, 'r') as f:
-            index_data = yaml.safe_load(f)
-
-        # create a file dictionary for each session
-        file_info = {}
-        for session in index_data['files']:
-            file_info[session['name']] = {'group': session['group']}
-    else:
-        print('index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first')
-
-    session_name = []
-    centroid = []
-    velocity = []
-    heading = []
-    angular_velocity = []
-    syllables = []
-    frame_index = []
-    s_group = []
-
-    for k, v in results_dict.items():
-        n_frame = v['centroid'].shape[0]
-        session_name.append([str(k)] * n_frame)
-        centroid.append(v['centroid'])
-        # velocity is pixel per second
-        velocity.append(np.concatenate(
-            ([0], np.sqrt(np.square(np.diff(v['centroid'], axis=0)).sum(axis=1)) * fps)))
-
-        if file_info is not None:
-            # find the group for each session from index data
-            s_group.append([file_info[k]['group']]*n_frame)
-        else:
-            # no index data
-            s_group.append(['default']*n_frame)
-        frame_index.append(np.arange(n_frame))
-
-        if smooth_heading:
-            session_heading = filter_angle(v['heading'])
-        else:
-            session_heading = v['heading']
-
-        # heading in radian
-        heading.append(session_heading)
-        # compute angular velocity (radian per second)
-        angular_velocity.append(np.concatenate(
-            ([0], np.diff(session_heading) * fps)))
-
-        # add syllable data
-        syllables.append(v['syllable'])
-
-    # construct dataframe
-    moseq_df = pd.DataFrame(np.concatenate(
-        session_name), columns=['name'])
-    moseq_df = pd.concat([moseq_df, pd.DataFrame(np.concatenate(centroid), columns=[
-                         'centroid_x', 'centroid_y'])], axis=1)
-    moseq_df['heading'] = np.concatenate(heading)
-    moseq_df['angular_velocity'] = np.concatenate(angular_velocity)
-    moseq_df['velocity_px_s'] = np.concatenate(velocity)
-    moseq_df['syllable'] = np.concatenate(syllables)
-    moseq_df['frame_index'] = np.concatenate(frame_index)
-    moseq_df['group'] = np.concatenate(s_group)
-
-    # compute syllable onset
-    change = np.diff(moseq_df['syllable']) != 0
-    indices = np.where(change)[0]
-    indices += 1
-    indices = np.concatenate(([0], indices))
-
-    onset = np.full(moseq_df.shape[0], False)
-    onset[indices] = True
-    moseq_df['onset'] = onset
-    return moseq_df
-
-
-def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupby=['group', 'name'], fps=30, normalize=True, **kwargs):
-    """summary statistics for syllable frequencies and kinematic values
-    Parameters
-    ----------
-    moseq_df : pandas.DataFrame
-        the dataframe that contains kinematic data for each frame
-    threshold : float, optional
-        usge threshold for the syllable to be included, by default 0.005
-    groupby : list, optional
-        the list of column names to group by, by default ['group', 'name']
-    fps : int, optional
-        frame per second information of the recording, by default 30
-    normalize : bool, optional
-        boolean falg whether to normalize by counts, by default True
-
-    Returns
-    -------
-    stats_df : pandas.DataFrame
-        the summary statistics dataframe for syllable frequencies and kinematic values
-    """
-    # compute runlength encoding for syllables
-    
-    # load model results
-    results_dict = load_results(base_dir, model_name)
-    syllables = {k:res['syllable'] for k,res in results_dict.items()}
-    # frequencies is array of frequencies for sorted syllables [syll_0, syll_1...]
-    frequencies=get_frequencies(syllables)
-    syll_include=np.where(frequencies>min_frequency)[0]
-
-    # add group information
-    # load index file
-    index_filepath = os.path.join(base_dir, 'index.yaml')
-    if os.path.exists(index_filepath):
-        with open(index_filepath, 'r') as f:
-            index_data = yaml.safe_load(f)
-
-        # create a file dictionary for each session
-        file_info = {}
-        for session in index_data['files']:
-            file_info[session['name']] = {'group': session['group']}
-    else:
-        print('index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first')
-
-    # construct frequency dataframe
-    frequency_df = []
-    for k, v in results_dict.items():
-        syll_freq=get_frequencies(v['syllable'])
-        df=pd.DataFrame({'name': k,
-                         'group': file_info[k]['group'],
-                         'syllable': np.arange(len(syll_freq)),
-                         'frequency': syll_freq})
-        frequency_df.append(df)
-    frequency_df = pd.concat(frequency_df)
-    if 'name' not in groupby:
-        frequency_df.drop(columns=['name'], inplace=True)
-    frequency_df=frequency_df.groupby(groupby + ['syllable']).mean().reset_index()
-
-    # filter out syllables that are used less than threshold in all sessions
-    filtered_df = moseq_df[moseq_df['syllable'].isin(syll_include)].copy()
-
-    # TODO: hard-coded heading for now, could add other scalars
-    features = filtered_df.groupby(
-        groupby + ['syllable'])[['heading', 'angular_velocity', 'velocity_px_s']].agg(['mean', 'std', 'min', 'max'])
-
-    features.columns = ['_'.join(col).strip()
-                        for col in features.columns.values]
-    features.reset_index(inplace=True)
-
-    # get durations
-    trials = filtered_df['onset'].cumsum()
-    trials.name = 'trials'
-    durations = filtered_df.groupby(
-        groupby + ['syllable'] + [trials])['onset'].count()
-    # average duration in seconds
-    durations = durations.groupby(groupby + ['syllable']).mean() / fps
-    durations.name = 'duration'
-    # only keep the columns we need
-    durations = durations.fillna(0).reset_index()[groupby + ['syllable', 'duration']]
-    
-    stats_df = pd.merge(features, frequency_df, on=groupby+['syllable'])
-    stats_df = pd.merge(stats_df, durations, on=groupby+['syllable'])
-    return stats_df
-
-
 def read_yaml(yaml_file):
     """read yaml file into dictionary
 
@@ -565,7 +381,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
     """Syllable Labeler control component.
     """
 
-    def __init__(self, project_dir, model_dirname, moseq_df, index_path, syll_info_path, movie_type):
+    def __init__(self, project_dir, model_dirname, stats_df, index_path, syll_info_path, movie_type):
         """Initialize the SyllableLabeler
 
         Parameters
@@ -603,7 +419,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
         self.clear_button.on_click(self.clear_on_click)
 
         # generate by group syllable statistics dictionary
-        self.get_group_df(moseq_df)
+        self.get_group_df(stats_df)
 
         # Get dropdown options with labels
         self.option_dict = {f'{i} - {x["label"]}': self.syll_info[i]
@@ -646,12 +462,9 @@ class SyllableLabeler(SyllableLabelerWidgets):
             self.syll_select.index = curr_syll
             self.syll_select._initializing_traits_ = False
 
-    def get_group_df(self, moseq_df):
+    def get_group_df(self, stats_df):
         """Populate syllable information dict with usage and scalar information.
         """
-        stats_df = compute_stats_df(self.base_dir, self.model_name, moseq_df, groupby=['group'])[
-            ['group', 'syllable', 'frequency', 'duration', 'heading_mean', 'velocity_px_s_mean']]
-
         # Get all unique groups in df
         self.groups = stats_df.group.unique()
 
