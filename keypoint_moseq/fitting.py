@@ -179,18 +179,21 @@ def fit_model(model,
                 data, model, pbar=pbar, ar_only=ar_only, verbose=verbose)
             except StopResampling: break
 
-            if history_every_n_iters>0 and (iteration%history_every_n_iters)==0:
-                history = _update_history(history, iteration, model, 
-                                        include_states=states_in_history)
+            if history_every_n_iters>0:
+                if (iteration%history_every_n_iters)==0 or iteration==num_iters:
+                    history = _update_history(history, iteration, model, 
+                                            include_states=states_in_history)
                 
-            if plot_every_n_iters>0 and (iteration%plot_every_n_iters)==0:
-                plot_progress(model, data, history, iteration, name=name, 
-                            savefig=save_progress_figs, project_dir=project_dir)
+            if plot_every_n_iters>0:
+                 if (iteration%plot_every_n_iters)==0 or iteration==num_iters:
+                    plot_progress(model, data, history, iteration, name=name, 
+                                savefig=save_progress_figs, project_dir=project_dir)
 
-            if save_every_n_iters>0 and (iteration%save_every_n_iters)==0:
-                save_checkpoint(model, data, history, labels, iteration, name=name,
-                                project_dir=project_dir,save_history=save_history, 
-                                save_states=save_states, save_data=save_data)
+            if save_every_n_iters>0:
+                 if (iteration%save_every_n_iters)==0 or iteration==num_iters:
+                    save_checkpoint(model, data, history, labels, iteration, name=name,
+                                    project_dir=project_dir,save_history=save_history, 
+                                    save_states=save_states, save_data=save_data)
                 
 
 
