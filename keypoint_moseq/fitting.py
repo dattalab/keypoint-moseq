@@ -164,6 +164,13 @@ def fit_model(model,
 
     save_progress_figs : bool, default=True
         If True, save the progress plots to disk.
+
+    tol : int, deafult=None
+        Enable early stopping if the median syllable duration has not changed by more than
+        `tol` in any of the last 4 resampling steps. If `None`, no check will be performed.
+        If the early stopping criterion is reached, histories, plots, and model checkpionts
+        will be updated unless `history_every_n_iters` or the other correspondsiding parameters
+        are zero.
         
     Returns
     -------
@@ -507,7 +514,7 @@ def kappa_scan(
     data,
     labels,
     scan_name = None,
-    name_fmt = None,
+    model_name_fmt = None,
     save_models = 'all',
     save_durations = True,
     save_progress_figs = True,
@@ -515,21 +522,109 @@ def kappa_scan(
     init_model_kwargs = {},
     fit_model_kwargs = {},
     plot_model_progress = None,
-    verbose = False,
+    scan_verbose = False,
     warning_convergence_tol = 2,
-    **model_config,
+    **config,
     ):
     """
-    save_models: whether to keep data from the model fits (including any potential plots)
-    save_durations: whether to keep median duration data in a summary file for the whole scan
+    Fit models on a range of kappa values to find desired median syllable duration.
+    
+    See also the configuration parameter `kappa_scan` for specifications on the scan to be
+    performed: `'min_kappa'`, `'max_kappa'`, `'n_iter'`, and `'target_duration'`.
+
+    Parameters
+    ----------
+    data: dict, labels: list of tuples
+        See :py:func:`keypoint_moseq.io.format_data`
+    
+    scan_name: str, default=None
+        Name of the scan. If None, the scan is named using the current
+        date and time.
+
+    model_name_fmt: str, default=None
+        Format string for the name of each trained model. If None, the models are named
+        using the date and time at the beginning of their fitting procedure. The keys
+        available in the format string are `scan_name` (as given by the `scan_name parameter),
+        `scan_iter` (the current integer iteration number of the scan), and `current_time` (
+        string-formatted datetime at the start of the model fit).
+
+    save_models: str or bool, default='all'
+        Policy for saving results of individual model fits. If `'all``, then output files
+        of :py:func:`keypoint_moseq.fit_model` for all iterations will be retained.
+        If `'best'`, output files for only the iteration resulting in medan duration closest to
+        the target value. If `False`, no model data will be saved, except for the median duration
+        histories in a summary file for the scan (see `save_durations`), and `save_every_n_iters` 
+        will be overridden to 0 in `fit_model_kwargs`. Setting to `True` is equivalent to `'all'`.
+
+    save_durations: bool, default=True
+        Whether to save summary file mapping kappas to median durations and the median duration
+        histories from training.
+
+    save_progess_figs:
+        Passed on to parameter `save_progeess_figs` of :py:func:`keypoint_moseq.fit_model`, and
+        determines whether to save model progress figures generated at the end of each model fit (
+        see parameter `plot_model_progress`).
+
+    project_dir : str, default=None
+        Project directory; required if any of `save_models`, `save_durations`, or `plot_model_progress`
+        are `True`, or if `save_every_n_iters>0` or `save_progress_figs=True`in parameter
+        `fit_model_kwargs`.
+
+    init_model_kwargs : dict, default={}
+        Keyword arguments for :py:func:`keypoint_moseq.init_model` when called at the start of
+        each scan iteration.
+
+    fit_model_kwargs : dict, default={}
+        Keyword arguments for :py:func:`keypoint_moseq.fit_model` when called at during each
+        each scan iteration. Entries may be overwritten for `'name'` (see parameter `model_name_fmt`),
+        `'project_dir'` (see parameter `project_dir`) ,  `'plot_every_n_iters'` (see paramete
+        `plot_model_progress`), `'save_progress_figs'` (see parameter `save_progress_figs`),
+        and `'save_every_n_iters'` (see parameter `save_models`).
+
+    plot_model_progress : int, str, bool, default=None
+        Policy for plotting model progeess. May be an integer to be passed on to
+        :py:func:`keypoint_moseq.fit_model` (overriding any value in `fit_model_kwargs`). Otherwise, if
+        `'each'`, one model progress plot will be generated at the end of each fitting process, or if `False`
+        then no model progreess plots will be generated. If `None`, the value in `fit_model_kwargs` or the
+        :py:func:`keypoint_moseq.fit_model` take precedence. Plots are saved according to `save_progess_figs`.
+
+    scan_verbose: bool, default=False
+        Verbosity level for scan information. Does not interaction with config option `verbose` or parameter
+        `verbose` of :py:func:`keypoint_moseq.fit_model`.
+
+    warning_convergence_tol: int, default=2
+        After each fittting process, a warning will be issued if median durations changed more than
+        `warning_convergence_tol` over any of its last 4 resampling iterations.
+
+    config: dict, default={}
+        Project configuration to be passed as keyword arguments to :py:func:`keypoint_moseq.init_model`, 
+        and containing an entry `'kappa_scan'`: a dictionary with keys 'min_kappa'`, `'max_kappa'`, 
+        `'n_iter'`, and `'target_duration'` specifying the scan to be performed.
+
+    Returns
+    -------
+    best: dict
+        Dictionary containing keys `'i'`, `'kappa'`, holding the iteration that yielded the closest
+        median duration to the target duration and corresponding value of kappa, respectively.
+    
+    kappas: np.ndarray
+        Values of the hyperparameter `kappa` at each iteration of the scan.
+
+    median_durations: np.ndarray
+        Resulting median syllable durations at each iteration of the scan.
+
+    med_dur_histories: List[np.ndarray]
+        History of model durations over the fitting process for each trained model to verify convergence.
+        See parameters `fit_model_kwargs` of this function and `history_every_n_iter` of
+        :py:func:`keypoint_moseq.fit_model`.
     """
 
     # --- Check arguments
 
     if scan_name is None:
         scan_name = f"scan-{datetime.now().strftime('%Y_%m_%d-%H_%M_%S')}"
-    if name_fmt is None:
-        name_fmt = ("{scan_name}-iter{scan_iter}-{current_time}")
+    if model_name_fmt is None:
+        model_name_fmt = ("{scan_name}-iter{scan_iter}-{current_time}")
 
     if save_models is True: save_models = 'all'
     assert (save_models == 'all' or save_models == 'best' or 
@@ -549,12 +644,12 @@ def kappa_scan(
             assert project_dir, fill(
                 'To save durations or models from of a kappa scan, provide '
                 'a `project_dir`. Otherwise set `save_models=False`, '
-                '`save_durations=False`, and `plot_model_progress = False`')
+                '`save_durations=False`, and `plot_model_progress=False`')
 
 
     # --- Set up variables for iteration
 
-    scan_config = model_config['kappa_scan']
+    scan_config = config['kappa_scan']
     kappas = np.logspace(
         np.log10(scan_config['min_kappa']),
         np.log10(scan_config['max_kappa']),
@@ -571,7 +666,7 @@ def kappa_scan(
     for i_kappa, kappa in enumerate(kappas):
 
         # Set up fit parameters
-        model_name = name_fmt.format(
+        model_name = model_name_fmt.format(
             scan_name = scan_name,
             scan_iter = i_kappa,
             current_time = str(datetime.now().strftime('%Y_%m_%d-%H_%M_%S')))
@@ -580,35 +675,33 @@ def kappa_scan(
             project_dir = project_dir,
             plot_every_n_iters = plot_every_n_fit_iters,
             save_progress_figs = save_progress_figs,
-            verbose = fit_model_kwargs.get('verbose', verbose),
-            save_every_n_iters = (fit_model_kwargs.get('save_ever_n_iters', 0)
-                                  if save_models is not False else 0)
+            save_every_n_iters = ('will-be-popped' if save_models is not False else 0)
         )}
         if plot_model_progress is None: fit_kwargs.pop('plot_every_n_iters')
         if save_models == 'all' or save_models == 'best': fit_kwargs.pop('save_every_n_iters')
         
 
         # Initialize a model fit with the desired kappa
-        if verbose: print(f"Initializing model with kappa={kappa}.")
+        if scan_verbose: print(f"Initializing model with kappa={kappa}.")
         model = init_model(data, **{
-            **model_config,
+            **config,
             **init_model_kwargs,
             **dict(
                 trans_hypparams = {
-                    **model_config['trans_hypparams'],
+                    **config['trans_hypparams'],
                     'kappa': kappa
                 }
             )})
 
         # Fit the initialized model
-        if verbose: print(f"Fitting said model with kappa={kappa}.")
+        if scan_verbose: print(f"Fitting said model with kappa={kappa}.")
         model, history, model_name = fit_model(
             model, data, labels,
             **fit_kwargs)
         model_names.append(model_name)
         
         # Calculate resulting median duration
-        if verbose: print(f"Calculating duration distribution.")
+        if scan_verbose: print(f"Calculating duration distribution.")
         z = np.array(model['states']['z'])
         mask = np.array(data['mask'])
         median_duration = np.median(get_durations(z,mask))
@@ -673,7 +766,9 @@ def kappa_scan(
         warnings.warn(fill(
             "Target duratiuon did not lie within durations achieved by kappa_scan."))
     
-    return best_i, kappas, median_durations, med_dur_histories
+    return (
+        dict(i = best_i, kappa = kappas[best_i]),
+        kappas, median_durations, med_dur_histories)
 
         
 

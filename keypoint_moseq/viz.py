@@ -498,6 +498,39 @@ def plot_kappa_scan(
     path=None, project_dir=None, name=None, savefig=True,
     fig_size=None,):
 
+    """
+    Plot results of :py:func:`keypoint_moseq.fit_model`.
+
+    Parameters
+    ----------
+    kappas: array-like
+        Kappa values for each iteration of the scan.
+
+    med_dur_histories: List[array-like]
+        Median durations over the course of each fitting process.
+    
+    med_durs: array-like, default=None
+        Resulting median durations from each kappa. If `None`, these will be extracted
+        as the last index of each array in `med_dur_histories`.
+
+    best_i: int, default=None,
+        Iteration selected by the kappa scan as closest to the target duration. If None,
+        no indication will be made on the plot as to which kappa value was selected by
+        the scan.
+
+    savefig : bool, default=True
+        Whether to save the figure to a file. If true, the figure is
+        either saved to `path` or, to `{project_dir}/{name}-progress.pdf`
+        if `path` is None.
+
+    fig_size : tuple of float, default=None
+        Size of the figure in inches.
+
+    project_dir : str, default=None
+    name : str, default=None
+    path : str, default=None
+    """
+
     if fig_size is None: fig_size = (5, 3)
     fig, axs = plt.subplots(1, 2, figsize = fig_size)
     
