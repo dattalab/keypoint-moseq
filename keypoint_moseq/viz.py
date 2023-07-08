@@ -495,7 +495,7 @@ def plot_progress(model, data, history, iteration, path=None,
 
 def plot_kappa_scan(
     kappas, med_dur_histories, med_durs=None, best_i = None,
-    path=None, project_dir=None, name=None, savefig=True,
+    path=None, project_dir=None, scan_name=None, savefig=True,
     fig_size=None,):
 
     """
@@ -520,14 +520,14 @@ def plot_kappa_scan(
 
     savefig : bool, default=True
         Whether to save the figure to a file. If true, the figure is
-        either saved to `path` or, to `{project_dir}/{name}-progress.pdf`
+        either saved to `path` or, to `{project_dir}/{name}_results.pdf`
         if `path` is None.
 
     fig_size : tuple of float, default=None
         Size of the figure in inches.
 
     project_dir : str, default=None
-    name : str, default=None
+    scan_name : str, default=None
     path : str, default=None
     """
 
@@ -559,16 +559,16 @@ def plot_kappa_scan(
     cbar.set_label("Kappa")
 
 
-    if name is not None:
-        fig.suptitle(name)
+    if scan_name is not None:
+        fig.suptitle(scan_name)
     plt.tight_layout()
 
     if savefig:
         if path is None:
-            assert name is not None and project_dir is not None, fill(
+            assert scan_name is not None and project_dir is not None, fill(
                 'The `savefig` option requires either a `path` '
                 'or a `name` and `project_dir`')
-            path = os.path.join(project_dir, f'{name}_results.pdf')
+            path = os.path.join(project_dir, f'{scan_name}_results.pdf')
         plt.savefig(path)  
     plt.show()
 

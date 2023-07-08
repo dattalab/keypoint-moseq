@@ -753,7 +753,7 @@ def kappa_scan(
                 best_model_name = (
                     model_names[best_i]
                     if (save_models == 'best') else None),
-                name = scan_name, project_dir = project_dir)
+                scan_name = scan_name, project_dir = project_dir)
         
         if warning_convergence_tol is not None and not _check_converged(
             med_dur_history[-5:], warning_convergence_tol, window = 5):
