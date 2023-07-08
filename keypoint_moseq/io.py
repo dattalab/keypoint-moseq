@@ -659,31 +659,102 @@ def save_checkpoint(model, data, history, labels, iteration,
 
 
 def save_kappa_scan_checkpoint(
-        kappas, median_durations,
-        iteration, target_duration, best_kappa,
-        fitting_median_durations,
-        path=None, name=None, project_dir=None,
-        model_names = None, best_model_name = None):
+        kappas, med_dur_histories,
+        iteration, target_duration,
+        best_i, best_kappa,
+        median_durations = None,
+        model_names = None, best_model_name = None,
+        path=None, scan_name=None, project_dir=None):
+
+    """
+    Save summary information of a kappa scan.
+
+    A checkpoint file for a kappa scan contains kappas tried so far,
+    resulting median syllable durations and their histories over the
+    fitting procedure of each model, the target duration of the scan
+    and the index and kappa of the iteration closest to that target,
+    as well as the the names of the models fit during the scan if
+    models were saved.
+
+    The checkpoint path can be specified directly via `path`.
+    Otherwise is assumed to be `{project_dir}/<scan_name>.p`.
+
+    Parameters
+    ----------
+    kappas : array-like
+        Kappa values for each iteration of the scan.
+
+    med_dur_histories : List[array-like]
+        Median durations over the course of each fitting process.
+
+    iteration : int
+        Current iteration number in the scan.
+
+    target_dutation : int or float
+        Target median syllable duration for the scan.
+
+    best_i : int
+        Iteration of the scan resulting in the closest median duation to
+        the target duration.
+
+    best_kappa : float
+        Kappa used during iteration `best_i`.
+
+    median_durations : array-like, default=None
+        Resulting median durations from each kappa. If `None`, these
+        will be extracted as the last index of each array in
+        `med_dur_histories`.
+
+    model_names : List[str]
+        Names of the trained models if model data were saved during the scan;
+        otherwise may be `None`.
+
+    best_model_name: str
+        Name of the model at iteration `best_i` if its data were saved during
+        the scan; otherwise may be `None`.
+
+    project_dir: str, default=None
+        Project directory; used in conjunction with `scan_name` to determine
+        the checkpoint path if `path` is not specified.
+
+    scan_name: str, default=None
+        Name of the scan; used in conjunction with `project_dir` to determine
+        the checkpoint path if `path` is not specified.
+
+    path: str, default=None
+        Checkpoint path; if not specified, the checkpoint path is determined
+        from `project_dir` and `name`.
+
+    Returns
+    -------
+    checkpoint: dict
+        Dictionary containing data saved to the checkpoint path.
+
+    """
     
     
     if path is None: 
-        assert project_dir is not None and name is not None, fill(
-            '`name` and `project_dir` are required if no `path` is given.')
-        path = os.path.join(project_dir, f'{name}.p')
+        assert project_dir is not None and scan_name is not None, fill(
+            '`scan_name` and `project_dir` are required if no `path` is given.')
+        path = os.path.join(project_dir, f'{scan_name}.p')
 
     dirname = os.path.dirname(path)
     if not os.path.exists(dirname): 
         print(fill(f'Creating the directory {dirname}'))
         os.makedirs(dirname)
+
+    if median_durations is None:
+        median_durations = [hist[-1] for hist in med_dur_histories]
     
     save_dict = {
         'iteration'       : iteration,
-        'name'            : name,
+        'scan_name'       : scan_name,
         'kappas'          : kappas,
         'median_durations': median_durations,
         'target_duration' : target_duration,
+        'best_i'          : best_i,
         'best_kappa'      : best_kappa,
-        'fitting_median_durations': fitting_median_durations
+        'fitting_median_durations': med_dur_histories
         }
 
     if best_model_name is not None:

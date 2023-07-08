@@ -744,7 +744,8 @@ def kappa_scan(
         if save_durations:
             save_kappa_scan_checkpoint(
                 kappas[:i_kappa+1], median_durations,
-                i_kappa, scan_config['target_duration'], kappas[best_i],
+                i_kappa, scan_config['target_duration'],
+                best_i, kappas[best_i],
                 med_dur_histories,
                 model_names = (
                     model_names
