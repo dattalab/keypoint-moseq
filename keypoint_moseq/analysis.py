@@ -1836,9 +1836,9 @@ def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data
             'Unable to find video directory. Please specify video directory.')
     # load coordinate results
     if keypoint_data_type == 'deeplabcut':
-        coordinates, _, _ = load_deeplabcut_results(video_dir)
+        coordinates, _, _ = load_keypoints(video_dir, 'deeplabcut')
     elif keypoint_data_type == 'sleap':
-        coordinates, _, _ = load_sleap_results(video_dir)
+        coordinates, _, _ = load_keypoints(video_dir, 'sleap')
     else:
         raise NotImplementedError('Input type not supported.')
 
