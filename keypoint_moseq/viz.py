@@ -206,8 +206,7 @@ def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
         
 
 def plot_syllable_frequencies(results=None, path=None, project_dir=None, 
-                              name=None, use_reindexed=True, minlength=10,
-                              min_frequency=0.005):
+                              name=None, minlength=10, min_frequency=0.005):
     """
     Plot a histogram showing the frequency of each syllable.
     
@@ -233,11 +232,6 @@ def plot_syllable_frequencies(results=None, path=None, project_dir=None,
         Path to a results file. If None, results will be loaded from
         `{project_dir}/{name}/results.h5`.
 
-    use_reindexed: bool, default=True
-        Whether to use label syllables by their frequency rank (True) or
-        or their original label (False). When reindexing, "0"  represents
-        the most frequent syllable).
-
     minlength: int, default=10
         Minimum x-axis length of the histogram.
 
@@ -255,8 +249,7 @@ def plot_syllable_frequencies(results=None, path=None, project_dir=None,
     if results is None:
         results = load_results(path=path, name=name, project_dir=project_dir)
 
-    syllable_key = 'syllables' if not use_reindexed else 'syllables_reindexed'
-    syllables = {k:res[syllable_key] for k,res in results.items()}
+    syllables = {k:res['syllable'] for k,res in results.items()}
     frequencies = get_frequencies(syllables)
     frequencies = frequencies[frequencies>min_frequency]
     xmax = max(minlength, np.max(np.nonzero(frequencies>min_frequency)[0])+1)
@@ -323,7 +316,7 @@ def plot_duration_distribution(results=None, path=None, project_dir=None,
     if results is None:
         results = load_results(path=path, name=name, project_dir=project_dir)
         
-    syllables = {k:res['syllables'] for k,res in results.items()}
+    syllables = {k:res['syllable'] for k,res in results.items()}
     durations = get_durations(syllables)
     
     if lim is None:
@@ -708,12 +701,11 @@ def generate_grid_movies(
     results_path=None, video_dir=None, video_paths=None, rows=4, 
     cols=6, filter_size=9, pre=30, post=60, min_frequency=0.005, 
     min_duration=3, dot_radius=4, dot_color=(255,255,255), quality=7,
-    window_size=None, use_reindexed=True, coordinates=None, 
-    bodyparts=None, use_bodyparts=None, sampling_options={},  
-    video_extension=None, max_video_size=1920, skeleton=[],
-    overlay_keypoints=False, keypoints_only=False, fps=30,
-    plot_options={}, keypoint_colormap='autumn', **kwargs):
-    
+    window_size=None, coordinates=None, bodyparts=None, use_bodyparts=None, 
+    sampling_options={}, video_extension=None, max_video_size=1920, 
+    skeleton=[], overlay_keypoints=False, keypoints_only=False, 
+    fps=30, plot_options={}, keypoint_colormap='autumn', **kwargs):
+
     """
     Generate grid movies for a modeled dataset.
 
@@ -735,19 +727,13 @@ def generate_grid_movies(
 
             {
                 session_name1: {
-                    'syllables':              array of shape (n_frames,),
-                    'syllables_reindexed':    array of shape (n_frames,),
-                    'centroid':               array of shape (n_frames, dim),
-                    'heading' :               array of shape (n_frames,), 
+                    'syllable':  array of shape (n_frames,),
+                    'centroid':  array of shape (n_frames, dim),
+                    'heading' :  array of shape (n_frames,), 
                 },
                 ...  
             }
             
-        - `syllables` is required if `use_reindexed=False`
-        - `syllables_reindexed` is required if `use_reindexed=True`
-        - `centroid` is always required
-        - `heading` is always required
-
         If `results=None`, results will be loaded using either 
         `results_path` or  `project_dir` and `name`.
 
@@ -790,11 +776,6 @@ def generate_grid_movies(
     min_duration: int, default=3
         Minimum duration of a syllable instance to be included in the 
         grid movie for that syllable. 
-
-    use_reindexed: bool, default=True
-        Whether to use label syllables by their frequency rank (True) or
-        or their original label (False). When reindexing, "0"  represents
-        the most frequent syllable).
 
     sampling_options: dict, default={}
         Dictionary of options for sampling syllable instances (see
@@ -907,8 +888,7 @@ def generate_grid_movies(
     else: 
         videos = None
 
-    syllable_key = 'syllables' + ('_reindexed' if use_reindexed else '')
-    syllables = {k:v[syllable_key] for k,v in results.items()}
+    syllables = {k:v['syllable'] for k,v in results.items()}
     centroids = {k:v['centroid'] for k,v in results.items()}
     headings = {k:v['heading'] for k,v in results.items()}
 
@@ -1187,12 +1167,11 @@ def save_gif(image_list, gif_filename, duration=0.5):
 def generate_trajectory_plots(
     coordinates=None, results=None, output_dir=None, name=None, 
     project_dir=None, results_path=None, pre=5, post=15, 
-    min_frequency=0.005, min_duration=3, use_reindexed=True, 
-    use_estimated_coords=False, skeleton=[], bodyparts=None, 
-    use_bodyparts=None, num_samples=50, keypoint_colormap='autumn',
-    plot_options={}, sampling_options={'mode':'density'},
-    padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2},
-    save_individually=True, save_gifs=True, save_mp4s=False, fps=30, 
+    min_frequency=0.005, min_duration=3, use_estimated_coords=False, 
+    skeleton=[], bodyparts=None, use_bodyparts=None, num_samples=50, 
+    keypoint_colormap='autumn', plot_options={}, save_individually=True, 
+    sampling_options={'mode':'density'}, save_gifs=True, save_mp4s=False, 
+    padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2}, fps=30, 
     projection_planes=['xy','xz'], **kwargs):
     """
     Generate trajectory plots for a modeled dataset.
@@ -1218,20 +1197,13 @@ def generate_trajectory_plots(
 
             {
                 session_name1: {
-                    'syllables':              array of shape (n_frames,),
-                    'estimated_coordinates' : array of shape (n_frames, n_bodyparts, dim)
-                    'syllables_reindexed':    array of shape (n_frames,),
-                    'centroid':               array of shape (n_frames, dim),
-                    'heading' :               array of shape (n_frames,), 
+                    'syllable':   array of shape (n_frames,),
+                    'est_coords': array of shape (n_frames, n_bodyparts, dim)
+                    'centroid':   array of shape (n_frames, dim),
+                    'heading' :   array of shape (n_frames,), 
                 },
                 ...  
             }
-            
-        - `syllables` is required if `use_reindexed=False`
-        - `syllables_reindexed` is required if `use_reindexed=True`
-        - `centroid` is always required
-        - `heading` is always required
-        - `estimated_coordinates` is required if `use_estimated_coords=True`
 
         If `results=None`, results will be loaded using either 
         `results_path` or  `project_dir` and `name`.
@@ -1265,11 +1237,6 @@ def generate_trajectory_plots(
     min_duration: float, default=3
         Minimum duration of a syllable instance to be included in the
         trajectory average.
-
-    use_reindexed: bool, default=True
-        Whether to use label syllables by their frequency rank (True) or
-        or their original label (False). When reindexing, "0"  represents
-        the most frequent syllable).
 
     bodyparts: list of str, default=None
         List of bodypart names in `coordinates`. 
@@ -1335,12 +1302,11 @@ def generate_trajectory_plots(
         name=name, project_dir=project_dir, path=results_path)
 
     if use_estimated_coords:
-        coordinates = {k:v['estimated_coordinates'] for k,v in results.items()}
+        coordinates = {k:v['est_coords'] for k,v in results.items()}
     elif bodyparts is not None and use_bodyparts is not None:
         coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
 
-    syllable_key = 'syllables' + ('_reindexed' if use_reindexed else '')
-    syllables = {k:v[syllable_key] for k,v in results.items()}
+    syllables = {k:v['syllable'] for k,v in results.items()}
     centroids = {k:v['centroid'] for k,v in results.items()}
     headings = {k:v['heading'] for k,v in results.items()}
     plot_options.update({'keypoint_colormap':keypoint_colormap})
@@ -1385,9 +1351,8 @@ def generate_trajectory_plots(
             "`projection_planes` must be a subset of `['xy','yz','xz']`")
         all_Xs = [Xs[...,np.array({'xy':[0,1], 'yz':[1,2], 'xz':[0,2]}[plane])] for plane in projection_planes]
         suffixes = ['.'+plane for plane in projection_planes]
-       
     else: 
-        all_Xs = [Xs]
+        all_Xs = [Xs * np.array([1,-1])] # flip y-axis
         suffixes = ['']
 
     for Xs,suffix in zip(all_Xs,suffixes):
@@ -1696,9 +1661,9 @@ def generate_crowd_movies(
     coordinates, results=None, output_dir=None, name=None, 
     project_dir=None, results_path=None, pre=30, post=60,
     min_frequency=0.005, min_duration=3, num_instances=15,
-    use_reindexed=True, use_estimated_coords=False, skeleton=[], 
-    bodyparts=None, use_bodyparts=None, keypoint_colormap='autumn', 
-    fps=30, limits=None, plot_options={}, sampling_options={}, 
+    use_estimated_coords=False, skeleton=[], bodyparts=None, 
+    use_bodyparts=None, keypoint_colormap='autumn', fps=30, 
+    limits=None, plot_options={}, sampling_options={}, 
     quality=7, **kwargs):
     """
     Generate crowd movies for a modeled dataset.
@@ -1726,22 +1691,14 @@ def generate_crowd_movies(
 
             {
                 session_name1: {
-                    'syllables':              array of shape (n_frames,),
-                    'estimated_coordinates' : array of shape (n_frames, n_bodyparts, dim)
-                    'syllables_reindexed':    array of shape (n_frames,),
-                    'centroid':               array of shape (n_frames, dim),
-                    'heading' :               array of shape (n_frames,), 
+                    'syllable':   array of shape (n_frames,),
+                    'est_coords': array of shape (n_frames, n_bodyparts, dim)
+                    'centroid':   array of shape (n_frames, dim),
+                    'heading' :   array of shape (n_frames,), 
                 },
                 ...  
             }
-            
-        - `syllables` is required if `use_reindexed=False`
-        - `syllables_reindexed` is required if `use_reindexed=True`
-        - `centroid` is required if the sampling mode is 'density'
-        - `heading` is required if the sampling mode is 'density'
-        - `estimated_coordinates` is required if `use_estimated_coords=True`
-        
-
+ 
         If `results=None`, results will be loaded using either 
         `results_path` or  `project_dir` and `name`.
 
@@ -1772,11 +1729,6 @@ def generate_crowd_movies(
     min_duration: int, default=3
         Minimum duration of a syllable instance to be included in the 
         crowd movie for that syllable. 
-
-    use_reindexed: bool, default=True
-        Whether to use label syllables by their frequency rank (True) or
-        or their original label (False). When reindexing, "0"  represents
-        the most frequent syllable).
 
     bodyparts: list of str, default=None
         List of bodypart names in `coordinates`. 
@@ -1823,12 +1775,11 @@ def generate_crowd_movies(
         name=name, project_dir=project_dir, path=results_path)
         
     if use_estimated_coords:
-        coordinates = {k:v['estimated_coordinates'] for k,v in results.items()}
+        coordinates = {k:v['est_coords'] for k,v in results.items()}
     elif bodyparts is not None and use_bodyparts is not None:
         coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
 
-    syllable_key = 'syllables' + ('_reindexed' if use_reindexed else '')
-    syllables = {k:v[syllable_key] for k,v in results.items()}
+    syllables = {k:v['syllable'] for k,v in results.items()}
     plot_options.update({'keypoint_colormap':keypoint_colormap})
 
     if limits is None: 

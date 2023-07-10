@@ -3,6 +3,7 @@ import os
 import glob
 import tqdm
 import warnings
+import subprocess
 from textwrap import fill
 import jax, jax.numpy as jnp
 from itertools import groupby
@@ -186,33 +187,6 @@ def get_frequencies(stateseqs, mask=None, num_states=None, runlength=True):
     counts = np.bincount(stateseq_flat, minlength=num_states)
     frequencies = counts/counts.sum()
     return frequencies
-
-
-
-def reindex_by_frequency(stateseqs, mask=None):
-    """
-    Reindex a sequence of syllables by frequency. The most frequent
-    syllable will be assigned 0, the second most frequent 1, etc.
-    For a more detailed  description of the function parameters, 
-    see :py:func:`keypoint_moseq.util.concatenate_stateseqs`
-
-    Parameters
-    ----------
-    stateseqs: dict or ndarray of shape (..., t)
-
-    mask: ndarray of shape (..., >=t), default=None
-
-    Returns
-    -------
-    stateseqs_reindexed: ndarray
-        The reindexed state sequences in the same format as `stateseqs`
-    """
-    frequency = get_frequencies(stateseqs, mask=mask)
-    o = np.argsort(np.argsort(frequency)[::-1])
-    if isinstance(stateseqs, dict):
-        stateseqs_reindexed = {k: o[seq] for k,seq in stateseqs.items()}
-    else: stateseqs_reindexed = o[stateseqs]
-    return stateseqs_reindexed
 
 
 def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
@@ -816,3 +790,28 @@ def permute_cyclic(arr, mask=None, axis=0):
     arr_permuted = arr_permuted.reshape(shape)
     arr_permuted = np.moveaxis(arr_permuted, 0, axis)
     return arr_permuted
+
+
+def check_jupyter_extensions(extensions=[
+    'nbextensions_configurator', 
+    'jupyter_bokeh',
+    'qgrid', 
+]):
+
+    result = subprocess.run(['jupyter', 'nbextension', 'list'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result_str = result.stdout.decode('utf-8')
+    
+    # For each extension
+    for extension in extensions:
+        for line in result_str.split('\n'):
+            if extension in line and 'validating' not in line:
+                # Parse the line
+                parts = line.split()
+                # Check if the extension is enabled
+                if 'enabled' in parts:
+                    print(f'✅ The extension {extension} is installed and enabled.')
+                else:
+                    print(f'❌ The extension {extension} is installed but not enabled.')
+                break
+        else:
+            print(f'The extension {extension} is not installed.')

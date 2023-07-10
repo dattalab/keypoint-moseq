@@ -29,7 +29,13 @@ from copy import deepcopy
 from cytoolz import sliding_window
 from os.path import join, exists
 
-from keypoint_moseq.util import stateseq_stats, sample_instances, get_trajectories
+from keypoint_moseq.widgets import GroupSettingWidgets, SyllableLabeler
+
+from glob import glob
+from keypoint_moseq.widgets import GroupSettingWidgets, SyllableLabeler
+
+
+from keypoint_moseq.util import stateseq_stats, sample_instances, get_trajectories, get_frequencies
 from scipy.spatial.distance import squareform, pdist
 from scipy.cluster.hierarchy import linkage, dendrogram
 
@@ -43,9 +49,31 @@ from jax_moseq.models.keypoint_slds import align_egocentric
 from jax_moseq.utils import unbatch
 na = np.newaxis
 
-# imports for syllable transitions
+output_notebook()
 
-# plot transition graphs
+
+def interactive_group_setting(project_dir, model_dirname):
+    """start the interactive group setting widget
+
+    Parameters
+    ----------
+    project_dir : str
+        the path to the project directory
+    model_dirname : str
+        the name of the model directory
+
+    """
+
+    index_filepath = os.path.join(project_dir, 'index.yaml')
+
+    if not os.path.exists(index_filepath):
+        generate_index(project_dir, model_dirname, index_filepath)
+
+    # display the widget
+    index_grid = GroupSettingWidgets(index_filepath)
+    display(index_grid.clear_button, index_grid.group_set)
+    display(index_grid.qgrid_widget)
+    return index_filepath
 
 
 def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
@@ -89,8 +117,8 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
     centroid = []
     velocity = []
     heading = []
+    angular_velocity = []
     syllables = []
-    syllables_reindexed = []
     frame_index = []
     s_group = []
 
@@ -111,13 +139,18 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
         frame_index.append(np.arange(n_frame))
 
         if smooth_heading:
-            heading.append(filter_angle(v['heading']))
+            session_heading = filter_angle(v['heading'])
         else:
-            heading.append(v['heading'])
+            session_heading = v['heading']
+
+        # heading in radian
+        heading.append(session_heading)
+        # compute angular velocity (radian per second)
+        angular_velocity.append(np.concatenate(
+            ([0], np.diff(session_heading) * fps)))
 
         # add syllable data
-        syllables.append(v['syllables'])
-        syllables_reindexed.append(v['syllables_reindexed'])
+        syllables.append(v['syllable'])
 
     # construct dataframe
     moseq_df = pd.DataFrame(np.concatenate(
@@ -125,9 +158,9 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
     moseq_df = pd.concat([moseq_df, pd.DataFrame(np.concatenate(centroid), columns=[
                          'centroid_x', 'centroid_y'])], axis=1)
     moseq_df['heading'] = np.concatenate(heading)
+    moseq_df['angular_velocity'] = np.concatenate(angular_velocity)
     moseq_df['velocity_px_s'] = np.concatenate(velocity)
     moseq_df['syllable'] = np.concatenate(syllables)
-    moseq_df['syllables_reindexed'] = np.concatenate(syllables_reindexed)
     moseq_df['frame_index'] = np.concatenate(frame_index)
     moseq_df['group'] = np.concatenate(s_group)
 
@@ -143,7 +176,7 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
     return moseq_df
 
 
-def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'name'], fps=30, syll_key='syllables_reindexed', normalize=True, **kwargs):
+def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupby=['group', 'name'], fps=30, normalize=True, **kwargs):
     """summary statistics for syllable frequencies and kinematic values
     Parameters
     ----------
@@ -152,11 +185,9 @@ def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'name'], fps=30, s
     threshold : float, optional
         usge threshold for the syllable to be included, by default 0.005
     groupby : list, optional
-        the list of column names to group by, by default ['group', 'session_name']
+        the list of column names to group by, by default ['group', 'name']
     fps : int, optional
         frame per second information of the recording, by default 30
-    syll_key : str, optional
-        the column name of the syllable column to be summarize by, by default 'syllables_reindexed'
     normalize : bool, optional
         boolean falg whether to normalize by counts, by default True
 
@@ -165,41 +196,69 @@ def compute_stats_df(moseq_df, threshold=0, groupby=['group', 'name'], fps=30, s
     stats_df : pandas.DataFrame
         the summary statistics dataframe for syllable frequencies and kinematic values
     """
+    # compute runlength encoding for syllables
+
+    # load model results
+    results_dict = load_results(base_dir, model_name)
+    syllables = {k: res['syllable'] for k, res in results_dict.items()}
+    # frequencies is array of frequencies for sorted syllables [syll_0, syll_1...]
+    frequencies = get_frequencies(syllables)
+    syll_include = np.where(frequencies > min_frequency)[0]
+
+    # add group information
+    # load index file
+    index_filepath = os.path.join(base_dir, 'index.yaml')
+    if os.path.exists(index_filepath):
+        with open(index_filepath, 'r') as f:
+            index_data = yaml.safe_load(f)
+
+        # create a file dictionary for each session
+        file_info = {}
+        for session in index_data['files']:
+            file_info[session['name']] = {'group': session['group']}
+    else:
+        print('index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first')
+
+    # construct frequency dataframe
+    frequency_df = []
+    for k, v in results_dict.items():
+        syll_freq = get_frequencies(v['syllable'])
+        df = pd.DataFrame({'name': k,
+                           'group': file_info[k]['group'],
+                          'syllable': np.arange(len(syll_freq)),
+                           'frequency': syll_freq})
+        frequency_df.append(df)
+    frequency_df = pd.concat(frequency_df)
+    if 'name' not in groupby:
+        frequency_df.drop(columns=['name'], inplace=True)
+    frequency_df = frequency_df.groupby(
+        groupby + ['syllable']).mean().reset_index()
 
     # filter out syllables that are used less than threshold in all sessions
-    raw_frequency = (moseq_df.groupby('syllable').count()[
-                     'frame_index']/moseq_df.shape[0]).reset_index().rename(columns={'frame_index': 'counts'})
-    syll_include = raw_frequency[raw_frequency['counts']
-                                 > threshold]['syllable']
     filtered_df = moseq_df[moseq_df['syllable'].isin(syll_include)].copy()
-
-    frequencies = (filtered_df.groupby(groupby)[syll_key]
-                   .value_counts(normalize=normalize)
-                   .unstack(fill_value=0)
-                   .reset_index()
-                   .melt(id_vars=groupby)
-                   .set_index(groupby + [syll_key]))
-    frequencies.columns = ['frequency']
 
     # TODO: hard-coded heading for now, could add other scalars
     features = filtered_df.groupby(
-        groupby + [syll_key])[['heading', 'velocity_px_s']].agg(['mean', 'std', 'min', 'max'])
+        groupby + ['syllable'])[['heading', 'angular_velocity', 'velocity_px_s']].agg(['mean', 'std', 'min', 'max'])
 
     features.columns = ['_'.join(col).strip()
                         for col in features.columns.values]
+    features.reset_index(inplace=True)
 
     # get durations
     trials = filtered_df['onset'].cumsum()
     trials.name = 'trials'
     durations = filtered_df.groupby(
-        groupby + [syll_key] + [trials])['onset'].count()
+        groupby + ['syllable'] + [trials])['onset'].count()
     # average duration in seconds
-    durations = durations.groupby(groupby + [syll_key]).mean() / fps
+    durations = durations.groupby(groupby + ['syllable']).mean() / fps
     durations.name = 'duration'
-    durations.fillna(0)
+    # only keep the columns we need
+    durations = durations.fillna(0).reset_index()[
+        groupby + ['syllable', 'duration']]
 
-    stats_df = frequencies.join(durations).join(features).reset_index()
-    stats_df = stats_df.rename(columns={'syllables_reindexed': 'syllable'})
+    stats_df = pd.merge(features, frequency_df, on=groupby+['syllable'])
+    stats_df = pd.merge(stats_df, durations, on=groupby+['syllable'])
     return stats_df
 
 
@@ -240,7 +299,7 @@ def _apply_to_col(df, fn, **kwargs):
     return df.apply(fn, axis=0, **kwargs)
 
 
-def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=25,
+def create_fingerprint_dataframe(moseq_df, stats_df, n_bins=50,
                                  groupby_list=['group', 'name'], range_type='robust',
                                  scalars=['heading', 'velocity_px_s']):
     """create a summary dataframe to visualize the data as the MoSeq fingerprint (behvavoiral summary) plot
@@ -270,28 +329,25 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=25
         the range dataframe of the values with the selcted range type
     """
 
+    # set statistics to plot to mean
+    stat_type = 'mean'
+
     # deep copy the dfs
-    scalar_df = scalar_df.copy()
-    mean_df = mean_df.copy()
-    # rescale velocity to cm/s
-    vel_cols = [c for c in scalars if 'velocity' in c]
-    vel_cols_stats = [f'{c}_{stat_type}' for c in scalars if 'velocity' in c]
+    moseq_df = moseq_df.copy()
+    stats_df = stats_df.copy()
 
-    if len(vel_cols) > 0:
-        scalar_df[vel_cols] *= 30
-        mean_df[vel_cols_stats] *= 30
-
-    # pivot mean_df to be groupby x syllable
-    syll_summary = mean_df.pivot_table(
+    # pivot stats_df to be groupby x syllable
+    syll_summary = stats_df.pivot_table(
         index=groupby_list, values='frequency', columns='syllable')
     syll_summary.columns = pd.MultiIndex.from_arrays(
         [['MoSeq'] * syll_summary.shape[1], syll_summary.columns])
     min_p = syll_summary.min().min()
     max_p = syll_summary.max().max()
 
-    ranges = scalar_df.reset_index(drop=True)[scalars].agg(
+    ranges = moseq_df.reset_index(drop=True)[scalars].agg(
         ['min', 'max', robust_min, robust_max])
     # add syllable ranges to this df
+    # robust mode would exclude the extreme values
     ranges['MoSeq'] = [min_p, max_p, min_p, max_p]
     range_idx = ['min', 'max'] if range_type == 'full' else [
         'robust_min', 'robust_max']
@@ -305,12 +361,7 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=25
         binned_data.index.name = 'bin'
         return binned_data
 
-    # use total number of syllables
-    if n_bins is None:
-        # num of bins (default to match the total number of syllables)
-        n_bins = syll_summary.shape[1] + 1
-
-    binned_scalars = scalar_df.groupby(groupby_list)[scalars].apply(
+    binned_scalars = moseq_df.groupby(groupby_list)[scalars].apply(
         _apply_to_col, fn=bin_scalars, range_type=range_type, n_bins=n_bins)
 
     scalar_fingerprint = binned_scalars.pivot_table(
@@ -321,11 +372,12 @@ def create_fingerprint_dataframe(scalar_df, mean_df, stat_type='mean', n_bins=25
     return fingerprints, ranges.loc[range_idx]
 
 
-
-def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minmax',
-                         num_level=1, level_names=['Group'], vmin=None, vmax=None,
-                         figsize=(10, 6), fontsize=12, plot_columns=['heading', 'velocity_px_s', 'MoSeq'],
-                         col_names=[('Heading', 'a.u.'), ('velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
+def plot_fingerprint(project_dir, model_dirname, moseq_df, stats_df, n_bins=50, range_type='robust',
+                     save_dir=None, preprocessor_type='minmax',
+                     vmin=None, vmax=None,
+                     color_bar=False,
+                     figsize=(10, 6), fontsize=12, plot_columns=['velocity_px_s', 'MoSeq'],
+                     col_names=[('Velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
     """plot the fingerprint plot from fingerprint dataframe
 
     Parameters
@@ -356,6 +408,8 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
     Exception
         too many levels to unpack. num_level should be less than the number of levels in the summary dataframe
     """
+    summary, range_dict = create_fingerprint_dataframe(
+        moseq_df, stats_df, n_bins, range_type=range_type)
 
     from sklearn.preprocessing import MinMaxScaler, StandardScaler
     assert preprocessor_type in ['minmax', 'standard', 'none']
@@ -366,46 +420,34 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
     else:
         preprocessor = None
 
-    # ensure number of groups is not over the number of available levels
-    if num_level > len(summary.index.names):
-        raise Exception('Too many levels to unpack. num_level should be less than', len(
-            summary.index.names))
-
     name_map = dict(zip(plot_columns, col_names))
 
-    levels = []
-    level_plot = []
-    level_ticks = []
-    for i in range(num_level):
-        level = summary.index.get_level_values(i)
-        level_label = LabelEncoder().fit_transform(level)
-        find_mid = (np.diff(np.r_[0, np.argwhere(
-            np.diff(level_label)).ravel(), len(level_label)])/2).astype('int32')
-        # store level value
-        levels.append(level)
-        level_plot.append(level_label)
-        level_ticks.append(np.r_[0, np.argwhere(
-            np.diff(level_label)).ravel()] + find_mid)
+    # get level label (group)
+    level = summary.index.get_level_values(0)
+    level_label = LabelEncoder().fit_transform(level)
+    find_mid = (np.diff(np.r_[0, np.argwhere(
+        np.diff(level_label)).ravel(), len(level_label)])/2).astype('int32')
+    level_ticks = np.r_[0, np.argwhere(
+        np.diff(level_label)).ravel()] + find_mid
 
-    # col_num = number of grouping/level + column in summary
-    col_num = num_level + len(plot_columns)
+    # col_num = 1 (for group level) + column in summary
+    col_num = 1 + len(plot_columns)
 
     # https://matplotlib.org/stable/tutorials/intermediate/gridspec.html
     fig = plt.figure(1, figsize=figsize, facecolor='white')
 
     gs = GridSpec(2, col_num, wspace=0.1, hspace=0.1,
-                  width_ratios=[1]*num_level+[8]*(col_num-num_level), height_ratios=[10, 0.1], figure=fig)
+                  width_ratios=[1]+[8]*(col_num-1), height_ratios=[10, 0.1], figure=fig)
 
-    # plot the level(s)
-    for i in range(num_level):
-        temp_ax = fig.add_subplot(gs[0, i])
-        temp_ax.set_title(level_names[i], fontsize=fontsize)
-        temp_ax.imshow(level_plot[i][:, np.newaxis],
-                       aspect='auto', cmap='Set3')
-        plt.yticks(level_ticks[i], levels[i]
-                   [level_ticks[i]], fontsize=fontsize)
+    # plot the group level
+    temp_ax = fig.add_subplot(gs[0, 0])
+    temp_ax.set_title('Label', fontsize=fontsize)
+    temp_ax.imshow(level_label[:, np.newaxis],
+                   aspect='auto', cmap='Set3')
+    plt.yticks(level_ticks, level
+               [level_ticks], fontsize=fontsize)
 
-        temp_ax.get_xaxis().set_ticks([])
+    temp_ax.get_xaxis().set_ticks([])
 
     # compile data to plot while recording vmin and vmax in the data
     plot_dict = {}
@@ -434,7 +476,7 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
     # plot the data
     for i, col in enumerate(plot_columns):
         name = name_map[col]
-        temp_ax = fig.add_subplot(gs[0, i + num_level])
+        temp_ax = fig.add_subplot(gs[0, i + 1])
         temp_ax.set_title(name[0], fontsize=fontsize)
         data = plot_dict[col]
 
@@ -449,6 +491,7 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
         pc = temp_ax.imshow(
             data, aspect='auto', interpolation='none', vmin=vmin, vmax=vmax, extent=extent)
         temp_ax.set_xlabel(name[1], fontsize=fontsize)
+
         temp_ax.set_xticks(np.linspace(
             np.ceil(extent[0]), np.floor(extent[1]), 6).astype(int))
         # https://stackoverflow.com/questions/14908576/how-to-remove-frame-from-matplotlib-pyplot-figure-vs-matplotlib-figure-frame
@@ -457,23 +500,102 @@ def plot_fingerprint(summary, range_dict, save_dir=None, preprocessor_type='minm
         plt.xticks(fontsize=int(fontsize*.75))
 
     # plot colorbar
-    # cb = fig.add_subplot(gs[1, -1])
-    # plt.colorbar(pc, cax=cb, orientation='horizontal')
+    if color_bar:
+        cb = fig.add_subplot(gs[1, -1])
+        plt.colorbar(pc, cax=cb, orientation='horizontal')
 
-    # specify labels for feature scaling
-    # if preprocessor_type == 'minmax':
-    #     cb.set_xlabel('Min Max')
-    # elif preprocessor_type == 'standard':
-    #     cb.set_xlabel('Standardized')
-    # else:
-    #     cb.set_xlabel('Percentage Usage')
+        # specify labels for feature scaling
+        if preprocessor_type == 'minmax':
+            cb.set_xlabel('Min Max')
+        elif preprocessor_type == 'standard':
+            cb.set_xlabel('Standardized')
+        else:
+            cb.set_xlabel('Percentage Usage')
 
     # saving the figure
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
-        fig.savefig(join(save_dir, 'moseq_fingerprint.pdf'))
-        fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
+    else:
+        save_dir = os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(join(save_dir, 'moseq_fingerprint.pdf'))
+    fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
 
+
+def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
+    """label syllables in the syllable grid movie
+
+    Parameters
+    ----------
+    project_dir : str
+        the path to the project directory
+    model_dirname : str
+        the name of the model directory
+    movie_type : str, optional
+        the type of movie to label, ('grid' or 'crowd')
+    """
+
+    output_notebook()
+
+    grid_movies = glob(os.path.join(
+        project_dir, model_dirname, 'grid_movies', '*.mp4'))
+    crowd_movies = glob(os.path.join(
+        project_dir, model_dirname, 'crowd_movies', '*.mp4'))
+
+    if movie_type == 'grid':
+        assert len(grid_movies) > 0, (
+            'No grid movies found. Please run `generate_grid_movies` as described in the docs: '
+            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
+
+    elif movie_type == 'crowd':
+        assert len(crowd_movies) > 0, (
+            'No crowd movies found. Please run `generate_crowd_movies` as described in the docs: '
+            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
+
+    # construct the syllable info path
+    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+
+    # generate a new syll_info yaml file
+    if not os.path.exists(syll_info_path):
+        # parse model results
+        model_results = load_results(project_dir, model_dirname)
+        unique_sylls = np.unique(np.concatenate(
+            [file['syllable'] for file in model_results.values()]))
+        # construct the syllable dictionary
+        syll_dict = {int(i): {'label': '', 'desc': '', 'movie_path': [
+        ], 'group_info': {}} for i in unique_sylls}
+        # record the movie paths
+        for movie_path in grid_movies:
+            syll_index = int(os.path.splitext(
+                os.path.basename(movie_path))[0][8:])
+            syll_dict[syll_index]['movie_path'].append(movie_path)
+        for movie_path in crowd_movies:
+            syll_index = int(os.path.splitext(
+                os.path.basename(movie_path))[0][8:])
+            syll_dict[syll_index]['movie_path'].append(movie_path)
+
+        # write to file
+        print(syll_info_path)
+        with open(syll_info_path, 'w') as file:
+            yaml.safe_dump(syll_dict, file, default_flow_style=False)
+
+    # construct the index path
+    index_path = os.path.join(project_dir, "index.yaml")
+
+    # create index.yaml if it does not exist
+    if not os.path.exists(index_path):
+        print('index.yaml does not exist, creating one...')
+        generate_index(project_dir, model_dirname, index_path)
+
+    # compute group-wise stats dataframe
+    stats_df = compute_stats_df(project_dir, model_dirname, moseq_df, groupby=['group'])[
+        ['group', 'syllable', 'frequency', 'duration', 'heading_mean', 'velocity_px_s_mean']]
+
+    labeler = SyllableLabeler(
+        project_dir, model_dirname, stats_df, index_path, syll_info_path, movie_type)
+    output = widgets.interactive_output(labeler.interactive_syllable_labeler, {
+                                        'syllables': labeler.syll_select})
+    display(labeler.clear_button, labeler.syll_select, output)
 
 
 def get_tie_correction(x, N_m):
@@ -901,8 +1023,8 @@ def _validate_and_order_syll_stats_params(complete_df, stat='frequency', order='
     return ordering, groups, colors, figsize
 
 
-def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir=None, plot_sig=True, thresh=0.05, 
-                             stat='frequency', order='stat', groups=None, ctrl_group=None, exp_group=None, 
+def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir=None, plot_sig=True, thresh=0.05,
+                             stat='frequency', order='stat', groups=None, ctrl_group=None, exp_group=None,
                              colors=None, join=False, figsize=(8, 4)):
     """plot syllable statistics with standard error of the mean
 
@@ -1022,9 +1144,12 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir=None
     # save the figure
     # saving the figure
     if save_dir is not None:
-        os.makedirs(save_dir, exist_ok=True) 
-        fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.pdf'))
-        fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.png'))
+        os.makedirs(save_dir, exist_ok=True)
+    else:
+        save_dir = os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.pdf'))
+    fig.savefig(os.path.join(save_dir, f'{stat}_{order}_stats.png'))
     return fig, legend
 
 
@@ -1163,7 +1288,7 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
     return all_mats
 
 
-def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigram'):
+def get_group_trans_mats(labels, label_group, group, syll_include, normalize='bigram'):
     """get the transition matrices for each group
 
     Parameters
@@ -1191,35 +1316,27 @@ def get_group_trans_mats(labels, label_group, group, max_sylls, normalize='bigra
 
     # Computing transition matrices for each given group
     for plt_group in group:
-        # list of sessions in the group
+        # list of syll labels in sessions in the group
         use_labels = [lbl for lbl, grp in zip(
             labels, label_group) if grp == plt_group]
         # find stack np array shape
         row_num = len(use_labels)
         max_len = max([len(lbl) for lbl in use_labels])
         # Get sessions to include in trans_mat
-
+        # subset only syllable included
         trans_mats.append(get_transition_matrix(use_labels,
                                                 normalize=normalize,
-                                                combine=True,
-                                                max_syllable=max_sylls))
-
-        # initialize the numpy array with -1
-        lbl_data = -np.ones((row_num, max_len), dtype='int')
-        for i, lbl in enumerate(use_labels):
-            # only include the max syllables to avoid different array shapes
-            lbl = lbl[lbl < max_sylls]
-            lbl_data[i, :len(lbl)] = lbl
-        mask = lbl_data != -1
+                                                combine=True)[syll_include, :][:, syll_include])
 
         # Getting frequency information for node scaling
-        frequency_count = stateseq_stats(lbl_data, mask)[0]
+        group_frequencies = get_frequencies(use_labels)[syll_include]
 
-        frequencies.append(frequency_count/frequency_count.sum())
+        frequencies.append(group_frequencies)
     return trans_mats, frequencies
 
 
-def visualize_transition_bigram(group, trans_mats, save_dir=None, normalize='bigram'):
+def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, syll_include,
+                                save_dir=None, normalize='bigram', figsize=(12, 6)):
     """visualize the transition matrices for each group
 
     Parameters
@@ -1230,13 +1347,15 @@ def visualize_transition_bigram(group, trans_mats, save_dir=None, normalize='big
         the list of transition matrices for each group
     normalize : str, optional
         the method to normalize the transition matrix, by default 'bigram'
+    figsize : tuple, optional
+        the figure size, by default (12,6)
     """
 
     # infer max_syllables
     max_syllables = trans_mats[0].shape[0]
 
-    fig, ax = plt.subplots(1, len(group), figsize=(
-        12, 15), sharex=False, sharey=True)
+    fig, ax = plt.subplots(1, len(group), figsize=figsize,
+                           sharex=False, sharey=True)
     title_map = dict(bigram='Bigram', columns='Incoming', rows='Outgoing')
     color_lim = max([x.max() for x in trans_mats])
     if len(group) == 1:
@@ -1248,23 +1367,26 @@ def visualize_transition_bigram(group, trans_mats, save_dir=None, normalize='big
                                         :max_syllables], cmap='cubehelix', vmax=color_lim)
         if i == 0:
             axs[i].set_ylabel('Incoming syllable')
-            plt.yticks(np.arange(0, max_syllables, 4))
+            plt.yticks(np.arange(len(syll_include)), syll_include)
         cb = fig.colorbar(h, ax=axs[i], fraction=0.046, pad=0.04)
         cb.set_label(f'{title_map[normalize]} transition probability')
         axs[i].set_xlabel('Outgoing syllable')
         axs[i].set_title(g)
-        axs[i].set_xticks(np.arange(0, max_syllables, 4))
+        axs[i].set_xticks(np.arange(len(syll_include)), syll_include)
 
     # saving the figures
     # saving the figure
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
-        fig.savefig(os.path.join(save_dir, 'transition_matrices.pdf'))
-        fig.savefig(os.path.join(save_dir, 'transition_matrices.png'))
+    else:
+        save_dir = os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(os.path.join(save_dir, 'transition_matrices.pdf'))
+    fig.savefig(os.path.join(save_dir, 'transition_matrices.png'))
 
 
-def generate_transition_matrices(project_dir, model_dirname, normalize='bigram', 
-                                 max_syllable=None, syll_key='syllables_reindexed'):
+def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
+                                 min_frequency=0.005):
     """generate the transition matrices for each session
 
     Parameters
@@ -1273,14 +1395,11 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
         the dictionary of paths to the files in the analysis progress
     normalize : str, optional
         the method to normalize the transition matrix, by default 'bigram'
-    syll_key : str, optional
-        the key to the syllable list in the progress file, by default 'syllables_reindexed'
 
     Returns
     -------
     trans_mats : list
         the list of transition matrices for each group
-
     """
 
     trans_mats, usages = None, None
@@ -1298,20 +1417,21 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
     group = sorted(list(set(label_group)))
     print('Group(s):', ', '.join(group))
 
+    # load model reuslts
     results_dict = load_results(
         project_dir=project_dir, name=model_dirname)
-    model_labels = [results_dict[session][syll_key]
-                    for session in sessions]
-    if max_syllable is None:
-        max_syllable = max([np.max(lbl) for lbl in model_labels])
-    print('maximum syllable to include:', max_syllable)
+
+    # filter out syllables by freqency
+    model_labels = [results_dict[session]['syllable'] for session in sessions]
+    frequencies = get_frequencies(model_labels)
+    syll_include = np.where(frequencies > min_frequency)[0]
 
     trans_mats, usages = get_group_trans_mats(
-        model_labels, label_group, group, max_sylls=max_syllable, normalize=normalize)
-    return trans_mats, usages, group
+        model_labels, label_group, group, syll_include=syll_include, normalize=normalize)
+    return trans_mats, usages, group, syll_include
 
 
-def plot_transition_graph_group(groups, trans_mats, usages, save_dir=None, layout='circular', node_scaling=2000):
+def plot_transition_graph_group(project_dir, model_dirname, groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=2000):
     """plot the transition graph for each group
 
     Parameters
@@ -1328,8 +1448,19 @@ def plot_transition_graph_group(groups, trans_mats, usages, save_dir=None, layou
         the scaling factor for the node size, by default 2000
     """
     # Figure out the number of rows for the plot
+
+    # get syllable info
+    syll_info = None
+    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+    if syll_info_path is not None:
+        if os.path.exists(syll_info_path):
+            with open(syll_info_path, 'r') as f:
+                syll_info = yaml.safe_load(f)
+    # prepare syll labels
+    syll_label = [syll_info[i]['label'] for i in syll_include]
+
     n_row = ceil(len(groups)/2)
-    fig, all_axes = plt.subplots(n_row, 2, figsize=(16, 8*n_row))
+    fig, all_axes = plt.subplots(n_row, 2, figsize=(20, 10*n_row))
     ax = all_axes.flat
 
     for i in range(len(groups)):
@@ -1339,11 +1470,12 @@ def plot_transition_graph_group(groups, trans_mats, usages, save_dir=None, layou
             pos = nx.circular_layout(G)
         else:
             pos = nx.spring_layout(G)
+        # get node list
         nodelist = G.nodes()
         # normalize the usage values
         sum_usages = sum(usages[i])
         normalized_usages = np.array(
-            [u/sum_usages for u in usages[i]]) * node_scaling + 500
+            [u/sum_usages for u in usages[i]]) * node_scaling + 1000
         nx.draw_networkx_nodes(G, pos,
                                nodelist=nodelist,
                                node_size=normalized_usages,
@@ -1353,7 +1485,7 @@ def plot_transition_graph_group(groups, trans_mats, usages, save_dir=None, layou
                                width=list(widths.values()),
                                edge_color='black', ax=ax[i], alpha=0.6)
         nx.draw_networkx_labels(G, pos=pos,
-                                labels=dict(zip(nodelist, nodelist)),
+                                labels=dict(zip(nodelist, syll_label)),
                                 font_color='black', ax=ax[i])
         ax[i].set_title(groups[i])
     # turn off the axis spines
@@ -1363,11 +1495,14 @@ def plot_transition_graph_group(groups, trans_mats, usages, save_dir=None, layou
     # saving the figure
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
-        fig.savefig(os.path.join(save_dir, 'transition_graphs.pdf'))
-        fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
+    else:
+        save_dir = os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(os.path.join(save_dir, 'transition_graphs.pdf'))
+    fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
 
 
-def plot_transition_graph_difference(groups, trans_mats, usages, save_dir=None, layout='circular', node_scaling=3000):
+def plot_transition_graph_difference(project_dir, model_dirname, groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=3000):
     """plot the difference of transition graph between groups
 
     Parameters
@@ -1383,6 +1518,16 @@ def plot_transition_graph_difference(groups, trans_mats, usages, save_dir=None, 
     node_scaling : int, optional
         the scaling factor for the node size, by default 3000
     """
+
+    # get syllable info
+    syll_info = None
+    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+    if syll_info_path is not None:
+        if os.path.exists(syll_info_path):
+            with open(syll_info_path, 'r') as f:
+                syll_info = yaml.safe_load(f)
+    # prepare syll labels
+    syll_label = [syll_info[i]['label'] for i in syll_include]
 
     # find combinations
     group_combinations = list(combinations(groups, 2))
@@ -1426,7 +1571,7 @@ def plot_transition_graph_difference(groups, trans_mats, usages, save_dir=None, 
                                    'blue' if u > 0 else 'red' for u in widths.values()],
                                ax=ax[i], alpha=0.6)
         nx.draw_networkx_labels(G, pos=pos,
-                                labels=dict(zip(nodelist, nodelist)),
+                                labels=dict(zip(nodelist, syll_label)),
                                 font_color='black', ax=ax[i])
         ax[i].set_title(pair[0] + ' - ' + pair[1])
 
@@ -1445,8 +1590,11 @@ def plot_transition_graph_difference(groups, trans_mats, usages, save_dir=None, 
     # saving the figure
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
-        fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.pdf'))
-        fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.png'))
+    else:
+        save_dir = os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.pdf'))
+    fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.png'))
 
 
 def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts,
@@ -1672,7 +1820,6 @@ def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data
         linkage matrix of behavioral distance
     syllable_keys : list
         list of syllable keys
-       
 
     Raises
     ------
@@ -1681,7 +1828,7 @@ def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data
     NotImplementedError
         keypoint data type not supported
     """
-    #find videos
+    # find videos
     if video_dir is None:
         video_dir = load_config(project_dir).get('video_dir', None)
     if video_dir is None:
@@ -1697,7 +1844,7 @@ def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data
 
     results = load_results(project_dir=project_dir, name=model_dirname)
     # TODO: add support for estimated coordinates
-    syllables = {k: v['syllables_reindexed'] for k, v in results.items()}
+    syllables = {k: v['syllable'] for k, v in results.items()}
     centroids = {k: v['centroid'] for k, v in results.items()}
     headings = {k: v['heading'] for k, v in results.items()}
     # get syllable instances that meet criteria
@@ -1711,26 +1858,26 @@ def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data
             'This usually occurs when all frames have the same syllable label '
             '(use `plot_syllable_frequencies` to check if this is the case)'))
         return
-    # sample instances 
-    sampled_instances = sample_instances(syllable_instances, num_samples, 
-                                        coordinates=coordinates, centroids=centroids, 
-                                        headings=headings, mode='density', n_neighbors=num_samples)
+    # sample instances
+    sampled_instances = sample_instances(syllable_instances, num_samples,
+                                         coordinates=coordinates, centroids=centroids,
+                                         headings=headings, mode='density', n_neighbors=num_samples)
     # get trajectories
     trajectories = {syllable: get_trajectories(
-        instances, coordinates, pre=pre, post=post, 
+        instances, coordinates, pre=pre, post=post,
         centroids=centroids, headings=headings
-        ) for syllable,instances in sampled_instances.items()}
+    ) for syllable, instances in sampled_instances.items()}
     # get mean trajefctories
     syllable_keys = sorted(trajectories.keys())
     # Xs shape is (n_syllables, n_frames, num_keypoints, xy)
-    Xs = np.nanmean(np.array([trajectories[syllable] for syllable in syllable_keys]),axis=1)
+    Xs = np.nanmean(np.array([trajectories[syllable]
+                    for syllable in syllable_keys]), axis=1)
     # reshape to (n_syllables, n_frames*num_keypoints*xy)
-    Xs = Xs.reshape(Xs.shape[0],-1)
+    Xs = Xs.reshape(Xs.shape[0], -1)
 
     # get distances and transform back to 1-d array
     Z = linkage(pdist(Xs, metric='correlation'), 'complete')
     return Z, list(syllable_keys)
-
 
 
 def plot_dendrogram(project_dir, model_dirname, video_dir=None, keypoint_data_type='deeplabcut', min_frequency=0.005, save_dir=None, figsize=(10, 5)):
@@ -1753,8 +1900,9 @@ def plot_dendrogram(project_dir, model_dirname, video_dir=None, keypoint_data_ty
     figsize : tuple, optional
         the size of the figure, by default (10, 5)
     """
-    Z, syllable_keys = get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data_type, min_frequency)
-    sns.set_style('whitegrid', {'axes.grid' : False})
+    Z, syllable_keys = get_behavioral_distance(
+        project_dir, model_dirname, video_dir, keypoint_data_type, min_frequency)
+    sns.set_style('whitegrid', {'axes.grid': False})
     fig, ax = plt.subplots(figsize=figsize)
     # get syllable info
     syll_info = None
@@ -1765,12 +1913,16 @@ def plot_dendrogram(project_dir, model_dirname, video_dir=None, keypoint_data_ty
                 syll_info = yaml.safe_load(f)
     syll_info = pd.DataFrame(syll_info).T.sort_index()
     syll_info = syll_info[syll_info.index.isin(syllable_keys)]
-    labels = (syll_info['label']+"-" +syll_info.index.astype(str)).to_numpy()
+    labels = (syll_info['label']+"-" + syll_info.index.astype(str)).to_numpy()
 
-    dendrogram(Z, distance_sort=False, no_plot=False, labels=labels, color_threshold=None, leaf_font_size=15, leaf_rotation=90, ax=ax)
-    # saving the figure
+    dendrogram(Z, distance_sort=False, no_plot=False, labels=labels,
+               color_threshold=None, leaf_font_size=15, leaf_rotation=90, ax=ax)
+
     # saving the figure
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
-        fig.savefig(join(save_dir, 'syllable_dendrogram.pdf'))
-        fig.savefig(join(save_dir, 'syllable_dendrogram.png'))
+    else:
+        save_dir = os.path.join(project_dir, model_dirname, 'figures')
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(join(save_dir, 'syllable_dendrogram.pdf'))
+    fig.savefig(join(save_dir, 'syllable_dendrogram.png'))

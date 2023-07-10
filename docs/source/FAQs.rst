@@ -171,11 +171,8 @@ Interpreting model outputs
 --------------------------
 The final output of keypoint MoSeq is a results .h5 file (and optionally a directory of .csv files) that contain the following information:
 
-- Syllables (reindexed) 
-   The syllable label assigned to each frame. The syllable labels are reindexed so that the most common syllable is labeled 0, the second most common is labeled 1, etc. Generally there will be a core set of syllables that are used a nontrivial number of times (perhaps a few dozen), and then a long tail of syllables that are used extremely rarely. The long tail should be ignored (we typically use a frequency cutoff of 0.5%). To plot the distribution of syllable frequencies, use ``kpms.plot_syllable_frequencies(name=name, project_dir=project_dir)``.
-
-- Syllables (non-reindexed)
-   The non-reindexed syllable label assigned to each frame (i.e. the state indexes assigned by the model). Unless you are doing something unusual, you should ignore these.
+- Syllables
+   The syllable label assigned to each frame (i.e. the state indexes assigned by the model).
 
 - Centroid and heading
    The centroid and heading of the animal in each frame, as estimated by the model. 

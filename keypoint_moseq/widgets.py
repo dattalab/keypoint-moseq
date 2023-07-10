@@ -14,25 +14,20 @@ from IPython.display import display, clear_output
 import io
 import imageio
 import base64
-from glob import glob
 from bokeh.io import show
 from bokeh.models import Div, CustomJS, Slider
 
 # syllable labeler widget and controller additional imports
-import re
 import numpy as np
 import pandas as pd
 from copy import deepcopy
 from bokeh.io import show
-from bokeh.layouts import column, gridplot
-from bokeh.plotting import figure
-from os.path import exists
+from bokeh.layouts import column
 from bokeh.models import Div, CustomJS, Slider
 from ipywidgets import HBox, VBox
 from bokeh.models.widgets import PreText
-from keypoint_moseq.analysis import compute_moseq_df, compute_stats_df
-from keypoint_moseq.viz import generate_grid_movies, generate_crowd_movies, generate_trajectory_plots
-from keypoint_moseq.io import load_deeplabcut_results, load_sleap_results, load_config
+from keypoint_moseq.io import load_results
+from keypoint_moseq.util import filter_angle, get_frequencies
 
 
 def read_yaml(yaml_file):
@@ -63,7 +58,7 @@ def show_trajectory_gif(project_dir, model_dirname):
     """
     trajectory_gifs_path = os.path.join(
         project_dir, model_dirname, 'trajectory_plots', 'all_trajectories.gif')
-    
+
     assert os.path.exists(trajectory_gifs_path), (
         f'Trajectory plots not found at {trajectory_gifs_path}. '
         'See documentation for generating trajectory plots: '
@@ -73,7 +68,7 @@ def show_trajectory_gif(project_dir, model_dirname):
         image = file.read()
     out = widgets.Image(value=image, format='gif')
     display(out)
- 
+
 
 class GroupSettingWidgets:
     """The group setting widget for setting group names in the index file.
@@ -81,13 +76,13 @@ class GroupSettingWidgets:
 
     def __init__(self, index_filepath):
         """Initialize the group setting widget
-        
+
         Parameters
         ----------
         index_filepath : str
             path to the index file
         """
-        
+
         self.index_filepath = index_filepath
         style = {'description_width': 'initial',
                  'display': 'flex-grow', 'align_items': 'stretch'}
@@ -183,7 +178,7 @@ class GroupSettingWidgets:
         ----------
         b : button click, optional
             button click to update and save the table, by default None
-        """       
+        """
 
         files = self.index_dict['files']
 
@@ -316,8 +311,10 @@ class SyllableLabelerWidgets:
         """
 
         # Updating dict
-        self.syll_info[self.syll_list[self.syll_select.index]]['label'] = self.lbl_name_input.value
-        self.syll_info[self.syll_list[self.syll_select.index]]['desc'] = self.desc_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]
+                       ]['label'] = self.lbl_name_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]
+                       ]['desc'] = self.desc_input.value
 
         # Handle cycling through syllable labels
         if self.syll_select.index < len(self.syll_select.options) - 1:
@@ -342,8 +339,10 @@ class SyllableLabelerWidgets:
         """
 
         # Update syllable information dict
-        self.syll_info[self.syll_list[self.syll_select.index]]['label'] = self.lbl_name_input.value
-        self.syll_info[self.syll_list[self.syll_select.index]]['desc'] = self.desc_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]
+                       ]['label'] = self.lbl_name_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]
+                       ]['desc'] = self.desc_input.value
 
         # Handle cycling through syllable labels
         if self.syll_select.index != 0:
@@ -367,8 +366,10 @@ class SyllableLabelerWidgets:
         """
 
         # Update dict
-        self.syll_info[self.syll_list[self.syll_select.index]]['label'] = self.lbl_name_input.value
-        self.syll_info[self.syll_list[self.syll_select.index]]['desc'] = self.desc_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]
+                       ]['label'] = self.lbl_name_input.value
+        self.syll_info[self.syll_list[self.syll_select.index]
+                       ]['desc'] = self.desc_input.value
 
         self.write_syll_info(curr_syll=self.syll_select.index)
 
@@ -380,9 +381,9 @@ class SyllableLabeler(SyllableLabelerWidgets):
     """Syllable Labeler control component.
     """
 
-    def __init__(self, project_dir, model_dirname, index_path, syll_info_path, movie_type):
+    def __init__(self, project_dir, model_dirname, stats_df, index_path, syll_info_path, movie_type):
         """Initialize the SyllableLabeler
-        
+
         Parameters
         ----------
         base_dir: str
@@ -407,7 +408,8 @@ class SyllableLabeler(SyllableLabelerWidgets):
         self.syll_info_path = syll_info_path
         # read in syllable information file and subset only those with crowd movies
         temp_syll_info = read_yaml(syll_info_path)
-        self.syll_info = {k: v for k, v in temp_syll_info.items() if len(v['movie_path']) == 2}
+        self.syll_info = {
+            k: v for k, v in temp_syll_info.items() if len(v['movie_path']) == 2}
         self.syll_list = sorted(list(self.syll_info.keys()))
 
         # Initialize button callbacks
@@ -417,15 +419,14 @@ class SyllableLabeler(SyllableLabelerWidgets):
         self.clear_button.on_click(self.clear_on_click)
 
         # generate by group syllable statistics dictionary
-        self.get_group_df()
+        self.get_group_df(stats_df)
 
         # Get dropdown options with labels
         self.option_dict = {f'{i} - {x["label"]}': self.syll_info[i]
                             for i, x in self.syll_info.items()}
-        
+
         # Set the syllable dropdown options
         self.syll_select.options = self.option_dict
-
 
     def write_syll_info(self, curr_syll=None):
         """Write current syllable info data to a YAML file.
@@ -440,13 +441,13 @@ class SyllableLabeler(SyllableLabelerWidgets):
         tmp = deepcopy(self.syll_info)
         for v in tmp.values():
             v['group_info'] = {}
-        
+
         # read in the syllable information file
         temp_syll_info = read_yaml(self.syll_info_path)
         for k, v in temp_syll_info.items():
             if k in tmp.keys():
-                temp_syll_info[k]=tmp[k]
-        
+                temp_syll_info[k] = tmp[k]
+
         # Write to file
         with open(self.syll_info_path, 'w') as f:
             yaml.safe_dump(temp_syll_info, f, default_flow_style=False)
@@ -461,31 +462,22 @@ class SyllableLabeler(SyllableLabelerWidgets):
             self.syll_select.index = curr_syll
             self.syll_select._initializing_traits_ = False
 
-    def get_group_df(self):
+    def get_group_df(self, stats_df):
         """Populate syllable information dict with usage and scalar information.
         """
-        print('Computing Syllable Statistics...')
-        moseq_df = compute_moseq_df(
-            self.base_dir, self.model_name, self.index_file)
-        stats_df = compute_stats_df(moseq_df, groupby=['group'])[
-            ['group', 'syllable', 'frequency', 'duration', 'heading_mean', 'velocity_px_s_mean']]
-
         # Get all unique groups in df
         self.groups = stats_df.group.unique()
 
         self.group_syll_info = deepcopy(self.syll_info)
-        for syll_key, syll_info in self.group_syll_info.items():
+        for syll_info in self.group_syll_info.values():
             for group in self.groups:
                 # make sure dataframe exists
-                if len(stats_df[((stats_df.group == group) & (stats_df.syllable == syll_key))]) > 0:
+                if len(stats_df[stats_df.group == group]) > 0:
                     # initialize group info dict
                     syll_info['group_info'][group] = {}
-                    syll_info['group_info'][group]['frequency'] = stats_df[(
-                        (stats_df.group == group) & (stats_df.syllable == syll_key))]['frequency'].values[0]
-                    syll_info['group_info'][group]['duration (s)'] = stats_df[(
-                        (stats_df.group == group) & (stats_df.syllable == syll_key))]['duration'].values[0]
-                    syll_info['group_info'][group]['velocity (pixel/s)'] = stats_df[(
-                        (stats_df.group == group) & (stats_df.syllable == syll_key))]['velocity_px_s_mean'].values[0]
+                    syll_info['group_info'][group]['frequency'] = stats_df[stats_df.group == group]['frequency'].values[0]
+                    syll_info['group_info'][group]['duration (s)'] = stats_df[stats_df.group == group]['duration'].values[0]
+                    syll_info['group_info'][group]['velocity (pixel/s)'] = stats_df[stats_df.group == group]['velocity_px_s_mean'].values[0]
 
     def set_group_info_widgets(self, group_info):
         """Read the syllable information into a pandas DataFrame and display it as a table.
@@ -543,7 +535,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
         # Update scalar values
         self.set_group_info_widgets(
             self.group_syll_info[self.syll_list[self.syll_select.index]]['group_info'])
- 
+
         # Get current movie path
         if self.movie_type == 'grid':
             cm_path = syllables['movie_path'][0]
@@ -554,7 +546,8 @@ class SyllableLabeler(SyllableLabelerWidgets):
         # Implementation from: https://github.com/jupyter/notebook/issues/1024#issuecomment-338664139
         video = io.open(cm_path, 'r+b').read()
         encoded = base64.b64encode(video)
-        video_dims = imageio.get_reader(cm_path, 'ffmpeg').get_meta_data()['size']
+        video_dims = imageio.get_reader(
+            cm_path, 'ffmpeg').get_meta_data()['size']
 
         # Create syllable crowd movie HTML div to embed
         video_div = f"""
