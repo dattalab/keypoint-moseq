@@ -696,6 +696,7 @@ def get_grid_movie_window_size(sampled_instances, centroids, headings,
         post=post, centroids=centroids, headings=headings)
     
     all_trajectories = np.concatenate(all_trajectories, axis=0)
+    all_trajectories = all_trajectories[~np.isnan(all_trajectories).all((1,2))]
     max_distances = np.nanmax(np.abs(all_trajectories), axis=1)
     window_size = np.percentile(max_distances, pctl) * fudge_factor * 2
     window_size = int(np.ceil(window_size / blocksize) * blocksize)
@@ -770,13 +771,15 @@ def generate_grid_movies(
 
     video_dir: str, default=None
         Directory containing videos of the modeled data (see 
-        :py:func:`keypoint_moseq.io.find_matching_videos`). If None,
-        a dictionary of `video_paths` must be provided.
+        :py:func:`keypoint_moseq.io.find_matching_videos`). 
+        Unless `keypoints_only=True`, either `video_dir` or
+        `video_paths` must be provided.
 
     video_paths: dict, default=None
         Dictionary mapping session names to video paths. The session 
-        names must correspond to keys in `results['syllables']`. If
-        None, a `video_dir` must be provided.
+        names must correspond to keys in `results['syllables']`. 
+        Unless `keypoints_only=True`, either `video_dir` or
+        `video_paths` must be provided.
 
     filter_size: int, default=9
         Size of the median filter applied to centroids and headings
@@ -1482,8 +1485,8 @@ def overlay_keypoints_on_image(
     # overlay skeleton
     for i, j in edges:
         if np.isnan(coordinates[i,0]) or np.isnan(coordinates[j,0]): continue
-        pos1 = tuple(coordinates[i].astype(int))
-        pos2 = tuple(coordinates[j].astype(int))
+        pos1 = (int(coordinates[i,0]), int(coordinates[i,1]))
+        pos2 = (int(coordinates[j,0]), int(coordinates[j,1]))
         canvas = cv2.line(canvas, pos1, pos2, colors[i], line_width, cv2.LINE_AA)
 
     # overlay keypoints
