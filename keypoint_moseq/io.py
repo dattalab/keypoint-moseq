@@ -1112,7 +1112,7 @@ def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
     the parameters and return values.
     """
     warnings.warn(
-        'WARNING: This `load_deeplabcut_results` is being deprecated. '
+        'WARNING: `load_deeplabcut_results` is being deprecated. '
         ' Use `load_keypoints` instead.\n\n')
     
     filepaths = list_files_with_exts(
@@ -1167,7 +1167,7 @@ def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
     the parameters and return values.
     """
     warnings.warn(
-        'WARNING: This `load_sleap_results` is being deprecated. '
+        'WARNING: `load_sleap_results` is being deprecated. '
         ' Use `load_keypoints` instead.\n\n')
     
     filepaths = list_files_with_exts(
