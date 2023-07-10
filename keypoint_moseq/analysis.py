@@ -44,7 +44,7 @@ from statsmodels.stats.multitest import fdrcorrection
 from scipy.ndimage import gaussian_filter1d, convolve1d
 from scipy.signal import argrelextrema
 from keypoint_moseq.util import filter_angle, filtered_derivative, permute_cyclic, get_syllable_instances
-from keypoint_moseq.io import format_data, load_results, load_deeplabcut_results
+from keypoint_moseq.io import format_data, load_results, load_keypoints
 from jax_moseq.models.keypoint_slds import align_egocentric
 from jax_moseq.utils import unbatch
 na = np.newaxis
@@ -557,27 +557,25 @@ def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
 
     # generate a new syll_info yaml file
     if not os.path.exists(syll_info_path):
-        # parse model results
-        model_results = load_results(project_dir, model_dirname)
-        unique_sylls = np.unique(np.concatenate(
-            [file['syllable'] for file in model_results.values()]))
-        # construct the syllable dictionary
-        syll_dict = {int(i): {'label': '', 'desc': '', 'movie_path': [
-        ], 'group_info': {}} for i in unique_sylls}
-        # record the movie paths
-        for movie_path in grid_movies:
-            syll_index = int(os.path.splitext(
-                os.path.basename(movie_path))[0][8:])
-            syll_dict[syll_index]['movie_path'].append(movie_path)
-        for movie_path in crowd_movies:
-            syll_index = int(os.path.splitext(
-                os.path.basename(movie_path))[0][8:])
-            syll_dict[syll_index]['movie_path'].append(movie_path)
+        # generate the syllable info yaml file
+        generate_syll_info(project_dir, model_dirname, syll_info_path)
+    # open syll_info
+    with open(syll_info_path, 'r') as f:
+        syll_dict = yaml.safe_load(f)
+        
+    # record the movie paths in the file
+    for movie_path in grid_movies:
+        syll_index = int(os.path.splitext(
+            os.path.basename(movie_path))[0][8:])
+        syll_dict[syll_index]['movie_path'].append(movie_path)
+    for movie_path in crowd_movies:
+        syll_index = int(os.path.splitext(
+            os.path.basename(movie_path))[0][8:])
+        syll_dict[syll_index]['movie_path'].append(movie_path)
 
-        # write to file
-        print(syll_info_path)
-        with open(syll_info_path, 'w') as file:
-            yaml.safe_dump(syll_dict, file, default_flow_style=False)
+    # write to file
+    with open(syll_info_path, 'w') as file:
+        yaml.safe_dump(syll_dict, file, default_flow_style=False)
 
     # construct the index path
     index_path = os.path.join(project_dir, "index.yaml")
@@ -1068,12 +1066,10 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir=None
     """
 
     # get syllable info
-    syll_info = None
     syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-    if syll_info_path is not None:
-        if os.path.exists(syll_info_path):
-            with open(syll_info_path, 'r') as f:
-                syll_info = yaml.safe_load(f)
+    if exists(syll_info_path):
+        with open(syll_info_path, 'r') as f:
+            syll_info = yaml.safe_load(f)
 
     # get significant syllables
     sig_sylls = None
@@ -1120,7 +1116,7 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir=None
     if syll_info is not None:
         mean_xlabels = []
         for o in (ordering):
-            mean_xlabels.append(f'{syll_info[o]["label"]} - {o}')
+            mean_xlabels.append(f'{o} {syll_info[o]["label"]}')
 
         plt.xticks(range(len(mean_xlabels)), mean_xlabels, rotation=90)
 
@@ -1452,12 +1448,12 @@ def plot_transition_graph_group(project_dir, model_dirname, groups, trans_mats, 
     # get syllable info
     syll_info = None
     syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-    if syll_info_path is not None:
-        if os.path.exists(syll_info_path):
-            with open(syll_info_path, 'r') as f:
-                syll_info = yaml.safe_load(f)
+
+    if os.path.exists(syll_info_path):
+        with open(syll_info_path, 'r') as f:
+            syll_info = yaml.safe_load(f)
     # prepare syll labels
-    syll_label = [syll_info[i]['label'] for i in syll_include]
+    syll_label = [str(i)+' '+syll_info[i]['label'] for i in syll_include]
 
     n_row = ceil(len(groups)/2)
     fig, all_axes = plt.subplots(n_row, 2, figsize=(20, 10*n_row))
@@ -1527,7 +1523,7 @@ def plot_transition_graph_difference(project_dir, model_dirname, groups, trans_m
             with open(syll_info_path, 'r') as f:
                 syll_info = yaml.safe_load(f)
     # prepare syll labels
-    syll_label = [syll_info[i]['label'] for i in syll_include]
+    syll_label = [str(i)+' '+syll_info[i]['label'] for i in syll_include]
 
     # find combinations
     group_combinations = list(combinations(groups, 2))
@@ -1790,6 +1786,23 @@ def generate_index(project_dir, model_dirname, index_filepath):
         yaml.safe_dump(index_data, f, default_flow_style=False)
 
 
+
+def generate_syll_info(project_dir, model_dirname, syll_info_path):
+    
+    # parse model results
+    model_results = load_results(project_dir, model_dirname)
+    unique_sylls = np.unique(np.concatenate(
+        [file['syllable'] for file in model_results.values()]))
+    # construct the syllable dictionary
+    syll_dict = {int(i): {'label': '', 'desc': '', 'movie_path': [
+    ], 'group_info': {}} for i in unique_sylls}
+
+    # write to file
+    print(syll_info_path)
+    with open(syll_info_path, 'w') as file:
+        yaml.safe_dump(syll_dict, file, default_flow_style=False)
+
+
 def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data_type, min_frequency=0.005, pre=5, post=15, min_duration=3, num_samples=40):
     """compute behavioral distance based on the trajectory correlation metric
 
@@ -1907,13 +1920,16 @@ def plot_dendrogram(project_dir, model_dirname, video_dir=None, keypoint_data_ty
     # get syllable info
     syll_info = None
     syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-    if syll_info_path is not None:
-        if os.path.exists(syll_info_path):
-            with open(syll_info_path, 'r') as f:
+    # generate syll_info if it doesn't exist
+    if not exists(syll_info_path):
+        generate_syll_info(project_dir, model_dirname, syll_info_path)
+    # open syll_info
+    with open(syll_info_path, 'r') as f:
                 syll_info = yaml.safe_load(f)
+
     syll_info = pd.DataFrame(syll_info).T.sort_index()
     syll_info = syll_info[syll_info.index.isin(syllable_keys)]
-    labels = (syll_info['label']+"-" + syll_info.index.astype(str)).to_numpy()
+    labels = (syll_info.index.astype(str) +" " + syll_info['label']).to_numpy()
 
     dendrogram(Z, distance_sort=False, no_plot=False, labels=labels,
                color_threshold=None, leaf_font_size=15, leaf_rotation=90, ax=ax)
