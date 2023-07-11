@@ -376,16 +376,6 @@ def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
     crowd_movies = glob(os.path.join(
         project_dir, model_dirname, 'crowd_movies', '*.mp4'))
 
-    if movie_type == 'grid':
-        assert len(grid_movies) > 0, (
-            'No grid movies found. Please run `generate_grid_movies` as described in the docs: '
-            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
-
-    elif movie_type == 'crowd':
-        assert len(crowd_movies) > 0, (
-            'No crowd movies found. Please run `generate_crowd_movies` as described in the docs: '
-            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
-
     # construct the syllable info path
     syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
 
@@ -396,17 +386,26 @@ def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
     # open syll_info
     with open(syll_info_path, 'r') as f:
         syll_dict = yaml.safe_load(f)
-        
-    # record the movie paths in the file
-    for movie_path in grid_movies:
-        syll_index = int(os.path.splitext(
-            os.path.basename(movie_path))[0][8:])
-        syll_dict[syll_index]['movie_path'].append(movie_path)
-    for movie_path in crowd_movies:
-        syll_index = int(os.path.splitext(
-            os.path.basename(movie_path))[0][8:])
-        syll_dict[syll_index]['movie_path'].append(movie_path)
 
+
+    if movie_type == 'grid':
+        assert len(grid_movies) > 0, (
+            'No grid movies found. Please run `generate_grid_movies` as described in the docs: '
+            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
+        for movie_path in grid_movies:
+            syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
+            if 'grid' not in ''.join(syll_dict[syll_index]['movie_path']):
+                syll_dict[syll_index]['movie_path'].append(movie_path)
+
+    elif movie_type == 'crowd':
+        assert len(crowd_movies) > 0, (
+            'No crowd movies found. Please run `generate_crowd_movies` as described in the docs: '
+            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
+        for movie_path in crowd_movies:
+            syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
+            if 'crowd' not in ''.join(syll_dict[syll_index]['movie_path']):
+                syll_dict[syll_index]['movie_path'].append(movie_path)
+        
     # write to file
     with open(syll_info_path, 'w') as file:
         yaml.safe_dump(syll_dict, file, default_flow_style=False)
