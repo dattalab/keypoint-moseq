@@ -372,11 +372,10 @@ def create_fingerprint_dataframe(moseq_df, stats_df, n_bins=50,
     return fingerprints, ranges.loc[range_idx]
 
 
-def plot_fingerprint(project_dir, model_dirname, moseq_df, stats_df, n_bins=50, range_type='robust',
-                     save_dir=None, preprocessor_type='minmax',
-                     vmin=None, vmax=None,
-                     color_bar=False,
-                     figsize=(10, 6), fontsize=12, plot_columns=['velocity_px_s', 'MoSeq'],
+def plot_fingerprint(project_dir, model_dirname, moseq_df, stats_df, n_bins=50, 
+                     range_type='robust', save_dir=None, preprocessor_type='minmax',
+                     vmin=None, vmax=None, figsize=(10, 6), fontsize=12, 
+                     plot_columns=['velocity_px_s', 'MoSeq'],
                      col_names=[('Velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
     """plot the fingerprint plot from fingerprint dataframe
 
@@ -482,35 +481,24 @@ def plot_fingerprint(project_dir, model_dirname, moseq_df, stats_df, n_bins=50, 
 
         # top to bottom is 0-20 for y axis
         if col == 'MoSeq':
-            extent = [summary[col].columns[0],
-                      summary[col].columns[-1], len(summary) - 1, 0]
+            temp_ax.imshow(data, aspect='auto', interpolation='none', 
+                           vmin=vmin, vmax=vmax)
+            temp_ax.set_xticks(range(data.shape[1]))
+            temp_ax.set_xticklabels(list(summary[col]))
         else:
             extent = [range_dict[col].iloc[0],
                       range_dict[col].iloc[1], len(summary) - 1, 0]
 
-        pc = temp_ax.imshow(
-            data, aspect='auto', interpolation='none', vmin=vmin, vmax=vmax, extent=extent)
+            temp_ax.imshow(data, aspect='auto', interpolation='none', 
+                        vmin=vmin, vmax=vmax, extent=extent)
+            
+            temp_ax.set_xticks(np.linspace(
+                np.ceil(extent[0]), np.floor(extent[1]), 6).astype(int))
+        
         temp_ax.set_xlabel(name[1], fontsize=fontsize)
-
-        temp_ax.set_xticks(np.linspace(
-            np.ceil(extent[0]), np.floor(extent[1]), 6).astype(int))
-        # https://stackoverflow.com/questions/14908576/how-to-remove-frame-from-matplotlib-pyplot-figure-vs-matplotlib-figure-frame
         temp_ax.set_yticks([])
         temp_ax.axis = 'tight'
         plt.xticks(fontsize=int(fontsize*.75))
-
-    # plot colorbar
-    if color_bar:
-        cb = fig.add_subplot(gs[1, -1])
-        plt.colorbar(pc, cax=cb, orientation='horizontal')
-
-        # specify labels for feature scaling
-        if preprocessor_type == 'minmax':
-            cb.set_xlabel('Min Max')
-        elif preprocessor_type == 'standard':
-            cb.set_xlabel('Standardized')
-        else:
-            cb.set_xlabel('Percentage Usage')
 
     # saving the figure
     if save_dir is not None:
