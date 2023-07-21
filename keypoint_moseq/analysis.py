@@ -51,6 +51,36 @@ na = np.newaxis
 
 output_notebook()
 
+def get_syllable_names(project_dir, model_dirname, syllable_ixs):
+    """get syllable names from syll_info.yaml file. Labels consist of the 
+    syllable index, followed by the syllable label, if it exists.
+
+    Parameters
+    ----------
+    project_dir : str
+        the path to the project directory
+    model_dirname : str
+        the name of the model directory
+    syllable_ixs : list
+        list of syllable indices to get names for
+
+    Returns
+    -------
+    names: list of str
+        list of syllable names
+    """
+    labels = {ix: f'{ix}' for ix in syllable_ixs}
+    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+    if os.path.exists(syll_info_path):
+        with open(syll_info_path, 'r') as f:
+            syll_info = yaml.safe_load(f)
+            for ix in syllable_ixs:
+                if len(syll_info[ix]["label"]) > 0:
+                    labels[ix] = f'{ix} ({syll_info[ix]["label"]})'
+    names = [labels[ix] for ix in syllable_ixs]
+    return names
+
+
 
 def interactive_group_setting(project_dir, model_dirname):
     """start the interactive group setting widget
@@ -145,9 +175,10 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
 
         # heading in radian
         heading.append(session_heading)
+
         # compute angular velocity (radian per second)
-        angular_velocity.append(np.concatenate(
-            ([0], np.diff(session_heading) * fps)))
+        gaussian_smoothed_heading = filter_angle(session_heading, size=3, method='gaussian')
+        angular_velocity.append(np.concatenate(([0], np.diff(gaussian_smoothed_heading) * fps)))
 
         # add syllable data
         syllables.append(v['syllable'])
@@ -262,7 +293,10 @@ def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupb
     return stats_df
 
 
-def plot_fingerprint(project_dir, model_dirname, moseq_df, bins=100, figsize=(10,5), fontsize=10, robust=True, colorbar=True, save_dir=None):
+def plot_fingerprint(project_dir, model_dirname, moseq_df, 
+                     bins=100, figsize=(15,5), fontsize=10, 
+                     robust=True, colorbar=True, save_dir=None):
+    
     plot_columns = ['angular_velocity', 'velocity_px_s', 'syllable']
     column_names = [('Angular velocity', 'rad/s'), ('Velocity', 'px/s'), ('MoSeq', 'Syllable ID')]
 
@@ -337,8 +371,12 @@ def plot_fingerprint(project_dir, model_dirname, moseq_df, bins=100, figsize=(10
     heatmap, bin_lbl = parse_heatmap(heatmap_df.syll_heatmap)
     pc = temp_ax.imshow(heatmap, aspect='auto', interpolation='none', cmap='viridis', vmin=0)
     temp_ax.set_xlabel(column_names[2][1], fontsize=fontsize)
-    temp_ax.set_xticks(np.linspace(0, len(bin_lbl)-1, 6).astype(int), bin_lbl[np.linspace(0, len(bin_lbl)-1, 6).astype(int)])
+    temp_ax.set_xticks(range(len(bin_lbl)), bin_lbl)
     temp_ax.set_yticks([])
+    for i, label in enumerate(temp_ax.xaxis.get_ticklabels()):
+        if i % 2 == 0: label.set_verticalalignment("bottom")
+        else: label.set_verticalalignment("top")
+
 
     # plotting color bar
     if colorbar:
@@ -898,12 +936,6 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir=None
         the legend object
     """
 
-    # get syllable info
-    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-    if exists(syll_info_path):
-        with open(syll_info_path, 'r') as f:
-            syll_info = yaml.safe_load(f)
-
     # get significant syllables
     sig_sylls = None
 
@@ -946,12 +978,8 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir=None
     handles, labels = ax.get_legend_handles_labels()
 
     # add syllable labels if they exist
-    if syll_info is not None:
-        mean_xlabels = []
-        for o in (ordering):
-            mean_xlabels.append(f'{o} {syll_info[o]["label"]}')
-
-        plt.xticks(range(len(mean_xlabels)), mean_xlabels, rotation=90)
+    syll_names = get_syllable_names(project_dir, model_dirname, ordering)
+    plt.xticks(range(len(syll_names)), syll_names, rotation=90)
 
     # if a list of significant syllables is given, mark the syllables above the x-axis
     if sig_sylls is not None:
@@ -1165,7 +1193,8 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize='bi
 
 
 def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, syll_include,
-                                save_dir=None, normalize='bigram', figsize=(12, 6)):
+                                save_dir=None, normalize='bigram', figsize=(12, 6),
+                                show_syllable_names=True):
     """visualize the transition matrices for each group
 
     Parameters
@@ -1178,7 +1207,14 @@ def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, s
         the method to normalize the transition matrix, by default 'bigram'
     figsize : tuple, optional
         the figure size, by default (12,6)
+    show_syllable_names : bool, optional
+        whether to show just syllable indexes (False) or syllable indexes and 
+        names (True)
     """
+    if show_syllable_names:
+        syll_names = get_syllable_names(project_dir, model_dirname, syll_include)
+    else:
+        syll_names = [f'{ix}' for ix in syll_include]
 
     # infer max_syllables
     max_syllables = trans_mats[0].shape[0]
@@ -1196,12 +1232,12 @@ def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, s
                                         :max_syllables], cmap='cubehelix', vmax=color_lim)
         if i == 0:
             axs[i].set_ylabel('Incoming syllable')
-            plt.yticks(np.arange(len(syll_include)), syll_include)
+            plt.yticks(np.arange(len(syll_include)), syll_names)
         cb = fig.colorbar(h, ax=axs[i], fraction=0.046, pad=0.04)
         cb.set_label(f'{title_map[normalize]} transition probability')
         axs[i].set_xlabel('Outgoing syllable')
         axs[i].set_title(g)
-        axs[i].set_xticks(np.arange(len(syll_include)), syll_include)
+        axs[i].set_xticks(np.arange(len(syll_include)), syll_names, rotation=90)
 
     # saving the figures
     # saving the figure
@@ -1210,6 +1246,7 @@ def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, s
     else:
         save_dir = os.path.join(project_dir, model_dirname, 'figures')
         os.makedirs(save_dir, exist_ok=True)
+    
     fig.savefig(os.path.join(save_dir, 'transition_matrices.pdf'))
     fig.savefig(os.path.join(save_dir, 'transition_matrices.png'))
 
@@ -1230,7 +1267,6 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
     trans_mats : list
         the list of transition matrices for each group
     """
-
     trans_mats, usages = None, None
     # index file
     index_file = os.path.join(project_dir, 'index.yaml')
@@ -1260,7 +1296,9 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
     return trans_mats, usages, group, syll_include
 
 
-def plot_transition_graph_group(project_dir, model_dirname, groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=2000):
+def plot_transition_graph_group(project_dir, model_dirname, groups, trans_mats, 
+                                usages, syll_include, save_dir=None, layout='circular', 
+                                node_scaling=2000, show_syllable_names=False):
     """plot the transition graph for each group
 
     Parameters
@@ -1274,19 +1312,15 @@ def plot_transition_graph_group(project_dir, model_dirname, groups, trans_mats, 
     layout : str, optional
         the layout of the graph, by default 'circular'
     node_scaling : int, optional
-        the scaling factor for the node size, by default 2000
+        the scaling factor for the node size, by default 2000,
+    show_syllable_names : bool, optional
+        whether to show just syllable indexes (False) or syllable indexes and 
+        names (True)
     """
-    # Figure out the number of rows for the plot
-
-    # get syllable info
-    syll_info = None
-    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-
-    if os.path.exists(syll_info_path):
-        with open(syll_info_path, 'r') as f:
-            syll_info = yaml.safe_load(f)
-    # prepare syll labels
-    syll_label = [str(i)+' '+syll_info[i]['label'] for i in syll_include]
+    if show_syllable_names:
+        syll_names = get_syllable_names(project_dir, model_dirname, syll_include)
+    else:
+        syll_names = [f'{ix}' for ix in syll_include]
 
     n_row = ceil(len(groups)/2)
     fig, all_axes = plt.subplots(n_row, 2, figsize=(20, 10*n_row))
@@ -1314,7 +1348,7 @@ def plot_transition_graph_group(project_dir, model_dirname, groups, trans_mats, 
                                width=list(widths.values()),
                                edge_color='black', ax=ax[i], alpha=0.6)
         nx.draw_networkx_labels(G, pos=pos,
-                                labels=dict(zip(nodelist, syll_label)),
+                                labels=dict(zip(nodelist, syll_names)),
                                 font_color='black', ax=ax[i])
         ax[i].set_title(groups[i])
     # turn off the axis spines
@@ -1331,7 +1365,9 @@ def plot_transition_graph_group(project_dir, model_dirname, groups, trans_mats, 
     fig.savefig(os.path.join(save_dir, 'transition_graphs.png'))
 
 
-def plot_transition_graph_difference(project_dir, model_dirname, groups, trans_mats, usages, syll_include, save_dir=None, layout='circular', node_scaling=3000):
+def plot_transition_graph_difference(project_dir, model_dirname, groups, trans_mats, 
+                                     usages, syll_include, save_dir=None, layout='circular', 
+                                     node_scaling=3000, show_syllable_names=False):
     """plot the difference of transition graph between groups
 
     Parameters
@@ -1346,17 +1382,14 @@ def plot_transition_graph_difference(project_dir, model_dirname, groups, trans_m
         the layout of the graph, by default 'circular'
     node_scaling : int, optional
         the scaling factor for the node size, by default 3000
+    show_syllable_names : bool, optional
+        whether to show just syllable indexes (False) or syllable indexes and 
+        names (True)
     """
-
-    # get syllable info
-    syll_info = None
-    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-    if syll_info_path is not None:
-        if os.path.exists(syll_info_path):
-            with open(syll_info_path, 'r') as f:
-                syll_info = yaml.safe_load(f)
-    # prepare syll labels
-    syll_label = [str(i)+' '+syll_info[i]['label'] for i in syll_include]
+    if show_syllable_names:
+        syll_names = get_syllable_names(project_dir, model_dirname, syll_include)
+    else:
+        syll_names = [f'{ix}' for ix in syll_include]
 
     # find combinations
     group_combinations = list(combinations(groups, 2))
@@ -1400,7 +1433,7 @@ def plot_transition_graph_difference(project_dir, model_dirname, groups, trans_m
                                    'blue' if u > 0 else 'red' for u in widths.values()],
                                ax=ax[i], alpha=0.6)
         nx.draw_networkx_labels(G, pos=pos,
-                                labels=dict(zip(nodelist, syll_label)),
+                                labels=dict(zip(nodelist, syll_names)),
                                 font_color='black', ax=ax[i])
         ax[i].set_title(pair[0] + ' - ' + pair[1])
 
@@ -1750,10 +1783,12 @@ def plot_dendrogram(project_dir, model_dirname, video_dir=None, keypoint_data_ty
         project_dir, model_dirname, video_dir, keypoint_data_type, min_frequency)
     sns.set_style('whitegrid', {'axes.grid': False})
     fig, ax = plt.subplots(figsize=figsize)
+    
     # get syllable info
     syll_info = None
     syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-    # generate syll_info if it doesn't exist
+    # generate syll_info if it
+    #  doesn't exist
     if not exists(syll_info_path):
         generate_syll_info(project_dir, model_dirname, syll_info_path)
     # open syll_info

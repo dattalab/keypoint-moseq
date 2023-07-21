@@ -7,7 +7,7 @@ import subprocess
 from textwrap import fill
 import jax, jax.numpy as jnp
 from itertools import groupby
-from scipy.ndimage import median_filter, convolve1d
+from scipy.ndimage import median_filter, convolve1d, gaussian_filter1d
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 from jax_moseq.models.keypoint_slds import inverse_rigid_transform
@@ -333,23 +333,36 @@ def pad_along_axis(arr, pad_widths, axis=0, value=0):
     padded_arr = np.pad(arr, pad_widths_full, constant_values=value)
     return padded_arr
 
-def filter_angle(angles, size=9, axis=0):
+def filter_angle(angles, size=9, axis=0, method='median'):
     """
     Perform median filtering on time-series of angles by transforming to
     a (cos,sin) representation, filtering in R^2, and then transforming 
     back into angle space. 
+
     Parameters
     -------
-    angles: ndarray, Array of angles (in radians)
-    size: int, default=9, Size of the filtering kernel
-    axis: int, default=0, Axis along which to filter
+    angles: ndarray
+        Array of angles (in radians)
+
+    size: int, default=9 
+        Size of the filtering kernel
+
+    axis: int, default=0
+        Axis along which to filter
+
+    method: str, default='median'
+        Method for filtering. Options are 'median' and 'gaussian'
+
     Returns
     -------
     filtered_angles: ndarray
     """
-    kernel = np.where(np.arange(len(angles.shape))==axis, size, 1)
-    return np.arctan2(median_filter(np.sin(angles), kernel),
-                      median_filter(np.cos(angles), kernel))
+    if method=='median':
+        kernel = np.where(np.arange(len(angles.shape))==axis, size, 1)
+        filter = lambda x: median_filter(x, kernel)
+    elif method=='gaussian':
+        filter = lambda x: gaussian_filter1d(x, size, axis=axis)
+    return np.arctan2(filter(np.sin(angles)), filter(np.cos(angles)))
 
 
 def filter_centroids_headings(centroids, headings, filter_size=9):
