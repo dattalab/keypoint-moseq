@@ -44,7 +44,7 @@ from statsmodels.stats.multitest import fdrcorrection
 from scipy.ndimage import gaussian_filter1d, convolve1d
 from scipy.signal import argrelextrema
 from keypoint_moseq.util import filter_angle, filtered_derivative, permute_cyclic, get_syllable_instances
-from keypoint_moseq.io import format_data, load_results, load_deeplabcut_results
+from keypoint_moseq.io import format_data, load_results, load_keypoints
 from jax_moseq.models.keypoint_slds import align_egocentric
 from jax_moseq.utils import unbatch
 na = np.newaxis
@@ -262,243 +262,89 @@ def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupb
     return stats_df
 
 
-# fingerprint
-def robust_min(v):
-    """find the 1% quantile of the input vector and return it as the robust minimum value
-    Parameters
-    ----------
-    v : numpy.array
-        the array to find robust minimum from
+def plot_fingerprint(project_dir, model_dirname, moseq_df, bins=100, figsize=(10,5), fontsize=10, robust=True, colorbar=True, save_dir=None):
+    plot_columns = ['angular_velocity', 'velocity_px_s', 'syllable']
+    column_names = [('Angular velocity', 'rad/s'), ('Velocity', 'px/s'), ('MoSeq', 'Syllable ID')]
 
-    Returns
-    -------
-    float
-        the robust minimum value of the array
-    """
-
-    return v.quantile(0.01)
-
-
-def robust_max(v):
-    """find the 99% quantile of the input vector and return it as the robust maximum value
-    Parameters
-    ----------
-    v : numpy.array
-        the array to find robust maximum from
-
-    Returns
-    -------
-    float
-        the robust maximum value of the array
-    """
-
-    return v.quantile(0.99)
-
-
-def _apply_to_col(df, fn, **kwargs):
-    return df.apply(fn, axis=0, **kwargs)
-
-
-def create_fingerprint_dataframe(moseq_df, stats_df, n_bins=50,
-                                 groupby_list=['group', 'name'], range_type='robust',
-                                 scalars=['heading', 'velocity_px_s']):
-    """create a summary dataframe to visualize the data as the MoSeq fingerprint (behvavoiral summary) plot
-
-    Parameters
-    ----------
-    scalar_df : pandas.DataFrame
-        the dataframe that contains kinematic data for each frame
-    mean_df : pandas.DataFrame
-        the summay statistics dataframe for syllable frequencies and kinematic values
-    stat_type : str, optional
-        the statistics to plot, by default 'mean'
-    n_bins : int, optional
-        the number of bins to use for the histogram, by default 100
-    groupby_list : list, optional
-        the list of column names to group by, by default ['group','name']
-    range_type : str, optional
-        the range type to use for the heatmap, by default 'robust'
-    scalars : list, optional
-        the list of scalars to include in the fingerprint, by default ['heading', 'velocity_px_s']
-
-    Returns
-    -------
-    fingerprint_df : pandas.DataFrame
-        the fingerprint dataframe to be used for plotting
-    pandas.DataFrame
-        the range dataframe of the values with the selcted range type
-    """
-
-    # set statistics to plot to mean
-    stat_type = 'mean'
-
-    # deep copy the dfs
-    moseq_df = moseq_df.copy()
-    stats_df = stats_df.copy()
-
-    # pivot stats_df to be groupby x syllable
-    syll_summary = stats_df.pivot_table(
-        index=groupby_list, values='frequency', columns='syllable')
-    syll_summary.columns = pd.MultiIndex.from_arrays(
-        [['MoSeq'] * syll_summary.shape[1], syll_summary.columns])
-    min_p = syll_summary.min().min()
-    max_p = syll_summary.max().max()
-
-    ranges = moseq_df.reset_index(drop=True)[scalars].agg(
-        ['min', 'max', robust_min, robust_max])
-    # add syllable ranges to this df
-    # robust mode would exclude the extreme values
-    ranges['MoSeq'] = [min_p, max_p, min_p, max_p]
-    range_idx = ['min', 'max'] if range_type == 'full' else [
-        'robust_min', 'robust_max']
-
-    def bin_scalars(data: pd.Series, n_bins=50, range_type='full'):
-        _range = ranges.loc[range_idx, data.name]
-        bins = np.linspace(_range.iloc[0], _range.iloc[1], n_bins)
-
-        binned_data = data.value_counts(normalize=True, sort=False, bins=bins)
-        binned_data = binned_data.sort_index().reset_index(drop=True)
-        binned_data.index.name = 'bin'
-        return binned_data
-
-    binned_scalars = moseq_df.groupby(groupby_list)[scalars].apply(
-        _apply_to_col, fn=bin_scalars, range_type=range_type, n_bins=n_bins)
-
-    scalar_fingerprint = binned_scalars.pivot_table(
-        index=groupby_list, columns='bin', values=binned_scalars.columns)
-
-    fingerprints = scalar_fingerprint.join(syll_summary, how='outer')
-
-    return fingerprints, ranges.loc[range_idx]
-
-
-def plot_fingerprint(project_dir, model_dirname, moseq_df, stats_df, n_bins=50, 
-                     range_type='robust', save_dir=None, preprocessor_type='minmax',
-                     vmin=None, vmax=None, figsize=(10, 6), fontsize=12, 
-                     plot_columns=['velocity_px_s', 'MoSeq'],
-                     col_names=[('Velocity', 'px/s'), ('MoSeq', 'Syllable ID')]):
-    """plot the fingerprint plot from fingerprint dataframe
-
-    Parameters
-    ----------
-    summary : pandas.DataFrame
-        the fingerprint dataframe to be used for plotting
-    range_dict : pandas.DataFrame 
-        the range dataframe of the values with the selcted range type
-    preprocessor_type : str, optional
-        the type of sklearn preprocessor to use to process data to plot, by default 'minmax'
-    num_level : int, optional
-        the number of levels to group by for plotting, by default 1
-    level_names : list, optional
-        the list of level names to use for plotting, by default ['Group']
-    vmin : float, optional
-        min value to plot, by default None, the min value for plotting will be found from the data
-    vmax : float, optional
-        max value to plot, by default None, the max value for plotting will be found from the data
-    figsize : tuple, optional
-        the size of the figure, by default (10,15)
-    plot_columns : list, optional
-        the columns to plot the fingerprint, by default ['heading','velocity_px_s', 'MoSeq']
-    col_names : list, optional
-        column names for the fingerprint plot, by default [('Heading','a.u.'),('velocity','px/s'), ('MoSeq','Syllable ID')]
-
-    Raises
-    ------
-    Exception
-        too many levels to unpack. num_level should be less than the number of levels in the summary dataframe
-    """
-    summary, range_dict = create_fingerprint_dataframe(
-        moseq_df, stats_df, n_bins, range_type=range_type)
-
-    from sklearn.preprocessing import MinMaxScaler, StandardScaler
-    assert preprocessor_type in ['minmax', 'standard', 'none']
-    if preprocessor_type == 'minmax':
-        preprocessor = MinMaxScaler()
-    elif preprocessor_type == 'standard':
-        preprocessor = StandardScaler()
+    # angular velocity
+    if robust:
+        vmin, vmax = np.percentile(moseq_df.angular_velocity, [1, 99])
     else:
-        preprocessor = None
+        vmin, vmax = moseq_df.angular_velocity.min(), moseq_df.angular_velocity.max()
+    
+    heatmap_df =moseq_df.groupby(['group', 'name']).apply(lambda x: np.histogram(x.angular_velocity, bins=bins, range=(vmin, vmax))).reset_index().rename(columns={0: 'ang_v_heatmap'})
 
-    name_map = dict(zip(plot_columns, col_names))
+    # velocity
+    if robust:
+        vmin, vmax = np.percentile(moseq_df.velocity_px_s, [1, 99])
+    else:
+        vmin, vmax = moseq_df.velocity_px_s.min(), moseq_df.velocity_px_s.max()
+    
+    heatmap_df['vel_heatmap']=moseq_df.groupby(['group', 'name']).apply(lambda x: np.histogram(x.velocity_px_s, bins=bins, range=(vmin, vmax))).reset_index().rename(columns={0: 'vel_heatmap'})['vel_heatmap']
 
-    # get level label (group)
-    level = summary.index.get_level_values(0)
-    level_label = LabelEncoder().fit_transform(level)
-    find_mid = (np.diff(np.r_[0, np.argwhere(
-        np.diff(level_label)).ravel(), len(level_label)])/2).astype('int32')
-    level_ticks = np.r_[0, np.argwhere(
-        np.diff(level_label)).ravel()] + find_mid
+    # syllable
+    vmin, vmax = moseq_df.syllable.min(), moseq_df.syllable.max()
+    heatmap_df['syll_heatmap'] = moseq_df.groupby(['group', 'name']).apply(lambda x: np.histogram(x.syllable, bins=sorted(moseq_df.syllable.unique()))).reset_index().rename(columns={0: 'syll_heatmap'})['syll_heatmap']
 
-    # col_num = 1 (for group level) + column in summary
-    col_num = 1 + len(plot_columns)
-
-    # https://matplotlib.org/stable/tutorials/intermediate/gridspec.html
+    # initialize the figure
     fig = plt.figure(1, figsize=figsize, facecolor='white')
+    gs = GridSpec(2, 1+len(plot_columns), wspace=0.2, hspace=0.3,width_ratios=[1]+[8]*len(plot_columns), height_ratios=[10, 0.1], figure=fig)
 
-    gs = GridSpec(2, col_num, wspace=0.1, hspace=0.1,
-                  width_ratios=[1]+[8]*(col_num-1), height_ratios=[10, 0.1], figure=fig)
+    # plot group labels
+    level = heatmap_df.group.values
+    from sklearn.preprocessing import LabelEncoder
+    level_label = LabelEncoder().fit_transform(level)
+    find_mid = (np.diff(np.r_[0, np.argwhere(np.diff(level_label)).ravel(), len(level_label)])/2).astype('int32')
+    level_ticks = np.r_[0, np.argwhere(np.diff(level_label)).ravel()] + find_mid
 
-    # plot the group level
     temp_ax = fig.add_subplot(gs[0, 0])
     temp_ax.set_title('Label', fontsize=fontsize)
-    temp_ax.imshow(level_label[:, np.newaxis],
-                   aspect='auto', cmap='Set3')
-    plt.yticks(level_ticks, level
-               [level_ticks], fontsize=fontsize)
-
+    temp_ax.imshow(level_label[:, np.newaxis], aspect='auto', cmap='Set3')
+    plt.yticks(level_ticks, level[level_ticks], fontsize=fontsize)
     temp_ax.get_xaxis().set_ticks([])
+    
+    # helper function to parse the heatmap data
+    def parse_heatmap(heatmap_data):
+        heatmap=np.array([s[0] for s in heatmap_data])/np.array([s[0] for s in heatmap_data]).sum(axis=1)[:, np.newaxis]
+        bin_lbl=np.array(heatmap_data[0][1])
+        return heatmap, bin_lbl
+    
+    # plot angular velocity
+    temp_ax = fig.add_subplot(gs[0, 1])
+    temp_ax.set_title(column_names[0][0], fontsize=fontsize)
+    heatmap, bin_lbl = parse_heatmap(heatmap_df.ang_v_heatmap)
+    bin_lbl = np.round(bin_lbl, 2)
+    pc = temp_ax.imshow(heatmap, aspect='auto', interpolation='none', cmap='viridis', vmin=0)
+    temp_ax.set_xlabel(column_names[0][1], fontsize=fontsize)
 
-    # compile data to plot while recording vmin and vmax in the data
-    plot_dict = {}
-    # initialize vmin and vmax
-    temp_vmin = np.Inf
-    temp_vmax = -np.Inf
+    temp_ax.set_xticks(np.linspace(0, bins, 6).astype(int), bin_lbl[np.linspace(0, bins, 6).astype(int)])
+    temp_ax.set_yticks([])
 
-    for col in plot_columns:
-        data = summary[col].to_numpy()
-        # process data with preprocessor
-        if preprocessor is not None:
-            data = preprocessor.fit_transform(data.T).T
+    # plot velocity
+    temp_ax = fig.add_subplot(gs[0, 2])
+    temp_ax.set_title(column_names[1][0], fontsize=fontsize)
+    heatmap, bin_lbl = parse_heatmap(heatmap_df.vel_heatmap)
+    bin_lbl = np.round(bin_lbl)
+    pc = temp_ax.imshow(heatmap, aspect='auto', interpolation='none', cmap='viridis', vmin=0)
+    temp_ax.set_xlabel(column_names[1][1], fontsize=fontsize)
 
-        if np.min(data) < temp_vmin:
-            temp_vmin = np.min(data)
-        if np.max(data) > temp_vmax:
-            temp_vmax = np.max(data)
+    temp_ax.set_xticks(np.linspace(0, bins, 6).astype(int), bin_lbl[np.linspace(0, bins, 6).astype(int)])
+    temp_ax.set_yticks([])
 
-        plot_dict[col] = data
+    # plot moseq
+    temp_ax = fig.add_subplot(gs[0, 3])
+    temp_ax.set_title(column_names[2][0], fontsize=fontsize)
+    heatmap, bin_lbl = parse_heatmap(heatmap_df.syll_heatmap)
+    pc = temp_ax.imshow(heatmap, aspect='auto', interpolation='none', cmap='viridis', vmin=0)
+    temp_ax.set_xlabel(column_names[2][1], fontsize=fontsize)
+    temp_ax.set_xticks(np.linspace(0, len(bin_lbl)-1, 6).astype(int), bin_lbl[np.linspace(0, len(bin_lbl)-1, 6).astype(int)])
+    temp_ax.set_yticks([])
 
-    if vmin is None:
-        vmin = temp_vmin
-    if vmax is None:
-        vmax = temp_vmax
-
-    # plot the data
-    for i, col in enumerate(plot_columns):
-        name = name_map[col]
-        temp_ax = fig.add_subplot(gs[0, i + 1])
-        temp_ax.set_title(name[0], fontsize=fontsize)
-        data = plot_dict[col]
-
-        # top to bottom is 0-20 for y axis
-        if col == 'MoSeq':
-            temp_ax.imshow(data, aspect='auto', interpolation='none', 
-                           vmin=vmin, vmax=vmax)
-            temp_ax.set_xticks(range(data.shape[1]))
-            temp_ax.set_xticklabels(list(summary[col]))
-        else:
-            extent = [range_dict[col].iloc[0],
-                      range_dict[col].iloc[1], len(summary) - 1, 0]
-
-            temp_ax.imshow(data, aspect='auto', interpolation='none', 
-                        vmin=vmin, vmax=vmax, extent=extent)
-            
-            temp_ax.set_xticks(np.linspace(
-                np.ceil(extent[0]), np.floor(extent[1]), 6).astype(int))
-        
-        temp_ax.set_xlabel(name[1], fontsize=fontsize)
-        temp_ax.set_yticks([])
-        temp_ax.axis = 'tight'
-        plt.xticks(fontsize=int(fontsize*.75))
+    # plotting color bar
+    if colorbar:
+        cb = fig.add_subplot(gs[1, -1])
+        plt.colorbar(pc, cax=cb, orientation='horizontal')
+        cb.set_xlabel('Percentage Usage')
 
     # saving the figure
     if save_dir is not None:
@@ -530,42 +376,39 @@ def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
     crowd_movies = glob(os.path.join(
         project_dir, model_dirname, 'crowd_movies', '*.mp4'))
 
-    if movie_type == 'grid':
-        assert len(grid_movies) > 0, (
-            'No grid movies found. Please run `generate_grid_movies` as described in the docs: '
-            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
-
-    elif movie_type == 'crowd':
-        assert len(crowd_movies) > 0, (
-            'No crowd movies found. Please run `generate_crowd_movies` as described in the docs: '
-            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
-
     # construct the syllable info path
     syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
 
     # generate a new syll_info yaml file
     if not os.path.exists(syll_info_path):
-        # parse model results
-        model_results = load_results(project_dir, model_dirname)
-        unique_sylls = np.unique(np.concatenate(
-            [file['syllable'] for file in model_results.values()]))
-        # construct the syllable dictionary
-        syll_dict = {int(i): {'label': '', 'desc': '', 'movie_path': [
-        ], 'group_info': {}} for i in unique_sylls}
-        # record the movie paths
-        for movie_path in grid_movies:
-            syll_index = int(os.path.splitext(
-                os.path.basename(movie_path))[0][8:])
-            syll_dict[syll_index]['movie_path'].append(movie_path)
-        for movie_path in crowd_movies:
-            syll_index = int(os.path.splitext(
-                os.path.basename(movie_path))[0][8:])
-            syll_dict[syll_index]['movie_path'].append(movie_path)
+        # generate the syllable info yaml file
+        generate_syll_info(project_dir, model_dirname, syll_info_path)
+    # open syll_info
+    with open(syll_info_path, 'r') as f:
+        syll_dict = yaml.safe_load(f)
 
-        # write to file
-        print(syll_info_path)
-        with open(syll_info_path, 'w') as file:
-            yaml.safe_dump(syll_dict, file, default_flow_style=False)
+
+    if movie_type == 'grid':
+        assert len(grid_movies) > 0, (
+            'No grid movies found. Please run `generate_grid_movies` as described in the docs: '
+            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
+        for movie_path in grid_movies:
+            syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
+            if 'grid' not in ''.join(syll_dict[syll_index]['movie_path']):
+                syll_dict[syll_index]['movie_path'].append(movie_path)
+
+    elif movie_type == 'crowd':
+        assert len(crowd_movies) > 0, (
+            'No crowd movies found. Please run `generate_crowd_movies` as described in the docs: '
+            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
+        for movie_path in crowd_movies:
+            syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
+            if 'crowd' not in ''.join(syll_dict[syll_index]['movie_path']):
+                syll_dict[syll_index]['movie_path'].append(movie_path)
+        
+    # write to file
+    with open(syll_info_path, 'w') as file:
+        yaml.safe_dump(syll_dict, file, default_flow_style=False)
 
     # construct the index path
     index_path = os.path.join(project_dir, "index.yaml")
@@ -1056,12 +899,10 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir=None
     """
 
     # get syllable info
-    syll_info = None
     syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-    if syll_info_path is not None:
-        if os.path.exists(syll_info_path):
-            with open(syll_info_path, 'r') as f:
-                syll_info = yaml.safe_load(f)
+    if exists(syll_info_path):
+        with open(syll_info_path, 'r') as f:
+            syll_info = yaml.safe_load(f)
 
     # get significant syllables
     sig_sylls = None
@@ -1108,7 +949,7 @@ def plot_syll_stats_with_sem(stats_df, project_dir, model_dirname, save_dir=None
     if syll_info is not None:
         mean_xlabels = []
         for o in (ordering):
-            mean_xlabels.append(f'{syll_info[o]["label"]} - {o}')
+            mean_xlabels.append(f'{o} {syll_info[o]["label"]}')
 
         plt.xticks(range(len(mean_xlabels)), mean_xlabels, rotation=90)
 
@@ -1440,12 +1281,12 @@ def plot_transition_graph_group(project_dir, model_dirname, groups, trans_mats, 
     # get syllable info
     syll_info = None
     syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-    if syll_info_path is not None:
-        if os.path.exists(syll_info_path):
-            with open(syll_info_path, 'r') as f:
-                syll_info = yaml.safe_load(f)
+
+    if os.path.exists(syll_info_path):
+        with open(syll_info_path, 'r') as f:
+            syll_info = yaml.safe_load(f)
     # prepare syll labels
-    syll_label = [syll_info[i]['label'] for i in syll_include]
+    syll_label = [str(i)+' '+syll_info[i]['label'] for i in syll_include]
 
     n_row = ceil(len(groups)/2)
     fig, all_axes = plt.subplots(n_row, 2, figsize=(20, 10*n_row))
@@ -1515,7 +1356,7 @@ def plot_transition_graph_difference(project_dir, model_dirname, groups, trans_m
             with open(syll_info_path, 'r') as f:
                 syll_info = yaml.safe_load(f)
     # prepare syll labels
-    syll_label = [syll_info[i]['label'] for i in syll_include]
+    syll_label = [str(i)+' '+syll_info[i]['label'] for i in syll_include]
 
     # find combinations
     group_combinations = list(combinations(groups, 2))
@@ -1778,6 +1619,23 @@ def generate_index(project_dir, model_dirname, index_filepath):
         yaml.safe_dump(index_data, f, default_flow_style=False)
 
 
+
+def generate_syll_info(project_dir, model_dirname, syll_info_path):
+    
+    # parse model results
+    model_results = load_results(project_dir, model_dirname)
+    unique_sylls = np.unique(np.concatenate(
+        [file['syllable'] for file in model_results.values()]))
+    # construct the syllable dictionary
+    syll_dict = {int(i): {'label': '', 'desc': '', 'movie_path': [
+    ], 'group_info': {}} for i in unique_sylls}
+
+    # write to file
+    print(syll_info_path)
+    with open(syll_info_path, 'w') as file:
+        yaml.safe_dump(syll_dict, file, default_flow_style=False)
+
+
 def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data_type, min_frequency=0.005, pre=5, post=15, min_duration=3, num_samples=40):
     """compute behavioral distance based on the trajectory correlation metric
 
@@ -1824,9 +1682,9 @@ def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data
             'Unable to find video directory. Please specify video directory.')
     # load coordinate results
     if keypoint_data_type == 'deeplabcut':
-        coordinates, _, _ = load_deeplabcut_results(video_dir)
+        coordinates, _, _ = load_keypoints(video_dir, 'deeplabcut')
     elif keypoint_data_type == 'sleap':
-        coordinates, _, _ = load_sleap_results(video_dir)
+        coordinates, _, _ = load_keypoints(video_dir, 'sleap')
     else:
         raise NotImplementedError('Input type not supported.')
 
@@ -1895,13 +1753,16 @@ def plot_dendrogram(project_dir, model_dirname, video_dir=None, keypoint_data_ty
     # get syllable info
     syll_info = None
     syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-    if syll_info_path is not None:
-        if os.path.exists(syll_info_path):
-            with open(syll_info_path, 'r') as f:
+    # generate syll_info if it doesn't exist
+    if not exists(syll_info_path):
+        generate_syll_info(project_dir, model_dirname, syll_info_path)
+    # open syll_info
+    with open(syll_info_path, 'r') as f:
                 syll_info = yaml.safe_load(f)
+
     syll_info = pd.DataFrame(syll_info).T.sort_index()
     syll_info = syll_info[syll_info.index.isin(syllable_keys)]
-    labels = (syll_info['label']+"-" + syll_info.index.astype(str)).to_numpy()
+    labels = (syll_info.index.astype(str) +" " + syll_info['label']).to_numpy()
 
     dendrogram(Z, distance_sort=False, no_plot=False, labels=labels,
                color_threshold=None, leaf_font_size=15, leaf_rotation=90, ax=ax)

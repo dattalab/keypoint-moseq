@@ -409,7 +409,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
         # read in syllable information file and subset only those with crowd movies
         temp_syll_info = read_yaml(syll_info_path)
         self.syll_info = {
-            k: v for k, v in temp_syll_info.items() if len(v['movie_path']) == 2}
+            k: v for k, v in temp_syll_info.items() if len(v['movie_path']) > 0}
         self.syll_list = sorted(list(self.syll_info.keys()))
 
         # Initialize button callbacks
