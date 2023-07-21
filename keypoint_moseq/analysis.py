@@ -295,7 +295,7 @@ def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupb
 
 def plot_fingerprint(project_dir, model_dirname, moseq_df, 
                      bins=100, figsize=(15,5), fontsize=10, 
-                     robust=True, colorbar=True, save_dir=None):
+                     robust=True, save_dir=None):
     
     plot_columns = ['angular_velocity', 'velocity_px_s', 'syllable']
     column_names = [('Angular velocity', 'rad/s'), ('Velocity', 'px/s'), ('MoSeq', 'Syllable ID')]
@@ -371,18 +371,8 @@ def plot_fingerprint(project_dir, model_dirname, moseq_df,
     heatmap, bin_lbl = parse_heatmap(heatmap_df.syll_heatmap)
     pc = temp_ax.imshow(heatmap, aspect='auto', interpolation='none', cmap='viridis', vmin=0)
     temp_ax.set_xlabel(column_names[2][1], fontsize=fontsize)
-    temp_ax.set_xticks(range(len(bin_lbl)), bin_lbl)
+    temp_ax.set_xticks([])
     temp_ax.set_yticks([])
-    for i, label in enumerate(temp_ax.xaxis.get_ticklabels()):
-        if i % 2 == 0: label.set_verticalalignment("bottom")
-        else: label.set_verticalalignment("top")
-
-
-    # plotting color bar
-    if colorbar:
-        cb = fig.add_subplot(gs[1, -1])
-        plt.colorbar(pc, cax=cb, orientation='horizontal')
-        cb.set_xlabel('Percentage Usage')
 
     # saving the figure
     if save_dir is not None:
