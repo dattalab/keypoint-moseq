@@ -361,6 +361,7 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
                 'or the `project_dir` and `name` arguments')
             results_path = os.path.join(project_dir,name,'results.h5')
      
+    kwargs = {k:v for k,v in kwargs.items() if not k in ['states', 'noise_prior']}
     data, labels = format_data(coordinates, confidences=confidences, **kwargs)
     model = init_model(data=data, params=params, verbose=verbose, **kwargs)
 
