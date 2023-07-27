@@ -658,6 +658,30 @@ def save_checkpoint(model, data, history, labels, iteration,
     return save_dict
 
 
+def load_kappa_scan_checkpoint(project_dir=None, name=None, path=None):
+    """
+    Load model fitting checkpoint.
+
+    The checkpoint path can be specified directly via `path`.
+    Othewise is assumed to be `{project_dir}/<name>/checkpoint.p`.
+
+    Parameters
+    ----------
+    project_dir: str, default=None
+    name: str, default=None
+    path: str, default=None
+
+    Returns
+    -------
+    checkpoint: dict
+        See :py:func:`keypoint_moseq.io.save_checkpoint`
+    """
+    if path is None: 
+        assert project_dir is not None and name is not None, fill(
+            '`name` and `project_dir` are required if no `path` is given.')
+        path = os.path.join(project_dir,f'{name}.p')
+    return joblib.load(path)
+
 def save_kappa_scan_checkpoint(
         kappas, med_dur_histories,
         iteration, target_duration,

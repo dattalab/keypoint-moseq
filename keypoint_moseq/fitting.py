@@ -85,6 +85,7 @@ def fit_model(model,
               plot_every_n_iters=10,  
               save_progress_figs=True,
               tol = None,
+              warning_convergence_tol = 2,
               **kwargs):
 
     """
@@ -165,12 +166,16 @@ def fit_model(model,
     save_progress_figs : bool, default=True
         If True, save the progress plots to disk.
 
-    tol : int, deafult=None
+    tol : int, default=None
         Enable early stopping if the median syllable duration has not changed by more than
         `tol` in any of the last 4 resampling steps. If `None`, no check will be performed.
         If the early stopping criterion is reached, histories, plots, and model checkpionts
         will be updated unless `history_every_n_iters` or the other correspondsiding parameters
         are zero.
+
+    warning_convergence_tol: int, default=2
+        After fitting, a warning will be issued if median durations changed more than
+        `warning_convergence_tol` over any of its last 4 resampling iterations.
         
     Returns
     -------
@@ -197,8 +202,12 @@ def fit_model(model,
         if not os.path.exists(savedir): os.makedirs(savedir)
         print(fill(f'Outputs will be saved to {savedir}'))
 
+    if tol is not None or warning_convergence_tol is not None:
+        keep_dur_history = True
+    else: keep_dur_history = False
+
     if history is None: history = {}
-    if tol is not None: med_durs_history = []
+    if keep_dur_history: med_durs_history = []
 
     with tqdm.trange(start_iter, num_iters+1) as pbar:
         for iteration in pbar:
@@ -207,8 +216,9 @@ def fit_model(model,
                 data, model, pbar=pbar, ar_only=ar_only, verbose=verbose)        
             except StopResampling: break
 
-            if tol is not None:
+            if keep_dur_history:
                 med_durs_history = _keep_duration_history(med_durs_history, model, data, window = 5)
+            if tol is not None:
                 early_stop = _check_converged(med_durs_history, tol, window = 5)
             else: early_stop = False
 
@@ -229,6 +239,12 @@ def fit_model(model,
                 print('Early termination of fitting: converged (see `tol` parameter).')
                 break
 
+    if warning_convergence_tol is not None and not early_stop and not _check_converged(
+        med_durs_history[-5:], warning_convergence_tol, window = 5):
+        warnings.warn(fill(
+            f"Fitting did not converge: Increase `num_iters` "
+            ", or to silence this warning increase "
+            "`warning_convergence_tol`."))
                 
     return model, history, name
     
@@ -523,7 +539,6 @@ def kappa_scan(
     fit_model_kwargs = {},
     plot_model_progress = None,
     scan_verbose = False,
-    warning_convergence_tol = 2,
     **config,
     ):
     """
@@ -592,10 +607,6 @@ def kappa_scan(
         Verbosity level for scan information. Does not interaction with config option `verbose` or parameter
         `verbose` of :py:func:`keypoint_moseq.fit_model`.
 
-    warning_convergence_tol: int, default=2
-        After each fittting process, a warning will be issued if median durations changed more than
-        `warning_convergence_tol` over any of its last 4 resampling iterations.
-
     config: dict, default={}
         Project configuration to be passed as keyword arguments to :py:func:`keypoint_moseq.init_model`, 
         and containing an entry `'kappa_scan'`: a dictionary with keys 'min_kappa'`, `'max_kappa'`, 
@@ -635,7 +646,9 @@ def kappa_scan(
     if isinstance(plot_model_progress, int):
         plot_every_n_fit_iters = plot_model_progress
     else:
-        assert plot_model_progress is False or plot_model_progress == 'each', fill(
+        assert (plot_model_progress is False or
+                plot_model_progress == 'each' or
+                plot_model_progress is None), fill(
             "Parameter `plot_model_progress` must be None, False, 'each', or an "
             "integer to be passsed on to `plot_every_n_iters`.")
     
@@ -727,8 +740,8 @@ def kappa_scan(
             abs(median_duration - scan_config['target_duration']) < 
             abs(median_durations[best_i] - scan_config['target_duration'])):
             if save_models == 'best' and best_i is not None:
-                # Delete previous best model
-                _delete_model_with_name(model_name)
+                # Delete previous best model if it exists and was saved
+                _delete_model_with_name(model_names[best_i])
             best_i = i_kappa
         elif save_models == 'best':
             # Delete this model, it was not better than the previous best
@@ -754,14 +767,7 @@ def kappa_scan(
                     model_names[best_i]
                     if (save_models == 'best') else None),
                 scan_name = scan_name, project_dir = project_dir)
-        
-        if warning_convergence_tol is not None and not _check_converged(
-            med_dur_history[-5:], warning_convergence_tol, window = 5):
-            warnings.warn(fill(
-                f"Fitting with kappa={kappa} did not converge. Increase `num_iters` "
-                 "in `fit_model_kwargs`, or to silence this warning increase "
-                 "`warning_convergence_tol`."))
-
+    
     if ((scan_config['target_duration'] < np.min(median_durations)) or
         (scan_config['target_duration'] > np.max(median_durations))):
         warnings.warn(fill(

@@ -21,6 +21,7 @@ from .fitting import (
     extract_results,
     resume_fitting, 
     update_hypparams,
+    kappa_scan
 )
 
 from .viz import (
@@ -32,6 +33,7 @@ from .viz import (
     generate_crowd_movies, 
     generate_grid_movies,
     generate_trajectory_plots,
+    plot_kappa_scan
 )
 
 from .analysis import (
