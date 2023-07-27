@@ -494,7 +494,8 @@ def plot_progress(model, data, history, iteration, path=None,
     
 
 def plot_kappa_scan(
-    kappas, med_dur_histories, med_durs=None, best_i = None,
+    kappa_scan_data = None,
+    kappas = None, med_dur_histories = None, med_durs=None, best_i = None,
     path=None, project_dir=None, scan_name=None, savefig=True,
     fig_size=None,):
 
@@ -503,11 +504,17 @@ def plot_kappa_scan(
 
     Parameters
     ----------
-    kappas: array-like
-        Kappa values for each iteration of the scan.
+    kappa_scan_data: dict, default=None
+        Data loaded from a kappa scan checkpoint. Required unless `kappas` and
+        `med_dur_histories` are provided.
 
-    med_dur_histories: List[array-like]
-        Median durations over the course of each fitting process.
+    kappas: array-like, default=None
+        Kappa values for each iteration of the scan. Required if `kappa_scan_data`
+        is not provided.
+
+    med_dur_histories: List[array-like], default=None
+        Median durations over the course of each fitting process. Required if
+         `kappa_scan_data` is not provided.
     
     med_durs: array-like, default=None
         Resulting median durations from each kappa. If `None`, these will be extracted
@@ -531,11 +538,26 @@ def plot_kappa_scan(
     path : str, default=None
     """
 
+    # ----- Deal with default arguments
+    
+    if kappa_scan_data is None:
+        assert (kappas is not None) and (med_dur_histories is not None), fill(
+            'If `kappa_scan_data` is not passed, then both `kappas` and '
+            '`med_dur_histories` are required.')
+
+        if med_durs is None: med_durs = [hist[-1] for hist in med_dur_histories]
+        
+    else:
+        kappas = kappa_scan_data['kappas']
+        med_durs = kappa_scan_data['final_median_durations']
+        med_dur_histories = kappa_scan_data['fitting_median_durations']
+        best_i = kappa_scan_data['best_i']
+
+
+    # ----- Perform plotting
+
     if fig_size is None: fig_size = (5, 3)
     fig, axs = plt.subplots(1, 2, figsize = fig_size)
-    
-
-    if med_durs is None: med_durs = [hist[-1] for hist in med_dur_histories]
 
     if best_i is not None:
         axs[0].axvline(kappas[best_i], ls = '--', color = '.5')
@@ -545,7 +567,7 @@ def plot_kappa_scan(
     axs[0].set_ylabel("Median duration")
 
     cmap = matplotlib.cm.get_cmap("viridis")
-    norm = matplotlib.colors.LogNorm(vmin = kappas[0], vmax = kappas[1])
+    norm = matplotlib.colors.LogNorm(vmin = kappas[0], vmax = kappas[-1])
     for i, (kappa, hist) in enumerate(zip(kappas, med_dur_histories)):        
         axs[1].plot(hist, 'o-', color = cmap(norm(kappa)))
     axs[1].set_xlabel("Iteration")
@@ -558,11 +580,12 @@ def plot_kappa_scan(
         cax = cax)
     cbar.set_label("Kappa")
 
-
     if scan_name is not None:
         fig.suptitle(scan_name)
     plt.tight_layout()
 
+    # ----- Save and/or show figure
+    
     if savefig:
         if path is None:
             assert scan_name is not None and project_dir is not None, fill(

@@ -756,10 +756,13 @@ def kappa_scan(
 
         if save_durations:
             save_kappa_scan_checkpoint(
-                kappas[:i_kappa+1], median_durations,
-                i_kappa, scan_config['target_duration'],
-                best_i, kappas[best_i],
-                med_dur_histories,
+                kappas = kappas[:i_kappa+1],
+                med_dur_histories = med_dur_histories,
+                iteration = i_kappa,
+                target_duration = scan_config['target_duration'],
+                best_i = best_i,
+                best_kappa = kappas[best_i],
+                median_durations = median_durations,
                 model_names = (
                     model_names
                     if (save_models == 'all') else None),
@@ -774,6 +777,7 @@ def kappa_scan(
             "Target duratiuon did not lie within durations achieved by kappa_scan."))
     
     return (
+        scan_name,
         dict(i = best_i, kappa = kappas[best_i]),
         kappas, median_durations, med_dur_histories)
 

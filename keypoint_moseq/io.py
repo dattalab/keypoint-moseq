@@ -660,7 +660,7 @@ def save_checkpoint(model, data, history, labels, iteration,
 
 def load_kappa_scan_checkpoint(project_dir=None, name=None, path=None):
     """
-    Load model fitting checkpoint.
+    Load kappa scan checkpoint.
 
     The checkpoint path can be specified directly via `path`.
     Othewise is assumed to be `{project_dir}/<name>/checkpoint.p`.
@@ -756,7 +756,6 @@ def save_kappa_scan_checkpoint(
 
     """
     
-    
     if path is None: 
         assert project_dir is not None and scan_name is not None, fill(
             '`scan_name` and `project_dir` are required if no `path` is given.')
@@ -774,10 +773,10 @@ def save_kappa_scan_checkpoint(
         'iteration'       : iteration,
         'scan_name'       : scan_name,
         'kappas'          : kappas,
-        'median_durations': median_durations,
         'target_duration' : target_duration,
         'best_i'          : best_i,
         'best_kappa'      : best_kappa,
+        'final_median_durations'  : median_durations,
         'fitting_median_durations': med_dur_histories
         }
 
