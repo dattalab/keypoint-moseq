@@ -147,10 +147,11 @@ def fit_model(model,
     save_progress_figs : bool, default=True
         If True, save the progress plots to disk.
 
-    parallel_message_passing : bool, default=True,
+    parallel_message_passing : bool, default=None,
         Use parallel implementation of Kalman sampling, which can be faster
         but has a significantly longer jit time.  To enable and skip checking
-        for parallel-computing backend, set to 'force.'
+        for parallel-computing backend, set to 'force.' To enable whenever a
+        parallel-computing backend is present, set to `None`.
         
     Returns
     -------
@@ -179,13 +180,15 @@ def fit_model(model,
 
     if parallel_message_passing == 'force':
         parallel_message_passing = True
+    if parallel_message_passing is None:
+        parallel_message_passing = jax.default_backend() != 'cpu'
     else:
         if parallel_message_passing and jax.default_backend() == 'cpu':
             warnings.warn(fill(
                 'Setting parallel_message_passing = True when JAX is'
-                'CPU-bound can result in long jit times and speed increase for'
-                'calculations. To suppress this message, set the parameter to'
-                '"force".'))
+                'CPU-bound can result in long jit times without speed increase '
+                'for calculations. To suppress this message, set the parameter'
+                'to "force".'))
 
     if history is None: history = {}
 
