@@ -197,7 +197,7 @@ def fit_model(model,
 
             try: model = _wrapped_resample(
                 data, model, pbar=pbar, ar_only=ar_only, verbose=verbose,
-                parallel_kalman = parallel_message_passing)
+                parallel_message_passing = parallel_message_passing)
             except StopResampling: break
 
             if history_every_n_iters>0 and (iteration%history_every_n_iters)==0:
@@ -407,7 +407,7 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
             try: model = _wrapped_resample(
                     data, model, pbar=pbar, ar_only=ar_only, 
                     states_only=True, verbose=verbose,
-                    parallel_kalman = parallel_message_passing)
+                    parallel_message_passing = parallel_message_passing)
             except StopResampling: break
 
     return extract_results(
