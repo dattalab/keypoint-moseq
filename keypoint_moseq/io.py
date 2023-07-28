@@ -14,7 +14,8 @@ from textwrap import fill
 import matplotlib.pyplot as plt
 import tabulate
 import sleap_io
-
+from pynwb import NWBHDF5IO
+from ndx_pose import PoseEstimation
 
 from jax_moseq.utils import batch
 from keypoint_moseq.util import (
@@ -257,7 +258,7 @@ def update_config(project_dir, **kwargs):
     
         
 def setup_project(project_dir, deeplabcut_config=None, sleap_file=None,
-                  overwrite=False, **options):
+                  nwb_file=None, overwrite=False, **options):
     """
     Setup a project directory with the following structure::
 
@@ -270,23 +271,28 @@ def setup_project(project_dir, deeplabcut_config=None, sleap_file=None,
         Path to the project directory (relative or absolute)
         
     deeplabcut_config: str, default=None
-        Path to a deeplabcut config file. Relevant settings, including
-        `'bodyparts'`, `'skeleton'`, `'use_bodyparts'`, and 
-        `'video_dir'` will be imported from the deeplabcut config and 
-        used to initialize the keypoint MoSeq config. (overrided by kwargs). 
+        Path to a deeplabcut config file. Will be used to initialize 
+        `bodyparts`, `skeleton`, `use_bodyparts` and `video_dir` in 
+        the keypoint MoSeq config. (overrided by kwargs). 
 
     sleap_file: str, default=None
-        Path to a .hdf5 or .slp file containing predictions for one video.
-        Relevant settings, including `'bodyparts'`, `'skeleton'`, 
-        and `'use_bodyparts'` will be imported from the sleap file and used 
-        to initialize the keypoint MoSeq config. (overrided by kwargs). 
+        Path to a .hdf5 or .slp file containing predictions for one 
+        video. Will be used to initialize `bodyparts`, `skeleton`, 
+        and `use_bodyparts` in the keypoint MoSeq config. (overrided 
+        by kwargs). 
+
+    nwb_file: str, default=None
+        Path to a .nwb file containing predictions for one video. 
+        Will be used to initialize `bodyparts`, `skeleton`, and 
+        `use_bodyparts` in the keypoint MoSeq config. (overrided 
+        by kwargs). 
         
     overwrite: bool, default=False
         Overwrite any config.yml that already exists at the path
-        `{project_dir}/config.yml`
+        `{project_dir}/config.yml`.
         
     options
-        Used to initialize config file. Overrides default settings
+        Used to initialize config file. Overrides default settings.
     """
 
     if os.path.exists(project_dir) and not overwrite:
@@ -297,53 +303,55 @@ def setup_project(project_dir, deeplabcut_config=None, sleap_file=None,
         
     if deeplabcut_config is not None: 
         dlc_options = {}
-
         with open(deeplabcut_config, 'r') as stream:           
             dlc_config = yaml.safe_load(stream)
-            
             if dlc_config is None:
                 raise RuntimeError(
                     f'{deeplabcut_config} does not exists or is not a'
                     ' valid yaml file')
-                
             if 'multianimalproject' in dlc_config and dlc_config['multianimalproject']:
                 dlc_options['bodyparts'] = dlc_config['multianimalbodyparts']
                 dlc_options['use_bodyparts'] = dlc_config['multianimalbodyparts']
             else:
                 dlc_options['bodyparts'] = dlc_config['bodyparts']
                 dlc_options['use_bodyparts'] = dlc_config['bodyparts']
-
             dlc_options['skeleton'] = dlc_config['skeleton']
             dlc_options['video_dir'] = os.path.join(dlc_config['project_path'],'videos')
-
         options = {**dlc_options, **options}
 
     elif sleap_file is not None:
         sleap_options = {}
-
         if os.path.splitext(sleap_file)[1] == '.slp':
             slp_file = sleap_io.load_slp(sleap_file)
-
             assert len(slp_file.skeletons)==1, fill(
                 f'{sleap_file} contains more than one skeleton. '
                 'This is not currently supported. Please '
                 'open a github issue or email calebsw@gmail.com')
-            
             skeleton = slp_file.skeletons[0]
             node_names = skeleton.node_names
             edge_names = [[e.source.name, e.destination.name] for e in skeleton.edges]
-
         else:
             with h5py.File(sleap_file, 'r') as f:
                 node_names = [n.decode('utf-8') for n in f['node_names']]
                 edge_names = [[n.decode('utf-8') for n in edge] for edge in f['edge_names']]
-        
         sleap_options['bodyparts'] = node_names
         sleap_options['use_bodyparts'] = node_names
         sleap_options['skeleton'] = edge_names
-
         options = {**sleap_options, **options}
-    
+
+    elif nwb_file is not None:
+        nwb_options = {}
+        with NWBHDF5IO(nwb_file, mode='r', load_namespaces=True) as io:
+            pose_obj = _load_nwb_pose_obj(io)
+            bodyparts = list(pose_obj.nodes[:])
+            nwb_options['bodyparts'] = bodyparts
+            nwb_options['use_bodyparts'] = bodyparts
+            if 'edges' in pose_obj.fields:
+                edges = pose_obj.edges[:]
+                skeleton = [[bodyparts[i], bodyparts[j]] for i,j in edges]
+                nwb_options['skeleton'] = skeleton
+        options = {**nwb_options, **options}
+
     if not os.path.exists(project_dir):
         os.makedirs(project_dir)
     generate_config(project_dir, **options)
@@ -1101,152 +1109,33 @@ def _sleap_anipose_loader(filepath, name):
     return coordinates,confidences,bodyparts
 
 
+def _load_nwb_pose_obj(io):
+    """Grab PoseEstimation object from an opened .nwb file."""
+    all_objs = io.read().all_children()
+    pose_objs = [o for o in all_objs if isinstance(o, PoseEstimation)]
+    assert len(pose_objs)>0, fill(
+        f'No PoseEstimation objects found in {filepath}')
+    assert len(pose_objs)==1, fill(
+        f'Found multiple PoseEstimation objects in {filepath}. '
+        'This is not currently supported. Please open a github '
+        'issue to request this feature.')
+    pose_obj = pose_objs[0]
+    return pose_obj
+
+
 def _nwb_loader(filepath, name):
     """Load keypoints from nwb files."""
-    try: 
-        from pynwb import NWBHDF5IO
-        from ndx_pose import PoseEstimation
-
-    except ImportError:
-        raise ImportError(fill(
-            'Loading keypoints from nwb files requires the packages '
-            '`pynwb` and `ndx-pose`. Please install them with '
-            '`pip install pynwb ndx-pose`'))
-    
     with NWBHDF5IO(filepath, mode='r', load_namespaces=True) as io:
-        all_objs = io.read().all_children()
-        pose_objs = [o for o in all_objs if isinstance(o, PoseEstimation)]
-
-        assert len(pose_objs)>0, fill(
-            f'No PoseEstimation objects found in {filepath}')
-        
-        assert len(pose_objs)==1, fill(
-            f'Found multiple PoseEstimation objects in {filepath}. '
-            'This is not currently supported. Please open a github '
-            'issue to request this feature.')
-        
-        pose_obj = pose_objs[0]
+        pose_obj = _load_nwb_pose_obj(io)
         bodyparts = list(pose_obj.nodes[:])
         coords = np.stack([pose_obj.pose_estimation_series[bp].data[()] for bp in bodyparts], axis=1)
         if 'confidence' in pose_obj.pose_estimation_series[bodyparts[0]].fields:
             confs = np.stack([pose_obj.pose_estimation_series[bp].confidence[()] for bp in bodyparts], axis=1)
-        else: confs = np.ones_like(coords[...,0])
-
+        else: 
+            confs = np.ones_like(coords[...,0])
         coordinates = {name: coords}
         confidences = {name: confs}
-        return coordinates,confidences,bodyparts
-
-
-
-def load_deeplabcut_results(filepath_pattern, recursive=True, path_sep='-',
-                            path_in_name=False, remove_extension=True):
-    """
-    Load tracking results from deeplabcut csv or hdf5 files.
-
-    For single-animal tracking, each file yields a single key/value 
-    pair in the returned `coordinates` and `confidences` dictionaries. For
-    multi-animal tracking, a key/vaue pair will be generated for each
-    tracked individual. For example a single file called `two_mice.h5`
-    with individuals "mouseA" and "mouseB" will yield the pair of
-    keys `'two_mice_mouseA', 'two_mice_mouseB'`. 
-
-    See :py:func:`keypoint_moseq.io.load_keypoints` for a description of 
-    the parameters and return values.
-    """
-    warnings.warn(
-        'WARNING: `load_deeplabcut_results` is being deprecated. '
-        ' Use `load_keypoints` instead.\n\n')
-    
-    filepaths = list_files_with_exts(
-        filepath_pattern, ['.csv','.h5','.hdf5'], recursive=recursive)
-    assert len(filepaths)>0, fill(
-        f'No deeplabcut csv or hdf5 files found for {filepath_pattern}')
-
-    coordinates,confidences = {},{}
-    for filepath in tqdm.tqdm(filepaths, desc='Loading from deeplabcut'):
-        
-        try:
-            ext = os.path.splitext(filepath)[1]
-            if ext=='.h5': df = pd.read_hdf(filepath)
-            if ext=='.csv': df = pd.read_csv(filepath, header=[0,1,2], index_col=0) 
-            
-            name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
-            bodyparts = df.columns.get_level_values('bodyparts').unique().tolist()   
-            
-            if 'individuals' in df.columns.names:
-                for ind in df.columns.get_level_values('individuals').unique():
-                    ind_df = df.xs(ind, axis=1, level='individuals')
-                    arr = ind_df.to_numpy().reshape(len(ind_df), -1, 3)
-                    coordinates[f'{name}_{ind}'] = arr[:,:,:-1]
-                    confidences[f'{name}_{ind}'] = arr[:,:,-1]
-            else:
-                arr = df.to_numpy().reshape(len(df), -1, 3)
-                coordinates[name] = arr[:,:,:-1]
-                confidences[name] = arr[:,:,-1]
-
-        except Exception as e: 
-            print(fill(f'Error loading {filepath}: {e}'))
-    
-    if len(coordinates) > 0:
-        check_nan_proportions(coordinates, bodyparts)
-
     return coordinates,confidences,bodyparts
-
-
-
-def load_sleap_results(filepath_pattern, recursive=True, path_sep='-',
-                       path_in_name=False, remove_extension=True):
-    """
-    Load keypoints from sleap hdf5 files. 
-
-    For single-animal tracking, each file yields a single key/value 
-    pair in the returned `coordinates` and `confidences` dictionaries. For
-    multi-animal tracking, a key/vaue pair will be generated for each track.
-    For example a single file called `two_mice.h5` will yield the pair of
-    keys `'two_mice_track0', 'two_mice_track1'`.
-
-    See :py:func:`keypoint_moseq.io.load_keypoints` for a description of 
-    the parameters and return values.
-    """
-    warnings.warn(
-        'WARNING: `load_sleap_results` is being deprecated. '
-        ' Use `load_keypoints` instead.\n\n')
-    
-    filepaths = list_files_with_exts(
-        filepath_pattern, ['.h5','.hdf5'], recursive=recursive)
-    assert len(filepaths)>0, fill(
-        f'No sleap hdf5 files found for {filepath_pattern}.')
-
-    coordinates,confidences = {},{}
-    for filepath in tqdm.tqdm(filepaths, desc='Loading from sleap'):
-        try: 
-            name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
-            with h5py.File(filepath, 'r') as f:
-                coords = f['tracks'][()]
-                confs = f['point_scores'][()]
-                bodyparts = [name.decode('utf-8') for name in f['node_names']]
-                if coords.shape[0] == 1: 
-                    coordinates[name] = coords[0].T
-                    confidences[name] = confs[0].T
-                else:
-                    for i in range(coords.shape[0]):
-                        coordinates[f'{name}_track{i}'] = coords[i].T
-                        confidences[f'{name}_track{i}'] = confs[i].T
-        except Exception as e: 
-            print(fill(f'Error loading {filepath}: {e}'))
-
-    if len(coordinates) > 0:
-        check_nan_proportions(coordinates, bodyparts)
-
-    return coordinates,confidences,bodyparts
-
-
-
-
-
-
-
-
 
 
 # hdf5 save/load routines modified from
