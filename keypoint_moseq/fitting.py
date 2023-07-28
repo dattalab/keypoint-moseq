@@ -46,17 +46,19 @@ def _wrapped_resample(data, model, pbar=None, **resample_options):
     
     return model
 
+
 def _set_parallel_flag(parallel_message_passing):
     if parallel_message_passing == 'force':
         parallel_message_passing = True
     elif parallel_message_passing is None:
         parallel_message_passing = jax.default_backend() != 'cpu'
-    else:
-        if parallel_message_passing and jax.default_backend() == 'cpu':
-            warnings.warn(fill(
-                'Setting parallel_message_passing to True when JAX is CPU-bound can '
-                'result in long jit times without speed increase for calculations. '
-                '(To suppress this message, set parallel_message_passing="force")'))
+    elif parallel_message_passing and jax.default_backend() == 'cpu':
+        warnings.warn(fill(
+            'Setting parallel_message_passing to True when JAX is CPU-bound can '
+            'result in long jit times without speed increase for calculations. '
+            '(To suppress this message, set parallel_message_passing="force")'))
+    return parallel_message_passing
+
 
 def fit_model(model,
               data,
