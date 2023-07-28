@@ -228,6 +228,7 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
         
     return config
 
+
 def update_config(project_dir, **kwargs):
     """
     Update the config file stored at `project_dir/config.yml`.
@@ -494,6 +495,7 @@ def save_pca(pca, project_dir, pca_path=None):
         pca_path = os.path.join(project_dir,'pca.p')
     joblib.dump(pca, pca_path)
     
+
 def load_pca(project_dir, pca_path=None):
     """
     Load a PCA model from disk.
@@ -904,6 +906,13 @@ def load_keypoints(filepath_pattern, format, extension=None, recursive=True,
         If there is also a `'point_scores'` dataset, it will be used as the
         keypoint confidence. Otherwise, the confidence will be set to 1.
 
+    - nwb
+        .nwb files (Neurodata Without Borders). Each file should contain exactly
+        one `PoseEstimation` object (for multi-animal tracking, each animal should
+        be stored in its own .nwb file). The `PoseEstimation` object should contain
+        one `PoseEstimationSeries` object for each bodypart. Confidence values are
+        optional and will be set to 1 if not present.
+
     Parameters
     ----------
     filepath_pattern: str or list of str
@@ -960,25 +969,27 @@ def load_keypoints(filepath_pattern, format, extension=None, recursive=True,
         List of bodypart names. The order of the names matches the order
         of the bodyparts in `coordinates` and `confidences`.
     """
-    formats = ['deeplabcut', 'sleap', 'anipose', 'sleap-anipose']
+    formats = ['deeplabcut', 'sleap', 'anipose', 'sleap-anipose', 'nwb']
     assert format in formats, fill(
         f'Unrecognized format {format}. Must be one of {formats}')
     
     if extension is None:
         extensions = {
-            'deeplabcut': ['.csv','.h5','.hdf5'],
-            'sleap': ['.h5','.hdf5','.slp'],
-            'anipose': ['.csv'],
-            'sleap-anipose': ['.h5','.hdf5']
+            'deeplabcut'    : ['.csv','.h5','.hdf5'],
+            'sleap'         : ['.h5','.hdf5','.slp'],
+            'anipose'       : ['.csv'],
+            'sleap-anipose' : ['.h5','.hdf5'],
+            'nwb'           : ['.nwb']
         }[format]
     else:
         extensions = [extension]
 
     loader = {
-        'deeplabcut': _deeplabcut_loader,
-        'sleap': _sleap_loader,
-        'anipose': _anipose_loader,
-        'sleap-anipose': _sleap_anipose_loader
+        'deeplabcut'    : _deeplabcut_loader,
+        'sleap'         : _sleap_loader,
+        'anipose'       : _anipose_loader,
+        'sleap-anipose' : _sleap_anipose_loader,
+        'nwb'           : _nwb_loader,
     }[format]
 
     filepaths = list_files_with_exts(
@@ -1003,7 +1014,6 @@ def load_keypoints(filepath_pattern, format, extension=None, recursive=True,
 
         coordinates.update(new_coordinates)
         confidences.update(new_confidences)
-
 
     assert len(coordinates)>0, fill(
         f'No valid results found for {filepath_pattern}')
@@ -1089,6 +1099,42 @@ def _sleap_anipose_loader(filepath, name):
             coordinates = {f'{name}_track{i}': coords[:,i] for i in range(coords.shape[1])}
             confidences = {f'{name}_track{i}': confs[:,i] for i in range(coords.shape[1])}
     return coordinates,confidences,bodyparts
+
+
+def _nwb_loader(filepath, name):
+    """Load keypoints from nwb files."""
+    try: 
+        from pynwb import NWBHDF5IO
+        from ndx_pose import PoseEstimation
+
+    except ImportError:
+        raise ImportError(fill(
+            'Loading keypoints from nwb files requires the packages '
+            '`pynwb` and `ndx-pose`. Please install them with '
+            '`pip install pynwb ndx-pose`'))
+    
+    with NWBHDF5IO(filepath, mode='r', load_namespaces=True) as io:
+        all_objs = io.read().all_children()
+        pose_objs = [o for o in all_objs if isinstance(o, PoseEstimation)]
+
+        assert len(pose_objs)>0, fill(
+            f'No PoseEstimation objects found in {filepath}')
+        
+        assert len(pose_objs)==1, fill(
+            f'Found multiple PoseEstimation objects in {filepath}. '
+            'This is not currently supported. Please open a github '
+            'issue to request this feature.')
+        
+        pose_obj = pose_objs[0]
+        bodyparts = list(pose_obj.nodes[:])
+        coords = np.stack([pose_obj.pose_estimation_series[bp].data[()] for bp in bodyparts], axis=1)
+        if 'confidence' in pose_obj.pose_estimation_series[bodyparts[0]].fields:
+            confs = np.stack([pose_obj.pose_estimation_series[bp].confidence[()] for bp in bodyparts], axis=1)
+        else: confs = np.ones_like(coords[...,0])
+
+        coordinates = {name: coords}
+        confidences = {name: confs}
+        return coordinates,confidences,bodyparts
 
 
 
