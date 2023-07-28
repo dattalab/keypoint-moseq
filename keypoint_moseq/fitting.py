@@ -65,6 +65,7 @@ def fit_model(model,
               states_in_history=True,
               plot_every_n_iters=10,  
               save_progress_figs=True,
+              parallel_message_passing=True,
               **kwargs):
 
     """
@@ -144,6 +145,12 @@ def fit_model(model,
 
     save_progress_figs : bool, default=True
         If True, save the progress plots to disk.
+
+    parallel_message_passing : bool, default=None,
+        Use parallel implementation of Kalman sampling, which can be faster
+        but has a significantly longer jit time.  To enable and skip checking
+        for parallel-computing backend, set to 'force.' To enable whenever a
+        parallel-computing backend is present, set to `None`.
         
     Returns
     -------
@@ -170,13 +177,26 @@ def fit_model(model,
         if not os.path.exists(savedir): os.makedirs(savedir)
         print(fill(f'Outputs will be saved to {savedir}'))
 
+    if parallel_message_passing == 'force':
+        parallel_message_passing = True
+    if parallel_message_passing is None:
+        parallel_message_passing = jax.default_backend() != 'cpu'
+    else:
+        if parallel_message_passing and jax.default_backend() == 'cpu':
+            warnings.warn(fill(
+                'Setting parallel_message_passing = True when JAX is'
+                'CPU-bound can result in long jit times without speed increase '
+                'for calculations. To suppress this message, set the parameter'
+                'to "force".'))
+
     if history is None: history = {}
 
     with tqdm.trange(start_iter, num_iters+1) as pbar:
         for iteration in pbar:
 
             try: model = _wrapped_resample(
-                data, model, pbar=pbar, ar_only=ar_only, verbose=verbose)
+                data, model, pbar=pbar, ar_only=ar_only, verbose=verbose,
+                parallel_message_passing = parallel_message_passing)
             except StopResampling: break
 
             if history_every_n_iters>0:
@@ -306,7 +326,9 @@ def extract_results(*, params, states, labels, save_results=True,
 
 def apply_model(*, params, coordinates, confidences=None, num_iters=20, 
                 ar_only=False, save_results=True, verbose=False,
-                project_dir=None, name=None, results_path=None, **kwargs): 
+                project_dir=None, name=None, results_path=None,
+                parallel_message_passing=True,
+                **kwargs):
     """
     Apply a model to new data.
 
@@ -348,6 +370,11 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
     results_path : str, default=None
         Optional path for saving model outputs.
 
+    parallel_message_passing : bool | string, default=True,
+        Use parallel implementation of Kalman sampling, which can be faster
+        but has a significantly longer jit time. To enable and skip checking
+        for parallel-computing backend, set to 'force.'
+    
     Returns
     -------
     results_dict : dict
@@ -360,6 +387,16 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
                 'The `save_results` option requires either a `results_path` '
                 'or the `project_dir` and `name` arguments')
             results_path = os.path.join(project_dir,name,'results.h5')
+
+    if parallel_message_passing == 'force':
+        parallel_message_passing = True
+    else:
+        if parallel_message_passing and jax.default_backend() == 'cpu':
+            warnings.warn(fill(
+                'Setting parallel_message_passing = True when JAX is'
+                'CPU-bound can result in long jit times and speed increase for'
+                'calculations. To suppress this message, set the parameter to'
+                '"force".'))
      
     kwargs = {k:v for k,v in kwargs.items() if not k in ['states', 'noise_prior']}
     data, labels = format_data(coordinates, confidences=confidences, **kwargs)
@@ -369,7 +406,8 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
         for iteration in pbar:
             try: model = _wrapped_resample(
                     data, model, pbar=pbar, ar_only=ar_only, 
-                    states_only=True, verbose=verbose)
+                    states_only=True, verbose=verbose,
+                    parallel_message_passing = parallel_message_passing)
             except StopResampling: break
 
     return extract_results(
