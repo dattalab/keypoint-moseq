@@ -15,41 +15,35 @@ import ipywidgets as widgets
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from matplotlib.gridspec import GridSpec
-
 from bokeh.io import output_notebook, show
 from IPython.display import display
 from scipy import stats
-from statsmodels.stats.multitest import multipletests
+from statsmodels.stats.multitest import multipletests, fdrcorrection
 from itertools import combinations
-
 from tqdm import tqdm
-from collections import defaultdict, OrderedDict
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 from copy import deepcopy
 from cytoolz import sliding_window
 from os.path import join, exists
-
-from keypoint_moseq.widgets import GroupSettingWidgets, SyllableLabeler
-
 from glob import glob
-from keypoint_moseq.widgets import GroupSettingWidgets, SyllableLabeler
 
-
-from keypoint_moseq.util import stateseq_stats, sample_instances, get_trajectories, get_frequencies
-from scipy.spatial.distance import squareform, pdist
+from scipy.spatial.distance import pdist
 from scipy.cluster.hierarchy import linkage, dendrogram
-
-# imports for changepoint analysis
-from statsmodels.stats.multitest import fdrcorrection
-from scipy.ndimage import gaussian_filter1d, convolve1d
+from scipy.ndimage import gaussian_filter1d
 from scipy.signal import argrelextrema
-from keypoint_moseq.util import filter_angle, filtered_derivative, permute_cyclic, get_syllable_instances
-from keypoint_moseq.io import format_data, load_results, load_keypoints
+
+from keypoint_moseq.widgets import GroupSettingWidgets, SyllableLabeler
+from keypoint_moseq.io import load_results, load_keypoints
+from keypoint_moseq.util import (
+    sample_instances, get_trajectories, filter_angle, 
+    filtered_derivative, permute_cyclic, get_syllable_instances, 
+    format_data)
+
+from jax_moseq.utils import get_frequencies, unbatch
 from jax_moseq.models.keypoint_slds import align_egocentric
-from jax_moseq.utils import unbatch
 na = np.newaxis
 
 output_notebook()
+
 
 def get_syllable_names(project_dir, model_dirname, syllable_ixs):
     """get syllable names from syll_info.yaml file. Labels consist of the 
@@ -1440,11 +1434,10 @@ def plot_transition_graph_difference(project_dir, model_dirname, groups, trans_m
     plt.legend(handles=legend_elements, loc='upper left', borderaxespad=0)
     # saving the figures
     # saving the figure
-    if save_dir is not None:
-        os.makedirs(save_dir, exist_ok=True)
-    else:
+
+    if save_dir is None:
         save_dir = os.path.join(project_dir, model_dirname, 'figures')
-        os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(save_dir, exist_ok=True)
     fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.pdf'))
     fig.savefig(os.path.join(save_dir, 'transition_graphs_diff.png'))
 

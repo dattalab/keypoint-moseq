@@ -1,17 +1,18 @@
-import numpy as np
 import os
 import glob
-import tqdm
+import tabulate
 import warnings
 import subprocess
+import numpy as np
 from textwrap import fill
 import jax, jax.numpy as jnp
-from itertools import groupby
 from scipy.ndimage import median_filter, convolve1d, gaussian_filter1d
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 from jax_moseq.models.keypoint_slds import inverse_rigid_transform
+from jax_moseq.utils import get_frequencies, batch
 na = jnp.newaxis
+
 
 
 def np_io(fn): 
@@ -21,35 +22,6 @@ def np_io(fn):
     """
     return lambda *args, **kwargs: jax.device_get(
         fn(*jax.device_put(args), **jax.device_put(kwargs)))
-
-
-def stateseq_stats(stateseqs, mask):
-    """
-    Get durations and frequencies for a batch of state sequences
-
-    Parameters
-    ----------
-    stateseqs: ndarray
-        Batch of state sequences where the last dim indexes time 
-
-    mask: ndarray
-        Binary indicator for which elements of `stateseqs` are valid,
-        e.g. when state sequences of different lengths have been padded
-        and stacked together in `stateseqs`
-
-    Returns
-    -------
-    frequency: ndarray, shape (max(stateseqs)+1,)
-        The frequency of each syllable (not run-length encoded)
-
-    durations: ndarray
-        The duration of each each syllable (across all state sequences)
-
-    """
-    s = np.array(stateseqs.flatten()[mask[...,-stateseqs.shape[-1]:].flatten()>0])
-    durations = np.array([sum(1 for i in g) for k,g in groupby(s)])
-    frequency = np.bincount(s)
-    return frequency, durations
 
 
 def print_dims_to_explain_variance(pca, f):
@@ -65,128 +37,6 @@ def print_dims_to_explain_variance(pca, f):
     cs = np.cumsum(pca.explained_variance_ratio_)
     if cs[-1] < f: print(f'All components together only explain {cs[-1]*100}% of variance.')
     else: print(f'>={f*100}% of variance exlained by {(cs>f).nonzero()[0].min()+1} components.')
-
-
-def concatenate_stateseqs(stateseqs, mask=None):
-    """
-    Concatenate state sequences, optionally applying a mask.
-
-    Parameters
-    ----------
-    stateseqs: ndarray of shape (..., t), or dict or list of such arrays
-        Batch of state sequences where the last dim indexes time, or a
-        dict/list containing state sequences as 1d arrays.
-
-    mask: ndarray of shape (..., >=t), default=None
-        Binary indicator for which elements of `stateseqs` are valid,
-        used in the case where `stateseqs` is an ndarray. If `mask` 
-        contains more time-points than `stateseqs`, the initial extra 
-        time-points will be ignored.
-
-    Returns
-    -------
-    stateseqs_flat: ndarray
-        1d array containing all state sequences 
-    """
-    if isinstance(stateseqs, dict):
-        stateseq_flat = np.hstack(list(stateseqs.values()))
-    elif isinstance(stateseqs, list):
-        stateseq_flat = np.hstack(stateseqs)
-    elif mask is not None:
-        stateseq_flat = stateseqs[mask[:,-stateseqs.shape[1]:]>0]
-    else: stateseq_flat = stateseqs.flatten()
-    return stateseq_flat
-
-
-def get_durations(stateseqs, mask=None):
-    """
-    Get durations for a batch of state sequences. For a more detailed 
-    description of the function parameters, see 
-    :py:func:`keypoint_moseq.util.concatenate_stateseqs`
-
-    Parameters
-    ----------
-    stateseqs: ndarray of shape (..., t), or dict or list of such arrays
-        Batch of state sequences where the last dim indexes time, or a
-        dict/list containing state sequences as 1d arrays.
-
-    mask: ndarray of shape (..., >=t), default=None
-        Binary indicator for which elements of `stateseqs` are valid,
-        used in the case where `stateseqs` is an ndarray. If `mask` 
-        contains more time-points than `stateseqs`, the initial extra 
-        time-points will be ignored.
-
-    Returns
-    -------
-    durations: 1d array
-        The duration of each each state (across all state sequences)
-
-    Examples
-    --------
-    >>> stateseqs = {
-        'name1': np.array([1, 1, 2, 2, 2, 3]),
-        'name2': np.array([0, 0, 0, 1])
-    }
-    >>> get_durations(stateseqs)
-    array([2, 3, 1, 3, 1])
-    """
-    stateseq_flat = concatenate_stateseqs(stateseqs, mask=mask).astype(int)
-    stateseq_padded = np.hstack([[-1],stateseq_flat,[-1]])
-    changepoints = np.diff(stateseq_padded).nonzero()[0]
-    return changepoints[1:]-changepoints[:-1]
-
-
-def get_frequencies(stateseqs, mask=None, num_states=None, runlength=True):
-    """
-    Get state frequencies for a batch of state sequences. Each frame is
-    counted separately. For a more detailed  description of the function 
-    parameters, see :py:func:`keypoint_moseq.util.concatenate_stateseqs`
-
-    Parameters
-    ----------
-    stateseqs: ndarray of shape (..., t), or dict or list of such arrays
-        Batch of state sequences where the last dim indexes time, or a
-        dict/list containing state sequences as 1d arrays.
-
-    mask: ndarray of shape (..., >=t), default=None
-        Binary indicator for which elements of `stateseqs` are valid,
-        used in the case where `stateseqs` is an ndarray. If `mask` 
-        contains more time-points than `stateseqs`, the initial extra 
-        time-points will be ignored.
-
-    num_states: int, default=None
-        Number of different states. If None, the number of states will
-        be set to `max(stateseqs)+1`.
-
-    runlength: bool, default=True
-        Whether to count frequency by the number of instances of each
-        state (True), or by the number of frames in each state (False).
-
-    Returns
-    -------
-    frequencies: 1d array
-        Frequency of each state across all state sequences
-
-    Examples
-    --------
-    >>> stateseqs = {
-        'name1': np.array([1, 1, 2, 2, 2, 3]),
-        'name2': np.array([0, 0, 0, 1])}
-    >>> get_frequencies(stateseqs, runlength=True)
-    array([0.2, 0.4, 0.2, 0.2])
-    >>> get_frequencies(stateseqs, runlength=False)
-    array([0.3, 0.3, 0.3, 0.1])
-    """    
-    stateseq_flat = concatenate_stateseqs(
-        stateseqs, mask=mask).astype(int)
-    
-    if runlength:
-        state_onsets = np.pad(np.diff(stateseq_flat).nonzero()[0]+1, (1,0))
-        stateseq_flat = stateseq_flat[state_onsets]
-
-    counts = np.bincount(stateseq_flat, minlength=num_states)
-    frequencies = counts/counts.sum()
-    return frequencies
 
 
 def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
@@ -669,6 +519,7 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     else:
         raise ValueError('Invalid mode: {}'.format(mode))
 
+
 def interpolate_along_axis(x, xp, fp, axis=0):
     """
     Linearly interpolate along a given axis.
@@ -810,7 +661,6 @@ def check_jupyter_extensions(extensions=[
     'jupyter_bokeh',
     'qgrid', 
 ]):
-
     result = subprocess.run(['jupyter', 'nbextension', 'list'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     result_str = result.stdout.decode('utf-8')
     
@@ -828,3 +678,197 @@ def check_jupyter_extensions(extensions=[
                 break
         else:
             print(f'The extension {extension} is not installed.')
+
+
+def _print_colored_table(row_labels, col_labels, values):
+    try:
+        from IPython.display import display
+        display_available = True
+    except ImportError:
+        display_available = False
+
+    title = 'Proportion of NaNs'
+    df = pd.DataFrame(values, index=row_labels, columns=col_labels)
+    
+    if display_available:
+        def colorize(val):
+            color = plt.get_cmap("Reds")(val*0.8)
+            return f'background-color: rgba({int(color[0]*255)}, {int(color[1]*255)}, {int(color[2]*255)}, {color[3]})'  
+        colored_df = df.style.applymap(colorize).set_caption('Proportion of NaNs')
+        display(colored_df)
+        return colored_df
+    else:
+        print(title)
+        print(tabulate(df, headers='keys', tablefmt="simple_grid", showindex=True))
+
+
+def check_nan_proportions(coordinates, bodyparts, 
+                          warning_threshold=0.5,
+                          breakdown=False, **kwargs):
+    """
+    Check if any bodyparts have a high proportion of NaNs.
+    
+    Parameters
+    ----------
+    coordinates: dict
+        Dictionary mapping filenames to keypoint coordinates as ndarrays
+        of shape (n_frames, n_bodyparts, 2)
+
+    bodyparts: list of str
+        Name of each bodypart. The order of the names should match the
+        order of the bodyparts in `coordinates`.
+
+    warning_threshold: float, default=0.5
+        If the proportion of NaNs for a bodypart is greater than
+        `warning_threshold`, then a warning is printed.
+        
+    breakdown: bool, default=False
+        Whether to print a table detailing the proportion of NaNs
+        for each bodyparts in each array of `coordinates`.
+    """
+    if breakdown:
+        keys = sorted(coordinates.keys())
+        nan_props = [np.isnan(coordinates[k]).any(-1).mean(0) for k in keys]
+        _print_colored_table(keys, bodyparts, nan_props)
+    else:
+        all_coords = np.concatenate(list(coordinates.values()))
+        nan_props = np.isnan(all_coords).any(-1).mean(0)
+        if np.any(nan_props > warning_threshold):
+            bps = [bp for bp,p in zip(bodyparts,nan_props) if p > warning_threshold]
+            warnings.warn(
+                 '\nCoordinates for the following bodyparts are missing (set to NaN) in at least '
+                 '{}% of frames:\n - {}\n\n'.format(warning_threshold*100, '\n - '.join(bps)))
+            warnings.warn(
+                'This may cause problems during modeling. See '
+                'https://keypoint-moseq.readthedocs.io/en/latest/FAQs.html#high-proportion-of-nans'
+                ' for additional information.')
+
+
+   
+def format_data(coordinates, confidences=None, keys=None, 
+                seg_length=None, bodyparts=None, use_bodyparts=None,
+                conf_pseudocount=1e-3, added_noise_level=0.1, **kwargs):
+    """
+    Format keypoint coordinates and confidences for inference.
+
+    Data are transformed as follows:
+        1. Coordinates and confidences are each merged into a single 
+           array using :py:func:`keypoint_moseq.util.batch`. 
+        2. The keypoints axis is reindexed according to the order
+           of elements in `use_bodyparts` with respect to their 
+           initial orer in `bodyparts`.
+        3. Uniform noise proportional to `added_noise_level` is
+           added to the keypoint coordinates to prevent degenerate
+           solutions during fitting. 
+        4. Keypoint confidences are augmented by `conf_pseudocount`.
+        5. Wherever NaNs occur in the coordinates, they are replaced
+           by values imputed using linear interpolation, and the
+           corresponding confidences are set to `conf_pseudocount`.
+    
+    Parameters
+    ----------
+    coordinates: dict
+        Keypoint coordinates for a collection of sessions. Values
+        must be numpy arrays of shape (T,K,D) where K is the number
+        of keypoints and D={2 or 3}. 
+        
+    confidences: dict, default=None
+        Nonnegative confidence values for the keypoints in 
+        `coordinates` as numpy arrays of shape (T,K).
+        
+    keys: list of str, default=None
+        (See :py:func:`keypoint_moseq.util.batch`)
+        
+    bodyparts: list, default=None
+        Label for each keypoint represented in `coordinates`. Required
+        to reindex coordinates and confidences according to `use_bodyparts`.
+
+    use_bodyparts: list, default=None
+        Ordered subset of keypoint labels to be used for modeling.
+        If `use_bodyparts=None`, then all keypoints are used.
+
+    conf_pseudocount: float, default=1e-3
+        Pseudocount used to augment keypoint confidences.
+    
+    seg_length: int, default=None
+        Length of each segment. If `seg_length=None`, a length is 
+        chosen so that no time-series are broken into multiple segments.
+        If all time-series are shorter than `seg_length`, then
+        `seg_length` is set to the length of the shortest time-series.
+        
+    Returns
+    -------
+    data: dict with the following items
+    
+        Y: jax array with shape (n_segs, seg_length, K, D)
+            Keypoint coordinates from all sessions broken into 
+            fixed-length segments.
+            
+        conf: jax array with shape (n_segs, seg_length, K)
+            Confidences from all sessions broken into fixed-length 
+            segments. If no input is provided for `confidences`, 
+            then `data["conf"]=None`.
+        
+        mask: jax array with shape (n_segs, seg_length)
+            Binary array where 0 indicates areas of padding 
+            (see :py:func:`keypoint_moseq.util.batch`).
+            
+    labels: list of tuples (object, int, int)
+        Label for each row of `Y` and `conf` 
+        (see :py:func:`keypoint_moseq.util.batch`).
+    """    
+    if keys is None: 
+        keys = sorted(coordinates.keys()) 
+    else: 
+        bad_keys = set(keys) - set(coordinates.keys())
+        assert len(bad_keys) == 0, fill(
+            f'Keys {bad_keys} not found in coordinates')
+
+    assert len(keys) > 0, 'No sessions found'
+
+    num_keypoints = [coordinates[key].shape[-2] for key in keys]
+    assert len(set(num_keypoints)) == 1, fill(
+        f'All sessions must have the same number of keypoints, but '
+        f'found {set(num_keypoints)} keypoints across sessions.')
+    
+    if bodyparts is not None:
+        assert len(bodyparts) == num_keypoints[0], fill(
+            f'The number of keypoints in `coordinates` ({num_keypoints[0]}) '
+            f'does not match the number of labels in `bodyparts` '
+            f'({len(bodyparts)})')
+
+    if any(['/' in key for key in keys]): 
+        warnings.warn(fill(
+            'WARNING: Session names should not contain "/", this will cause '
+            'problems with saving/loading hdf5 files.'))
+        
+    if confidences is None:
+        confidences = {key: np.ones_like(coordinates[key][...,0]) for key in keys}
+
+    if bodyparts is not None and use_bodyparts is not None:
+        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+        confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
+
+    for key in keys:
+        outliers = np.isnan(coordinates[key]).any(-1)
+        coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
+        confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
+    
+    if seg_length is not None:
+        max_session_length = max([coordinates[key].shape[0] for key in keys])
+        seg_length = min(seg_length, max_session_length)
+
+    Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
+    Y = Y.astype(float)
+
+    conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
+    if np.min(conf) < 0: 
+        conf = np.maximum(conf,0) 
+        warnings.warn(fill(
+            'Negative confidence values are not allowed and will be set to 0.'))
+    conf = conf + conf_pseudocount
+  
+    if added_noise_level>0: 
+        Y += np.random.uniform(-added_noise_level,added_noise_level,Y.shape)
+        
+    return jax.device_put({'mask':mask, 'Y':Y, 'conf':conf}), labels

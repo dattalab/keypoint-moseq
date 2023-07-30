@@ -26,8 +26,6 @@ from bokeh.layouts import column
 from bokeh.models import Div, CustomJS, Slider
 from ipywidgets import HBox, VBox
 from bokeh.models.widgets import PreText
-from keypoint_moseq.io import load_results
-from keypoint_moseq.util import filter_angle, get_frequencies
 
 
 def read_yaml(yaml_file):

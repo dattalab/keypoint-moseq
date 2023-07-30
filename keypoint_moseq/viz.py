@@ -13,13 +13,13 @@ from PIL import Image
 plt.rcParams['figure.dpi'] = 100
 
 from keypoint_moseq.util import (
-    get_edges, get_durations, get_frequencies, reindex_by_bodyparts,
-    find_matching_videos, get_syllable_instances, sample_instances,
-    filter_centroids_headings, get_trajectories, interpolate_keypoints,
-    interpolate_along_axis
+    get_edges, reindex_by_bodyparts, find_matching_videos, 
+    get_syllable_instances, sample_instances, filter_centroids_headings, 
+    get_trajectories, interpolate_keypoints, interpolate_along_axis
 )
-from keypoint_moseq.io import load_results
+from keypoint_moseq.io import load_results, _get_path
 from jax_moseq.models.keypoint_slds import center_embedding
+from jax_moseq.utils import get_durations, get_frequencies
 
 
 # suppress warnings from imageio
@@ -471,11 +471,7 @@ def plot_progress(model, data, history, iteration, path=None,
     plt.tight_layout()
     
     if savefig:
-        if path is None:
-            assert name is not None and project_dir is not None, fill(
-                'The `savefig` option requires either a `path` '
-                'or a `name` and `project_dir`')
-            path = os.path.join(project_dir,name,'fitting_progress.pdf')
+        path = _get_path(path, project_dir, name, 'fitting_progress.pdf')
         plt.savefig(path)  
     plt.show()
 
@@ -853,11 +849,7 @@ def generate_grid_movies(
             '`coordinates` must be provided if `window_size` is None '
             'or `overlay_keypoints` is True')
     
-    if output_dir is None:
-        assert project_dir is not None and name is not None, fill(
-            'Either specify the `output_dir` where grid movies should '
-            'be saved or include a `project_dir` and `name`')
-        output_dir = os.path.join(project_dir,name, 'grid_movies')
+    output_dir = _get_path(project_dir, name, output_dir, 'grid_movies', 'output_dir')        
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     print(f'Writing grid movies to {output_dir}')
     
@@ -1290,11 +1282,7 @@ def generate_trajectory_plots(
         the name of the plane (e.g. 'xy') as a suffix. This argument is 
         ignored for 2D data.
     """
-    if output_dir is None:
-        assert project_dir is not None and name is not None, fill(
-            'Either specify the `output_dir` where trajectory plots '
-            'should be saved or include a `project_dir` and `name`')
-        output_dir = os.path.join(project_dir,name, 'trajectory_plots')
+    output_dir = _get_path(project_dir, name, output_dir, 'grid_movies', 'output_dir') 
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     print(f'Saving trajectory plots to {output_dir}')
         
@@ -1763,11 +1751,7 @@ def generate_crowd_movies(
         Quality of the crowd movies. Higher values result in higher
         quality movies but larger file sizes.
     """    
-    if output_dir is None:
-        assert project_dir is not None and name is not None, fill(
-            'Either specify the `output_dir` where crowd movies should '
-            'be saved or include a `project_dir` and `name`')
-        output_dir = os.path.join(project_dir,name, 'crowd_movies')
+    output_dir = _get_path(project_dir, name, output_dir, 'grid_movies', 'output_dir') 
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     print(f'Writing crowd movies to {output_dir}')
 

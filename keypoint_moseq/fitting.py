@@ -7,7 +7,8 @@ from textwrap import fill
 from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
-from keypoint_moseq.io import save_checkpoint, format_data, save_hdf5
+from keypoint_moseq.io import save_checkpoint, save_hdf5
+from keypoint_moseq.util import format_data
 from jax_moseq.models.keypoint_slds import estimate_coordinates, resample_model, init_model
 from jax_moseq.utils import check_for_nans, unbatch
 

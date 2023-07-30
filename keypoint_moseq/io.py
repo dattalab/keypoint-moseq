@@ -7,21 +7,15 @@ import joblib
 import tqdm
 import yaml
 import os
-import re
 import pandas as pd
-from datetime import datetime
 from textwrap import fill
-import matplotlib.pyplot as plt
-import tabulate
 import sleap_io
 from pynwb import NWBHDF5IO
 from ndx_pose import PoseEstimation
 
-from jax_moseq.utils import batch
 from keypoint_moseq.util import (
-    reindex_by_bodyparts, 
     list_files_with_exts, 
-    interpolate_keypoints,
+    check_nan_proportions,
 )
 
 
@@ -36,6 +30,14 @@ def _build_yaml(sections, comments):
             text_blocks.append(text)
     return '\n'.join(text_blocks)
         
+
+def _get_path(project_dir, name, path, filename, pathname_for_error_msg='path'):
+    if path is None: 
+        assert project_dir is not None and name is not None, fill(
+            f'`name` and `project_dir` are required if no `{pathname_for_error_msg}` is given.')
+        path = os.path.join(project_dir, name, filename)
+    return path
+
 
 def generate_config(project_dir, **kwargs):
     """
@@ -356,135 +358,6 @@ def setup_project(project_dir, deeplabcut_config=None, sleap_file=None,
         os.makedirs(project_dir)
     generate_config(project_dir, **options)
             
-    
-def format_data(coordinates, confidences=None, keys=None, 
-                seg_length=None, bodyparts=None, use_bodyparts=None,
-                conf_pseudocount=1e-3, added_noise_level=0.1, **kwargs):
-    """
-    Format keypoint coordinates and confidences for inference.
-
-    Data are transformed as follows:
-        1. Coordinates and confidences are each merged into a single 
-           array using :py:func:`keypoint_moseq.util.batch`. 
-        2. The keypoints axis is reindexed according to the order
-           of elements in `use_bodyparts` with respect to their 
-           initial orer in `bodyparts`.
-        3. Uniform noise proportional to `added_noise_level` is
-           added to the keypoint coordinates to prevent degenerate
-           solutions during fitting. 
-        4. Keypoint confidences are augmented by `conf_pseudocount`.
-        5. Wherever NaNs occur in the coordinates, they are replaced
-           by values imputed using linear interpolation, and the
-           corresponding confidences are set to `conf_pseudocount`.
-    
-    Parameters
-    ----------
-    coordinates: dict
-        Keypoint coordinates for a collection of sessions. Values
-        must be numpy arrays of shape (T,K,D) where K is the number
-        of keypoints and D={2 or 3}. 
-        
-    confidences: dict, default=None
-        Nonnegative confidence values for the keypoints in 
-        `coordinates` as numpy arrays of shape (T,K).
-        
-    keys: list of str, default=None
-        (See :py:func:`keypoint_moseq.util.batch`)
-        
-    bodyparts: list, default=None
-        Label for each keypoint represented in `coordinates`. Required
-        to reindex coordinates and confidences according to `use_bodyparts`.
-
-    use_bodyparts: list, default=None
-        Ordered subset of keypoint labels to be used for modeling.
-        If `use_bodyparts=None`, then all keypoints are used.
-
-    conf_pseudocount: float, default=1e-3
-        Pseudocount used to augment keypoint confidences.
-    
-    seg_length: int, default=None
-        Length of each segment. If `seg_length=None`, a length is 
-        chosen so that no time-series are broken into multiple segments.
-        If all time-series are shorter than `seg_length`, then
-        `seg_length` is set to the length of the shortest time-series.
-        
-    Returns
-    -------
-    data: dict with the following items
-    
-        Y: jax array with shape (n_segs, seg_length, K, D)
-            Keypoint coordinates from all sessions broken into 
-            fixed-length segments.
-            
-        conf: jax array with shape (n_segs, seg_length, K)
-            Confidences from all sessions broken into fixed-length 
-            segments. If no input is provided for `confidences`, 
-            then `data["conf"]=None`.
-        
-        mask: jax array with shape (n_segs, seg_length)
-            Binary array where 0 indicates areas of padding 
-            (see :py:func:`keypoint_moseq.util.batch`).
-            
-    labels: list of tuples (object, int, int)
-        Label for each row of `Y` and `conf` 
-        (see :py:func:`keypoint_moseq.util.batch`).
-    """    
-    if keys is None: 
-        keys = sorted(coordinates.keys()) 
-    else: 
-        bad_keys = set(keys) - set(coordinates.keys())
-        assert len(bad_keys) == 0, fill(
-            f'Keys {bad_keys} not found in coordinates')
-
-    assert len(keys) > 0, 'No sessions found'
-
-    num_keypoints = [coordinates[key].shape[-2] for key in keys]
-    assert len(set(num_keypoints)) == 1, fill(
-        f'All sessions must have the same number of keypoints, but '
-        f'found {set(num_keypoints)} keypoints across sessions.')
-    
-    if bodyparts is not None:
-        assert len(bodyparts) == num_keypoints[0], fill(
-            f'The number of keypoints in `coordinates` ({num_keypoints[0]}) '
-            f'does not match the number of labels in `bodyparts` '
-            f'({len(bodyparts)})')
-
-    if any(['/' in key for key in keys]): 
-        warnings.warn(fill(
-            'WARNING: Session names should not contain "/", this will cause '
-            'problems with saving/loading hdf5 files.'))
-        
-    if confidences is None:
-        confidences = {key: np.ones_like(coordinates[key][...,0]) for key in keys}
-
-    if bodyparts is not None and use_bodyparts is not None:
-        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
-        confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
-
-    for key in keys:
-        outliers = np.isnan(coordinates[key]).any(-1)
-        coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
-        confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
-    
-    if seg_length is not None:
-        max_session_length = max([coordinates[key].shape[0] for key in keys])
-        seg_length = min(seg_length, max_session_length)
-
-    Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
-    Y = Y.astype(float)
-
-    conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
-    if np.min(conf) < 0: 
-        conf = np.maximum(conf,0) 
-        warnings.warn(fill(
-            'Negative confidence values are not allowed and will be set to 0.'))
-    conf = conf + conf_pseudocount
-  
-    if added_noise_level>0: 
-        Y += np.random.uniform(-added_noise_level,added_noise_level,Y.shape)
-        
-    return jax.device_put({'mask':mask, 'Y':Y, 'conf':conf}), labels
-
 
 def save_pca(pca, project_dir, pca_path=None):
     """
@@ -527,50 +400,12 @@ def load_pca(project_dir, pca_path=None):
     return joblib.load(pca_path)
 
 
-def load_last_checkpoint(project_dir):
-    """
-    Load checkpoint for the most recent model.
-
-    This method assumes the following directory structure for saved
-    model checkpoints::
-
-        project_dir
-        ├──YYYY_MM_DD-HH_MM_SS
-        │  └checkpoint.p
-        ⋮
-        └──YYYY_MM_DD-HH_MM_SS
-           └checkpoint.p
-
-    Parameters
-    ----------
-    project_dir: str
-
-    Returns
-    -------
-    checkpoint: dict
-        (See :py:func:`keypoint_moseq.io.load_checkpoint`)
-    """ 
-    pattern = re.compile(r'(\d{4}_\d{1,2}_\d{1,2}-\d{2}_\d{2}_\d{2})')
-    paths = list(filter(lambda p: pattern.search(p), os.listdir(project_dir)))
-    assert len(paths)>0, fill(
-        f'There are no directories in {project_dir} that contain'
-        ' a date string with format %Y_%m_%d-%H_%M_%S')
-    
-    name = sorted(
-        paths, key=lambda p: datetime.strptime(
-        pattern.search(p).group(), '%Y_%m_%d-%H_%M_%S')
-    )[-1]
-    
-    path = os.path.join(project_dir,name,'checkpoint.p')
-    return load_checkpoint(path=path), name
-
-
 def load_checkpoint(project_dir=None, name=None, path=None):
     """
     Load model fitting checkpoint.
 
-    The checkpoint path can be specified directly via `path`.
-    Othewise is assumed to be `{project_dir}/<name>/checkpoint.p`.
+    The checkpoint path can be specified directly via `path` or else
+    it is assumed to be `{project_dir}/<name>/checkpoint.p`.
 
     Parameters
     ----------
@@ -583,10 +418,7 @@ def load_checkpoint(project_dir=None, name=None, path=None):
     checkpoint: dict
         See :py:func:`keypoint_moseq.io.save_checkpoint`
     """
-    if path is None: 
-        assert project_dir is not None and name is not None, fill(
-            '`name` and `project_dir` are required if no `path` is given.')
-        path = os.path.join(project_dir,name,'checkpoint.p')
+    path = _get_path(project_dir, name, path, 'checkpoint.p')
     return joblib.load(path)
 
 
@@ -600,8 +432,8 @@ def save_checkpoint(model, data, history, labels, iteration,
     of model fitting. To restart fitting from an iteration earlier than the
     last iteration, use :py:func:`keypoint_moseq.fitting.revert`.
 
-    The checkpoint path can be specified directly via `path`.
-    Otherwise is assumed to be `{project_dir}/<name>/checkpoint.p`. See
+    The checkpoint path can be specified directly via `path` or else
+    it is assumed to be `{project_dir}/<name>/checkpoint.p`. See
     :py:func:`keypoint_moseq.fitting.fit_model` for a more detailed
     description of the checkpoint contents.
 
@@ -637,18 +469,13 @@ def save_checkpoint(model, data, history, labels, iteration,
         Checkpoint path; if not specified, the checkpoint path is determined
         from `project_dir` and `name`.
 
-
     Returns
     -------
     checkpoint: dict
         Dictionary containing `history`, `labels` and `name` as 
         well as the key/value pairs from `model` and `data`.
     """
-    
-    if path is None: 
-        assert project_dir is not None and name is not None, fill(
-            '`name` and `project_dir` are required if no `path` is given.')
-        path = os.path.join(project_dir,name,'checkpoint.p')
+    path = _get_path(project_dir, name, path, 'checkpoint.p')
 
     dirname = os.path.dirname(path)
     if not os.path.exists(dirname): 
@@ -679,6 +506,30 @@ def save_checkpoint(model, data, history, labels, iteration,
     joblib.dump(save_dict, path)
     return save_dict
 
+
+def reindex_states_by_frequency(project_dir=None, name=None, path=None):
+    """
+    Reindex syllable labels by frequency in a saved checkpoint.
+
+    This is an in-place operation: the checkpoint is loaded from disk,
+    modified and saved to disk again. Reindexing effects the discrete
+    state sequence `z` and autoregressive parameters (`Ab` and `Q`),
+    and applies both to the current model and all saved snapshots. 
+
+    The checkpoint path can be specified directly via `path` or else
+    it is assumed to be `{project_dir}/<name>/checkpoint.p`.
+
+    Parameters
+    ----------
+    project_dir: str, default=None
+    name: str, default=None
+    path: str, default=None    
+    """
+    path = _get_path(project_dir, name, path, 'checkpoint.p')
+    checkpoint = joblib.load(path)
+
+    
+
     
 def load_results(project_dir=None, name=None, path=None):
     """
@@ -698,10 +549,7 @@ def load_results(project_dir=None, name=None, path=None):
     results: dict
         See :py:func:`keypoint_moseq.fitting.apply_model`
     """
-    if path is None: 
-        assert project_dir is not None and name is not None, fill(
-            '`name` and `project_dir` are required if no `path` is given.')
-        path = os.path.join(project_dir,name,'results.h5')
+    path = _get_path(project_dir, name, path, 'results.h5')
     return load_hdf5(path)
 
 
@@ -746,16 +594,8 @@ def save_results_as_csv(project_dir=None, name=None, h5_path=None,
         If a path separator ("/" or "\") is present in the recording name, 
         it will be replaced with `path_sep` when saving the csv file.
     """
-
-    if h5_path is None:
-        assert project_dir is not None and name is not None, fill(
-            'Provide either a `h5_path` or a `project_dir` and `name`')
-        h5_path = os.path.join(project_dir, name, 'results.h5')
-
-    if save_dir is None:
-        assert project_dir is not None and name is not None, fill(
-            'Provide either a `save_dir` or a `project_dir` and `name`')
-        save_dir = os.path.join(project_dir, name, 'results')
+    h5_path = _get_path(project_dir, name, h5_path, 'results.h5', 'h5_path')
+    save_dir = _get_path(project_dir, name, h5_path, 'results', 'save_dir')
 
     if not os.path.exists(save_dir): 
         os.makedirs(save_dir)
@@ -801,8 +641,6 @@ def save_results_as_csv(project_dir=None, name=None, h5_path=None,
             df.to_csv(f'{save_path}.csv', index=False)
 
 
-
-
 def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
     """
     Create a name from a filepath. Either return the name of the file
@@ -815,70 +653,6 @@ def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
         return filepath.replace(os.path.sep, path_sep)
     else:
         return os.path.basename(filepath)
-
-
-def _print_colored_table(row_labels, col_labels, values):
-    try:
-        from IPython.display import display
-        display_available = True
-    except ImportError:
-        display_available = False
-
-    title = 'Proportion of NaNs'
-    df = pd.DataFrame(values, index=row_labels, columns=col_labels)
-    
-    if display_available:
-        def colorize(val):
-            color = plt.get_cmap("Reds")(val*0.8)
-            return f'background-color: rgba({int(color[0]*255)}, {int(color[1]*255)}, {int(color[2]*255)}, {color[3]})'  
-        colored_df = df.style.applymap(colorize).set_caption('Proportion of NaNs')
-        display(colored_df)
-        return colored_df
-    else:
-        print(title)
-        print(tabulate(df, headers='keys', tablefmt="simple_grid", showindex=True))
-
-
-def check_nan_proportions(coordinates, bodyparts, 
-                          warning_threshold=0.5,
-                          breakdown=False, **kwargs):
-    """
-    Check if any bodyparts have a high proportion of NaNs.
-    
-    Parameters
-    ----------
-    coordinates: dict
-        Dictionary mapping filenames to keypoint coordinates as ndarrays
-        of shape (n_frames, n_bodyparts, 2)
-
-    bodyparts: list of str
-        Name of each bodypart. The order of the names should match the
-        order of the bodyparts in `coordinates`.
-
-    warning_threshold: float, default=0.5
-        If the proportion of NaNs for a bodypart is greater than
-        `warning_threshold`, then a warning is printed.
-        
-    breakdown: bool, default=False
-        Whether to print a table detailing the proportion of NaNs
-        for each bodyparts in each array of `coordinates`.
-    """
-    if breakdown:
-        keys = sorted(coordinates.keys())
-        nan_props = [np.isnan(coordinates[k]).any(-1).mean(0) for k in keys]
-        _print_colored_table(keys, bodyparts, nan_props)
-    else:
-        all_coords = np.concatenate(list(coordinates.values()))
-        nan_props = np.isnan(all_coords).any(-1).mean(0)
-        if np.any(nan_props > warning_threshold):
-            bps = [bp for bp,p in zip(bodyparts,nan_props) if p > warning_threshold]
-            warnings.warn(
-                 '\nCoordinates for the following bodyparts are missing (set to NaN) in at least '
-                 '{}% of frames:\n - {}\n\n'.format(warning_threshold*100, '\n - '.join(bps)))
-            warnings.warn(
-                'This may cause problems during modeling. See '
-                'https://keypoint-moseq.readthedocs.io/en/latest/FAQs.html#high-proportion-of-nans'
-                ' for additional information.')
 
 
 def load_keypoints(filepath_pattern, format, extension=None, recursive=True, 
