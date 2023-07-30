@@ -8,6 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
+from scipy.spatial.distance import pdist
+from scipy.cluster.hierarchy import linkage, dendrogram
 from textwrap import fill
 from PIL import Image
 plt.rcParams['figure.dpi'] = 100
@@ -15,7 +17,8 @@ plt.rcParams['figure.dpi'] = 100
 from keypoint_moseq.util import (
     get_edges, reindex_by_bodyparts, find_matching_videos, 
     get_syllable_instances, sample_instances, filter_centroids_headings, 
-    get_trajectories, interpolate_keypoints, interpolate_along_axis
+    get_instance_trajectories, get_typical_trajectories,
+    interpolate_keypoints, interpolate_along_axis,
 )
 from keypoint_moseq.io import load_results, _get_path
 from jax_moseq.models.keypoint_slds import center_embedding
@@ -105,6 +108,7 @@ def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3,2)):
     plt.show()
     return fig
           
+
 def plot_pcs(pca, *, use_bodyparts, skeleton, keypoint_colormap='autumn',
              savefig=True, project_dir=None, scale=1, plot_n_pcs=10, 
              axis_size=(2,1.5), ncols=5, node_size=30.0, linewidth=2.0, **kwargs):
@@ -680,7 +684,7 @@ def get_grid_movie_window_size(sampled_instances, centroids, headings,
     blocksize: int, default=16
         Window size is rounded up to the nearest multiple of `blocksize`.
     """
-    all_trajectories = get_trajectories(
+    all_trajectories = get_instance_trajectories(
         sum(sampled_instances.values(), []), coordinates, pre=pre, 
         post=post, centroids=centroids, headings=headings)
     
@@ -837,6 +841,8 @@ def generate_grid_movies(
         
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """    
+    plot_options.update({'keypoint_colormap':keypoint_colormap})
+    
     if not keypoints_only:
         assert (video_dir is not None) or (video_paths is not None), fill(
             'Either `video_dir` or `video_paths` is required unless `keypoints_only=True`')
@@ -858,31 +864,23 @@ def generate_grid_movies(
 
     edges = []
     if len(skeleton)>0 and overlay_keypoints: 
-        if isinstance(skeleton[0][0],str):
-            assert use_bodyparts is not None, fill(
-                'If skeleton edges are specified using bodypart names, '
-                '`use_bodyparts` must be specified')
-            edges = get_edges(use_bodyparts, skeleton)
-        else: edges = skeleton
-
-    plot_options.update({'keypoint_colormap':keypoint_colormap})
+        edges = get_edges(use_bodyparts, skeleton)
 
     if results is None: results = load_results(
         name=name, project_dir=project_dir, path=results_path)
+
+    syllables = {k:v['syllable'] for k,v in results.items()}
+    centroids = {k:v['centroid'] for k,v in results.items()}
+    headings = {k:v['heading'] for k,v in results.items()}
     
     if video_paths is None and not keypoints_only:
         video_paths = find_matching_videos(
             results.keys(), video_dir, as_dict=True, 
             video_extension=video_extension)
-        
         videos = {k: OpenCVReader(path) for k,path in video_paths.items()}
         fps = list(videos.values())[0].fps
     else: 
         videos = None
-
-    syllables = {k:v['syllable'] for k,v in results.items()}
-    centroids = {k:v['centroid'] for k,v in results.items()}
-    headings = {k:v['heading'] for k,v in results.items()}
 
     syllable_instances = get_syllable_instances(
         syllables, pre=pre, post=post, min_duration=min_duration,
@@ -1157,14 +1155,14 @@ def save_gif(image_list, gif_filename, duration=0.5):
 
 
 def generate_trajectory_plots(
-    coordinates=None, results=None, output_dir=None, name=None, 
-    project_dir=None, results_path=None, pre=5, post=15, 
-    min_frequency=0.005, min_duration=3, use_estimated_coords=False, 
-    skeleton=[], bodyparts=None, use_bodyparts=None, num_samples=50, 
-    keypoint_colormap='autumn', plot_options={}, save_individually=True, 
-    sampling_options={'mode':'density'}, save_gifs=True, save_mp4s=False, 
-    padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2}, fps=30, 
-    projection_planes=['xy','xz'], **kwargs):
+    coordinates=None, results=None, output_dir=None, 
+    name=None, project_dir=None, results_path=None, pre=5, post=15, 
+    min_frequency=0.005, min_duration=3, skeleton=[], bodyparts=None, 
+    use_bodyparts=None, density_sample=True,
+    sampling_options={'mode':'density', 'n_neighbors':50}, save_gifs=True, 
+    save_mp4s=False, keypoint_colormap='autumn', plot_options={}, 
+    save_individually=True, fps=30, projection_planes=['xy','xz'], 
+    padding={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2}, **kwargs):
     """
     Generate trajectory plots for a modeled dataset.
 
@@ -1173,33 +1171,13 @@ def generate_trajectory_plots(
     A separate figure (and gif, optionally) is saved for each syllable, 
     along with a single figure showing all syllables in a grid. The 
     plots are saved to `{output_dir}` if it is provided, otherwise 
-    they are saved to `{project_dir}/{name}/trajectory_plots`.
+    they are saved to `{project_dir}/{name}/trajectory_plots`. 
+    
+    Plot-related parameters are described below. For the remaining 
+    parameters see (:py:func:`keypoint_moseq.util.get_typical_trajectories`)
 
     Parameters
     ----------
-    coordinates : dict, default=None
-        Dictionary mapping session names to keypoint coordinates as 
-        ndarrays of shape (n_frames, n_bodyparts, 2). Required if
-        `use_estimated_coords=False`.
-
-    results: dict, default=None
-        Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.apply_model`). Must have
-        the format::
-
-            {
-                session_name1: {
-                    'syllable':   array of shape (n_frames,),
-                    'est_coords': array of shape (n_frames, n_bodyparts, dim)
-                    'centroid':   array of shape (n_frames, dim),
-                    'heading' :   array of shape (n_frames,), 
-                },
-                ...  
-            }
-
-        If `results=None`, results will be loaded using either 
-        `results_path` or  `project_dir` and `name`.
-
     output_dir: str, default=None
         Directory where trajectory plots should be saved. If None, 
         plots will be saved to `{project_dir}/{name}/trajectory_plots`.
@@ -1210,7 +1188,7 @@ def generate_trajectory_plots(
         plots if `output_dir` is None.
 
     project_dir: str, default=None
-       Project directory. Required to load results if `results` is 
+        Project directory. Required to load results if `results` is 
         None and `results_path` is None. Required to save trajectory
         plots if `output_dir` is None.
 
@@ -1218,33 +1196,9 @@ def generate_trajectory_plots(
         Path to a results file. If None, results will be loaded from
         `{project_dir}/{name}/results.h5`.
 
-    pre: int, default=5, post: int, default=15
-        Defines the temporal window around syllable onset for 
-        computing the average trajectory. Note that the window is 
-        independent of the actual duration of the syllable.
-
-    min_frequency: float, default=0.005
-        Minimum frequency of a syllable to plotted.
-
-    min_duration: float, default=3
-        Minimum duration of a syllable instance to be included in the
-        trajectory average.
-
-    bodyparts: list of str, default=None
-        List of bodypart names in `coordinates`. 
-
-    use_bodyparts: list of str, default=None
-        Ordered list of bodyparts to include in trajectory plot.
-        If None, all bodyparts will be included.
-
     skeleton : list, default=[]
         List of edges that define the skeleton, where each edge is a
         pair of bodypart names or a pair of indexes.
-
-    num_samples: int, default=50
-        Number of samples to used to compute the average trajectory.
-        Also used to set `n_neighbors` when sampling syllable instances
-        in `density` mode. 
 
     keypoint_colormap : str
         Name of a matplotlib colormap to use for coloring the keypoints.
@@ -1252,10 +1206,6 @@ def generate_trajectory_plots(
     plot_options: dict, default={}
         Dictionary of options for trajectory plots (see
         :py:func:`keypoint_moseq.util.plot_trajectories`).
-
-    sampling_options: dict, default={'mode':'density'}
-        Dictionary of options for sampling syllable instances (see
-        :py:func:`keypoint_moseq.util.sample_instances`).
         
     padding: dict, default={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2}
         Padding around trajectory plots. Controls the the distance
@@ -1282,6 +1232,9 @@ def generate_trajectory_plots(
         the name of the plane (e.g. 'xy') as a suffix. This argument is 
         ignored for 2D data.
     """
+    plot_options.update({'keypoint_colormap':keypoint_colormap})
+    edges = [] if len(skeleton)==0 else get_edges(use_bodyparts, skeleton)
+
     output_dir = _get_path(project_dir, name, output_dir, 'grid_movies', 'output_dir') 
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     print(f'Saving trajectory plots to {output_dir}')
@@ -1289,49 +1242,18 @@ def generate_trajectory_plots(
     if results is None: results = load_results(
         name=name, project_dir=project_dir, path=results_path)
 
-    if use_estimated_coords:
-        coordinates = {k:v['est_coords'] for k,v in results.items()}
-    elif bodyparts is not None and use_bodyparts is not None:
-        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
-
     syllables = {k:v['syllable'] for k,v in results.items()}
     centroids = {k:v['centroid'] for k,v in results.items()}
     headings = {k:v['heading'] for k,v in results.items()}
-    plot_options.update({'keypoint_colormap':keypoint_colormap})
-            
-    syllable_instances = get_syllable_instances(
-        syllables, pre=pre, post=post, min_duration=min_duration,
-        min_frequency=min_frequency, min_instances=num_samples)
-    
-    if len(syllable_instances) == 0:
-        warnings.warn(fill(
-            'No syllables with sufficient instances to make a trajectory plot. '
-            'This usually occurs when all frames have the same syllable label '
-            '(use `plot_syllable_frequencies` to check if this is the case)'))
-        return
-    
-    sampling_options['n_neighbors'] = num_samples
-    sampled_instances = sample_instances(
-        syllable_instances, num_samples, coordinates=coordinates, 
-        centroids=centroids, headings=headings, **sampling_options)
 
-    trajectories = {syllable: get_trajectories(
-        instances, coordinates, pre=pre, post=post, 
-        centroids=centroids, headings=headings
-        ) for syllable,instances in sampled_instances.items()}
+    typical_trajectories = get_typical_trajectories(
+        coordinates, syllables, centroids, headings, pre, post, 
+        min_frequency, min_duration, bodyparts, use_bodyparts, 
+        density_sample, sampling_options)
 
-    edges = []
-    if len(skeleton)>0: 
-        if isinstance(skeleton[0][0],str):
-            assert use_bodyparts is not None, fill(
-                'If skeleton edges are specified using bodypart names, '
-                '`use_bodyparts` must be specified')
-            edges = get_edges(use_bodyparts, skeleton)
-        else: edges = skeleton
-
-    syllables = sorted(trajectories.keys())
-    titles = [f'Syllable {syllable}' for syllable in syllables]
-    Xs = np.nanmedian(np.array([trajectories[syllable] for syllable in syllables]),axis=1)  
+    syllable_ixs = sorted(typical_trajectories.keys())
+    titles = [f'Syllable {s}' for s in syllable_ixs]
+    Xs = np.stack([typical_trajectories[s] for s in syllable_ixs])
     
     if Xs.shape[-1]==3:
         projection_planes = [''.join(sorted(plane.lower())) for plane in projection_planes]
@@ -1453,35 +1375,11 @@ def overlay_keypoints_on_image(
     return image
 
 
-def overlay_trajectory_on_video(
-        frames, trajectory, smoothing_kernel=1, highlight=None, 
-        min_opacity=0.2, max_opacity=1, num_ghosts=5, interval=2, 
-        plot_options={}):
-    
-    """
-    Overlay a trajectory of keypoints on a video.
-    """
-    if smoothing_kernel > 0:
-        trajectory = gaussian_filter1d(trajectory, smoothing_kernel, axis=0)
-        
-    opacities = np.repeat(np.linspace(max_opacity, min_opacity, num_ghosts+1), interval)  
-    for i in np.arange(0,trajectory.shape[0],interval):
-        for j,opacity in enumerate(opacities):
-            if i+j < frames.shape[0]:
-                plot_options['opacity'] = opacity
-                if highlight is not None:
-                    start,end,highlight_factor = highlight
-                    if i+j < start or i+j > end:
-                        plot_options['opacity'] *= highlight_factor
-                frames[i+j] = overlay_keypoints_on_image(
-                    frames[i+j], trajectory[i], **plot_options)
-    return frames
-
 def overlay_keypoints_on_video(
-    video_path, coordinates, skeleton=[], bodyparts=None, use_bodyparts=None, 
-    output_path=None, show_frame_numbers=True, text_color=(255,255,255), 
-    crop_size=None, frames=None, quality=7, centroid_smoothing_filter=10, 
-    plot_options={}):
+    video_path, coordinates, skeleton=[], bodyparts=None, 
+    use_bodyparts=None,  output_path=None, show_frame_numbers=True, 
+    text_color=(255,255,255),  crop_size=None, frames=None, quality=7, 
+    centroid_smoothing_filter=10, plot_options={}):
     """
     Overlay keypoints on a video.
 
@@ -1573,245 +1471,69 @@ def overlay_keypoints_on_video(
 
 
 
-
-
-def crowd_movie(
-    instances, coordinates, centroids, lims, pre=30, post=60,
-    edges=[], plot_options={}):
+def plot_similarity_dendrogram(
+    coordinates=None, results=None, save_path=None, name=None, 
+    project_dir=None, results_path=None, pre=5, post=15, min_frequency=0.005, 
+    min_duration=3, bodyparts=None, use_bodyparts=None, density_sample=False,
+    sampling_options={},  figsize=(6,3), **kwargs):
     """
-    Generate a crowd movie.
+    Plot a dendrogram showing the similarity between syllable trajectories.
 
-    Crowd movies show many instances of a syllable by animating
-    their keypoint trajectories in a common coordinate system.
-    The trajectories are synchronized to syllable onset. The opacity 
-    of each instance increases at syllable onset and decreases at
-    syllable offset.
+    The dendrogram is saved to `{save_path}` if it is provided, or 
+    else to `{project_dir}/{name}/similarity_dendrogram.pdf`. Plot-
+    related parameters are described below. For the remaining parameters 
+    see (:py:func:`keypoint_moseq.util.get_typical_trajectories`)
 
     Parameters
     ----------
-    instances: list of tuples `(key, start, end)`
-        List of syllable instances to include in the grid movie,
-        where each instance is specified as a tuple with the session
-        name, start frame and end frame. 
-    
-    coordinates: dict of ndarrays of shape (num_frames, num_keypoints, dim)
-        Dictionary of keypoint coordinates, where each key is a session name.
-        
-    centroids: dict of ndarrays of shape (num_frames, dim)
-        Dictionary of animal centroids, where each key is a session name.
-
-    lims: array of shape (2, dim)
-        Axis limits for plotting keypoints in the crowd movies. 
-
-    pre: int, default=30
-        Number of frames before syllable onset to include in the movie
-
-    post: int, default=60
-        Number of frames after syllable onset to include in the movie
-
-    plot_options: dict, default={}
-        Dictionary of options for rendering keypoints in the crowd
-        movies (see :py:func:`keypoint_moseq.util.overlay_keypoints_on_image`).
-
-    Returns
-    -------
-    frames: array of shape `(post+pre, height, width, 3)`
-        Array of frames in the grid movie. `width` and 
-        `height` are determined by `lims`.
-    """
-    dim = coordinates[instances[0][0]].shape[2]
-    if dim == 3: warnings.warn(fill(
-        'Crowd movies are only supported for 2D keypoints. '
-        'Only the X and Y coordinates will be used.'))
-
-    h, w = (lims[1]-lims[0]).astype(int)
-    frames = np.zeros((post+pre, w, h, 3), dtype=np.uint8)
-
-    for key, start, end in instances:
-        xy = coordinates[key][start-pre:start+post,:,:2]
-        xy = np.clip(xy, *lims[:,:2]) - lims[0,:2]
-        frames = overlay_trajectory_on_video(
-            frames, xy, plot_options=plot_options)
-
-        dot_radius=5
-        dot_color=(255,255,255)
-        cen = centroids[key][start-pre:start+post,:2]
-        cen = gaussian_filter1d(cen,1,axis=0)
-        cen = np.clip(cen, *lims[:,:2]) - lims[0,:2]
-        for i in range(pre, min(end-start+pre,pre+post)):
-            pos = (int(cen[i,0]),int(cen[i,1]))
-            frames[i] = cv2.circle(frames[i], pos, dot_radius, dot_color, -1, cv2.LINE_AA)
-
-    return frames
-
-
-def generate_crowd_movies(
-    coordinates, results=None, output_dir=None, name=None, 
-    project_dir=None, results_path=None, pre=30, post=60,
-    min_frequency=0.005, min_duration=3, num_instances=15,
-    use_estimated_coords=False, skeleton=[], bodyparts=None, 
-    use_bodyparts=None, keypoint_colormap='autumn', fps=30, 
-    limits=None, plot_options={}, sampling_options={}, 
-    quality=7, **kwargs):
-    """
-    Generate crowd movies for a modeled dataset.
-
-    Crowd movies show many instances of a syllable and are useful in
-    figuring out what behavior the syllable captures 
-    (see :py:func:`keypoint_moseq.viz.crowd_movie`). This method
-    generates a crowd movie for each syllable that is used sufficiently
-    often (i.e. has at least `num_instances` instances with duration
-    of at least `min_duration` and an overall frequency of at least
-    `min_frequency`). The crowd movies are saved to `output_dir` if 
-    specified, or else to `{project_dir}/{name}/crowd_movies`.
-
-    Parameters
-    ----------
-    coordinates: dict, default=None
-        Dictionary mapping session names to keypoint coordinates as 
-        ndarrays of shape (n_frames, n_bodyparts, 2). Required if
-        `use_estimated_coords=False`.
-
-    results: dict, default=None
-        Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.apply_model`). Must have
-        the format::
-
-            {
-                session_name1: {
-                    'syllable':   array of shape (n_frames,),
-                    'est_coords': array of shape (n_frames, n_bodyparts, dim)
-                    'centroid':   array of shape (n_frames, dim),
-                    'heading' :   array of shape (n_frames,), 
-                },
-                ...  
-            }
- 
-        If `results=None`, results will be loaded using either 
-        `results_path` or  `project_dir` and `name`.
-
-    output_dir: str, default=None
-        Directory where crowd movies should be saved. If None, 
-        movies will be saved to `{project_dir}/{name}/crowd_movies`.
+    save_path: str, default=None
+        Path to save the dendrogram plot (do not include an extension). 
+        If None, the plot will be saved  to 
+        `{project_dir}/{name}/similarity_dendrogram.[pdf/png]`.
 
     name: str, default=None
         Name of the model. Required to load results if `results` is 
-        None and `results_path` is None. Required to save crowd
-        movies if `output_dir` is None.
+        None and `results_path` is None. Required to save the 
+        dendrogram  plot if `output_dir` is None.
 
     project_dir: str, default=None
         Project directory. Required to load results if `results` is 
-        None and `results_path` is None. Required to save crowd
-        movies if `output_dir` is None.
+        None and `results_path` is None. Required to save the 
+        dendrogram  plot if `output_dir` is None.
 
     results_path: str, default=None
         Path to a results file. If None, results will be loaded from
         `{project_dir}/{name}/results.h5`.
 
-    num_instances: int, default=15
-        Number of syllable instances per crowd movie.
-
-    min_frequency: float, default=0.005
-        Minimum frequency of a syllable to be included in the crowd movies.
-
-    min_duration: int, default=3
-        Minimum duration of a syllable instance to be included in the 
-        crowd movie for that syllable. 
-
-    bodyparts: list of str, default=None
-        List of bodypart names in `coordinates`. 
-
-    use_bodyparts: list of str, default=None
-        Ordered list of bodyparts to include in the crowd
-        movies. If None, all bodyparts will be included.
-        
-    skeleton: list, default=[]
-        List of edges that define the skeleton, where each edge is a
-        pair of bodypart names or a pair of indexes.
-        
-    keypoint_colormap: str, default='autumn'
-        Name of a matplotlib colormap to use for coloring the keypoints.
-        
-    fps: int, default=30
-        Frames per second of the crowd movies.
-
-    limits: array, default=None
-        Axis limits for plotting keypoints in the crowd movies. If None,
-        limits will be inferred automatically from `coordinates`.
-        
-    plot_options: dict, default={}
-        Dictionary of options for rendering keypoints in the crowd
-        movies (see :py:func:`keypoint_moseq.util.overlay_keypoints_on_image`).
-        
-    sampling_options: dict, default={}
-        Dictionary of options for sampling syllable instances (see
-        :py:func:`keypoint_moseq.util.sample_instances`).
-
-    quality: int, default=7
-        Quality of the crowd movies. Higher values result in higher
-        quality movies but larger file sizes.
-    """    
-    output_dir = _get_path(project_dir, name, output_dir, 'grid_movies', 'output_dir') 
-    if not os.path.exists(output_dir): os.makedirs(output_dir)
-    print(f'Writing crowd movies to {output_dir}')
-
+    figsize: tuple of float, default=(10,5)
+        Size of the dendrogram plot.
+    """
     if results is None: results = load_results(
         name=name, project_dir=project_dir, path=results_path)
-        
-    if use_estimated_coords:
-        coordinates = {k:v['est_coords'] for k,v in results.items()}
-    elif bodyparts is not None and use_bodyparts is not None:
-        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
 
     syllables = {k:v['syllable'] for k,v in results.items()}
-    plot_options.update({'keypoint_colormap':keypoint_colormap})
+    centroids = {k:v['centroid'] for k,v in results.items()}
+    headings = {k:v['heading'] for k,v in results.items()}
 
-    if limits is None: 
-        limits = get_limits(coordinates, blocksize=16)
-
-    k = list(results.keys())[0]
-    if 'heading' in results[k]:
-        headings = {k:v['heading'] for k,v in results.items()}
-    else: headings = None
-        
-    if 'centroid' in results[k]:
-        centroids = {k:v['centroid'] for k,v in results.items()}
-    else:
-        outliers = np.any(np.isnan(coordinates), axis=2)
-        interpolated_coordinates = interpolate_keypoints(coordinates, outliers)
-        centroids = {k:v.mean(1) for k,v in interpolated_coordinates.items()}
-
-    edges = []
-    if len(skeleton)>0: 
-        if isinstance(skeleton[0][0],str):
-            assert use_bodyparts is not None, fill(
-                'If skeleton edges are specified using bodypart names, '
-                '`use_bodyparts` must be specified')
-            edges = get_edges(use_bodyparts, skeleton)
-        else: edges = skeleton
-
-    syllable_instances = get_syllable_instances(
-        syllables, pre=pre, post=post, min_duration=min_duration,
-        min_frequency=min_frequency, min_instances=num_instances)
+    typical_trajectories = get_typical_trajectories(
+        coordinates, syllables, centroids, headings, pre, post, 
+        min_frequency, min_duration, bodyparts, use_bodyparts, 
+        density_sample, sampling_options)
     
-    if len(syllable_instances) == 0:
-        warnings.warn(fill(
-            'No syllables with sufficient instances to make a crowd movie. '
-            'This usually occurs when all frames have the same syllable label '
-            '(use `plot_syllable_frequencies` to check if this is the case)'))
-        return
+    syllable_ixs = sorted(typical_trajectories.keys())
+    Xs = np.stack([typical_trajectories[s] for s in syllable_ixs])
+    Z = linkage(pdist(Xs.reshape(len(Xs),-1), metric='euclidean'), 'complete')
 
-    sampled_instances = sample_instances(
-        syllable_instances, num_instances, coordinates=coordinates, 
-        centroids=centroids, headings=headings, **sampling_options)
+    fig,ax = plt.subplots(1,1)
+    labels = [f'Syllable {s}' for s in syllable_ixs]
+    dendrogram(Z, labels=labels, leaf_font_size=10, ax=ax, leaf_rotation=90);
 
-    for syllable,instances in tqdm.tqdm(
-        sampled_instances.items(), desc='Generating crowd movies'):
-        
-        frames = crowd_movie(
-            instances, coordinates, centroids, pre=pre, post=post,
-            edges=edges, lims=limits, plot_options=plot_options)
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_color('lightgray')
+    ax.set_title('Syllable similarity')
+    fig.set_size_inches(figsize)
 
-        path = os.path.join(output_dir, f'syllable{syllable}.mp4')
-        write_video_clip(frames, path, fps=fps, quality=quality)
-            
+    save_path = _get_path(project_dir, name, save_path, 'similarity_dendrogram') 
+    print(f'Saving dendrogram plot to {save_path}')
+    for ext in ['pdf','png']: plt.savefig(save_path+'.'+ext)

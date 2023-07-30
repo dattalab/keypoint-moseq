@@ -379,7 +379,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
     """Syllable Labeler control component.
     """
 
-    def __init__(self, project_dir, model_dirname, stats_df, index_path, syll_info_path, movie_type):
+    def __init__(self, project_dir, model_dirname, stats_df, index_path, syll_info_path):
         """Initialize the SyllableLabeler
 
         Parameters
@@ -390,8 +390,6 @@ class SyllableLabeler(SyllableLabelerWidgets):
             Name of the model.
         index_file: str
             Path to the index file.
-        movie_type: str
-            Type of movie to load.
         syll_info_path: str
             Path to the syllable information file.
         """
@@ -402,12 +400,10 @@ class SyllableLabeler(SyllableLabelerWidgets):
         self.model_name = model_dirname
         self.index_file = index_path
         self.sorted_index = read_yaml(yaml_file=index_path)
-        self.movie_type = movie_type
         self.syll_info_path = syll_info_path
-        # read in syllable information file and subset only those with crowd movies
+        # read in syllable information file and subset only those with grid movies
         temp_syll_info = read_yaml(syll_info_path)
-        self.syll_info = {
-            k: v for k, v in temp_syll_info.items() if len(v['movie_path']) > 0}
+        self.syll_info = {k: v for k, v in temp_syll_info.items() if v['movie_path'] is not None}
         self.syll_list = sorted(list(self.syll_info.keys()))
 
         # Initialize button callbacks
@@ -535,10 +531,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
             self.group_syll_info[self.syll_list[self.syll_select.index]]['group_info'])
 
         # Get current movie path
-        if self.movie_type == 'grid':
-            cm_path = syllables['movie_path'][0]
-        else:
-            cm_path = syllables['movie_path'][1]
+        cm_path = syllables['movie_path']
 
         # open the video and encode to be displayed in jupyter notebook
         # Implementation from: https://github.com/jupyter/notebook/issues/1024#issuecomment-338664139
@@ -547,7 +540,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
         video_dims = imageio.get_reader(
             cm_path, 'ffmpeg').get_meta_data()['size']
 
-        # Create syllable crowd movie HTML div to embed
+        # Create syllable grid movie HTML div to embed
         video_div = f"""
                         <h2>{self.syll_list[self.syll_select.index]}: {syllables['label']}</h2>
                         <video

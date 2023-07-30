@@ -316,9 +316,17 @@ def get_edges(use_bodyparts, skeleton):
         Pairs of indexes representing the enties of `skeleton`
     """
     edges = []
-    for bp1,bp2 in skeleton:
-        if bp1 in use_bodyparts and bp2 in use_bodyparts:
-            edges.append([use_bodyparts.index(bp1),use_bodyparts.index(bp2)])
+    if len(skeleton)>0: 
+        if isinstance(skeleton[0][0],int):
+            edges = skeleton
+        else:
+            assert use_bodyparts is not None, fill(
+                'If skeleton edges are specified using bodypart names, '
+                '`use_bodyparts` must be specified')
+            
+            for bp1,bp2 in skeleton:
+                if bp1 in use_bodyparts and bp2 in use_bodyparts:
+                    edges.append([use_bodyparts.index(bp1),use_bodyparts.index(bp2)])
     return edges
 
         
@@ -353,7 +361,7 @@ def reindex_by_bodyparts(data, bodyparts, use_bodyparts, axis=1):
     else: return {k: np.take(v, ix, axis) for k,v in data.items()}
 
 
-def get_trajectories(syllable_instances, coordinates, pre=0, post=None, 
+def get_instance_trajectories(syllable_instances, coordinates, pre=0, post=None, 
                      centroids=None, headings=None, filter_size=9):
     """
     Extract keypoint trajectories for a collection of syllable instances. 
@@ -397,7 +405,8 @@ def get_trajectories(syllable_instances, coordinates, pre=0, post=None,
     -------
     trajectories: list
         List or array of trajectories (a list is used when `post=None`, 
-        else an array)
+        else an array). Each trajectory is an array of shape 
+        (n_frames, n_bodyparts, [2 or 3]).
     """
     if centroids is not None and headings is not None:
         centroids,headings = filter_centroids_headings(
@@ -459,7 +468,7 @@ def sample_instances(syllable_instances, num_samples, mode='random',
         (used when `mode='density'`)
 
     coordinates, pre, pos, centroids, heading, filter_size
-        Passed to :py:func:`keypoint_moseq.util.get_trajectories`
+        Passed to :py:func:`keypoint_moseq.util.get_instance_trajectories`
 
     Returns
     -------
@@ -486,7 +495,7 @@ def sample_instances(syllable_instances, num_samples, mode='random',
             outliers = np.isnan(coordinates[key]).any(-1)
             coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
 
-        trajectories = {syllable: get_trajectories(
+        trajectories = {syllable: get_instance_trajectories(
             instances, coordinates, pre=pre, post=post, 
             centroids=centroids, headings=headings, filter_size=filter_size
             ) for syllable,instances in syllable_instances.items()}
@@ -519,6 +528,14 @@ def sample_instances(syllable_instances, num_samples, mode='random',
     else:
         raise ValueError('Invalid mode: {}'.format(mode))
 
+
+
+def generate_representative_trajectories():
+    """
+    Generate a representative trajectory for each syllable by taking
+    the median over a collection of sampled instances.
+
+    """
 
 def interpolate_along_axis(x, xp, fp, axis=0):
     """
@@ -872,3 +889,98 @@ def format_data(coordinates, confidences=None, keys=None,
         Y += np.random.uniform(-added_noise_level,added_noise_level,Y.shape)
         
     return jax.device_put({'mask':mask, 'Y':Y, 'conf':conf}), labels
+
+
+
+
+def get_typical_trajectories(
+    coordinates, syllables, centroids, headings, pre=5, 
+    post=15, min_frequency=0.005, min_duration=3, bodyparts=None, 
+    use_bodyparts=None, density_sample=True, 
+    sampling_options={'mode':'density', 'n_neighbors':50}):
+    """
+    Generate representative keypoint trajectories for each syllable.
+
+    Parameters
+    ----------
+    coordinates: dict
+        Dictionary mapping session names to keypoint coordinates as 
+        ndarrays of shape (n_frames, n_bodyparts, 2).
+
+    syllables: dict
+        Dictionary mapping session names to syllable sequences as
+        arrays of shape (n_frames,).
+
+    centroids: dict
+        Dictionary mapping session names to centroid coordinates as
+        ndarrays of shape (n_frames, 2).
+
+    headings: dict
+        Dictionary mapping session names to heading angles in radians
+        as arrays of shape (n_frames,).
+
+    pre: int, default=5, post: int, default=15
+        Defines the temporal window around syllable onset for 
+        computing the average trajectory. Note that the window is 
+        independent of the actual duration of the syllable.
+
+    min_frequency: float, default=0.005
+        Minimum frequency of a syllable to plotted.
+
+    min_duration: float, default=3
+        Minimum duration of a syllable instance to be included in the
+        trajectory average.
+
+    bodyparts: list of str, default=None
+        List of bodypart names in `coordinates`. 
+
+    use_bodyparts: list of str, default=None
+        Ordered list of bodyparts to include in each trajectory.
+        If None, all bodyparts will be included.
+
+    density_sample : bool, default=True
+        Whether to use density sampling when generating trajectories.
+        If True, the trajectory is based on the most exemplary 
+        syllable instances, rather than being average across all
+        instances.
+
+    sampling_options: dict, default={'mode':'density', 'n_neighbors':50}
+        Dictionary of options for sampling syllable instances (see
+        :py:func:`keypoint_moseq.util.sample_instances`). Only used 
+        when `density_sample` is True.
+
+    Returns
+    -------
+    representative_trajectories: dict
+        Dictionary mapping syllable indexes to representative trajectories
+        as arrays of shape (pre+pose, n_bodyparts, [2 or 3]).
+    """ 
+    if bodyparts is not None and use_bodyparts is not None:
+        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+        
+    min_instances = sampling_options['n_neighbors'] if density_sample else 1
+    syllable_instances = get_syllable_instances(
+        syllables, pre=pre, post=post, min_duration=min_duration,
+        min_frequency=min_frequency, min_instances=min_instances)
+    
+    if len(syllable_instances) == 0:
+        warnings.warn(fill(
+            'No syllables with sufficient instances to generate a trajectory. '
+            'This usually occurs when all frames have the same syllable label '
+            '(use `plot_syllable_frequencies` to check if this is the case)'))
+        return
+    
+    if density_sample:
+        sampled_instances = sample_instances(
+            syllable_instances, sampling_options['n_neighbors'], 
+            coordinates=coordinates, centroids=centroids, 
+            headings=headings, **sampling_options)
+    else:
+        sampled_instances = syllable_instances
+
+    trajectories = {syllable: get_instance_trajectories(
+        instances, coordinates, pre=pre, post=post, 
+        centroids=centroids, headings=headings
+        ) for syllable,instances in sampled_instances.items()}
+    
+    return {s: np.nanmedian(ts,axis=0) for s,ts in trajectories.items()}

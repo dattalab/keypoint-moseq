@@ -23,20 +23,17 @@ from itertools import combinations
 from tqdm import tqdm
 from copy import deepcopy
 from cytoolz import sliding_window
-from os.path import join, exists
+from os.path import join
 from glob import glob
 
-from scipy.spatial.distance import pdist
-from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import argrelextrema
 
 from keypoint_moseq.widgets import GroupSettingWidgets, SyllableLabeler
-from keypoint_moseq.io import load_results, load_keypoints
+from keypoint_moseq.io import load_results
 from keypoint_moseq.util import (
-    sample_instances, get_trajectories, filter_angle, 
-    filtered_derivative, permute_cyclic, get_syllable_instances, 
-    format_data)
+    filter_angle, filtered_derivative, 
+    permute_cyclic, format_data)
 
 from jax_moseq.utils import get_frequencies, unbatch
 from jax_moseq.models.keypoint_slds import align_egocentric
@@ -378,7 +375,7 @@ def plot_fingerprint(project_dir, model_dirname, moseq_df,
     fig.savefig(join(save_dir, 'moseq_fingerprint.png'))
 
 
-def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
+def label_syllables(project_dir, model_dirname, moseq_df):
     """label syllables in the syllable grid movie
 
     Parameters
@@ -387,16 +384,8 @@ def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
         the path to the project directory
     model_dirname : str
         the name of the model directory
-    movie_type : str, optional
-        the type of movie to label, ('grid' or 'crowd')
     """
-
     output_notebook()
-
-    grid_movies = glob(os.path.join(
-        project_dir, model_dirname, 'grid_movies', '*.mp4'))
-    crowd_movies = glob(os.path.join(
-        project_dir, model_dirname, 'crowd_movies', '*.mp4'))
 
     # construct the syllable info path
     syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
@@ -405,29 +394,20 @@ def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
     if not os.path.exists(syll_info_path):
         # generate the syllable info yaml file
         generate_syll_info(project_dir, model_dirname, syll_info_path)
+
     # open syll_info
     with open(syll_info_path, 'r') as f:
         syll_dict = yaml.safe_load(f)
+  
+    grid_movies = glob(os.path.join(project_dir, model_dirname, 'grid_movies', '*.mp4'))
+    assert len(grid_movies) > 0, (
+        'No grid movies found. Please run `generate_grid_movies` as described in the docs: '
+        'https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization')
+    
+    for movie_path in grid_movies:
+        syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
+        syll_dict[syll_index]['movie_path'] = movie_path
 
-
-    if movie_type == 'grid':
-        assert len(grid_movies) > 0, (
-            'No grid movies found. Please run `generate_grid_movies` as described in the docs: '
-            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
-        for movie_path in grid_movies:
-            syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
-            if 'grid' not in ''.join(syll_dict[syll_index]['movie_path']):
-                syll_dict[syll_index]['movie_path'].append(movie_path)
-
-    elif movie_type == 'crowd':
-        assert len(crowd_movies) > 0, (
-            'No crowd movies found. Please run `generate_crowd_movies` as described in the docs: '
-            'https://keypoint-moseq.readthedocs.io/en/latest/tutorial.html#crowd-grid-movies')
-        for movie_path in crowd_movies:
-            syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
-            if 'crowd' not in ''.join(syll_dict[syll_index]['movie_path']):
-                syll_dict[syll_index]['movie_path'].append(movie_path)
-        
     # write to file
     with open(syll_info_path, 'w') as file:
         yaml.safe_dump(syll_dict, file, default_flow_style=False)
@@ -445,14 +425,17 @@ def label_syllables(project_dir, model_dirname, moseq_df, movie_type='grid'):
         ['group', 'syllable', 'frequency', 'duration', 'heading_mean', 'velocity_px_s_mean']]
 
     labeler = SyllableLabeler(
-        project_dir, model_dirname, stats_df, index_path, syll_info_path, movie_type)
-    output = widgets.interactive_output(labeler.interactive_syllable_labeler, {
-                                        'syllables': labeler.syll_select})
+        project_dir, model_dirname, stats_df, index_path, syll_info_path)
+    
+    output = widgets.interactive_output(
+        labeler.interactive_syllable_labeler, {'syllables': labeler.syll_select})
+    
     display(labeler.clear_button, labeler.syll_select, output)
 
 
 def get_tie_correction(x, N_m):
-    """assign tied rank values to the average of the ranks they would have received if they had not been tied for Kruskal-Wallis helper function.
+    """assign tied rank values to the average of the ranks they would have 
+    received if they had not been tied for Kruskal-Wallis helper function.
 
     Parameters
     ----------
@@ -1643,153 +1626,12 @@ def generate_syll_info(project_dir, model_dirname, syll_info_path):
     unique_sylls = np.unique(np.concatenate(
         [file['syllable'] for file in model_results.values()]))
     # construct the syllable dictionary
-    syll_dict = {int(i): {'label': '', 'desc': '', 'movie_path': [
-    ], 'group_info': {}} for i in unique_sylls}
+    syll_dict = {int(i): {
+        'label': '', 'desc': '', 'movie_path': None, 'group_info': {}
+        } for i in unique_sylls}
 
     # write to file
     print(syll_info_path)
     with open(syll_info_path, 'w') as file:
         yaml.safe_dump(syll_dict, file, default_flow_style=False)
 
-
-def get_behavioral_distance(project_dir, model_dirname, video_dir, keypoint_data_type, min_frequency=0.005, pre=5, post=15, min_duration=3, num_samples=40):
-    """compute behavioral distance based on the trajectory correlation metric
-
-    Parameters
-    ----------
-    project_dir : str
-        path to project directory
-    model_dirname : str
-        model directory name
-    video_dir : str
-        path to video directory
-    keypoint_data_type : str
-        keypoint data type
-    min_frequency : float, optional
-        the minimum threshold for syllable usage to include in the dendrogram, by default 0.005
-    pre : int, optional
-        frames before syllable onset, by default 5
-    post : int, optional
-        frames after syllable onset, by default 15
-    min_duration : int, optional
-        min duration of syllable to include, by default 3
-    num_samples : int, optional
-        the number of samples, by default 40
-
-    Returns
-    -------
-    Z : ndarray
-        linkage matrix of behavioral distance
-    syllable_keys : list
-        list of syllable keys
-
-    Raises
-    ------
-    Exception
-        video directory not found
-    NotImplementedError
-        keypoint data type not supported
-    """
-    # find videos
-    if video_dir is None:
-        video_dir = load_config(project_dir).get('video_dir', None)
-    if video_dir is None:
-        raise Exception(
-            'Unable to find video directory. Please specify video directory.')
-    # load coordinate results
-    if keypoint_data_type == 'deeplabcut':
-        coordinates, _, _ = load_keypoints(video_dir, 'deeplabcut')
-    elif keypoint_data_type == 'sleap':
-        coordinates, _, _ = load_keypoints(video_dir, 'sleap')
-    else:
-        raise NotImplementedError('Input type not supported.')
-
-    results = load_results(project_dir=project_dir, name=model_dirname)
-    # TODO: add support for estimated coordinates
-    syllables = {k: v['syllable'] for k, v in results.items()}
-    centroids = {k: v['centroid'] for k, v in results.items()}
-    headings = {k: v['heading'] for k, v in results.items()}
-    # get syllable instances that meet criteria
-    syllable_instances = get_syllable_instances(
-        syllables, pre=pre, post=post, min_duration=min_duration,
-        min_frequency=min_frequency, min_instances=num_samples)
-
-    if len(syllable_instances) == 0:
-        warnings.warn(fill(
-            'No syllables with sufficient instances to make a trajectory plot. '
-            'This usually occurs when all frames have the same syllable label '
-            '(use `plot_syllable_frequencies` to check if this is the case)'))
-        return
-    # sample instances
-    sampled_instances = sample_instances(syllable_instances, num_samples,
-                                         coordinates=coordinates, centroids=centroids,
-                                         headings=headings, mode='density', n_neighbors=num_samples)
-    # get trajectories
-    trajectories = {syllable: get_trajectories(
-        instances, coordinates, pre=pre, post=post,
-        centroids=centroids, headings=headings
-    ) for syllable, instances in sampled_instances.items()}
-    # get mean trajefctories
-    syllable_keys = sorted(trajectories.keys())
-    # Xs shape is (n_syllables, n_frames, num_keypoints, xy)
-    Xs = np.nanmean(np.array([trajectories[syllable]
-                    for syllable in syllable_keys]), axis=1)
-    # reshape to (n_syllables, n_frames*num_keypoints*xy)
-    Xs = Xs.reshape(Xs.shape[0], -1)
-
-    # get distances and transform back to 1-d array
-    Z = linkage(pdist(Xs, metric='correlation'), 'complete')
-    return Z, list(syllable_keys)
-
-
-def plot_dendrogram(project_dir, model_dirname, video_dir=None, keypoint_data_type='deeplabcut', min_frequency=0.005, save_dir=None, figsize=(10, 5)):
-    """plot similarity dendrogram
-
-    Parameters
-    ----------
-    project_dir : str
-        path to project directory
-    model_dirname : str
-        model directory name
-    video_dir : str, optional
-        path to video dir, by default None
-    keypoint_data_type : str, optional
-        keypoint data type, by default 'deeplabcut'
-    min_frequency : float, optional
-        the minimum threshold for syllable usage to include in the dendrogram, by default 0.005
-    save_dir : str, optional
-        path to the directory to save the figure, by default None
-    figsize : tuple, optional
-        the size of the figure, by default (10, 5)
-    """
-    Z, syllable_keys = get_behavioral_distance(
-        project_dir, model_dirname, video_dir, keypoint_data_type, min_frequency)
-    sns.set_style('whitegrid', {'axes.grid': False})
-    fig, ax = plt.subplots(figsize=figsize)
-    
-    # get syllable info
-    syll_info = None
-    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
-    # generate syll_info if it
-    #  doesn't exist
-    if not exists(syll_info_path):
-        generate_syll_info(project_dir, model_dirname, syll_info_path)
-    # open syll_info
-    with open(syll_info_path, 'r') as f:
-                syll_info = yaml.safe_load(f)
-
-    syll_info = pd.DataFrame(syll_info).T.sort_index()
-    syll_info = syll_info[syll_info.index.isin(syllable_keys)]
-    labels = (syll_info.index.astype(str) +" " + syll_info['label']).to_numpy()
-
-    dendrogram(Z, distance_sort=False, no_plot=False, labels=labels,
-               color_threshold=None, leaf_font_size=15, leaf_rotation=90, ax=ax)
-
-    # saving the figure
-    if save_dir is not None:
-        os.makedirs(save_dir, exist_ok=True)
-    else:
-        save_dir = os.path.join(project_dir, model_dirname, 'figures')
-        os.makedirs(save_dir, exist_ok=True)
-    fig.savefig(join(save_dir, 'syllable_dendrogram.pdf'))
-    fig.savefig(join(save_dir, 'syllable_dendrogram.png'))
