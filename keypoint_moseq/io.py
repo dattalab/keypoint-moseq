@@ -13,10 +13,8 @@ import sleap_io
 from pynwb import NWBHDF5IO
 from ndx_pose import PoseEstimation
 
-from keypoint_moseq.util import (
-    list_files_with_exts, 
-    check_nan_proportions,
-)
+from keypoint_moseq.util import list_files_with_exts, check_nan_proportions
+from jax_moseq.utils import get_frequencies
 
 
 def _build_yaml(sections, comments):
@@ -507,14 +505,14 @@ def save_checkpoint(model, data, history, labels, iteration,
     return save_dict
 
 
-def reindex_states_by_frequency(project_dir=None, name=None, path=None):
+def reindex_syllables_in_checkpoint(project_dir=None, name=None, path=None, 
+                                    save_path=None, index=None, runlength=True):
     """
     Reindex syllable labels by frequency in a saved checkpoint.
 
     This is an in-place operation: the checkpoint is loaded from disk,
-    modified and saved to disk again. Reindexing effects the discrete
-    state sequence `z` and autoregressive parameters (`Ab` and `Q`),
-    and applies both to the current model and all saved snapshots. 
+    modified and saved to disk again. Reindexing is applied to the
+    current model states and parameters as well as saved snapshots. 
 
     The checkpoint path can be specified directly via `path` or else
     it is assumed to be `{project_dir}/<name>/checkpoint.p`.
@@ -523,12 +521,53 @@ def reindex_states_by_frequency(project_dir=None, name=None, path=None):
     ----------
     project_dir: str, default=None
     name: str, default=None
-    path: str, default=None    
+    path: str, default=None  
+
+    save_path: str, default=None
+        Path to save the reindexed checkpoint. If None, the checkpoint
+        is saved to the same path as the original checkpoint.
+
+    index: array of shape (num_states,), default=None
+        Permutation for syllable labels, where `index[i]` is relabled 
+        as `i`. If None, syllables are relabled by frequency, with the
+        most frequent syllable relabled as 0, and so on.
+
+    runlength: bool, default=True
+        If True, frequencies are quantified using the number of non-
+        consecutive occurrences of each syllable. If False, frequency
+        is quantified by total number of frames.
+
+    Returns
+    -------
+    checkpoint: dict
+        A copy of the checkpoint after reindexing
+
+    index: array of shape (num_states,)
+        The index used for permuting syllable labels.
     """
     path = _get_path(project_dir, name, path, 'checkpoint.p')
     checkpoint = joblib.load(path)
 
-    
+    if index is None:
+        index = np.argsort(get_frequencies(
+            stateseqs = checkpoint['states']['z'], mask=checkpoint['mask'], 
+            num_states=checkpoint['hypparams']['ar_hypparams']['num_states'], 
+            runlength=runlength))[::-1]
+
+    def _reindex(dct):
+        dct['params']['beta'] = dct['params']['beta'][index,:]
+        dct['params']['pi'] = dct['params']['pi'][index,:][:,index]
+        dct['params']['Ab'] = dct['params']['Ab'][index]
+        dct['params']['Q'] = dct['params']['Q'][index]
+        dct['states']['z'] = np.argsort(index)[dct['states']['z']]
+
+    for iteration in checkpoint['history']:
+        _reindex(checkpoint['history'][iteration])
+    _reindex(checkpoint) # current model
+
+    if save_path is None: save_path = path
+    joblib.dump(checkpoint, save_path)
+    return checkpoint, index
 
     
 def load_results(project_dir=None, name=None, path=None):
