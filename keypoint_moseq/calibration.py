@@ -16,7 +16,7 @@ def sample_error_frames(confidences, bodyparts, use_bodyparts,
     Parameters
     ----------
     confidences: dict
-        Keypoint detection confidences for a collection of sessions 
+        Keypoint detection confidences for a collection of recordings 
 
     bodyparts: list
         Label for each keypoint represented in `confidences`
@@ -396,7 +396,7 @@ def noise_calibration(project_dir, coordinates, confidences, *,
         Project directory. Must contain a `config.yml` file.
 
     coordinates: dict
-        Keypoint coordinates for a collection of sessions. Values
+        Keypoint coordinates for a collection of recordings. Values
         must be numpy arrays of shape (T,K,2) where K is the number
         of keypoints. Keys can be any unique str, but must start with 
         the name of a videofile in `video_dir`. 

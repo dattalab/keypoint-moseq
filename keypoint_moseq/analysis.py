@@ -127,14 +127,14 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
         with open(index_filepath, 'r') as f:
             index_data = yaml.safe_load(f)
 
-        # create a file dictionary for each session
+        # create a file dictionary for each recording
         file_info = {}
-        for session in index_data['files']:
-            file_info[session['name']] = {'group': session['group']}
+        for recording in index_data['files']:
+            file_info[recording['name']] = {'group': recording['group']}
     else:
         print('index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first')
 
-    session_name = []
+    recording_name = []
     centroid = []
     velocity = []
     heading = []
@@ -145,14 +145,14 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
 
     for k, v in results_dict.items():
         n_frame = v['centroid'].shape[0]
-        session_name.append([str(k)] * n_frame)
+        recording_name.append([str(k)] * n_frame)
         centroid.append(v['centroid'])
         # velocity is pixel per second
         velocity.append(np.concatenate(
             ([0], np.sqrt(np.square(np.diff(v['centroid'], axis=0)).sum(axis=1)) * fps)))
 
         if file_info is not None:
-            # find the group for each session from index data
+            # find the group for each recording from index data
             s_group.append([file_info[k]['group']]*n_frame)
         else:
             # no index data
@@ -160,15 +160,15 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
         frame_index.append(np.arange(n_frame))
 
         if smooth_heading:
-            session_heading = filter_angle(v['heading'])
+            recording_heading = filter_angle(v['heading'])
         else:
-            session_heading = v['heading']
+            recording_heading = v['heading']
 
         # heading in radian
-        heading.append(session_heading)
+        heading.append(recording_heading)
 
         # compute angular velocity (radian per second)
-        gaussian_smoothed_heading = filter_angle(session_heading, size=3, method='gaussian')
+        gaussian_smoothed_heading = filter_angle(recording_heading, size=3, method='gaussian')
         angular_velocity.append(np.concatenate(([0], np.diff(gaussian_smoothed_heading) * fps)))
 
         # add syllable data
@@ -176,7 +176,7 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
 
     # construct dataframe
     moseq_df = pd.DataFrame(np.concatenate(
-        session_name), columns=['name'])
+        recording_name), columns=['name'])
     moseq_df = pd.concat([moseq_df, pd.DataFrame(np.concatenate(centroid), columns=[
                          'centroid_x', 'centroid_y'])], axis=1)
     moseq_df['heading'] = np.concatenate(heading)
@@ -234,10 +234,10 @@ def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupb
         with open(index_filepath, 'r') as f:
             index_data = yaml.safe_load(f)
 
-        # create a file dictionary for each session
+        # create a file dictionary for each recording
         file_info = {}
-        for session in index_data['files']:
-            file_info[session['name']] = {'group': session['group']}
+        for recording in index_data['files']:
+            file_info[recording['name']] = {'group': recording['group']}
     else:
         print('index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first')
 
@@ -256,7 +256,7 @@ def compute_stats_df(base_dir, model_name, moseq_df, min_frequency=0.005, groupb
     frequency_df = frequency_df.groupby(
         groupby + ['syllable']).mean().reset_index()
 
-    # filter out syllables that are used less than threshold in all sessions
+    # filter out syllables that are used less than threshold in all recordings
     filtered_df = moseq_df[moseq_df['syllable'].isin(syll_include)].copy()
 
     # TODO: hard-coded heading for now, could add other scalars
@@ -440,9 +440,9 @@ def get_tie_correction(x, N_m):
     Parameters
     ----------
     x : pd.Series
-        syllable usages for a single session.
+        syllable usages for a single recording.
     N_m : int
-        Number of total sessions.
+        Number of total recordings.
 
     Returns
     -------
@@ -469,7 +469,7 @@ def run_manual_KW_test(df_usage, merged_usages_all, num_groups, n_per_group, cum
     num_groups : int
         Number of unique groups
     n_per_group : list
-        list of value counts for sessions per group. len == num_groups.
+        list of value counts for recordings per group. len == num_groups.
     cum_group_idx : list
         list of indices for different groups. len == num_groups + 1.
     n_perm : int, optional
@@ -539,13 +539,13 @@ def dunns_z_test_permute_within_group_pairs(df_usage, vc, real_ranks, X_ties, N_
     df_usage : pandas.DataFrame
         DataFrame containing only pre-computed syllable stats.
     vc : pd.Series
-        value counts of sessions in each group.
+        value counts of recordings in each group.
     real_ranks : np.array
         Array of syllable ranks.
     X_ties : np.array
         1-D list of tied ranks, where if value > 0, then rank is tied
     N_m : int
-        Number of sessions.
+        Number of recordings.
     group_names : pd.Index
         Index list of unique group names.
     rnd : np.random.RandomState
@@ -796,7 +796,7 @@ def sort_syllables_by_stat(stats_df, stat='frequency'):
     Parameters
     ----------
     stats_df : pandas.DataFrame
-        the stats dataframe that contains kinematic data and the syllable label for each session and each syllable
+        the stats dataframe that contains kinematic data and the syllable label for each recording and each syllable
     stat : str, optional
         the statistic to sort on, by default 'frequency'
 
@@ -984,7 +984,7 @@ def get_transitions(label_sequence):
     Parameters
     ----------
     label_sequence : np.ndarray
-        the sequence of syllable labels for a session
+        the sequence of syllable labels for a recording
 
     Returns
     -------
@@ -1008,7 +1008,7 @@ def n_gram_transition_matrix(labels, n=2, max_label=99):
     Parameters
     ----------
     labels : list or np.ndarray
-        session state lists
+        recording state lists
     n : int, optional
         the number of successive states in the sequence, by default 2
     max_label : int, optional
@@ -1061,7 +1061,7 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
     Parameters
     ----------
     labels : list or np.ndarray
-        syllable labels per session
+        syllable labels per recording
     max_syllable : int, optional
         the maximum number of syllables to include, by default 100
     normalize : str, optional
@@ -1069,14 +1069,14 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
     smoothing : float, optional
         the smoothing value (pseudo count) to add to the transition matrix, by default 0.0
     combine : bool, optional
-        whether to combine the transition matrices for all the sessions, by default False
+        whether to combine the transition matrices for all the recordings, by default False
     disable_output : bool, optional
         whether to disable the progress bar, by default False
 
     Returns
     -------
     all_mats : list
-        the list of transition matrices for each session
+        the list of transition matrices for each recording
     """
     if not isinstance(labels[0], (list, np.ndarray, pd.Series)):
         labels = [labels]
@@ -1096,7 +1096,7 @@ def get_transition_matrix(labels, max_syllable=100, normalize='bigram',
         init_matrix = np.sum(init_matrix, axis=0) + smoothing
         all_mats = normalize_transition_matrix(init_matrix, normalize)
     else:
-        # Compute a transition matrix for each session label list
+        # Compute a transition matrix for each recording label list
         all_mats = []
         for v in labels:
             # Get syllable transitions
@@ -1118,9 +1118,9 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize='bi
     Parameters
     ----------
     labels : list or np.ndarray
-        session state lists
+        recording state lists
     label_group : list or np.ndarray
-        the group labels for each session
+        the group labels for each recording
     group : list or np.ndarray
         the groups in the project
     max_sylls : int
@@ -1140,13 +1140,13 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize='bi
 
     # Computing transition matrices for each given group
     for plt_group in group:
-        # list of syll labels in sessions in the group
+        # list of syll labels in recordings in the group
         use_labels = [lbl for lbl, grp in zip(
             labels, label_group) if grp == plt_group]
         # find stack np array shape
         row_num = len(use_labels)
         max_len = max([len(lbl) for lbl in use_labels])
-        # Get sessions to include in trans_mat
+        # Get recordings to include in trans_mat
         # subset only syllable included
         trans_mats.append(get_transition_matrix(use_labels,
                                                 normalize=normalize,
@@ -1220,7 +1220,7 @@ def visualize_transition_bigram(project_dir, model_dirname, group, trans_mats, s
 
 def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
                                  min_frequency=0.005):
-    """generate the transition matrices for each session
+    """generate the transition matrices for each recording
 
     Parameters
     ----------
@@ -1242,10 +1242,10 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
 
     with open(index_file, 'r') as f:
         index_data = yaml.safe_load(f)
-    label_group = [session_info['group']
-                   for session_info in index_data['files']]
-    sessions = [session_info['name']
-                for session_info in index_data['files']]
+    label_group = [recording_info['group']
+                   for recording_info in index_data['files']]
+    recordings = [recording_info['name']
+                for recording_info in index_data['files']]
     group = sorted(list(set(label_group)))
     print('Group(s):', ', '.join(group))
 
@@ -1254,7 +1254,7 @@ def generate_transition_matrices(project_dir, model_dirname, normalize='bigram',
         project_dir=project_dir, name=model_dirname)
 
     # filter out syllables by freqency
-    model_labels = [results_dict[session]['syllable'] for session in sessions]
+    model_labels = [results_dict[recording]['syllable'] for recording in recordings]
     frequencies = get_frequencies(model_labels)
     syll_include = np.where(frequencies > min_frequency)[0]
 
@@ -1449,7 +1449,7 @@ def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts
     Parameters
     ----------
     coordinates : dict
-        Keypoint observations as a dictionary mapping session names to
+        Keypoint observations as a dictionary mapping recording names to
         ndarrays of shape (num_frames, num_keypoints, dim)
 
     anterior_bodyparts : iterable of str or int
@@ -1558,7 +1558,7 @@ def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts
     all_changescores, all_changepoints = [], []
     for threshold in tqdm(thresholds, disable=(not verbose), desc='Testing thresholds'):
 
-        # permute within-session then combine across sessions
+        # permute within-recording then combine across recordings
         crossings = (dy_zscored > threshold).sum(2)[mask[:, :, 0]]
         crossings_shuff = permute_cyclic(
             dy_zscored > threshold, mask, axis=1).sum(2)[mask[:, :, 0]]
@@ -1570,7 +1570,7 @@ def changepoint_analysis(coordinates, *, anterior_bodyparts, posterior_bodyparts
             (np.sort(crossings_shuff).searchsorted(crossings)-1)/len(crossings)
         ps_combined = fdrcorrection(ps_combined, alpha=alpha)[1]
 
-        # separate back into sessions
+        # separate back into recordings
         pvals = np.zeros(mask[:, :, 0].shape)
         pvals[mask[:, :, 0]] = ps_combined
         pvals = unbatch(pvals, labels)
@@ -1608,8 +1608,8 @@ def generate_index(project_dir, model_dirname, index_filepath):
     # generate a new index file
     results_dict = load_results(project_dir=project_dir, name=model_dirname)
     files = []
-    for session in results_dict.keys():
-        file_dict = {'name': session, 'group': 'default'}
+    for recording in results_dict.keys():
+        file_dict = {'name': recording, 'group': 'default'}
         files.append(file_dict)
 
     index_data = {'files': files}

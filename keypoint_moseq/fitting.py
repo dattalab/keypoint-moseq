@@ -7,25 +7,13 @@ from textwrap import fill
 from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
-from keypoint_moseq.io import save_checkpoint, save_hdf5
-from keypoint_moseq.util import format_data
-from jax_moseq.models.keypoint_slds import estimate_coordinates, resample_model, init_model
-from jax_moseq.utils import check_for_nans, unbatch
+from keypoint_moseq.io import save_hdf5, _get_path
+from jax_moseq.models.keypoint_slds import resample_model, init_model
+from jax_moseq.utils import check_for_nans, unbatch, device_put_as_scalar
+
 
 class StopResampling(Exception):
     pass
-
-def _update_history(history, iteration, model, include_states=True): 
-    
-    model_snapshot = {
-        'params': jax.device_get(model['params']),
-        'seed': jax.device_get(model['seed'])}
-    
-    if include_states: 
-        model_snapshot['states'] = jax.device_get(model['states'])
-        
-    history[iteration] = model_snapshot
-    return history
 
 
 def _wrapped_resample(data, model, pbar=None, **resample_options):
@@ -38,9 +26,11 @@ def _wrapped_resample(data, model, pbar=None, **resample_options):
     any_nans, nan_info, messages = check_for_nans(model)
     
     if any_nans:
-        if pbar is not None: pbar.close()
+        if pbar is not None: 
+            pbar.close()
         warning_text = ['\nEarly termination of fitting: NaNs encountered']
-        for msg in messages: warning_text.append('  - {}'.format(msg))
+        for msg in messages: 
+            warning_text.append('  - {}'.format(msg))
         warning_text.append('\nFor additional information, see https://keypoint-moseq.readthedocs.io/en/latest/troubleshooting.html#nans-during-fitting')
         warnings.warn('\n'.join(warning_text))
         raise StopResampling()
@@ -63,25 +53,17 @@ def _set_parallel_flag(parallel_message_passing):
 
 def fit_model(model,
               data,
-              labels,
-              start_iter=0,
-              history=None,
-              verbose=False,
-              num_iters=50,
-              ar_only=False,
-              name=None,
+              metadata,
               project_dir=None,
-              save_data=True,
-              save_states=True,
-              save_history=True,
+              name=None,
+              num_iters=50,
+              start_iter=0,
+              verbose=False,
+              ar_only=False,
               save_every_n_iters=10,
-              history_every_n_iters=10,
-              states_in_history=True,
-              plot_every_n_iters=10,  
-              save_progress_figs=True,
+              generate_progress_plots=True,
               parallel_message_passing=None,
               **kwargs):
-
     """
     Fit a model to data.
     
@@ -90,8 +72,6 @@ def fit_model(model,
           (see :py:func:`jax_moseq.io.save_checkpoint`)
         - plots of the model's progress during fitting (see 
           :py:func:`jax_moseq.viz.plot_progress`)
-        - saves a history of the model's states and parameters at 
-          regular intervals
 
     Parameters
     ----------
@@ -99,23 +79,29 @@ def fit_model(model,
         Model dictionary containing states, parameters, hyperparameters, 
         noise prior, and random seed. 
 
-    data: dict, labels: list of tuples
-        See :py:func:`keypoint_moseq.io.format_data`
+    data: dict
+        Data for model fitting (see :py:func:`keypoint_moseq.io.format_data`).
+
+    metadata: tuple (keys, bounds)
+        Recordings and start/end frames for the data (see
+        :py:func:`keypoint_moseq.io.format_data`).
+
+    project_dir : str, default=None
+        Project directory; required if `save_every_n_iters>0`.
+
+    name : str, default=None
+        Name of the model. If None, the model is named using the current
+        date and time.
+
+    num_iters : int, default=50
+        Number of Gibbs sampling iterations to run.
 
     start_iter : int, default=0
         Index of the starting iteration, which is non-zero when continuing
         a previous fit.
 
-    history : dict, default=None
-        Dictionary containing the history of the model's states and
-        parameters, (see Returns for the format). If None, a new empty
-        history is created.
-
     verbose : bool, default=True
         If True, print the model's progress during fitting.
-
-    num_iters : int, default=50
-        Number of Gibbs sampling iterations to run.
 
     ar_only : bool, default=False
         If True, fit an AR-HMM model using the latent trajectory
@@ -124,41 +110,13 @@ def fit_model(model,
         Otherwise fit a full keypoint-SLDS model
         (see :py:func:`jax_moseq.models.keypoint_slds.resample_model`)
 
-    name : str, default=None
-        Name of the model. If None, rhe model is named using the current
-        date and time.
-
-    project_dir : str, default=None
-        Project directory; required if `save_every_n_iters>0` or
-        `save_progress_figs=True`.
-
-    save_data : bool, default=True
-        If True, include the data in the checkpoint.
-
-    save_states : bool, default=True
-        If True, include the model's states in the checkpoint.
-
-    save_history : bool, default=True
-        If True, include the model's history in the checkpoint.
-
     save_every_n_iters : int, default=10
-        Save a checkpoint every `save_every_n_iters`
+        Save the current model every `save_every_n_iters`. If
+        `save_every_n_iters=0`, nothing is saved.
 
-    history_every_n_iters : int, default=10
-        Update the model's history every `history_every_n_iters`. E.g.,
-        if `history_every_n_iters=10`, the history will contain snapshots 
-        from iterations 0, 10, 20, etc. If `history_every_n_iters=0`, no
-        history is saved.
-
-    states_in_history : bool, default=True
-        If True, include the model's states in the history.
-
-    plot_every_n_iters : int, default=10
-        Plot the model's progress every `plot_every_n_iters`. If 
-        `plot_every_n_iters=0`, no plots are generated.
-
-    save_progress_figs : bool, default=True
-        If True, save the progress plots to disk.
+    generate_progress_plots : bool, default=True
+        If True, generate plots of the model's progress during fitting.
+        Plots are saved to `{project_dir}/{name}/plots/`.
 
     parallel_message_passing : bool | string, default=None,
         Use parallel implementation of Kalman sampling, which can be faster
@@ -173,88 +131,65 @@ def fit_model(model,
         Model dictionary containing states, parameters, hyperparameters,
         noise prior, and random seed.
 
-    history : dict
-        Snapshots of the model over the course of fitting, represented as
-        a dictionary with keys corresponding to the iteration number and
-        values corresponding to copies of the `model` dictionary.
-
     name : str
         Name of the model.
     """
-    parallel_message_passing = _set_parallel_flag(parallel_message_passing)
+    if generate_progress_plots and save_every_n_iters==0:
+        warnings.warn(fill(
+            'The `generate_progress_plots` option requires that '
+            '`save_every_n_iters` be greater than 0. Progress plots will '
+            'not be generated.'))
+        generate_progress_plots = False
 
-    if save_every_n_iters>0 or save_progress_figs:
-        assert project_dir, fill(
-            'To save checkpoints or progress plots during fitting, provide '
-            'a `project_dir`. Otherwise set `save_every_n_iters=0` and '
-            '`save_progress_figs=False`')
-        if name is None: 
-            name = str(datetime.now().strftime('%Y_%m_%d-%H_%M_%S'))
+    if name is None: 
+        name = str(datetime.now().strftime('%Y_%m_%d-%H_%M_%S'))
+    
+    if save_every_n_iters>0:
         savedir = os.path.join(project_dir,name)
         if not os.path.exists(savedir): os.makedirs(savedir)
         print(fill(f'Outputs will be saved to {savedir}'))
 
-    if history is None: history = {}
+        checkpoint_path = os.path.join(savedir,'checkpoint.h5')
+        if not os.path.exists(checkpoint_path):
+            save_hdf5(checkpoint_path, {
+                'model_snapshots' : {f'{start_iter}': model},
+                'metadata' : metadata,
+                'data' : data})
+
+    parallel_message_passing = _set_parallel_flag(parallel_message_passing)
+    model = device_put_as_scalar(model)
 
     with tqdm.trange(start_iter, num_iters+1) as pbar:
         for iteration in pbar:
-
             try: 
                 model = _wrapped_resample(
                     data, model, pbar=pbar, ar_only=ar_only, verbose=verbose,
                     parallel_message_passing=parallel_message_passing)
-            except StopResampling: 
-                break
+            except StopResampling: break
 
-            if history_every_n_iters>0:
-                if (iteration%history_every_n_iters)==0 or iteration==num_iters:
-                    history = _update_history(history, iteration, model, 
-                                            include_states=states_in_history)
-                
-            if plot_every_n_iters>0:
-                 if (iteration%plot_every_n_iters)==0 or iteration==num_iters:
-                    plot_progress(model, data, history, iteration, name=name, 
-                                savefig=save_progress_figs, project_dir=project_dir)
+            if save_every_n_iters>0 and iteration>start_iter:
+                if (iteration%save_every_n_iters)==0 or iteration==num_iters:
+                    save_hdf5(checkpoint_path, model, f'model_snapshots/{iteration}')
+                    if generate_progress_plots:
+                        plot_progress(model, data, checkpoint_path, iteration, project_dir, name, savefig=True)
 
-            if save_every_n_iters>0:
-                 if (iteration%save_every_n_iters)==0 or iteration==num_iters:
-                    save_checkpoint(model, data, history, labels, iteration, name=name,
-                                    project_dir=project_dir,save_history=save_history, 
-                                    save_states=save_states, save_data=save_data)
-                
-
-
-    return model, history, name
+    return model, name
     
-    
-def resume_fitting(*, params, hypparams, labels, iteration, mask, num_iters,
-                   Y, conf, seed, noise_prior=None, states=None, **kwargs):
-    """Resume fitting a model from a checkpoint."""
-    
-    num_iters = num_iters + iteration
-    data = jax.device_put({'Y':Y, 'mask':mask, 'conf':conf})    
-    model = init_model(data, states, params, hypparams,
-                       noise_prior, seed, **kwargs)
-
-    return fit_model(model, data, labels, start_iter=iteration+1, 
-                     num_iters=num_iters, **kwargs)
 
 
-def extract_results(*, params, states, labels, save_results=True, 
-                    project_dir=None, name=None, results_path=None, 
-                    **kwargs): 
+def extract_results(model, metadata, project_dir=None, name=None, 
+                    save_results=True, path=None): 
     """
     Extract model outputs and [optionally] save them to disk.
 
-    Model outputs are saved to disk as a .h5 file, either at `results_path`
+    Model outputs are saved to disk as a .h5 file, either at `path`
     if it is specified, or at `{project_dir}/{name}/results.h5` if it is not.
     If a .h5 file with the given path already exists, the outputs will be added
     to it. The results have the following structure::
 
         results.h5
-        ├──session_name1
+        ├──recording_name1
         │  ├──syllable      # model state sequence (z), shape=(T,)
-        │  ├──est_coords    # model predicted coordinates, shape=(T,n_keypoints,dim)
         │  ├──latent_state  # model latent state (x), shape=(T,latent_dim)
         │  ├──centroid      # model centroid (v), shape=(T,dim)
         │  └──heading       # model heading (h), shape=(T,)
@@ -262,15 +197,13 @@ def extract_results(*, params, states, labels, save_results=True,
 
     Parameters
     ----------
-    params : dict
-        Model parameters.
+    model : dict
+        Model dictionary containing states, parameters, hyperparameters,
+        noise prior, and random seed.
 
-    states : dict, default=None
-        Dictionary of saved states. 
-
-    labels: list
-        Row labels for `states`
-        (see :py:func:`keypoint_moseq.util.batch`).
+    metadata: tuple (keys, bounds)
+        Recordings and start/end frames for the data (see
+        :py:func:`keypoint_moseq.io.format_data`).
 
     save_results : bool, default=True
         If True, the model outputs will be saved to disk.
@@ -283,7 +216,7 @@ def extract_results(*, params, states, labels, save_results=True,
         Name of the model. Required if `save_results=True`
         and `results_path=None`.
 
-    results_path : str, default=None
+    path : str, default=None
         Optional path for saving model outputs.
 
     Returns
@@ -292,64 +225,64 @@ def extract_results(*, params, states, labels, save_results=True,
         Dictionary of model outputs with the same structure as the
         results `.h5` file.
     """
-    if save_results:
-        if results_path is None: 
-            assert project_dir is not None and name is not None, fill(
-                'The `save_results` option requires either a `results_path` '
-                'or the `project_dir` and `name` arguments')
-            results_path = os.path.join(project_dir,name,'results.h5')
+    if save_results: 
+        path = _get_path(path, project_dir, name, 'results.h5')
 
-    # estimate keypoint coords from latent state, centroid and heading
-    estimated_coords = jax.device_get(estimate_coordinates(**states, **params))
-    states = jax.device_get(states)
-    
+    states = jax.device_get(model['states'])
+    keys, bounds = metadata
+
     # extract syllables; repeat first syllable an extra `nlags` times
     nlags = states['x'].shape[1] - states['z'].shape[1]
-    lagged_labels = [(key,start+nlags,end) for key,start,end in labels]
-    syllables = unbatch(states['z'], lagged_labels)
+    syllables = unbatch(states['z'], keys, bounds+np.array([0,nlags]))
     syllables = {k: np.pad(z[nlags:], (nlags,0), mode='edge') for k,z in syllables.items()}
     
-    # extract estimated coords, latent state, centroid, and heading
-    estimated_coords = unbatch(estimated_coords, labels)
-    latent_state = unbatch(states['x'], labels)
-    centroid = unbatch(states['v'], labels)
-    heading = unbatch(states['h'], labels)
+    # extract latent state, centroid, and heading
+    latent_state = unbatch(states['x'], keys, bounds)
+    centroid = unbatch(states['v'], keys, bounds)
+    heading = unbatch(states['h'], keys, bounds)
 
     results_dict = {
-        session_name : {
-            'syllable' : syllables[session_name],
-            'est_coords' : estimated_coords[session_name],
-            'latent_state' : latent_state[session_name],
-            'centroid' : centroid[session_name],
-            'heading' : heading[session_name]
-        } for session_name in syllables.keys()}
+        recording_name : {
+            'syllable' : syllables[recording_name],
+            'latent_state' : latent_state[recording_name],
+            'centroid' : centroid[recording_name],
+            'heading' : heading[recording_name]
+        } for recording_name in syllables.keys()}
     
     if save_results: 
-        save_hdf5(results_path, results_dict)
-        print(fill(f'Saved results to {results_path}'))
+        save_hdf5(path, results_dict)
+        print(fill(f'Saved results to {path}'))
         
     return results_dict
 
 
-def apply_model(*, params, coordinates, confidences=None, num_iters=20, 
-                ar_only=False, save_results=True, verbose=False,
-                project_dir=None, name=None, results_path=None,
-                parallel_message_passing=None, **kwargs):
+def apply_model(model, data, metadata, project_dir=None, name=None, 
+                num_iters=20, ar_only=False, save_results=True, 
+                verbose=False, results_path=None, 
+                parallel_message_passing=None):
     """
     Apply a model to new data.
 
     Parameters
     ----------
-    params : dict
-        Model parameters.
+    model : dict
+        Model dictionary containing states, parameters, hyperparameters, 
+        noise prior, and random seed. 
 
-    coordinates: dict
-        Dictionary mapping filenames to keypoint coordinates as ndarrays
-        of shape (n_frames, n_bodyparts, 2)
+    data: dict
+        Data for model fitting (see :py:func:`keypoint_moseq.io.format_data`).
 
-    confidences: dict, default=None
-        Dictionary mapping filenames to keypoint confidences as ndarrays
-        of shape (n_frames, n_bodyparts)
+    metadata: tuple (keys, bounds)
+        Recordings and start/end frames for the data (see
+        :py:func:`keypoint_moseq.io.format_data`).
+
+    project_dir : str, default=None
+        Path to the project directory. Required if `save_results=True`
+        and `results_path=None`.
+
+    name : str, default=None
+        Name of the model. Required if `save_results=True`
+        and `results_path=None`.
 
     num_iters : int, default=20
         Number of iterations to run the model. 
@@ -364,14 +297,6 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
 
     verbose : bool, default=False
         Whether to print progress updates.
-
-    project_dir : str, default=None
-        Path to the project directory. Required if `save_results=True`
-        and `results_path=None`.
-
-    name : str, default=None
-        Name of the model. Required if `save_results=True`
-        and `results_path=None`.
 
     results_path : str, default=None
         Optional path for saving model outputs.
@@ -398,9 +323,9 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
                 'or the `project_dir` and `name` arguments')
             results_path = os.path.join(project_dir,name,'results.h5')
 
-    kwargs = {k:v for k,v in kwargs.items() if not k in ['states', 'noise_prior']}
-    data, labels = format_data(coordinates, confidences=confidences, **kwargs)
-    model = init_model(data=data, params=params, verbose=verbose, **kwargs)
+    model = init_model(
+        data=data, params=model['params'], 
+        hypparams=model['hypparams'], verbose=verbose)
 
     with tqdm.trange(num_iters, desc='Applying model') as pbar:
         for iteration in pbar:
@@ -413,53 +338,9 @@ def apply_model(*, params, coordinates, confidences=None, num_iters=20,
                 break
 
     return extract_results(
-        **model, labels=labels, save_results=save_results, name=name,
-        project_dir=project_dir, results_path=results_path)
+        model, metadata, project_dir, name, save_results, results_path)
 
 
-def revert(checkpoint, iteration):
-    """
-    Revert a checkpoint to an earlier iteration.
-
-    The checkpoint will revert to latest iteration stored in the 
-    fitting history that is less than or equal to `iteration`.
-    The model parameters, seed, and iteration number will be updated
-    accordingly. The fitting history will be truncated to remove
-    all iterations after the reverted iteration.
-
-    Parameters
-    ----------
-    checkpoint : dict
-        See :py:func:`keypoint_moseq.io.save_checkpoint`.
-
-    iteration : int
-        Iteration to revert to.
-
-    Returns
-    -------
-    checkpoint : dict
-        Reverted checkpoint.
-    """
-    assert len(checkpoint['history'])>0, fill(
-        'No history was saved during fitting')
-    
-    use_iter = max([i for i in checkpoint['history'] if i <= iteration])
-    print(f'Reverting to iteration {use_iter}')
-    
-    model_snapshot =  checkpoint['history'][use_iter]
-    checkpoint['params'] = model_snapshot['params']
-    checkpoint['seed'] = model_snapshot['seed']
-    checkpoint['iteration'] = use_iter
-    
-    if 'states' in model_snapshot: 
-        checkpoint['states'] = model_snapshot['states']
-    else: checkpoint['states'] = None
-        
-    for i in list(checkpoint['history'].keys()):
-        if i > use_iter: del checkpoint['history'][i]
-
-    return checkpoint
-    
     
 def update_hypparams(model_dict, **kwargs):
     """
@@ -492,14 +373,10 @@ def update_hypparams(model_dict, **kwargs):
     
     for hypparms_group in model_dict['hypparams']:
         for k,v in kwargs.items():
-    
             if k in model_dict['hypparams'][hypparms_group]:
-                
-                old_value = model_dict['hypparams'][hypparms_group][k]
-                
+                old_value = model_dict['hypparams'][hypparms_group][k] 
                 if not np.isscalar(old_value): print(fill(
                     f'{k} cannot be updated since it is not a scalar hyperparam'))
-                 
                 else:
                     if not isinstance(v, type(old_value)): warnings.warn(fill(
                         f'{v} has type {type(v)} which differs from the current '

@@ -48,7 +48,7 @@ If your keypoint tracking data contains a high proportion of NaNs, you may get t
    <br />
 
 
-- Check if the NaNs are occuring in a specific subset of sessions. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic sessions. For a session-by-session breakdown of NaNs, run::
+- Check if the NaNs are occuring in a specific subset of recordings. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic recordings. For a recording-by-recording breakdown of NaNs, run::
 
    kpms.check_nan_proportions(coordinates, bodyparts, breakdown=True)
 
@@ -79,7 +79,7 @@ Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detec
    coordinates, confidences, bodyparts = kpms.load_keypoints(keypoint_data_path, 'deeplabcut')
 
 
-- If writing your own data loader, the output should be a ``coordinates`` dictionary that maps session names to arrays of shape ``(num_frames, num_keypoints, num_dimensions)``, where ``num_dimensions`` is 2 or 3. The keypoint axis should correspond to the `bodyparts` list in the config. You can also include a ``confidences`` dictionary that maps session names to arrays of shape ``(num_frames, num_keypoints)``. If your loader applies to a commonly used keypoint inference method, please let us know! We'd love to add it for others to use.
+- If writing your own data loader, the output should be a ``coordinates`` dictionary that maps recording names to arrays of shape ``(num_frames, num_keypoints, num_dimensions)``, where ``num_dimensions`` is 2 or 3. The keypoint axis should correspond to the `bodyparts` list in the config. You can also include a ``confidences`` dictionary that maps recording names to arrays of shape ``(num_frames, num_keypoints)``. If your loader applies to a commonly used keypoint inference method, please let us know! We'd love to add it for others to use.
 
 -  We are also happy to help write a loader for your data. Just open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and describe the method you used for keypoint tracking and the format of the data, including the file format, how it is organized into directories, and how the output files are typically named (especially in relation to the corresponding videos). If possible, also send one or more example files to calebsw@gmail.com. 
 
@@ -176,9 +176,6 @@ The final output of keypoint MoSeq is a results .h5 file (and optionally a direc
 
 - Centroid and heading
    The centroid and heading of the animal in each frame, as estimated by the model. 
-
-- Estimated keypoint coordinates
-   The denoised coordinates of each keypoint in each frame, as estimated by the model. These coordinates reflect the model's estimate of the "true" location of keypoint, once noise has been removed. They may be useful if the original coordinates are noisy or frequently non-detected. It's important to note, however, that these coordinates are mainly a byproduct of the model fitting process, and have not been formally validated as a replacement for the original detections. So use with caution!
 
 - Latent state
    Low-dimensional representation of the animal's pose in each frame. These are similar to PCA scores, are modified to reflect the pose dynamics and noise estimates inferred by the model. 

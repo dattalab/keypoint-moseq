@@ -87,19 +87,19 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
     
 
 def find_matching_videos(keys, video_dir, as_dict=False, recursive=True, 
-                         session_name_suffix='', video_extension=None):
+                         recording_name_suffix='', video_extension=None):
     """
-    Find video files for a set of session names. The filename of each
-    video is assumed to be a prefix within the session name, i.e. the
-    session name has the form `{video_name}{more_text}`. If more than 
-    one video matches a session name, the longest match will be used. 
+    Find video files for a set of recording names. The filename of each
+    video is assumed to be a prefix within the recording name, i.e. the
+    recording name has the form `{video_name}{more_text}`. If more than 
+    one video matches a recording name, the longest match will be used. 
     For example given the following video directory::
 
         video_dir
         ├─ videoname1.avi
         └─ videoname2.avi
  
-    the videos would be matched to session names as follows::
+    the videos would be matched to recording names as follows::
 
         >>> keys = ['videoname1blahblah','videoname2yadayada']
         >>> find_matching_videos(keys, video_dir, as_dict=True)
@@ -107,13 +107,13 @@ def find_matching_videos(keys, video_dir, as_dict=False, recursive=True,
         {'videoname1blahblah': 'video_dir/videoname1.avi',
          'videoname2blahblah': 'video_dir/videoname2.avi'}
 
-    A suffix can also be specified, in which case the session name 
+    A suffix can also be specified, in which case the recording name 
     is assumed to have the form `{video_name}{suffix}{more_text}`.
  
     Parameters
     -------
     keys: iterable
-        Session names (as strings)
+        Recording names (as strings)
 
     video_dir: str
         Path to the video directory. 
@@ -127,10 +127,10 @@ def find_matching_videos(keys, video_dir, as_dict=False, recursive=True,
         `video_dir`.
 
     as_dict: bool, default=False
-        Determines whether to return a dict mapping session names to 
+        Determines whether to return a dict mapping recording names to 
         video paths, or a list of paths in the same order as `keys`.
 
-    session_name_suffix: str, default=None
+    recording_name_suffix: str, default=None
         Suffix to append to the video name when searching for a match.
 
     Returns
@@ -151,7 +151,7 @@ def find_matching_videos(keys, video_dir, as_dict=False, recursive=True,
     video_paths = []
     for key in keys:
         matches = [v for v in videos_to_paths if \
-                   os.path.basename(key).startswith(v+session_name_suffix)]
+                   os.path.basename(key).startswith(v+recording_name_suffix)]
         assert len(matches)>0, fill(f'No matching videos found for {key}')
         
         longest_match = sorted(matches, key=lambda v: len(v))[-1]
@@ -222,11 +222,11 @@ def filter_centroids_headings(centroids, headings, filter_size=9):
     Parameters
     -------
     centroids: dict {str : ndarray, shape (t,2)}
-        Centroids stored as a dictionary mapping session names to 
+        Centroids stored as a dictionary mapping recording names to 
         ndarrays, where the first dim represents time
 
     headings: dict {str : 1d array }
-        Headings stored as a dictionary mapping session names to
+        Headings stored as a dictionary mapping recording names to
         1d arrays representing an angle in radians
 
     filter_size: int, default=9
@@ -770,7 +770,8 @@ def format_data(coordinates, confidences=None, keys=None,
 
     Data are transformed as follows:
         1. Coordinates and confidences are each merged into a single 
-           array using :py:func:`keypoint_moseq.util.batch`. 
+           array using :py:func:`keypoint_moseq.util.batch`. Each row
+           of the merged arrays is a segment from one recording.
         2. The keypoints axis is reindexed according to the order
            of elements in `use_bodyparts` with respect to their 
            initial orer in `bodyparts`.
@@ -785,7 +786,7 @@ def format_data(coordinates, confidences=None, keys=None,
     Parameters
     ----------
     coordinates: dict
-        Keypoint coordinates for a collection of sessions. Values
+        Keypoint coordinates for a collection of recordings. Values
         must be numpy arrays of shape (T,K,D) where K is the number
         of keypoints and D={2 or 3}. 
         
@@ -818,11 +819,11 @@ def format_data(coordinates, confidences=None, keys=None,
     data: dict with the following items
     
         Y: jax array with shape (n_segs, seg_length, K, D)
-            Keypoint coordinates from all sessions broken into 
+            Keypoint coordinates from all recordings broken into 
             fixed-length segments.
             
         conf: jax array with shape (n_segs, seg_length, K)
-            Confidences from all sessions broken into fixed-length 
+            Confidences from all recordings broken into fixed-length 
             segments. If no input is provided for `confidences`, 
             then `data["conf"]=None`.
         
@@ -830,9 +831,10 @@ def format_data(coordinates, confidences=None, keys=None,
             Binary array where 0 indicates areas of padding 
             (see :py:func:`keypoint_moseq.util.batch`).
             
-    labels: list of tuples (object, int, int)
-        Label for each row of `Y` and `conf` 
-        (see :py:func:`keypoint_moseq.util.batch`).
+    metadata: tuple (keys, bounds)
+        Metadata for the rows of `Y`, `conf` and `mask`, as a tuple
+        with a array of recording names and an array of (start,end) times.
+        See :py:func:`jax_moseq.utils.batch` for details.
     """    
     if keys is None: 
         keys = sorted(coordinates.keys()) 
@@ -841,12 +843,12 @@ def format_data(coordinates, confidences=None, keys=None,
         assert len(bad_keys) == 0, fill(
             f'Keys {bad_keys} not found in coordinates')
 
-    assert len(keys) > 0, 'No sessions found'
+    assert len(keys) > 0, 'No recordings found'
 
     num_keypoints = [coordinates[key].shape[-2] for key in keys]
     assert len(set(num_keypoints)) == 1, fill(
-        f'All sessions must have the same number of keypoints, but '
-        f'found {set(num_keypoints)} keypoints across sessions.')
+        f'All recordings must have the same number of keypoints, but '
+        f'found {set(num_keypoints)} keypoints across recordings.')
     
     if bodyparts is not None:
         assert len(bodyparts) == num_keypoints[0], fill(
@@ -856,7 +858,7 @@ def format_data(coordinates, confidences=None, keys=None,
 
     if any(['/' in key for key in keys]): 
         warnings.warn(fill(
-            'WARNING: Session names should not contain "/", this will cause '
+            'WARNING: Recording names should not contain "/", this will cause '
             'problems with saving/loading hdf5 files.'))
         
     if confidences is None:
@@ -872,10 +874,10 @@ def format_data(coordinates, confidences=None, keys=None,
         confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
     
     if seg_length is not None:
-        max_session_length = max([coordinates[key].shape[0] for key in keys])
-        seg_length = min(seg_length, max_session_length)
+        max_recording_length = max([coordinates[key].shape[0] for key in keys])
+        seg_length = min(seg_length, max_recording_length)
 
-    Y,mask,labels = batch(coordinates, seg_length=seg_length, keys=keys)
+    Y,mask,metadata = batch(coordinates, seg_length=seg_length, keys=keys)
     Y = Y.astype(float)
 
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
@@ -888,7 +890,8 @@ def format_data(coordinates, confidences=None, keys=None,
     if added_noise_level>0: 
         Y += np.random.uniform(-added_noise_level,added_noise_level,Y.shape)
         
-    return jax.device_put({'mask':mask, 'Y':Y, 'conf':conf}), labels
+    data = jax.device_put({'mask':mask, 'Y':Y, 'conf':conf})
+    return data, metadata
 
 
 
@@ -904,19 +907,19 @@ def get_typical_trajectories(
     Parameters
     ----------
     coordinates: dict
-        Dictionary mapping session names to keypoint coordinates as 
+        Dictionary mapping recording names to keypoint coordinates as 
         ndarrays of shape (n_frames, n_bodyparts, 2).
 
     syllables: dict
-        Dictionary mapping session names to syllable sequences as
+        Dictionary mapping recording names to syllable sequences as
         arrays of shape (n_frames,).
 
     centroids: dict
-        Dictionary mapping session names to centroid coordinates as
+        Dictionary mapping recording names to centroid coordinates as
         ndarrays of shape (n_frames, 2).
 
     headings: dict
-        Dictionary mapping session names to heading angles in radians
+        Dictionary mapping recording names to heading angles in radians
         as arrays of shape (n_frames,).
 
     pre: int, default=5, post: int, default=15

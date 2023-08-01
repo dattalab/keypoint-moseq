@@ -4,6 +4,7 @@ import tqdm
 import imageio
 import warnings
 import logging
+import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
@@ -222,7 +223,7 @@ def plot_syllable_frequencies(results=None, path=None, project_dir=None,
     ----------
     results : dict, default=None
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.apply_model`)
+        :py:func:`keypoint_moseq.fitting.extract_results`)
 
     name: str, default=None
         Name of the model. Required to load results if `results` is 
@@ -282,7 +283,7 @@ def plot_duration_distribution(results=None, path=None, project_dir=None,
     ----------
     results : dict, default=None
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.apply_model`)
+        :py:func:`keypoint_moseq.fitting.extract_results`)
 
     name: str, default=None
         Name of the model. Required to load results if `results` is 
@@ -346,10 +347,10 @@ def plot_duration_distribution(results=None, path=None, project_dir=None,
     return fig, ax
         
 
-def plot_progress(model, data, history, iteration, path=None,
-                  project_dir=None, name=None, savefig=True,
+def plot_progress(model, data, checkpoint_path, iteration,
+                  project_dir=None, name=None, path=None, savefig=True,
                   fig_size=None, window_size=600, min_frequency=.001, 
-                  min_histogram_length=10, **kwargs):
+                  min_histogram_length=10):
     """
     Plot the progress of the model during fitting.
 
@@ -374,11 +375,17 @@ def plot_progress(model, data, history, iteration, path=None,
     data : dict
         Data dictionary containing `mask`
 
-    history : dict
-        Dictionary mapping iteration number to saved model dictionaries
+    checkpoint_path : str
+        Path to an HDF5 file containing model checkpoints.
 
     iteration : int
         Current iteration of model fitting
+
+    project_dir : str, default=None
+        Path to the project directory. Required if `savefig` is True.
+
+    name : str, default=None
+        Name of the model. Required if `savefig` is True.
 
     savefig : bool, default=True
         Whether to save the figure to a file. If true, the figure is
@@ -398,10 +405,6 @@ def plot_progress(model, data, history, iteration, path=None,
     min_histogram_length : int, default=10
         Minimum x-axis length of the frequency distribution plot.
 
-    project_dir : str, default=None
-    name : str, default=None
-    path : str, default=None
-
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -415,12 +418,10 @@ def plot_progress(model, data, history, iteration, path=None,
     durations = get_durations(z,mask)
     frequencies = get_frequencies(z,mask)
     
-    history_iters = np.array(sorted(history.keys()))
-    past_stateseqs = [history[i]['states']['z'] 
-                      for i in history_iters 
-                      if 'states' in history[i]]
-        
-    if len(past_stateseqs)>0: 
+    with h5py.File(checkpoint_path, 'r') as f:
+        saved_iterations = np.sort([int(i) for i in f['model_snapshots']])
+
+    if len(saved_iterations)>1: 
         fig,axs = plt.subplots(1,4, gridspec_kw={'width_ratios':[1,1,1,3]})
         if fig_size is None: fig_size=(12,2.5)
     else: 
@@ -445,26 +446,34 @@ def plot_progress(model, data, history, iteration, path=None,
     axs[1].set_title('Duration distribution')
     axs[1].set_yticks([])
     
-    if len(past_stateseqs)>0:
-        
-        med_durs = [np.median(get_durations(z,mask)) for z in past_stateseqs]
-        axs[2].scatter(history_iters,med_durs)
-        axs[2].set_ylim([-1,np.max(med_durs)*1.1])
-        axs[2].set_xlabel('iteration')
-        axs[2].set_ylabel('duration')
-        axs[2].set_title('Median duration')
+    if len(saved_iterations)>1:
         
         window_size = int(min(window_size,mask.max(0).sum()-1))
         nz = np.stack(np.array(mask[:,window_size:]).nonzero(),axis=1)
         batch_ix,start = nz[np.random.randint(nz.shape[0])]
-        seq_hist = np.stack([z[batch_ix,start:start+window_size] for z in past_stateseqs])
-        axs[3].imshow(seq_hist, cmap=plt.cm.jet, aspect='auto', interpolation='nearest')
+
+        sample_state_history = []
+        median_durations = []
+
+        for i in saved_iterations:
+            with h5py.File(checkpoint_path, 'r') as f:
+                z = np.array(f[f'model_snapshots/{i}/states/z'])
+                sample_state_history.append(z[batch_ix,start:start+window_size])
+                median_durations.append(np.median(get_durations(z,mask)))
+
+        axs[2].scatter(saved_iterations, median_durations)
+        axs[2].set_ylim([-1,np.max(median_durations)*1.1])
+        axs[2].set_xlabel('iteration')
+        axs[2].set_ylabel('duration')
+        axs[2].set_title('Median duration')
+        
+        axs[3].imshow(sample_state_history, cmap=plt.cm.jet, aspect='auto', interpolation='nearest')
         axs[3].set_xlabel('Time (frames)')
         axs[3].set_ylabel('Iterations')
         axs[3].set_title('State sequence history')
         
-        yticks = [int(y) for y in axs[3].get_yticks() if y < len(history_iters) and y > 0]
-        yticklabels = history_iters[yticks]
+        yticks = [int(y) for y in axs[3].get_yticks() if y < len(saved_iterations) and y > 0]
+        yticklabels = saved_iterations[yticks]
         axs[3].set_yticks(yticks)
         axs[3].set_yticklabels(yticklabels)
 
@@ -478,7 +487,6 @@ def plot_progress(model, data, history, iteration, path=None,
         path = _get_path(path, project_dir, name, 'fitting_progress.pdf')
         plt.savefig(path)  
     plt.show()
-
     return fig,axs
 
     
@@ -668,7 +676,7 @@ def get_grid_movie_window_size(sampled_instances, centroids, headings,
         with the heading of the animal on each frame (in radians)
 
     coordinates: dict
-        Dictionary mapping session names to keypoint coordinates as 
+        Dictionary mapping recording names to keypoint coordinates as 
         ndarrays of shape (n_frames, n_bodyparts, 2). 
 
     pre, post: int
@@ -697,8 +705,8 @@ def get_grid_movie_window_size(sampled_instances, centroids, headings,
 
 
 def generate_grid_movies(
-    results=None, output_dir=None, name=None, project_dir=None,
-    results_path=None, video_dir=None, video_paths=None, rows=4, 
+    results, project_dir=None, name=None, output_dir=None, 
+    video_dir=None, video_paths=None, rows=4, 
     cols=6, filter_size=9, pre=30, post=60, min_frequency=0.005, 
     min_duration=3, dot_radius=4, dot_color=(255,255,255), quality=7,
     window_size=None, coordinates=None, bodyparts=None, use_bodyparts=None, 
@@ -720,40 +728,21 @@ def generate_grid_movies(
 
     Parameters
     ----------
-    results: dict, default=None
+    results: dict
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.apply_model`). Must have
-        the format::
+        :py:func:`keypoint_moseq.fitting.extract_results`)
 
-            {
-                session_name1: {
-                    'syllable':  array of shape (n_frames,),
-                    'centroid':  array of shape (n_frames, dim),
-                    'heading' :  array of shape (n_frames,), 
-                },
-                ...  
-            }
-            
-        If `results=None`, results will be loaded using either 
-        `results_path` or  `project_dir` and `name`.
+    project_dir: str, default=None
+        Project directory. Required to save grid movies if `output_dir` 
+        is None.
+
+    name: str, default=None
+        Name of the model. Required to save grid movies if 
+        `output_dir` is None.
 
     output_dir: str, default=None
         Directory where grid movies should be saved. If None, grid
         movies will be saved to `{project_dir}/{name}/grid_movies`.
-
-    name: str, default=None
-        Name of the model. Required to load results if `results` is 
-        None and `results_path` is None. Required to save grid movies 
-        if `output_dir` is None.
-        
-    project_dir: str, default=None
-        Project directory. Required to load results if `results` is 
-        None and `results_path` is None. Required to save grid movies 
-        if `output_dir` is None.
-
-    results_path: str, default=None
-        Path to a results file. If None, results will be loaded from
-        `{project_dir}/{name}/results.h5`.
 
     video_dir: str, default=None
         Directory containing videos of the modeled data (see 
@@ -762,7 +751,7 @@ def generate_grid_movies(
         `video_paths` must be provided.
 
     video_paths: dict, default=None
-        Dictionary mapping session names to video paths. The session 
+        Dictionary mapping recording names to video paths. The recording 
         names must correspond to keys in `results['syllables']`. 
         Unless `keypoints_only=True`, either `video_dir` or
         `video_paths` must be provided.
@@ -782,7 +771,7 @@ def generate_grid_movies(
         :py:func:`keypoint_moseq.util.sample_instances`).
     
     coordinates: dict, default=None
-        Dictionary mapping session names to keypoint coordinates as 
+        Dictionary mapping recording names to keypoint coordinates as 
         ndarrays of shape (n_frames, n_bodyparts, 2). Required when
         `window_size=None`, or `overlay_keypoints=True`, or if using 
         density-based sampling (i.e. when `sampling_options['mode']=='density'`; see 
@@ -1155,9 +1144,9 @@ def save_gif(image_list, gif_filename, duration=0.5):
 
 
 def generate_trajectory_plots(
-    coordinates=None, results=None, output_dir=None, 
-    name=None, project_dir=None, results_path=None, pre=5, post=15, 
-    min_frequency=0.005, min_duration=3, skeleton=[], bodyparts=None, 
+    coordinates, results, project_dir=None, name=None,
+    output_dir=None, pre=5, post=15,  min_frequency=0.005, 
+    min_duration=3, skeleton=[], bodyparts=None, 
     use_bodyparts=None, density_sample=True,
     sampling_options={'mode':'density', 'n_neighbors':50}, save_gifs=True, 
     save_mp4s=False, keypoint_colormap='autumn', plot_options={}, 
@@ -1178,23 +1167,25 @@ def generate_trajectory_plots(
 
     Parameters
     ----------
+    coordinates: dict
+        Dictionary mapping recording names to keypoint coordinates as
+        ndarrays of shape (n_frames, n_bodyparts, 2).
+
+    results: dict
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
+ 
+    project_dir: str, default=None
+        Project directory. Required to save trajectory plots if 
+        `output_dir` is None.
+
+    name: str, default=None
+        Name of the model. Required to save trajectory plots if 
+        `output_dir` is None.
+
     output_dir: str, default=None
         Directory where trajectory plots should be saved. If None, 
         plots will be saved to `{project_dir}/{name}/trajectory_plots`.
-
-    name: str, default=None
-        Name of the model. Required to load results if `results` is 
-        None and `results_path` is None. Required to save trajectory
-        plots if `output_dir` is None.
-
-    project_dir: str, default=None
-        Project directory. Required to load results if `results` is 
-        None and `results_path` is None. Required to save trajectory
-        plots if `output_dir` is None.
-
-    results_path: str, default=None
-        Path to a results file. If None, results will be loaded from
-        `{project_dir}/{name}/results.h5`.
 
     skeleton : list, default=[]
         List of edges that define the skeleton, where each edge is a
@@ -1239,9 +1230,6 @@ def generate_trajectory_plots(
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     print(f'Saving trajectory plots to {output_dir}')
         
-    if results is None: results = load_results(
-        name=name, project_dir=project_dir, path=results_path)
-
     syllables = {k:v['syllable'] for k,v in results.items()}
     centroids = {k:v['centroid'] for k,v in results.items()}
     headings = {k:v['heading'] for k,v in results.items()}
@@ -1472,9 +1460,9 @@ def overlay_keypoints_on_video(
 
 
 def plot_similarity_dendrogram(
-    coordinates=None, results=None, save_path=None, name=None, 
-    project_dir=None, results_path=None, pre=5, post=15, min_frequency=0.005, 
-    min_duration=3, bodyparts=None, use_bodyparts=None, density_sample=False,
+    coordinates, results, project_dir=None, name=None, save_path=None, 
+    pre=5, post=15, min_frequency=0.005, min_duration=3, bodyparts=None, 
+    use_bodyparts=None, density_sample=False,
     sampling_options={},  figsize=(6,3), **kwargs):
     """
     Plot a dendrogram showing the similarity between syllable trajectories.
@@ -1486,6 +1474,20 @@ def plot_similarity_dendrogram(
 
     Parameters
     ----------
+    coordinates: dict
+        Dictionary mapping recording names to keypoint coordinates as
+        ndarrays of shape (n_frames, n_bodyparts, 2).
+
+    results: dict
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
+ 
+    project_dir: str, default=None
+        Project directory. Required to save figure if `save_path` is None.
+
+    name: str, default=None
+        Model name. Required to save figure if `save_path` is None.
+
     save_path: str, default=None
         Path to save the dendrogram plot (do not include an extension). 
         If None, the plot will be saved  to 
@@ -1508,8 +1510,7 @@ def plot_similarity_dendrogram(
     figsize: tuple of float, default=(10,5)
         Size of the dendrogram plot.
     """
-    if results is None: results = load_results(
-        name=name, project_dir=project_dir, path=results_path)
+    save_path = _get_path(project_dir, name, save_path, 'similarity_dendrogram') 
 
     syllables = {k:v['syllable'] for k,v in results.items()}
     centroids = {k:v['centroid'] for k,v in results.items()}
@@ -1534,6 +1535,5 @@ def plot_similarity_dendrogram(
     ax.set_title('Syllable similarity')
     fig.set_size_inches(figsize)
 
-    save_path = _get_path(project_dir, name, save_path, 'similarity_dendrogram') 
     print(f'Saving dendrogram plot to {save_path}')
     for ext in ['pdf','png']: plt.savefig(save_path+'.'+ext)

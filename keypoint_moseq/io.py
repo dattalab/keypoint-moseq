@@ -32,7 +32,7 @@ def _build_yaml(sections, comments):
 def _get_path(project_dir, name, path, filename, pathname_for_error_msg='path'):
     if path is None: 
         assert project_dir is not None and name is not None, fill(
-            f'`name` and `project_dir` are required if no `{pathname_for_error_msg}` is given.')
+            f'`name` and `project_dir` are required if `{pathname_for_error_msg}` is None.')
         path = os.path.join(project_dir, name, filename)
     return path
 
@@ -71,7 +71,7 @@ def generate_config(project_dir, **kwargs):
         'posterior_bodyparts': ['BODYPART3']})
         
     other = _update_dict(kwargs, {
-        'session_name_suffix': '',
+        'recording_name_suffix': '',
         'verbose':False,
         'conf_pseudocount': 1e-3,
         'video_dir': '',
@@ -99,7 +99,7 @@ def generate_config(project_dir, **kwargs):
         'added_noise_level': 'upper bound of uniform noise added to the data during initial AR-HMM fitting; this is used to regularize the model',
         'PCA_fitting_num_frames': 'number of frames used to fit the PCA model during initialization',
         'video_dir': 'directory with videos from which keypoints were derived (used for crowd movies)',
-        'session_name_suffix': 'suffix used to match videos to session names; this can usually be left empty (see `util.find_matching_videos` for details)',
+        'recording_name_suffix': 'suffix used to match videos to recording names; this can usually be left empty (see `util.find_matching_videos` for details)',
         'bodyparts': 'used to access columns in the keypoint data',
         'skeleton': 'used for visualization only',
         'use_bodyparts': 'determines the subset of bodyparts to use for modeling and the order in which they are represented',
@@ -342,7 +342,7 @@ def setup_project(project_dir, deeplabcut_config=None, sleap_file=None,
     elif nwb_file is not None:
         nwb_options = {}
         with NWBHDF5IO(nwb_file, mode='r', load_namespaces=True) as io:
-            pose_obj = _load_nwb_pose_obj(io)
+            pose_obj = _load_nwb_pose_obj(io, nwb_file)
             bodyparts = list(pose_obj.nodes[:])
             nwb_options['bodyparts'] = bodyparts
             nwb_options['use_bodyparts'] = bodyparts
@@ -398,134 +398,81 @@ def load_pca(project_dir, pca_path=None):
     return joblib.load(pca_path)
 
 
-def load_checkpoint(project_dir=None, name=None, path=None):
+def load_checkpoint(project_dir=None, name=None, path=None, iteration=None):
     """
-    Load model fitting checkpoint.
+    Load data and model snapshot from a saved checkpoint.
 
     The checkpoint path can be specified directly via `path` or else
-    it is assumed to be `{project_dir}/<name>/checkpoint.p`.
+    it is assumed to be `{project_dir}/<name>/checkpoint.h5`.
 
     Parameters
     ----------
-    project_dir: str, default=None
-    name: str, default=None
-    path: str, default=None
-
-    Returns
-    -------
-    checkpoint: dict
-        See :py:func:`keypoint_moseq.io.save_checkpoint`
-    """
-    path = _get_path(project_dir, name, path, 'checkpoint.p')
-    return joblib.load(path)
-
-
-def save_checkpoint(model, data, history, labels, iteration, 
-                    path=None, name=None, project_dir=None,
-                    save_history=True, save_states=True, save_data=True):
-    """
-    Save a checkpoint during model fitting.
-
-    A single checkpoint file contains model snapshots from the full history
-    of model fitting. To restart fitting from an iteration earlier than the
-    last iteration, use :py:func:`keypoint_moseq.fitting.revert`.
-
-    The checkpoint path can be specified directly via `path` or else
-    it is assumed to be `{project_dir}/<name>/checkpoint.p`. See
-    :py:func:`keypoint_moseq.fitting.fit_model` for a more detailed
-    description of the checkpoint contents.
-
-    Parameters
-    ----------
-    model: dict, history: dict
-        See :py:func:`keypoint_moseq.fitting.fit_model`
-
-    data: dict, labels: list of tuples
-        See :py:func:`keypoint_moseq.io.format_data`
-
-    iteration: int
-        Current iteration of model fitting
-
-    save_history: bool, default=True
-        Whether to include `history` in the checkpoint
-
-    save_states: bool, default=True
-        Whether to include `states` in the checkpoint
-
-    save_data: bool, default=True
-        Whether to include `Y`, `conf`, and `mask` in the checkpoint
-    
     project_dir: str, default=None
         Project directory; used in conjunction with `name` to determine
         the checkpoint path if `path` is not specified.
-
+        
     name: str, default=None
         Model name; used in conjunction with `project_dir` to determine
         the checkpoint path if `path` is not specified.
 
     path: str, default=None
-        Checkpoint path; if not specified, the checkpoint path is determined
-        from `project_dir` and `name`.
+        Checkpoint path; if not specified, the checkpoint path is set to
+        `{project_dir}/<name>/checkpoint.h5`.
+
+    iteration: int, default=None
+        Determines which model snapshot to load. If None, the last
+        snapshot is loaded.
 
     Returns
     -------
-    checkpoint: dict
-        Dictionary containing `history`, `labels` and `name` as 
-        well as the key/value pairs from `model` and `data`.
+    model: dict
+        Model dictionary containing states, parameters, hyperparameters,
+        noise prior, and random seed.
+
+    data: dict
+        Data dictionary containing observations, confidences, mask and
+        associated metadata (see :py:func:`keypoint_moseq.util.format_data`). 
+
+    iteration: int
+        Iteration of model fitting corresponding to the loaded snapshot.
     """
-    path = _get_path(project_dir, name, path, 'checkpoint.p')
+    path = _get_path(project_dir, name, path, 'checkpoint.h5')
 
-    dirname = os.path.dirname(path)
-    if not os.path.exists(dirname): 
-        print(fill(f'Creating the directory {dirname}'))
-        os.makedirs(dirname)
-    
-    save_dict = {
-        'labels': labels,
-        'iteration' : iteration,
-        'hypparams' : jax.device_get(model['hypparams']),
-        'params'    : jax.device_get(model['params']), 
-        'seed'      : np.array(model['seed']),
-        'name'      : name}
+    with h5py.File(path, 'r') as f:
+        saved_iterations = np.sort([int(i) for i in f['model_snapshots']])
 
-    if save_data: 
-        save_dict.update(jax.device_get(data))
-        
-    if save_states or save_data: 
-        save_dict['mask'] = np.array(data['mask'])
-        
-    if save_states: 
-        save_dict['states'] = jax.device_get(model['states'])
-        save_dict['noise_prior'] = jax.device_get(model['noise_prior'])
-        
-    if save_history:
-        save_dict['history'] = history
-        
-    joblib.dump(save_dict, path)
-    return save_dict
+    if iteration is None:
+        iteration = saved_iterations[-1]
+    else:
+        assert iteration in saved_iterations, fill(
+            f'No snapshot found for iteration {iteration}. '
+            f'Available iterations are {saved_iterations}')
+
+    model = load_hdf5(path, f'model_snapshots/{iteration}')
+    metadata = load_hdf5(path, 'metadata')
+    data = load_hdf5(path, 'data')
+    return model, data, metadata, iteration
+
 
 
 def reindex_syllables_in_checkpoint(project_dir=None, name=None, path=None, 
-                                    save_path=None, index=None, runlength=True):
+                                    index=None, runlength=True):
     """
-    Reindex syllable labels by frequency in a saved checkpoint.
+    Reindex syllable labels by their frequency in the most recent
+    model snapshot in a checkpoint file.
 
     This is an in-place operation: the checkpoint is loaded from disk,
-    modified and saved to disk again. Reindexing is applied to the
-    current model states and parameters as well as saved snapshots. 
+    modified and saved to disk again. The label permutation is applied
+    to all model snapshots in the checkpoint.
 
     The checkpoint path can be specified directly via `path` or else
-    it is assumed to be `{project_dir}/<name>/checkpoint.p`.
+    it is assumed to be `{project_dir}/<name>/checkpoint.h5`.
 
     Parameters
     ----------
     project_dir: str, default=None
     name: str, default=None
     path: str, default=None  
-
-    save_path: str, default=None
-        Path to save the reindexed checkpoint. If None, the checkpoint
-        is saved to the same path as the original checkpoint.
 
     index: array of shape (num_states,), default=None
         Permutation for syllable labels, where `index[i]` is relabled 
@@ -539,35 +486,34 @@ def reindex_syllables_in_checkpoint(project_dir=None, name=None, path=None,
 
     Returns
     -------
-    checkpoint: dict
-        A copy of the checkpoint after reindexing
-
     index: array of shape (num_states,)
         The index used for permuting syllable labels.
     """
-    path = _get_path(project_dir, name, path, 'checkpoint.p')
-    checkpoint = joblib.load(path)
+    path = _get_path(project_dir, name, path, 'checkpoint.h5')
+    
+    with h5py.File(path, 'r') as f:
+        saved_iterations = [int(i) for i in f['model_snapshots']]
 
     if index is None:
-        index = np.argsort(get_frequencies(
-            stateseqs = checkpoint['states']['z'], mask=checkpoint['mask'], 
-            num_states=checkpoint['hypparams']['ar_hypparams']['num_states'], 
-            runlength=runlength))[::-1]
+        with h5py.File(path, 'r') as f:
+            last_iter = np.max(saved_iterations)
+            num_states = f[f'model_snapshots/{last_iter}/params/pi'].shape[0]
+            z = f[f'model_snapshots/{last_iter}/states/z'][()]
+            mask = f['data/mask'][()]   
+        index = np.argsort(get_frequencies(z, mask, num_states, runlength))[::-1]
 
-    def _reindex(dct):
-        dct['params']['beta'] = dct['params']['beta'][index,:]
-        dct['params']['pi'] = dct['params']['pi'][index,:][:,index]
-        dct['params']['Ab'] = dct['params']['Ab'][index]
-        dct['params']['Q'] = dct['params']['Q'][index]
-        dct['states']['z'] = np.argsort(index)[dct['states']['z']]
+    def _reindex(model):
+        model['params']['beta'] = model['params']['beta'][index,:]
+        model['params']['pi'] = model['params']['pi'][index,:][:,index]
+        model['params']['Ab'] = model['params']['Ab'][index]
+        model['params']['Q'] = model['params']['Q'][index]
+        model['states']['z'] = np.argsort(index)[model['states']['z']]
+        return model
 
-    for iteration in checkpoint['history']:
-        _reindex(checkpoint['history'][iteration])
-    _reindex(checkpoint) # current model
-
-    if save_path is None: save_path = path
-    joblib.dump(checkpoint, save_path)
-    return checkpoint, index
+    for iteration in saved_iterations:
+        model = load_hdf5(path, f'model_snapshots/{iteration}')
+        save_hdf5(path, _reindex(model), f'model_snapshots/{iteration}')
+    return index
 
     
 def load_results(project_dir=None, name=None, path=None):
@@ -592,92 +538,68 @@ def load_results(project_dir=None, name=None, path=None):
     return load_hdf5(path)
 
 
-def save_results_as_csv(project_dir=None, name=None, h5_path=None, 
-                        save_dir=None, use_bodyparts=None,
-                        path_sep='-', **kwargs):
+def save_results_as_csv(results, project_dir=None, name=None, save_dir=None, 
+                        path_sep='-'):
     """
-    Convert modeling results from h5 to csv format.
+    Save modeling results to csv format.
 
-    The input h5 file is assumed to contain modeling outputs for one
-    or more recordings. This function creates a directory and then
-    saves a separate csv file for each.
-
-    The path to the input h5 file can be specified directly via
-    `results_path`. Otherwise it is assumed to be
-    `{project_dir}/{name}/results.h5`. The path to the output
-    directory can be specified directly via `save_dir`. Otherwise
-    it will be set to `{project_dir}/{name}/results`. Any files
-    already in the output directory will be overwritten.
+    This function creates a directory and then saves a separate csv file 
+    for each recording. The directory is created at `save_dir` if provided,
+    otherwise at `{project_dir}/{name}/results`. 
     
     Parameters
     ----------
+    results: dict
+        See :py:func:`keypoint_moseq.fitting.extract_results`.
+
     project_dir: str, default=None
-        Project directory; required if `h5_path` or `save_dir` is not provided.
+        Project directory; required if `save_dir` is not provided.
 
     name: str, default=None
-        Name of the model; required if `h5_path` or `save_dir` is not provided.
-
-    h5_path: str, default=None
-        Path to the h5 file containing modeling results.
+        Name of the model; required if `save_dir` is not provided.
 
     save_dir: str, default=None
-        Path to the directory where the csv files will be saved.
-
-    use_bodyparts: list, default=None
-        List of bodyparts that were used for modeling. If provided,
-        will be used for the csv column names corresponding to 
-        `est_coords`. Otherwise, the bodyparts will be named 
-        `bodypart0`, `bodypart1` etc.
+        Optional path to the directory where the csv files will be saved.
 
     path_sep: str, default='-'
         If a path separator ("/" or "\") is present in the recording name, 
         it will be replaced with `path_sep` when saving the csv file.
     """
-    h5_path = _get_path(project_dir, name, h5_path, 'results.h5', 'h5_path')
-    save_dir = _get_path(project_dir, name, h5_path, 'results', 'save_dir')
+    save_dir = _get_path(project_dir, name, save_dir, 'results', 'save_dir')
 
     if not os.path.exists(save_dir): 
         os.makedirs(save_dir)
 
-    with h5py.File(h5_path, 'r') as results:
-        for key in tqdm.tqdm(results.keys(), desc='Saving to csv'):
-            column_names, data = [], []
+    for key in tqdm.tqdm(results.keys(), desc='Saving to csv'):
+        column_names, data = [], []
 
-            if 'syllable' in results[key].keys():
-                column_names.append(['syllable'])
-                data.append(results[key]['syllable'][()].reshape(-1,1))
+        if 'syllable' in results[key].keys():
+            column_names.append(['syllable'])
+            data.append(results[key]['syllable'].reshape(-1,1))
 
-            if 'centroid' in results[key].keys():
-                d = results[key]['centroid'].shape[1]
-                column_names.append(['centroid x', 'centroid y', 'centroid z'][:d])
-                data.append(results[key]['centroid'][()])
+        if 'centroid' in results[key].keys():
+            d = results[key]['centroid'].shape[1]
+            column_names.append(['centroid x', 'centroid y', 'centroid z'][:d])
+            data.append(results[key]['centroid'])
 
-            if 'heading' in results[key].keys():
-                column_names.append(['heading'])
-                data.append(results[key]['heading'][()].reshape(-1,1))
+        if 'heading' in results[key].keys():
+            column_names.append(['heading'])
+            data.append(results[key]['heading'].reshape(-1,1))
 
-            if 'est_coords' in results[key].keys():
-                k,d = results[key]['est_coords'].shape[1:]
-                if use_bodyparts is None:
-                    use_bodyparts = [f'bodypart{i}' for i in range(k)]
-                for i, bp in enumerate(use_bodyparts):
-                    column_names.append([f'est {bp} x', f'est {bp} y', f'{bp} z'][:d])
-                    data.append(results[key]['est_coords'][:,i,:])
+        if 'latent_state' in results[key].keys():
+            latent_dim = results[key]['latent_state'].shape[1]
+            column_names.append([f'latent_state {i}' for i in range(latent_dim)])
+            data.append(results[key]['latent_state'])
 
-            if 'latent_state' in results[key].keys():
-                latent_dim = results[key]['latent_state'].shape[1]
-                column_names.append([f'latent_state {i}' for i in range(latent_dim)])
-                data.append(results[key]['latent_state'][()])
+        dfs = [pd.DataFrame(arr, columns=cols) for arr,cols in zip(data,column_names)]
+        df = pd.concat(dfs, axis=1)
 
-            dfs = [pd.DataFrame(arr, columns=cols) for arr,cols in zip(data,column_names)]
-            df = pd.concat(dfs, axis=1)
+        for col in df.select_dtypes(include=[np.floating]).columns:
+            df[col] = df[col].astype(float).round(4)
 
-            for col in df.select_dtypes(include=[np.floating]).columns:
-                df[col] = df[col].astype(float).round(4)
-
-            save_name = key.replace(os.path.sep, path_sep)
-            save_path = os.path.join(save_dir, save_name)
-            df.to_csv(f'{save_path}.csv', index=False)
+        save_name = key.replace(os.path.sep, path_sep)
+        save_path = os.path.join(save_dir, save_name)
+        df.to_csv(f'{save_path}.csv', index=False)
 
 
 def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
@@ -818,11 +740,11 @@ def load_keypoints(filepath_pattern, format, extension=None, recursive=True,
     assert len(filepaths)>0, fill(
         f'No files with extensions {extensions} found for {filepath_pattern}')
     
-    coordinates,confidences,bodyparts = {},{},None
+    coordinates, confidences, bodyparts = {},{},None
     for filepath in tqdm.tqdm(filepaths, desc=f'Loading keypoints'):
         try:
             name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
-            new_coordinates,new_confidences,bodyparts = loader(filepath, name)
+            new_coordinates, new_confidences, bodyparts = loader(filepath, name)
 
             if set(new_coordinates.keys()) & set(coordinates.keys()):
                 raise ValueError(fill(
@@ -840,7 +762,7 @@ def load_keypoints(filepath_pattern, format, extension=None, recursive=True,
         f'No valid results found for {filepath_pattern}')
 
     check_nan_proportions(coordinates, bodyparts)
-    return coordinates,confidences,bodyparts
+    return coordinates, confidences, bodyparts
 
 
 def _deeplabcut_loader(filepath, name):
@@ -922,7 +844,7 @@ def _sleap_anipose_loader(filepath, name):
     return coordinates,confidences,bodyparts
 
 
-def _load_nwb_pose_obj(io):
+def _load_nwb_pose_obj(io, filepath):
     """Grab PoseEstimation object from an opened .nwb file."""
     all_objs = io.read().all_children()
     pose_objs = [o for o in all_objs if isinstance(o, PoseEstimation)]
@@ -939,7 +861,7 @@ def _load_nwb_pose_obj(io):
 def _nwb_loader(filepath, name):
     """Load keypoints from nwb files."""
     with NWBHDF5IO(filepath, mode='r', load_namespaces=True) as io:
-        pose_obj = _load_nwb_pose_obj(io)
+        pose_obj = _load_nwb_pose_obj(io, filepath)
         bodyparts = list(pose_obj.nodes[:])
         coords = np.stack([pose_obj.pose_estimation_series[bp].data[()] for bp in bodyparts], axis=1)
         if 'confidence' in pose_obj.pose_estimation_series[bodyparts[0]].fields:
@@ -951,11 +873,10 @@ def _nwb_loader(filepath, name):
     return coordinates,confidences,bodyparts
 
 
-# hdf5 save/load routines modified from
-# https://gist.github.com/nirum/b119bbbd32d22facee3071210e08ecdf
-def save_hdf5(filepath, save_dict):
+def save_hdf5(filepath, save_dict, datapath=None):
     """
-    Save a dict of pytrees to an hdf5 file.
+    Save a dict of pytrees to an hdf5 file. The leaves of the
+    pytrees must be numpy arrays, scalars, or strings.
     
     Parameters
     ----------
@@ -965,12 +886,20 @@ def save_hdf5(filepath, save_dict):
     save_dict: dict
         Dictionary where the values are pytrees, i.e. recursive 
         collections of tuples, lists, dicts, and numpy arrays.
+
+    datapath: str, default=None
+        Path within the hdf5 file to save the data. If None, the
+        data is saved at the root of the hdf5 file.
     """
     with h5py.File(filepath, 'a') as f:
-        for k,tree in save_dict.items():
-            _savetree_hdf5(jax.device_get(tree), f, k)
+        if datapath is not None:
+            _savetree_hdf5(jax.device_get(save_dict), f, datapath)
+        else:
+            for k,tree in save_dict.items():
+                _savetree_hdf5(jax.device_get(tree), f, k)
 
-def load_hdf5(filepath):
+
+def load_hdf5(filepath, datapath=None):
     """
     Load a dict of pytrees from an hdf5 file.
 
@@ -978,6 +907,10 @@ def load_hdf5(filepath):
     ----------
     filepath: str
         Path of the hdf5 file to load.
+
+    datapath: str, default=None
+        Path within the hdf5 file to load the data from. If None, the
+        data is loaded from the root of the hdf5 file.
             
     Returns
     -------
@@ -986,33 +919,59 @@ def load_hdf5(filepath):
         collections of tuples, lists, dicts, and numpy arrays.
     """
     with h5py.File(filepath, 'r') as f:
-        return {k:_loadtree_hdf5(f[k]) for k in f}
+        if datapath is None:
+            return {k:_loadtree_hdf5(f[k]) for k in f}
+        else:
+            return _loadtree_hdf5(f[datapath])
+
+
 
 def _savetree_hdf5(tree, group, name):
     """Recursively save a pytree to an h5 file group."""
-    if name in group: del group[name]
+    if name in group: 
+        del group[name]
     if isinstance(tree, np.ndarray):
+        if tree.dtype.kind == 'U': 
+            dt = h5py.special_dtype(vlen=str)
+            group.create_dataset(name, data=tree.astype(object), dtype=dt)
+        else:
+            group.create_dataset(name, data=tree)
+    elif isinstance(tree, (float, int, str)):
         group.create_dataset(name, data=tree)
     else:
         subgroup = group.create_group(name)
         subgroup.attrs['type'] = type(tree).__name__
-        if isinstance(tree, tuple) or isinstance(tree, list):
+        
+        if isinstance(tree, (tuple, list)):
             for k, subtree in enumerate(tree):
                 _savetree_hdf5(subtree, subgroup, f'arr{k}')
         elif isinstance(tree, dict):
             for k, subtree in tree.items():
                 _savetree_hdf5(subtree, subgroup, k)
-        else: raise ValueError(f'Unrecognized type {type(tree)}')
+        else: 
+            raise ValueError(f'Unrecognized type {type(tree)}')
 
+
+                
 def _loadtree_hdf5(leaf):
     """Recursively load a pytree from an h5 file group."""
     if isinstance(leaf, h5py.Dataset):
-        return np.array(leaf)
+        data = np.array(leaf[()])
+        if h5py.check_dtype(vlen=data.dtype) == str:
+            data = [item.decode('utf-8') for item in data]
+        elif data.dtype.kind == 'S':
+            data = data.item().decode('utf-8')
+        elif data.shape == ():
+            data = data.item()
+        return data
     else:
         leaf_type = leaf.attrs['type']
         values = map(_loadtree_hdf5, leaf.values())
-        if leaf_type == 'dict': return dict(zip(leaf.keys(), values))
-        elif leaf_type == 'list': return list(values)
-        elif leaf_type == 'tuple': return tuple(values)
-        else: raise ValueError(f'Unrecognized type {leaf_type}')
-
+        if leaf_type == 'dict': 
+            return dict(zip(leaf.keys(), values))
+        elif leaf_type == 'list': 
+            return list(values)
+        elif leaf_type == 'tuple': 
+            return tuple(values)
+        else: 
+            raise ValueError(f'Unrecognized type {leaf_type}')
