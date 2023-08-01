@@ -334,8 +334,8 @@ class VersioneerConfig:
 def get_root():
     """Get the project root directory.
 
-    We require that all commands are run from the project root, i.e. the directory that
-    contains setup.py, setup.cfg, and versioneer.py .
+    We require that all commands are run from the project root, i.e. the
+    directory that contains setup.py, setup.cfg, and versioneer.py .
     """
     root = os.path.realpath(os.path.abspath(os.getcwd()))
     setup_py = os.path.join(root, "setup.py")
@@ -432,7 +432,9 @@ def register_vcs_handler(vcs, method):  # decorator
     return decorate
 
 
-def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False, env=None):
+def run_command(
+    commands, args, cwd=None, verbose=False, hide_stderr=False, env=None
+):
     """Call the given command(s)."""
     assert isinstance(commands, list)
     process = None
@@ -1244,9 +1246,9 @@ def git_versions_from_keywords(keywords, tag_prefix, verbose):
 def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
     """Get version from 'git describe' in the root of the source tree.
 
-    This only gets called if the git-archive 'subst' keywords were *not* expanded, and
-    _version.py hasn't already been rewritten with a short version string, meaning we're
-    inside a checked out source tree.
+    This only gets called if the git-archive 'subst' keywords were *not*
+    expanded, and _version.py hasn't already been rewritten with a short
+    version string, meaning we're inside a checked out source tree.
     """
     GITS = ["git"]
     if sys.platform == "win32":
@@ -1259,7 +1261,9 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
     env.pop("GIT_DIR", None)
     runner = functools.partial(runner, env=env)
 
-    _, rc = runner(GITS, ["rev-parse", "--git-dir"], cwd=root, hide_stderr=not verbose)
+    _, rc = runner(
+        GITS, ["rev-parse", "--git-dir"], cwd=root, hide_stderr=not verbose
+    )
     if rc != 0:
         if verbose:
             print("Directory %s not under git control" % root)
@@ -1294,7 +1298,9 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
     pieces["short"] = full_out[:7]  # maybe improved later
     pieces["error"] = None
 
-    branch_name, rc = runner(GITS, ["rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
+    branch_name, rc = runner(
+        GITS, ["rev-parse", "--abbrev-ref", "HEAD"], cwd=root
+    )
     # --abbrev-ref was added in git-1.6.3
     if rc != 0 or branch_name is None:
         raise NotThisMethod("'git rev-parse --abbrev-ref' returned error")
@@ -1343,7 +1349,9 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
         mo = re.search(r"^(.+)-(\d+)-g([0-9a-f]+)$", git_describe)
         if not mo:
             # unparsable. Maybe git-describe is misbehaving?
-            pieces["error"] = "unable to parse git-describe output: '%s'" % describe_out
+            pieces["error"] = (
+                "unable to parse git-describe output: '%s'" % describe_out
+            )
             return pieces
 
         # tag
@@ -1372,7 +1380,9 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
         pieces["distance"] = len(out.split())  # total number of commits
 
     # commit date: see ISO-8601 comment in git_versions_from_keywords()
-    date = runner(GITS, ["show", "-s", "--format=%ci", "HEAD"], cwd=root)[0].strip()
+    date = runner(GITS, ["show", "-s", "--format=%ci", "HEAD"], cwd=root)[
+        0
+    ].strip()
     # Use only the last line.  Previous lines may contain GPG signature
     # information.
     date = date.splitlines()[-1]
@@ -1384,8 +1394,8 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
 def do_vcs_install(versionfile_source, ipy):
     """Git-specific installation logic for Versioneer.
 
-    For Git, this means creating/changing .gitattributes to mark _version.py for export-
-    subst keyword substitution.
+    For Git, this means creating/changing .gitattributes to mark _version.py
+    for export- subst keyword substitution.
     """
     GITS = ["git"]
     if sys.platform == "win32":
@@ -1422,9 +1432,9 @@ def do_vcs_install(versionfile_source, ipy):
 def versions_from_parentdir(parentdir_prefix, root, verbose):
     """Try to determine the version from the parent directory name.
 
-    Source tarballs conventionally unpack into a directory that includes both the
-    project name and a version string. We will also support searching up two directory
-    levels for an appropriately named parent directory
+    Source tarballs conventionally unpack into a directory that includes both
+    the project name and a version string. We will also support searching up
+    two directory levels for an appropriately named parent directory
     """
     rootdirs = []
 
@@ -1475,11 +1485,15 @@ def versions_from_file(filename):
     except OSError:
         raise NotThisMethod("unable to read _version.py")
     mo = re.search(
-        r"version_json = '''\n(.*)'''  # END VERSION_JSON", contents, re.M | re.S
+        r"version_json = '''\n(.*)'''  # END VERSION_JSON",
+        contents,
+        re.M | re.S,
     )
     if not mo:
         mo = re.search(
-            r"version_json = '''\r\n(.*)'''  # END VERSION_JSON", contents, re.M | re.S
+            r"version_json = '''\r\n(.*)'''  # END VERSION_JSON",
+            contents,
+            re.M | re.S,
         )
     if not mo:
         raise NotThisMethod("no version_json in _version.py")
@@ -1489,7 +1503,9 @@ def versions_from_file(filename):
 def write_to_version_file(filename, versions):
     """Write the given version number to the given _version.py file."""
     os.unlink(filename)
-    contents = json.dumps(versions, sort_keys=True, indent=1, separators=(",", ": "))
+    contents = json.dumps(
+        versions, sort_keys=True, indent=1, separators=(",", ": ")
+    )
     with open(filename, "w") as f:
         f.write(SHORT_VERSION_PY % contents)
 
@@ -1559,8 +1575,8 @@ def render_pep440_branch(pieces):
 def pep440_split_post(ver):
     """Split pep440 version string at the post-release segment.
 
-    Returns the release segments before the post-release and the post-release version
-    number (or -1 if no post-release segment is present).
+    Returns the release segments before the post-release and the post-release
+    version number (or -1 if no post-release segment is present).
     """
     vc = str.split(ver, ".post")
     return vc[0], int(vc[1] or 0) if len(vc) == 2 else None
@@ -1575,10 +1591,15 @@ def render_pep440_pre(pieces):
     if pieces["closest-tag"]:
         if pieces["distance"]:
             # update the post release segment
-            tag_version, post_version = pep440_split_post(pieces["closest-tag"])
+            tag_version, post_version = pep440_split_post(
+                pieces["closest-tag"]
+            )
             rendered = tag_version
             if post_version is not None:
-                rendered += ".post%d.dev%d" % (post_version + 1, pieces["distance"])
+                rendered += ".post%d.dev%d" % (
+                    post_version + 1,
+                    pieces["distance"],
+                )
             else:
                 rendered += ".post0.dev%d" % (pieces["distance"])
         else:
@@ -1843,8 +1864,8 @@ def get_version():
 def get_cmdclass(cmdclass=None):
     """Get the custom setuptools subclasses used by Versioneer.
 
-    If the package uses a different cmdclass (e.g. one from numpy), it should be provide
-    as an argument.
+    If the package uses a different cmdclass (e.g. one from numpy), it should
+    be provide as an argument.
     """
     if "versioneer" in sys.modules:
         del sys.modules["versioneer"]
@@ -1925,7 +1946,9 @@ def get_cmdclass(cmdclass=None):
             # now locate _version.py in the new build/ directory and replace
             # it with an updated value
             if cfg.versionfile_build:
-                target_versionfile = os.path.join(self.build_lib, cfg.versionfile_build)
+                target_versionfile = os.path.join(
+                    self.build_lib, cfg.versionfile_build
+                )
                 print("UPDATING %s" % target_versionfile)
                 write_to_version_file(target_versionfile, versions)
 
@@ -1952,7 +1975,9 @@ def get_cmdclass(cmdclass=None):
             # it with an updated value
             if not cfg.versionfile_build:
                 return
-            target_versionfile = os.path.join(self.build_lib, cfg.versionfile_build)
+            target_versionfile = os.path.join(
+                self.build_lib, cfg.versionfile_build
+            )
             if not os.path.exists(target_versionfile):
                 print(
                     f"Warning: {target_versionfile} does not exist, skipping "
@@ -2161,9 +2186,15 @@ def do_setup():
     root = get_root()
     try:
         cfg = get_config_from_root(root)
-    except (OSError, configparser.NoSectionError, configparser.NoOptionError) as e:
+    except (
+        OSError,
+        configparser.NoSectionError,
+        configparser.NoOptionError,
+    ) as e:
         if isinstance(e, (OSError, configparser.NoSectionError)):
-            print("Adding sample versioneer config to setup.cfg", file=sys.stderr)
+            print(
+                "Adding sample versioneer config to setup.cfg", file=sys.stderr
+            )
             with open(os.path.join(root, "setup.cfg"), "a") as f:
                 f.write(SAMPLE_CONFIG)
         print(CONFIG_ERROR, file=sys.stderr)

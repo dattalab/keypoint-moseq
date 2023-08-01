@@ -34,7 +34,9 @@ def print_dims_to_explain_variance(pca, f):
     """
     cs = np.cumsum(pca.explained_variance_ratio_)
     if cs[-1] < f:
-        print(f"All components together only explain {cs[-1]*100}% of variance.")
+        print(
+            f"All components together only explain {cs[-1]*100}% of variance."
+        )
     else:
         print(
             f">={f*100}% of variance exlained by {(cs>f).nonzero()[0].min()+1} components."
@@ -84,7 +86,9 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
 
         # filter matches by extension
         matches = [
-            match for match in matches if os.path.splitext(match)[1].lower() in ext_list
+            match
+            for match in matches
+            if os.path.splitext(match)[1].lower() in ext_list
         ]
         return matches
 
@@ -155,7 +159,9 @@ def find_matching_videos(
         extensions = [video_extension]
 
     videos = list_files_with_exts(video_dir, extensions, recursive=recursive)
-    videos_to_paths = {os.path.splitext(os.path.basename(f))[0]: f for f in videos}
+    videos_to_paths = {
+        os.path.splitext(os.path.basename(f))[0]: f for f in videos
+    }
 
     video_paths = []
     for key in keys:
@@ -247,13 +253,22 @@ def filter_centroids_headings(centroids, headings, filter_size=9):
     filtered_centroids: dict
     filtered_headings: dict
     """
-    centroids = {k: median_filter(v, (filter_size, 1)) for k, v in centroids.items()}
-    headings = {k: filter_angle(v, size=filter_size) for k, v in headings.items()}
+    centroids = {
+        k: median_filter(v, (filter_size, 1)) for k, v in centroids.items()
+    }
+    headings = {
+        k: filter_angle(v, size=filter_size) for k, v in headings.items()
+    }
     return centroids, headings
 
 
 def get_syllable_instances(
-    stateseqs, min_duration=3, pre=30, post=60, min_frequency=0, min_instances=0
+    stateseqs,
+    min_duration=3,
+    pre=30,
+    post=60,
+    min_frequency=0,
+    min_instances=0,
 ):
     """Map each syllable to a list of instances when it occured. Only include
     instances that meet the criteria specified by `pre`, `post`, and
@@ -303,9 +318,15 @@ def get_syllable_instances(
                 syllable_instances[syllable].append((key, s, e))
 
     frequencies_filter = get_frequencies(stateseqs) >= min_frequency
-    counts_filter = np.array(list(map(len, syllable_instances))) >= min_instances
-    use_syllables = np.all([frequencies_filter, counts_filter], axis=0).nonzero()[0]
-    return {syllable: syllable_instances[syllable] for syllable in use_syllables}
+    counts_filter = (
+        np.array(list(map(len, syllable_instances))) >= min_instances
+    )
+    use_syllables = np.all(
+        [frequencies_filter, counts_filter], axis=0
+    ).nonzero()[0]
+    return {
+        syllable: syllable_instances[syllable] for syllable in use_syllables
+    }
 
 
 def get_edges(use_bodyparts, skeleton):
@@ -336,7 +357,9 @@ def get_edges(use_bodyparts, skeleton):
 
             for bp1, bp2 in skeleton:
                 if bp1 in use_bodyparts and bp2 in use_bodyparts:
-                    edges.append([use_bodyparts.index(bp1), use_bodyparts.index(bp2)])
+                    edges.append(
+                        [use_bodyparts.index(bp1), use_bodyparts.index(bp2)]
+                    )
     return edges
 
 
@@ -436,20 +459,25 @@ def get_instance_trajectories(
         ]
         if centroids is not None and headings is not None:
             trajectories = [
-                np_io(inverse_rigid_transform)(x, centroids[key][s], headings[key][s])
+                np_io(inverse_rigid_transform)(
+                    x, centroids[key][s], headings[key][s]
+                )
                 for x, (key, s, e) in zip(trajectories, syllable_instances)
             ]
     else:
         trajectories = np.array(
-            [coordinates[key][s - pre : s + post] for key, s, e in syllable_instances]
+            [
+                coordinates[key][s - pre : s + post]
+                for key, s, e in syllable_instances
+            ]
         )
         if centroids is not None and headings is not None:
-            c = np.array([centroids[key][s] for key, s, e in syllable_instances])[
-                :, None
-            ]
-            h = np.array([headings[key][s] for key, s, e in syllable_instances])[
-                :, None
-            ]
+            c = np.array(
+                [centroids[key][s] for key, s, e in syllable_instances]
+            )[:, None]
+            h = np.array(
+                [headings[key][s] for key, s, e in syllable_instances]
+            )[:, None]
             trajectories = np_io(inverse_rigid_transform)(trajectories, c, h)
 
     return trajectories
@@ -520,21 +548,27 @@ def sample_instances(
         sampled_instances = {
             syllable: [
                 instances[i]
-                for i in np.random.choice(len(instances), num_samples, replace=False)
+                for i in np.random.choice(
+                    len(instances), num_samples, replace=False
+                )
             ]
             for syllable, instances in syllable_instances.items()
         }
         return sampled_instances
 
     elif mode == "density":
-        assert not (coordinates is None or headings is None or centroids is None), fill(
+        assert not (
+            coordinates is None or headings is None or centroids is None
+        ), fill(
             "`coordinates`, `headings` and `centroids` are required when "
             '`mode == "density"`'
         )
 
         for key in coordinates.keys():
             outliers = np.isnan(coordinates[key]).any(-1)
-            coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
+            coordinates[key] = interpolate_keypoints(
+                coordinates[key], outliers
+            )
 
         trajectories = {
             syllable: get_instance_trajectories(
@@ -568,7 +602,9 @@ def sample_instances(
             distances, _ = all_nbrs.kneighbors(Xpca)
             global_density = 1 / distances.mean(1)
             exemplar = np.argmax(local_density / global_density)
-            samples = np.random.choice(indices[exemplar], num_samples, replace=False)
+            samples = np.random.choice(
+                indices[exemplar], num_samples, replace=False
+            )
             sampled_instances[syllable] = [
                 syllable_instances[syllable][i] for i in samples
             ]
@@ -600,7 +636,9 @@ def interpolate_along_axis(x, xp, fp, axis=0):
     """
     assert len(xp.shape) == len(x.shape) == 1
     assert fp.shape[axis] == len(xp)
-    assert len(xp) > 0, "xp must be non-empty; cannot interpolate without datapoints"
+    assert (
+        len(xp) > 0
+    ), "xp must be non-empty; cannot interpolate without datapoints"
 
     fp = np.moveaxis(fp, axis, 0)
     shape = fp.shape[1:]
@@ -734,9 +772,13 @@ def check_jupyter_extensions(
                 parts = line.split()
                 # Check if the extension is enabled
                 if "enabled" in parts:
-                    print(f"✅ The extension {extension} is installed and enabled.")
+                    print(
+                        f"✅ The extension {extension} is installed and enabled."
+                    )
                 else:
-                    print(f"❌ The extension {extension} is installed but not enabled.")
+                    print(
+                        f"❌ The extension {extension} is installed but not enabled."
+                    )
                 break
         else:
             print(f"The extension {extension} is not installed.")
@@ -759,12 +801,18 @@ def _print_colored_table(row_labels, col_labels, values):
             color = plt.get_cmap("Reds")(val * 0.8)
             return f"background-color: rgba({int(color[0]*255)}, {int(color[1]*255)}, {int(color[2]*255)}, {color[3]})"
 
-        colored_df = df.style.applymap(colorize).set_caption("Proportion of NaNs")
+        colored_df = df.style.applymap(colorize).set_caption(
+            "Proportion of NaNs"
+        )
         display(colored_df)
         return colored_df
     else:
         print(title)
-        print(tabulate(df, headers="keys", tablefmt="simple_grid", showindex=True))
+        print(
+            tabulate(
+                df, headers="keys", tablefmt="simple_grid", showindex=True
+            )
+        )
 
 
 def check_nan_proportions(
@@ -798,7 +846,11 @@ def check_nan_proportions(
         all_coords = np.concatenate(list(coordinates.values()))
         nan_props = np.isnan(all_coords).any(-1).mean(0)
         if np.any(nan_props > warning_threshold):
-            bps = [bp for bp, p in zip(bodyparts, nan_props) if p > warning_threshold]
+            bps = [
+                bp
+                for bp, p in zip(bodyparts, nan_props)
+                if p > warning_threshold
+            ]
             warnings.warn(
                 "\nCoordinates for the following bodyparts are missing (set to NaN) in at least "
                 "{}% of frames:\n - {}\n\n".format(
@@ -896,7 +948,9 @@ def format_data(
         keys = sorted(coordinates.keys())
     else:
         bad_keys = set(keys) - set(coordinates.keys())
-        assert len(bad_keys) == 0, fill(f"Keys {bad_keys} not found in coordinates")
+        assert len(bad_keys) == 0, fill(
+            f"Keys {bad_keys} not found in coordinates"
+        )
 
     assert len(keys) > 0, "No recordings found"
 
@@ -922,16 +976,24 @@ def format_data(
         )
 
     if confidences is None:
-        confidences = {key: np.ones_like(coordinates[key][..., 0]) for key in keys}
+        confidences = {
+            key: np.ones_like(coordinates[key][..., 0]) for key in keys
+        }
 
     if bodyparts is not None and use_bodyparts is not None:
-        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
-        confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
+        coordinates = reindex_by_bodyparts(
+            coordinates, bodyparts, use_bodyparts
+        )
+        confidences = reindex_by_bodyparts(
+            confidences, bodyparts, use_bodyparts
+        )
 
     for key in keys:
         outliers = np.isnan(coordinates[key]).any(-1)
         coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
-        confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
+        confidences[key] = np.where(
+            outliers, 0, np.nan_to_num(confidences[key])
+        )
 
     if seg_length is not None:
         max_recording_length = max([coordinates[key].shape[0] for key in keys])
@@ -944,7 +1006,9 @@ def format_data(
     if np.min(conf) < 0:
         conf = np.maximum(conf, 0)
         warnings.warn(
-            fill("Negative confidence values are not allowed and will be set to 0.")
+            fill(
+                "Negative confidence values are not allowed and will be set to 0."
+            )
         )
     conf = conf + conf_pseudocount
 
@@ -974,25 +1038,25 @@ def get_typical_trajectories(
     Parameters
     ----------
     coordinates: dict
-        Dictionary mapping recording names to keypoint coordinates as
-        ndarrays of shape (n_frames, n_bodyparts, 2).
+        Dictionary mapping recording names to keypoint coordinates as ndarrays
+        of shape (n_frames, n_bodyparts, 2).
 
     syllables: dict
-        Dictionary mapping recording names to syllable sequences as
-        arrays of shape (n_frames,).
+        Dictionary mapping recording names to syllable sequences as arrays of
+        shape (n_frames,).
 
     centroids: dict
-        Dictionary mapping recording names to centroid coordinates as
-        ndarrays of shape (n_frames, 2).
+        Dictionary mapping recording names to centroid coordinates as ndarrays
+        of shape (n_frames, 2).
 
     headings: dict
-        Dictionary mapping recording names to heading angles in radians
-        as arrays of shape (n_frames,).
+        Dictionary mapping recording names to heading angles in radians as
+        arrays of shape (n_frames,).
 
     pre: int, default=5, post: int, default=15
-        Defines the temporal window around syllable onset for
-        computing the average trajectory. Note that the window is
-        independent of the actual duration of the syllable.
+        Defines the temporal window around syllable onset for computing the
+        average trajectory. Note that the window is independent of the actual
+        duration of the syllable.
 
     min_frequency: float, default=0.005
         Minimum frequency of a syllable to plotted.
@@ -1005,19 +1069,18 @@ def get_typical_trajectories(
         List of bodypart names in `coordinates`.
 
     use_bodyparts: list of str, default=None
-        Ordered list of bodyparts to include in each trajectory.
-        If None, all bodyparts will be included.
+        Ordered list of bodyparts to include in each trajectory. If None, all
+        bodyparts will be included.
 
     density_sample : bool, default=True
-        Whether to use density sampling when generating trajectories.
-        If True, the trajectory is based on the most exemplary
-        syllable instances, rather than being average across all
-        instances.
+        Whether to use density sampling when generating trajectories. If True,
+        the trajectory is based on the most exemplary syllable instances,
+        rather than being average across all instances.
 
     sampling_options: dict, default={'mode':'density', 'n_neighbors':50}
         Dictionary of options for sampling syllable instances (see
-        :py:func:`keypoint_moseq.util.sample_instances`). Only used
-        when `density_sample` is True.
+        :py:func:`keypoint_moseq.util.sample_instances`). Only used when
+        `density_sample` is True.
 
     Returns
     -------
@@ -1026,7 +1089,9 @@ def get_typical_trajectories(
         as arrays of shape (pre+pose, n_bodyparts, [2 or 3]).
     """
     if bodyparts is not None and use_bodyparts is not None:
-        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+        coordinates = reindex_by_bodyparts(
+            coordinates, bodyparts, use_bodyparts
+        )
 
     min_instances = sampling_options["n_neighbors"] if density_sample else 1
     syllable_instances = get_syllable_instances(

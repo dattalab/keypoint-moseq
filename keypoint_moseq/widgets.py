@@ -93,7 +93,9 @@ class GroupSettingWidgets:
         self.col_defs = {"group": {"editable": True, "toolTip": "editable"}}
 
         self.clear_button = widgets.Button(
-            description="Clear Output", disabled=False, tooltip="Close Cell Output"
+            description="Clear Output",
+            disabled=False,
+            tooltip="Close Cell Output",
         )
 
         self.group_input = widgets.Text(
@@ -183,7 +185,8 @@ class GroupSettingWidgets:
             self.qgrid_widget.edit_cell(i, "group", self.group_input.value)
 
     def update_clicked(self, b=None):
-        """Update the index file with the current table state upon Save button click.
+        """Update the index file with the current table state upon Save button
+        click.
 
          Parameters
         ----------
@@ -196,7 +199,9 @@ class GroupSettingWidgets:
         latest_df = self.qgrid_widget.get_changed_df()
         self.df.update(latest_df)
 
-        updated_index = {"files": list(self.df.to_dict(orient="index").values())}
+        updated_index = {
+            "files": list(self.df.to_dict(orient="index").values())
+        }
 
         with open(self.index_filepath, "w") as f:
             yaml.safe_dump(updated_index, f, default_flow_style=False)
@@ -223,7 +228,9 @@ class SyllableLabelerWidgets:
         """Initialize the syllable labeler widgets."""
 
         self.clear_button = widgets.Button(
-            description="Clear Output", disabled=False, tooltip="Close Cell Output"
+            description="Clear Output",
+            disabled=False,
+            tooltip="Close Cell Output",
         )
 
         self.syll_select = widgets.Dropdown(
@@ -233,8 +240,12 @@ class SyllableLabelerWidgets:
         # labels
         self.cm_lbl = PreText(text="Syllable Movie")  # current movie number
 
-        self.syll_lbl = widgets.Label(value="Syllable Name")  # name user prompt label
-        self.desc_lbl = widgets.Label(value="Short Description")  # description label
+        self.syll_lbl = widgets.Label(
+            value="Syllable Name"
+        )  # name user prompt label
+        self.desc_lbl = widgets.Label(
+            value="Short Description"
+        )  # description label
 
         self.syll_info_lbl = widgets.Label(value="Syllable Info", font_size=24)
 
@@ -244,7 +255,9 @@ class SyllableLabelerWidgets:
 
         # text input widgets
         self.lbl_name_input = widgets.Text(
-            value="", placeholder="Syllable Name", tooltip="name for the syllable"
+            value="",
+            placeholder="Syllable Name",
+            tooltip="name for the syllable",
         )
 
         self.desc_input = widgets.Text(
@@ -301,7 +314,9 @@ class SyllableLabelerWidgets:
         )
 
         # label box
-        self.lbl_box = VBox([self.syll_lbl, self.desc_lbl], layout=self.label_layout)
+        self.lbl_box = VBox(
+            [self.syll_lbl, self.desc_lbl], layout=self.label_layout
+        )
 
         # input box
         self.input_box = VBox(
@@ -321,7 +336,8 @@ class SyllableLabelerWidgets:
 
         # button box
         self.button_box = HBox(
-            [self.prev_button, self.set_button, self.next_button], layout=self.ui_layout
+            [self.prev_button, self.set_button, self.next_button],
+            layout=self.ui_layout,
         )
 
     def clear_on_click(self, b=None):
@@ -364,9 +380,9 @@ class SyllableLabelerWidgets:
         self.lbl_name_input.value = self.syll_info[
             self.syll_list[self.syll_select.index]
         ]["label"]
-        self.desc_input.value = self.syll_info[self.syll_list[self.syll_select.index]][
-            "desc"
-        ]
+        self.desc_input.value = self.syll_info[
+            self.syll_list[self.syll_select.index]
+        ]["desc"]
 
         self.write_syll_info(curr_syll=self.syll_select.index)
 
@@ -398,9 +414,9 @@ class SyllableLabelerWidgets:
         self.lbl_name_input.value = self.syll_info[
             self.syll_list[self.syll_select.index]
         ]["label"]
-        self.desc_input.value = self.syll_info[self.syll_list[self.syll_select.index]][
-            "desc"
-        ]
+        self.desc_input.value = self.syll_info[
+            self.syll_list[self.syll_select.index]
+        ]["desc"]
 
         self.write_syll_info(curr_syll=self.syll_select.index)
 
@@ -457,7 +473,9 @@ class SyllableLabeler(SyllableLabelerWidgets):
         # read in syllable information file and subset only those with grid movies
         temp_syll_info = read_yaml(syll_info_path)
         self.syll_info = {
-            k: v for k, v in temp_syll_info.items() if v["movie_path"] is not None
+            k: v
+            for k, v in temp_syll_info.items()
+            if v["movie_path"] is not None
         }
         self.syll_list = sorted(list(self.syll_info.keys()))
 
@@ -472,7 +490,8 @@ class SyllableLabeler(SyllableLabelerWidgets):
 
         # Get dropdown options with labels
         self.option_dict = {
-            f'{i} - {x["label"]}': self.syll_info[i] for i, x in self.syll_info.items()
+            f'{i} - {x["label"]}': self.syll_info[i]
+            for i, x in self.syll_info.items()
         }
 
         # Set the syllable dropdown options
@@ -515,7 +534,8 @@ class SyllableLabeler(SyllableLabelerWidgets):
             self.syll_select._initializing_traits_ = False
 
     def get_group_df(self, stats_df):
-        """Populate syllable information dict with usage and scalar information."""
+        """Populate syllable information dict with usage and scalar
+        information."""
         # Get all unique groups in df
         self.groups = stats_df.group.unique()
 
@@ -532,13 +552,17 @@ class SyllableLabeler(SyllableLabelerWidgets):
                     syll_info["group_info"][group]["duration (s)"] = stats_df[
                         stats_df.group == group
                     ]["duration"].values[0]
-                    syll_info["group_info"][group]["velocity (pixel/s)"] = stats_df[
-                        stats_df.group == group
-                    ]["velocity_px_s_mean"].values[0]
+                    syll_info["group_info"][group][
+                        "velocity (pixel/s)"
+                    ] = stats_df[stats_df.group == group][
+                        "velocity_px_s_mean"
+                    ].values[
+                        0
+                    ]
 
     def set_group_info_widgets(self, group_info):
-        """Read the syllable information into a pandas DataFrame and display it as a
-        table.
+        """Read the syllable information into a pandas DataFrame and display it
+        as a table.
 
         Parameters
         ----------
@@ -588,13 +612,13 @@ class SyllableLabeler(SyllableLabelerWidgets):
             self.desc_input.value = syllables["desc"]
 
         # Update label
-        self.cm_lbl.text = (
-            f"Crowd Movie {self.syll_select.index + 1}/{len(self.syll_select.options)}"
-        )
+        self.cm_lbl.text = f"Crowd Movie {self.syll_select.index + 1}/{len(self.syll_select.options)}"
 
         # Update scalar values
         self.set_group_info_widgets(
-            self.group_syll_info[self.syll_list[self.syll_select.index]]["group_info"]
+            self.group_syll_info[self.syll_list[self.syll_select.index]][
+                "group_info"
+            ]
         )
 
         # Get current movie path
@@ -604,7 +628,9 @@ class SyllableLabeler(SyllableLabelerWidgets):
         # Implementation from: https://github.com/jupyter/notebook/issues/1024#issuecomment-338664139
         video = io.open(cm_path, "r+b").read()
         encoded = base64.b64encode(video)
-        video_dims = imageio.get_reader(cm_path, "ffmpeg").get_meta_data()["size"]
+        video_dims = imageio.get_reader(cm_path, "ffmpeg").get_meta_data()[
+            "size"
+        ]
 
         # Create syllable grid movie HTML div to embed
         video_div = f"""
@@ -647,7 +673,9 @@ class SyllableLabeler(SyllableLabelerWidgets):
 
         # Create grid layout to display all the widgets
         grid = widgets.AppLayout(
-            left_sidebar=vid_out, right_sidebar=self.data_box, pane_widths=[3, 0, 3]
+            left_sidebar=vid_out,
+            right_sidebar=self.data_box,
+            pane_widths=[3, 0, 3],
         )
 
         # Display all widgets

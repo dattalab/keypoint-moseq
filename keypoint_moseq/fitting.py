@@ -74,16 +74,16 @@ def fit_model(
     """Fit a model to data.
 
     This method optionally:
-        - saves checkpoints of the model and data at regular intervals
-          (see :py:func:`jax_moseq.io.save_checkpoint`)
+        - saves checkpoints of the model and data at regular intervals (see
+          :py:func:`jax_moseq.io.save_checkpoint`)
         - plots of the model's progress during fitting (see
           :py:func:`jax_moseq.viz.plot_progress`)
 
     Parameters
     ----------
     model : dict
-        Model dictionary containing states, parameters, hyperparameters,
-        noise prior, and random seed.
+        Model dictionary containing states, parameters, hyperparameters, noise
+        prior, and random seed.
 
     data: dict
         Data for model fitting (see :py:func:`keypoint_moseq.io.format_data`).
@@ -96,46 +96,46 @@ def fit_model(
         Project directory; required if `save_every_n_iters>0`.
 
     name : str, default=None
-        Name of the model. If None, the model is named using the current
-        date and time.
+        Name of the model. If None, the model is named using the current date
+        and time.
 
     num_iters : int, default=50
         Number of Gibbs sampling iterations to run.
 
     start_iter : int, default=0
-        Index of the starting iteration, which is non-zero when continuing
-        a previous fit.
+        Index of the starting iteration, which is non-zero when continuing a
+        previous fit.
 
     verbose : bool, default=True
         If True, print the model's progress during fitting.
 
     ar_only : bool, default=False
-        If True, fit an AR-HMM model using the latent trajectory
-        defined by `model['states']['x']` (see
+        If True, fit an AR-HMM model using the latent trajectory defined by
+        `model['states']['x']` (see
         :py:func:`jax_moseq.models.arhmm.resample_model`).
-        Otherwise fit a full keypoint-SLDS model
-        (see :py:func:`jax_moseq.models.keypoint_slds.resample_model`)
+        Otherwise fit a full keypoint-SLDS model (see
+        :py:func:`jax_moseq.models.keypoint_slds.resample_model`)
 
     save_every_n_iters : int, default=10
         Save the current model every `save_every_n_iters`. If
         `save_every_n_iters=0`, nothing is saved.
 
     generate_progress_plots : bool, default=True
-        If True, generate plots of the model's progress during fitting.
-        Plots are saved to `{project_dir}/{name}/plots/`.
+        If True, generate plots of the model's progress during fitting. Plots
+        are saved to `{project_dir}/{name}/plots/`.
 
     parallel_message_passing : bool | string, default=None,
-        Use parallel implementation of Kalman sampling, which can be faster
-        but has a significantly longer jit time. If None, will be set
-        automatically based on the backend (True for GPU, False for CPU).
-        A warning will be raised if `parallel_message_passing=True` and
-        JAX is CPU-bound. Set to 'force' to skip this check.
+        Use parallel implementation of Kalman sampling, which can be faster but
+        has a significantly longer jit time. If None, will be set automatically
+        based on the backend (True for GPU, False for CPU). A warning will be
+        raised if `parallel_message_passing=True` and JAX is CPU-bound. Set to
+        'force' to skip this check.
 
     Returns
     -------
     model : dict
-        Model dictionary containing states, parameters, hyperparameters,
-        noise prior, and random seed.
+        Model dictionary containing states, parameters, hyperparameters, noise
+        prior, and random seed.
 
     name : str
         Name of the model.
@@ -188,8 +188,12 @@ def fit_model(
                 break
 
             if save_every_n_iters > 0 and iteration > start_iter:
-                if (iteration % save_every_n_iters) == 0 or iteration == num_iters:
-                    save_hdf5(checkpoint_path, model, f"model_snapshots/{iteration}")
+                if (
+                    iteration % save_every_n_iters
+                ) == 0 or iteration == num_iters:
+                    save_hdf5(
+                        checkpoint_path, model, f"model_snapshots/{iteration}"
+                    )
                     if generate_progress_plots:
                         plot_progress(
                             model,
@@ -222,8 +226,8 @@ def apply_model(
     Parameters
     ----------
     model : dict
-        Model dictionary containing states, parameters, hyperparameters,
-        noise prior, and random seed.
+        Model dictionary containing states, parameters, hyperparameters, noise
+        prior, and random seed.
 
     data: dict
         Data for model fitting (see :py:func:`keypoint_moseq.io.format_data`).
@@ -233,12 +237,12 @@ def apply_model(
         :py:func:`keypoint_moseq.io.format_data`).
 
     project_dir : str, default=None
-        Path to the project directory. Required if `save_results=True`
-        and `results_path=None`.
+        Path to the project directory. Required if `save_results=True` and
+        `results_path=None`.
 
     name : str, default=None
-        Name of the model. Required if `save_results=True`
-        and `results_path=None`.
+        Name of the model. Required if `save_results=True` and
+        `results_path=None`.
 
     num_iters : int, default=20
         Number of iterations to run the model.
@@ -248,8 +252,7 @@ def apply_model(
 
     save_results : bool, default=True
         If True, the model outputs will be saved to disk (see
-        :py:func:`keypoint_moseq.io.extract_results` for
-        the output format).
+        :py:func:`keypoint_moseq.io.extract_results` for the output format).
 
     verbose : bool, default=False
         Whether to print progress updates.
@@ -260,9 +263,9 @@ def apply_model(
     parallel_message_passing : bool | string, default=None,
         Use parallel implementation of Kalman sampling, which can be faster
         but has a significantly longer jit time. If None, will be set
-        automatically based on the backend (True for GPU, False for CPU).
-        A warning will be raised if `parallel_message_passing=True` and
-        JAX is CPU-bound. Set to 'force' to skip this check.
+        automatically based on the backend (True for GPU, False for CPU). A
+        warning will be raised if `parallel_message_passing=True` and JAX is
+        CPU-bound. Set to 'force' to skip this check.
 
     Returns
     -------
@@ -281,7 +284,10 @@ def apply_model(
             results_path = os.path.join(project_dir, name, "results.h5")
 
     model = init_model(
-        data=data, params=model["params"], hypparams=model["hypparams"], verbose=verbose
+        data=data,
+        params=model["params"],
+        hypparams=model["hypparams"],
+        verbose=verbose,
     )
 
     with tqdm.trange(num_iters, desc="Applying model") as pbar:
@@ -307,12 +313,11 @@ def apply_model(
 def update_hypparams(model_dict, **kwargs):
     """Edit the hyperparameters of a model.
 
-    Hyperparameters are stored as a nested dictionary in the
-    `hypparams` key of the model dictionary. This function
-    allows the user to update the hyperparameters of a model
-    by passing in keyword arguments with the same name as the
-    hyperparameter. The hyperparameter will be updated if it
-    is a scalar value.
+    Hyperparameters are stored as a nested dictionary in the `hypparams` key of
+    the model dictionary. This function allows the user to update the
+    hyperparameters of a model by passing in keyword arguments with the same
+    name as the hyperparameter. The hyperparameter will be updated if it is a
+    scalar value.
 
     Parameters
     ----------
@@ -353,10 +358,14 @@ def update_hypparams(model_dict, **kwargs):
                             )
                         )
 
-                    model_dict["hypparams"][hypparms_group][k] = type(old_value)(v)
+                    model_dict["hypparams"][hypparms_group][k] = type(
+                        old_value
+                    )(v)
                     not_updated.remove(k)
 
     if len(not_updated) > 0:
-        warnings.warn(fill(f"The following hypparams were not found {not_updated}"))
+        warnings.warn(
+            fill(f"The following hypparams were not found {not_updated}")
+        )
 
     return model_dict

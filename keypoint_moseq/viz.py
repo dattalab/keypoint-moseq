@@ -73,7 +73,9 @@ def crop_image(image, centroid, crop_size):
     padded = np.zeros((h, w, *image.shape[2:]), dtype=image.dtype)
     pad_x = (w - cropped.shape[1]) // 2
     pad_y = (h - cropped.shape[0]) // 2
-    padded[pad_y : pad_y + cropped.shape[0], pad_x : pad_x + cropped.shape[1]] = cropped
+    padded[
+        pad_y : pad_y + cropped.shape[0], pad_x : pad_x + cropped.shape[1]
+    ] = cropped
     return padded
 
 
@@ -205,9 +207,9 @@ def plot_pcs(
             ymean = Gamma @ pca.mean_.reshape(k - 1, d)[:, dims]
             y = (
                 Gamma
-                @ (pca.mean_ + magnitude * pca.components_[i]).reshape(k - 1, d)[
-                    :, dims
-                ]
+                @ (pca.mean_ + magnitude * pca.components_[i]).reshape(
+                    k - 1, d
+                )[:, dims]
             )
 
             for e in edges:
@@ -218,9 +220,14 @@ def plot_pcs(
                     alpha=0.25,
                     linewidth=linewidth,
                 )
-                ax.plot(*y[e].T, color="k", zorder=2, linewidth=linewidth + 0.2)
                 ax.plot(
-                    *y[e].T, color=cmap(e[0] / (k - 1)), zorder=3, linewidth=linewidth
+                    *y[e].T, color="k", zorder=2, linewidth=linewidth + 0.2
+                )
+                ax.plot(
+                    *y[e].T,
+                    color=cmap(e[0] / (k - 1)),
+                    zorder=3,
+                    linewidth=linewidth,
                 )
 
             ax.scatter(
@@ -309,7 +316,9 @@ def plot_syllable_frequencies(
     syllables = {k: res["syllable"] for k, res in results.items()}
     frequencies = get_frequencies(syllables)
     frequencies = frequencies[frequencies > min_frequency]
-    xmax = max(minlength, np.max(np.nonzero(frequencies > min_frequency)[0]) + 1)
+    xmax = max(
+        minlength, np.max(np.nonzero(frequencies > min_frequency)[0]) + 1
+    )
 
     fig, ax = plt.subplots()
     ax.bar(range(len(frequencies)), frequencies, width=1)
@@ -490,7 +499,9 @@ def plot_progress(
         saved_iterations = np.sort([int(i) for i in f["model_snapshots"]])
 
     if len(saved_iterations) > 1:
-        fig, axs = plt.subplots(1, 4, gridspec_kw={"width_ratios": [1, 1, 1, 3]})
+        fig, axs = plt.subplots(
+            1, 4, gridspec_kw={"width_ratios": [1, 1, 1, 3]}
+        )
         if fig_size is None:
             fig_size = (12, 2.5)
     else:
@@ -509,7 +520,9 @@ def plot_progress(
 
     lim = int(np.percentile(durations, 95))
     binsize = max(int(np.floor(lim / 30)), 1)
-    axs[1].hist(durations, range=(1, lim), bins=(int(lim / binsize)), density=True)
+    axs[1].hist(
+        durations, range=(1, lim), bins=(int(lim / binsize)), density=True
+    )
     axs[1].set_xlim([1, lim])
     axs[1].set_xlabel("syllable duration (frames)")
     axs[1].set_ylabel("probability")
@@ -527,7 +540,9 @@ def plot_progress(
         for i in saved_iterations:
             with h5py.File(checkpoint_path, "r") as f:
                 z = np.array(f[f"model_snapshots/{i}/states/z"])
-                sample_state_history.append(z[batch_ix, start : start + window_size])
+                sample_state_history.append(
+                    z[batch_ix, start : start + window_size]
+                )
                 median_durations.append(np.median(get_durations(z, mask)))
 
         axs[2].scatter(saved_iterations, median_durations)
@@ -547,7 +562,9 @@ def plot_progress(
         axs[3].set_title("State sequence history")
 
         yticks = [
-            int(y) for y in axs[3].get_yticks() if y < len(saved_iterations) and y > 0
+            int(y)
+            for y in axs[3].get_yticks()
+            if y < len(saved_iterations) and y > 0
         ]
         yticklabels = saved_iterations[yticks]
         axs[3].set_yticks(yticks)
@@ -631,7 +648,9 @@ def _grid_movie_tile(
                 frame, coords, edges=edges, **plot_options
             )
 
-        frame = cv2.warpAffine(frame, np.float32(M), (window_size, window_size))
+        frame = cv2.warpAffine(
+            frame, np.float32(M), (window_size, window_size)
+        )
         frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
         if 0 <= ii - pre <= end - start and dot_radius > 0:
             pos = tuple([int(x) for x in M @ np.append(c, 1) * scale_factor])
@@ -829,7 +848,9 @@ def get_grid_movie_window_size(
     )
 
     all_trajectories = np.concatenate(all_trajectories, axis=0)
-    all_trajectories = all_trajectories[~np.isnan(all_trajectories).all((1, 2))]
+    all_trajectories = all_trajectories[
+        ~np.isnan(all_trajectories).all((1, 2))
+    ]
     max_distances = np.nanmax(np.abs(all_trajectories), axis=1)
     window_size = np.percentile(max_distances, pctl) * fudge_factor * 2
     window_size = int(np.ceil(window_size / blocksize) * blocksize)
@@ -991,7 +1012,9 @@ def generate_grid_movies(
             "Either `video_dir` or `video_paths` is required unless `keypoints_only=True`"
         )
     elif not overlay_keypoints:
-        warnings.warn("Setting `overlay_keypoints=True` since `keypoints_only=True`")
+        warnings.warn(
+            "Setting `overlay_keypoints=True` since `keypoints_only=True`"
+        )
         overlay_keypoints = True
 
     if window_size is None or overlay_keypoints:
@@ -1000,20 +1023,26 @@ def generate_grid_movies(
             "or `overlay_keypoints` is True"
         )
 
-    output_dir = _get_path(project_dir, name, output_dir, "grid_movies", "output_dir")
+    output_dir = _get_path(
+        project_dir, name, output_dir, "grid_movies", "output_dir"
+    )
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     print(f"Writing grid movies to {output_dir}")
 
     if not (bodyparts is None or use_bodyparts is None or coordinates is None):
-        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+        coordinates = reindex_by_bodyparts(
+            coordinates, bodyparts, use_bodyparts
+        )
 
     edges = []
     if len(skeleton) > 0 and overlay_keypoints:
         edges = get_edges(use_bodyparts, skeleton)
 
     if results is None:
-        results = load_results(name=name, project_dir=project_dir, path=results_path)
+        results = load_results(
+            name=name, project_dir=project_dir, path=results_path
+        )
 
     syllables = {k: v["syllable"] for k, v in results.items()}
     centroids = {k: v["centroid"] for k, v in results.items()}
@@ -1021,7 +1050,10 @@ def generate_grid_movies(
 
     if video_paths is None and not keypoints_only:
         video_paths = find_matching_videos(
-            results.keys(), video_dir, as_dict=True, video_extension=video_extension
+            results.keys(),
+            video_dir,
+            as_dict=True,
+            video_extension=video_extension,
         )
         videos = {k: OpenCVReader(path) for k, path in video_paths.items()}
         fps = list(videos.values())[0].fps
@@ -1109,7 +1141,13 @@ def generate_grid_movies(
 
 
 def get_limits(
-    coordinates, pctl=1, blocksize=None, left=0.2, right=0.2, top=0.2, bottom=0.2
+    coordinates,
+    pctl=1,
+    blocksize=None,
+    left=0.2,
+    right=0.2,
+    top=0.2,
+    bottom=0.2,
 ):
     """Get axis limits based on the coordinates of all keypoints.
 
@@ -1264,7 +1302,9 @@ def plot_trajectories(
     if isinstance(keypoint_colormap, list):
         colors = keypoint_colormap
     else:
-        colors = plt.cm.get_cmap(keypoint_colormap)(np.linspace(0, 1, Xs[0].shape[1]))
+        colors = plt.cm.get_cmap(keypoint_colormap)(
+            np.linspace(0, 1, Xs[0].shape[1])
+        )
 
     n_cols = min(n_cols, len(Xs))
     n_rows = np.ceil(len(Xs) / n_cols)
@@ -1302,7 +1342,12 @@ def plot_trajectories(
 
     for xy, text in zip(offsets + title_xy, titles):
         ax.text(
-            *xy, text, c=title_color, ha="center", va="top", zorder=Xs.shape[1] * 4 + 4
+            *xy,
+            text,
+            c=title_color,
+            ha="center",
+            va="top",
+            zorder=Xs.shape[1] * 4 + 4,
         )
 
     # final extents in axis
@@ -1480,7 +1525,9 @@ def generate_trajectory_plots(
     plot_options.update({"keypoint_colormap": keypoint_colormap})
     edges = [] if len(skeleton) == 0 else get_edges(use_bodyparts, skeleton)
 
-    output_dir = _get_path(project_dir, name, output_dir, "grid_movies", "output_dir")
+    output_dir = _get_path(
+        project_dir, name, output_dir, "grid_movies", "output_dir"
+    )
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     print(f"Saving trajectory plots to {output_dir}")
@@ -1516,7 +1563,10 @@ def generate_trajectory_plots(
             "`projection_planes` must be a subset of `['xy','yz','xz']`"
         )
         all_Xs = [
-            Xs[..., np.array({"xy": [0, 1], "yz": [1, 2], "xz": [0, 2]}[plane])]
+            Xs[
+                ...,
+                np.array({"xy": [0, 1], "yz": [1, 2], "xz": [0, 2]}[plane]),
+            ]
             for plane in projection_planes
         ]
         suffixes = ["." + plane for plane in projection_planes]
@@ -1530,7 +1580,9 @@ def generate_trajectory_plots(
         # individual plots
         if save_individually:
             desc = "Generating trajectory plots"
-            for title, X in tqdm.tqdm(zip(titles, Xs), desc=desc, total=len(titles)):
+            for title, X in tqdm.tqdm(
+                zip(titles, Xs), desc=desc, total=len(titles)
+            ):
                 fig, ax, rasters = plot_trajectories(
                     [title],
                     X[None],
@@ -1625,7 +1677,9 @@ def overlay_keypoints_on_image(
         canvas = image
 
     # get colors from matplotlib and convert to 0-255 range for openc
-    colors = plt.get_cmap(keypoint_colormap)(np.linspace(0, 1, coordinates.shape[0]))
+    colors = plt.get_cmap(keypoint_colormap)(
+        np.linspace(0, 1, coordinates.shape[0])
+    )
     colors = [tuple([int(c) for c in cs[:3] * 255]) for cs in colors]
 
     # overlay skeleton
@@ -1634,14 +1688,18 @@ def overlay_keypoints_on_image(
             continue
         pos1 = (int(coordinates[i, 0]), int(coordinates[i, 1]))
         pos2 = (int(coordinates[j, 0]), int(coordinates[j, 1]))
-        canvas = cv2.line(canvas, pos1, pos2, colors[i], line_width, cv2.LINE_AA)
+        canvas = cv2.line(
+            canvas, pos1, pos2, colors[i], line_width, cv2.LINE_AA
+        )
 
     # overlay keypoints
     for i, (x, y) in enumerate(coordinates):
         if np.isnan(x) or np.isnan(y):
             continue
         pos = (int(x), int(y))
-        canvas = cv2.circle(canvas, pos, node_size, colors[i], -1, lineType=cv2.LINE_AA)
+        canvas = cv2.circle(
+            canvas, pos, node_size, colors[i], -1, lineType=cv2.LINE_AA
+        )
 
     if opacity < 1.0:
         image = cv2.addWeighted(image, 1 - opacity, canvas, opacity, 0)
@@ -1716,7 +1774,9 @@ def overlay_keypoints_on_video(
 
     if bodyparts is not None:
         if use_bodyparts is not None:
-            coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+            coordinates = reindex_by_bodyparts(
+                coordinates, bodyparts, use_bodyparts
+            )
         else:
             use_bodyparts = bodyparts
         edges = get_edges(use_bodyparts, skeleton)
@@ -1826,7 +1886,9 @@ def plot_similarity_dendrogram(
     figsize: tuple of float, default=(10,5)
         Size of the dendrogram plot.
     """
-    save_path = _get_path(project_dir, name, save_path, "similarity_dendrogram")
+    save_path = _get_path(
+        project_dir, name, save_path, "similarity_dendrogram"
+    )
 
     syllables = {k: v["syllable"] for k, v in results.items()}
     centroids = {k: v["centroid"] for k, v in results.items()}

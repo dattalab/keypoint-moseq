@@ -57,7 +57,9 @@ def sample_error_frames(
     for low, high in zip(thresholds[:-1], thresholds[1:]):
         samples_in_bin = []
         for key, confs in confidences.items():
-            for t, k in zip(*np.nonzero((confs >= low) * (confs < high) * mask)):
+            for t, k in zip(
+                *np.nonzero((confs >= low) * (confs < high) * mask)
+            ):
                 samples_in_bin.append((key, t, bodyparts[k]))
 
         if len(samples_in_bin) > 0:
@@ -65,7 +67,9 @@ def sample_error_frames(
             for i in np.random.choice(len(samples_in_bin), n, replace=False):
                 sample_keys.append(samples_in_bin[i])
 
-    sample_keys = [sample_keys[i] for i in np.random.permutation(len(sample_keys))]
+    sample_keys = [
+        sample_keys[i] for i in np.random.permutation(len(sample_keys))
+    ]
     return sample_keys
 
 
@@ -94,9 +98,12 @@ def load_sampled_frames(sample_keys, video_dir, video_extension=None):
     videos = find_matching_videos(keys, video_dir)
     key_to_video = dict(zip(keys, videos))
     readers = {key: OpenCVReader(video) for key, video in zip(keys, videos)}
-    pbar = tqdm.tqdm(sample_keys, desc="Loading sample frames", position=0, leave=True)
+    pbar = tqdm.tqdm(
+        sample_keys, desc="Loading sample frames", position=0, leave=True
+    )
     return {
-        (key, frame, bodypart): readers[key][frame] for key, frame, bodypart in pbar
+        (key, frame, bodypart): readers[key][frame]
+        for key, frame, bodypart in pbar
     }
 
 
@@ -165,14 +172,18 @@ def save_params(project_dir, estimator):
     )
 
 
-def _confs_and_dists_from_annotations(coordinates, confidences, annotations, bodyparts):
+def _confs_and_dists_from_annotations(
+    coordinates, confidences, annotations, bodyparts
+):
     confs, dists = [], []
     for (key, frame, bodypart), xy in annotations.items():
         if key in coordinates and key in confidences:
             k = bodyparts.index(bodypart)
             confs.append(confidences[key][frame][k])
             dists.append(
-                np.sqrt(((coordinates[key][frame][k] - np.array(xy)) ** 2).sum())
+                np.sqrt(
+                    ((coordinates[key][frame][k] - np.array(xy)) ** 2).sum()
+                )
             )
     return confs, dists
 
@@ -205,9 +216,13 @@ def _noise_calibration_widget(
 
     edges = np.array(get_edges(bodyparts, skeleton))
     conf_vals = np.hstack([v.flatten() for v in confidences.values()])
-    min_conf, max_conf = np.nanpercentile(conf_vals, 0.01), np.nanmax(conf_vals)
+    min_conf, max_conf = np.nanpercentile(conf_vals, 0.01), np.nanmax(
+        conf_vals
+    )
 
-    annotations_stream = Stream.define("Annotations", annotations=annotations)()
+    annotations_stream = Stream.define(
+        "Annotations", annotations=annotations
+    )()
     current_sample = Stream.define("Current sample", sample_ix=0)()
     estimator = Stream.define(
         "Estimator",
@@ -230,7 +245,10 @@ def _noise_calibration_widget(
         max_dist = np.log10(np.sqrt(max_height**2 + max_width**2) + 1)
 
         xspan = np.log10(max_conf) - np.log10(min_conf)
-        xlim = (np.log10(min_conf) - xspan / 10, np.log10(max_conf) + xspan / 10)
+        xlim = (
+            np.log10(min_conf) - xspan / 10,
+            np.log10(max_conf) + xspan / 10,
+        )
         ylim = (-max_dist / 50, max_dist)
 
         if len(log_dists) > 1:
@@ -255,9 +273,9 @@ def _noise_calibration_widget(
             default_tools=[],
         )
 
-        curve = hv.Curve([(xlim[0], xlim[0] * m + b), (xlim[1], xlim[1] * m + b)]).opts(
-            xlim=xlim, ylim=ylim, axiswise=True, default_tools=[]
-        )
+        curve = hv.Curve(
+            [(xlim[0], xlim[0] * m + b), (xlim[1], xlim[1] * m + b)]
+        ).opts(xlim=xlim, ylim=ylim, axiswise=True, default_tools=[])
 
         vline_label = hv.Text(
             x - (xlim[1] - xlim[0]) / 50,
@@ -272,7 +290,10 @@ def _noise_calibration_widget(
         )
 
         vline = hv.VLine(x).opts(
-            axiswise=True, line_dash="dashed", color="lightgray", default_tools=[]
+            axiswise=True,
+            line_dash="dashed",
+            color="lightgray",
+            default_tools=[],
         )
 
         return (scatter * curve * vline * vline_label).opts(
@@ -334,7 +355,9 @@ def _noise_calibration_widget(
             if len(masked_edges) > 0:
                 edge_data = (*masked_edges.T, colorvals[masked_edges[:, 0]])
 
-        sizes = np.where(np.arange(len(xys)) == keypoint_ix, 10, 6)[masked_nodes]
+        sizes = np.where(np.arange(len(xys)) == keypoint_ix, 10, 6)[
+            masked_nodes
+        ]
         masked_bodyparts = [bodyparts[i] for i in masked_nodes]
         nodes = hv.Nodes(
             (*xys[masked_nodes].T, masked_nodes, masked_bodyparts, sizes),
@@ -365,10 +388,20 @@ def _noise_calibration_widget(
     next_button = pn.widgets.Button(name="\u25b6", width=50, align="center")
     save_button = pn.widgets.Button(name="Save:", width=100, align="center")
     sample_slider = pn.widgets.IntSlider(
-        name="sample", value=0, start=0, end=len(sample_keys), width=100, align="center"
+        name="sample",
+        value=0,
+        start=0,
+        end=len(sample_keys),
+        width=100,
+        align="center",
     )
     zoom_slider = pn.widgets.IntSlider(
-        name="Zoom", value=200, start=1, end=max_zoom, width=100, align="center"
+        name="Zoom",
+        value=200,
+        start=1,
+        end=max_zoom,
+        width=100,
+        align="center",
     )
     estimator_textbox = pn.widgets.StaticText(align="center")
 
@@ -397,7 +430,8 @@ def _noise_calibration_widget(
     estimator.event()
 
     img_dmap = hv.DynamicMap(
-        pn.bind(update_img, crop_size=zoom_slider), streams=[current_sample, img_tap]
+        pn.bind(update_img, crop_size=zoom_slider),
+        streams=[current_sample, img_tap],
     ).opts(framewise=True)
 
     scatter_dmap = hv.DynamicMap(
@@ -433,8 +467,8 @@ def noise_calibration(
     verbose=False,
     **kwargs,
 ):
-    """Perform manual annotation to calibrate the relationship between keypoint error
-    and neural network confidence.
+    """Perform manual annotation to calibrate the relationship between keypoint
+    error and neural network confidence.
 
     This function creates a widget for interactive annotation in a
     jupyter notebook. Users mark correct keypoint locations for a
