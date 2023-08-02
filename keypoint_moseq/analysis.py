@@ -93,13 +93,13 @@ def interactive_group_setting(project_dir, model_name):
     return index_filepath
 
 
-def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
+def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
     """Compute moseq dataframe from results dict that contains all kinematic
     values by frame.
 
     Parameters
     ----------
-    base_dir : str
+    project_dir : str
         the path to the project directory
     model_name : str
         the name of the model directory
@@ -117,10 +117,10 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
     """
 
     # load model results
-    results_dict = load_results(base_dir, model_name)
+    results_dict = load_results(project_dir, model_name)
 
     # load index file
-    index_filepath = os.path.join(base_dir, "index.yaml")
+    index_filepath = os.path.join(project_dir, "index.yaml")
     if os.path.exists(index_filepath):
         with open(index_filepath, "r") as f:
             index_data = yaml.safe_load(f)
@@ -218,14 +218,12 @@ def compute_moseq_df(base_dir, model_name, *, fps=30, smooth_heading=True):
 
 
 def compute_stats_df(
-    base_dir,
+    project_dir,
     model_name,
     moseq_df,
     min_frequency=0.005,
     groupby=["group", "name"],
     fps=30,
-    normalize=True,
-    **kwargs,
 ):
     """Summary statistics for syllable frequencies and kinematic values.
 
@@ -239,8 +237,6 @@ def compute_stats_df(
         the list of column names to group by, by default ['group', 'name']
     fps : int, optional
         frame per second information of the recording, by default 30
-    normalize : bool, optional
-        boolean falg whether to normalize by counts, by default True
 
     Returns
     -------
@@ -250,7 +246,7 @@ def compute_stats_df(
     # compute runlength encoding for syllables
 
     # load model results
-    results_dict = load_results(base_dir, model_name)
+    results_dict = load_results(project_dir, model_name)
     syllables = {k: res["syllable"] for k, res in results_dict.items()}
     # frequencies is array of frequencies for sorted syllables [syll_0, syll_1...]
     frequencies = get_frequencies(syllables)
@@ -258,7 +254,7 @@ def compute_stats_df(
 
     # add group information
     # load index file
-    index_filepath = os.path.join(base_dir, "index.yaml")
+    index_filepath = os.path.join(project_dir, "index.yaml")
     if os.path.exists(index_filepath):
         with open(index_filepath, "r") as f:
             index_data = yaml.safe_load(f)
@@ -322,170 +318,6 @@ def compute_stats_df(
     stats_df = pd.merge(features, frequency_df, on=groupby + ["syllable"])
     stats_df = pd.merge(stats_df, durations, on=groupby + ["syllable"])
     return stats_df
-
-
-def plot_fingerprint(
-    project_dir,
-    model_name,
-    moseq_df,
-    bins=100,
-    figsize=(15, 5),
-    fontsize=10,
-    robust=True,
-    save_dir=None,
-):
-    plot_columns = ["angular_velocity", "velocity_px_s", "syllable"]
-    column_names = [
-        ("Angular velocity", "rad/s"),
-        ("Velocity", "px/s"),
-        ("MoSeq", "Syllable ID"),
-    ]
-
-    # angular velocity
-    if robust:
-        vmin, vmax = np.percentile(moseq_df.angular_velocity, [1, 99])
-    else:
-        vmin, vmax = (
-            moseq_df.angular_velocity.min(),
-            moseq_df.angular_velocity.max(),
-        )
-
-    heatmap_df = (
-        moseq_df.groupby(["group", "name"])
-        .apply(
-            lambda x: np.histogram(
-                x.angular_velocity, bins=bins, range=(vmin, vmax)
-            )
-        )
-        .reset_index()
-        .rename(columns={0: "ang_v_heatmap"})
-    )
-
-    # velocity
-    if robust:
-        vmin, vmax = np.percentile(moseq_df.velocity_px_s, [1, 99])
-    else:
-        vmin, vmax = moseq_df.velocity_px_s.min(), moseq_df.velocity_px_s.max()
-
-    heatmap_df["vel_heatmap"] = (
-        moseq_df.groupby(["group", "name"])
-        .apply(
-            lambda x: np.histogram(
-                x.velocity_px_s, bins=bins, range=(vmin, vmax)
-            )
-        )
-        .reset_index()
-        .rename(columns={0: "vel_heatmap"})["vel_heatmap"]
-    )
-
-    # syllable
-    vmin, vmax = moseq_df.syllable.min(), moseq_df.syllable.max()
-    heatmap_df["syll_heatmap"] = (
-        moseq_df.groupby(["group", "name"])
-        .apply(
-            lambda x: np.histogram(
-                x.syllable, bins=sorted(moseq_df.syllable.unique())
-            )
-        )
-        .reset_index()
-        .rename(columns={0: "syll_heatmap"})["syll_heatmap"]
-    )
-
-    # initialize the figure
-    fig = plt.figure(1, figsize=figsize, facecolor="white")
-    gs = GridSpec(
-        2,
-        1 + len(plot_columns),
-        wspace=0.2,
-        hspace=0.3,
-        width_ratios=[1] + [8] * len(plot_columns),
-        height_ratios=[10, 0.1],
-        figure=fig,
-    )
-
-    # plot group labels
-    level = heatmap_df.group.values
-    from sklearn.preprocessing import LabelEncoder
-
-    level_label = LabelEncoder().fit_transform(level)
-    find_mid = (
-        np.diff(
-            np.r_[
-                0, np.argwhere(np.diff(level_label)).ravel(), len(level_label)
-            ]
-        )
-        / 2
-    ).astype("int32")
-    level_ticks = (
-        np.r_[0, np.argwhere(np.diff(level_label)).ravel()] + find_mid
-    )
-
-    temp_ax = fig.add_subplot(gs[0, 0])
-    temp_ax.set_title("Label", fontsize=fontsize)
-    temp_ax.imshow(level_label[:, np.newaxis], aspect="auto", cmap="Set3")
-    plt.yticks(level_ticks, level[level_ticks], fontsize=fontsize)
-    temp_ax.get_xaxis().set_ticks([])
-
-    # helper function to parse the heatmap data
-    def parse_heatmap(heatmap_data):
-        heatmap = (
-            np.array([s[0] for s in heatmap_data])
-            / np.array([s[0] for s in heatmap_data]).sum(axis=1)[:, np.newaxis]
-        )
-        bin_lbl = np.array(heatmap_data[0][1])
-        return heatmap, bin_lbl
-
-    # plot angular velocity
-    temp_ax = fig.add_subplot(gs[0, 1])
-    temp_ax.set_title(column_names[0][0], fontsize=fontsize)
-    heatmap, bin_lbl = parse_heatmap(heatmap_df.ang_v_heatmap)
-    bin_lbl = np.round(bin_lbl, 2)
-    pc = temp_ax.imshow(
-        heatmap, aspect="auto", interpolation="none", cmap="viridis", vmin=0
-    )
-    temp_ax.set_xlabel(column_names[0][1], fontsize=fontsize)
-
-    temp_ax.set_xticks(
-        np.linspace(0, bins, 6).astype(int),
-        bin_lbl[np.linspace(0, bins, 6).astype(int)],
-    )
-    temp_ax.set_yticks([])
-
-    # plot velocity
-    temp_ax = fig.add_subplot(gs[0, 2])
-    temp_ax.set_title(column_names[1][0], fontsize=fontsize)
-    heatmap, bin_lbl = parse_heatmap(heatmap_df.vel_heatmap)
-    bin_lbl = np.round(bin_lbl)
-    pc = temp_ax.imshow(
-        heatmap, aspect="auto", interpolation="none", cmap="viridis", vmin=0
-    )
-    temp_ax.set_xlabel(column_names[1][1], fontsize=fontsize)
-
-    temp_ax.set_xticks(
-        np.linspace(0, bins, 6).astype(int),
-        bin_lbl[np.linspace(0, bins, 6).astype(int)],
-    )
-    temp_ax.set_yticks([])
-
-    # plot moseq
-    temp_ax = fig.add_subplot(gs[0, 3])
-    temp_ax.set_title(column_names[2][0], fontsize=fontsize)
-    heatmap, bin_lbl = parse_heatmap(heatmap_df.syll_heatmap)
-    pc = temp_ax.imshow(
-        heatmap, aspect="auto", interpolation="none", cmap="viridis", vmin=0
-    )
-    temp_ax.set_xlabel(column_names[2][1], fontsize=fontsize)
-    temp_ax.set_xticks([])
-    temp_ax.set_yticks([])
-
-    # saving the figure
-    if save_dir is not None:
-        os.makedirs(save_dir, exist_ok=True)
-    else:
-        save_dir = os.path.join(project_dir, model_name, "figures")
-        os.makedirs(save_dir, exist_ok=True)
-    fig.savefig(os.path.join(save_dir, "moseq_fingerprint.pdf"))
-    fig.savefig(os.path.join(save_dir, "moseq_fingerprint.png"))
 
 
 def label_syllables(project_dir, model_name, moseq_df):
@@ -1528,7 +1360,7 @@ def generate_transition_matrices(
     print("Group(s):", ", ".join(group))
 
     # load model reuslts
-    results_dict = load_results(project_dir=project_dir, name=model_name)
+    results_dict = load_results(project_dir, model_name)
 
     # filter out syllables by freqency
     model_labels = [
@@ -1980,7 +1812,7 @@ def generate_index(project_dir, model_name, index_filepath):
         path to index file
     """
     # generate a new index file
-    results_dict = load_results(project_dir=project_dir, name=model_name)
+    results_dict = load_results(project_dir, model_name)
     files = []
     for recording in results_dict.keys():
         file_dict = {"name": recording, "group": "default"}

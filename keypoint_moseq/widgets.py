@@ -45,7 +45,7 @@ def read_yaml(yaml_file):
         return yaml.safe_load(f)
 
 
-def show_trajectory_gif(project_dir, model_dirname):
+def show_trajectory_gif(project_dir, model_name):
     """Show trajectory gif for syllable labeling.
 
     Parameters
@@ -54,7 +54,7 @@ def show_trajectory_gif(project_dir, model_dirname):
         dictionary of paths and filenames for progress tracking
     """
     trajectory_gifs_path = os.path.join(
-        project_dir, model_dirname, "trajectory_plots", "all_trajectories.gif"
+        project_dir, model_name, "trajectory_plots", "all_trajectories.gif"
     )
 
     assert os.path.exists(trajectory_gifs_path), (
@@ -447,7 +447,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
     """Syllable Labeler control component."""
 
     def __init__(
-        self, project_dir, model_dirname, stats_df, index_path, syll_info_path
+        self, project_dir, model_name, stats_df, index_path, syll_info_path
     ):
         """Initialize the SyllableLabeler.
 
@@ -466,7 +466,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
         super().__init__()
 
         self.base_dir = project_dir
-        self.model_name = model_dirname
+        self.model_name = model_name
         self.index_file = index_path
         self.sorted_index = read_yaml(yaml_file=index_path)
         self.syll_info_path = syll_info_path
