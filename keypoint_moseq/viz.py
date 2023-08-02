@@ -265,10 +265,10 @@ def plot_pcs(
 
 
 def plot_syllable_frequencies(
+    project_dir=None,
+    model_name=None,
     results=None,
     path=None,
-    project_dir=None,
-    name=None,
     minlength=10,
     min_frequency=0.005,
 ):
@@ -276,7 +276,7 @@ def plot_syllable_frequencies(
 
     Caller must provide a results dictionary, a path to a results .h5,
     or a project directory and model name, in which case the results are
-    loaded from `{project_dir}/{name}/results.h5`.
+    loaded from `{project_dir}/{model_name}/results.h5`.
 
     Parameters
     ----------
@@ -284,7 +284,7 @@ def plot_syllable_frequencies(
         Dictionary containing modeling results for a dataset (see
         :py:func:`keypoint_moseq.fitting.extract_results`)
 
-    name: str, default=None
+    model_name: str, default=None
         Name of the model. Required to load results if `results` is
         None and `path` is None.
 
@@ -294,7 +294,7 @@ def plot_syllable_frequencies(
 
     path: str, default=None
         Path to a results file. If None, results will be loaded from
-        `{project_dir}/{name}/results.h5`.
+        `{project_dir}/{model_name}/results.h5`.
 
     minlength: int, default=10
         Minimum x-axis length of the histogram.
@@ -311,7 +311,7 @@ def plot_syllable_frequencies(
         Axes containing the histogram.
     """
     if results is None:
-        results = load_results(path=path, name=name, project_dir=project_dir)
+        results = load_results(project_dir, model_name, path)
 
     syllables = {k: res["syllable"] for k, res in results.items()}
     frequencies = get_frequencies(syllables)
@@ -331,10 +331,10 @@ def plot_syllable_frequencies(
 
 
 def plot_duration_distribution(
+    project_dir=None,
+    model_name=None,
     results=None,
     path=None,
-    project_dir=None,
-    name=None,
     lim=None,
     num_bins=30,
     fps=None,
@@ -344,7 +344,7 @@ def plot_duration_distribution(
 
     Caller must provide a results dictionary, a path to a results .h5,
     or a project directory and model name, in which case the results are
-    loaded from `{project_dir}/{name}/results.h5`.
+    loaded from `{project_dir}/{model_name}/results.h5`.
 
     Parameters
     ----------
@@ -352,7 +352,7 @@ def plot_duration_distribution(
         Dictionary containing modeling results for a dataset (see
         :py:func:`keypoint_moseq.fitting.extract_results`)
 
-    name: str, default=None
+    model_name: str, default=None
         Name of the model. Required to load results if `results` is
         None and `path` is None.
 
@@ -362,7 +362,7 @@ def plot_duration_distribution(
 
     path: str, default=None
         Path to a results file. If None, results will be loaded from
-        `{project_dir}/{name}/results.h5`.
+        `{project_dir}/{model_name}/results.h5`.
 
     lim: tuple, default=None
         x-axis limits as a pair of ints (in units of frames). If None,
@@ -386,7 +386,7 @@ def plot_duration_distribution(
         Axes containing the histogram.
     """
     if results is None:
-        results = load_results(path=path, name=name, project_dir=project_dir)
+        results = load_results(project_dir, model_name, path)
 
     syllables = {k: res["syllable"] for k, res in results.items()}
     durations = get_durations(syllables)
@@ -421,7 +421,7 @@ def plot_progress(
     checkpoint_path,
     iteration,
     project_dir=None,
-    name=None,
+    model_name=None,
     path=None,
     savefig=True,
     fig_size=None,
@@ -461,12 +461,12 @@ def plot_progress(
     project_dir : str, default=None
         Path to the project directory. Required if `savefig` is True.
 
-    name : str, default=None
+    model_name : str, default=None
         Name of the model. Required if `savefig` is True.
 
     savefig : bool, default=True
         Whether to save the figure to a file. If true, the figure is
-        either saved to `path` or, to `{project_dir}/{name}-progress.pdf`
+        either saved to `path` or, to `{project_dir}/{model_name}-progress.pdf`
         if `path` is None.
 
     fig_size : tuple of float, default=None
@@ -571,14 +571,14 @@ def plot_progress(
         axs[3].set_yticklabels(yticklabels)
 
     title = f"Iteration {iteration}"
-    if name is not None:
-        title = f"{name}: {title}"
+    if model_name is not None:
+        title = f"{model_name}: {title}"
     fig.suptitle(title)
     fig.set_size_inches(fig_size)
     plt.tight_layout()
 
     if savefig:
-        path = _get_path(project_dir, name, path, "fitting_progress.pdf")
+        path = _get_path(project_dir, model_name, path, "fitting_progress.pdf")
         plt.savefig(path)
     plt.show()
     return fig, axs
@@ -860,7 +860,7 @@ def get_grid_movie_window_size(
 def generate_grid_movies(
     results,
     project_dir=None,
-    name=None,
+    model_name=None,
     output_dir=None,
     video_dir=None,
     video_paths=None,
@@ -898,7 +898,7 @@ def generate_grid_movies(
     often (i.e. has at least `rows*cols` instances with duration
     of at least `min_duration` and an overall frequency of at least
     `min_frequency`). The grid movies are saved to `output_dir` if
-    specified, or else to `{project_dir}/{name}/grid_movies`.
+    specified, or else to `{project_dir}/{model_name}/grid_movies`.
 
     Parameters
     ----------
@@ -910,13 +910,13 @@ def generate_grid_movies(
         Project directory. Required to save grid movies if `output_dir`
         is None.
 
-    name: str, default=None
+    model_name: str, default=None
         Name of the model. Required to save grid movies if
         `output_dir` is None.
 
     output_dir: str, default=None
         Directory where grid movies should be saved. If None, grid
-        movies will be saved to `{project_dir}/{name}/grid_movies`.
+        movies will be saved to `{project_dir}/{model_name}/grid_movies`.
 
     video_dir: str, default=None
         Directory containing videos of the modeled data (see
@@ -1024,7 +1024,7 @@ def generate_grid_movies(
         )
 
     output_dir = _get_path(
-        project_dir, name, output_dir, "grid_movies", "output_dir"
+        project_dir, model_name, output_dir, "grid_movies", "output_dir"
     )
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -1040,9 +1040,7 @@ def generate_grid_movies(
         edges = get_edges(use_bodyparts, skeleton)
 
     if results is None:
-        results = load_results(
-            name=name, project_dir=project_dir, path=results_path
-        )
+        results = load_results(project_dir, model_name)
 
     syllables = {k: v["syllable"] for k, v in results.items()}
     centroids = {k: v["centroid"] for k, v in results.items()}
@@ -1431,7 +1429,7 @@ def generate_trajectory_plots(
     coordinates,
     results,
     project_dir=None,
-    name=None,
+    model_name=None,
     output_dir=None,
     pre=5,
     post=15,
@@ -1459,7 +1457,7 @@ def generate_trajectory_plots(
     A separate figure (and gif, optionally) is saved for each syllable,
     along with a single figure showing all syllables in a grid. The
     plots are saved to `{output_dir}` if it is provided, otherwise
-    they are saved to `{project_dir}/{name}/trajectory_plots`.
+    they are saved to `{project_dir}/{model_name}/trajectory_plots`.
 
     Plot-related parameters are described below. For the remaining
     parameters see (:py:func:`keypoint_moseq.util.get_typical_trajectories`)
@@ -1478,13 +1476,13 @@ def generate_trajectory_plots(
         Project directory. Required to save trajectory plots if
         `output_dir` is None.
 
-    name: str, default=None
+    model_name: str, default=None
         Name of the model. Required to save trajectory plots if
         `output_dir` is None.
 
     output_dir: str, default=None
         Directory where trajectory plots should be saved. If None,
-        plots will be saved to `{project_dir}/{name}/trajectory_plots`.
+        plots will be saved to `{project_dir}/{model_name}/trajectory_plots`.
 
     skeleton : list, default=[]
         List of edges that define the skeleton, where each edge is a
@@ -1526,7 +1524,7 @@ def generate_trajectory_plots(
     edges = [] if len(skeleton) == 0 else get_edges(use_bodyparts, skeleton)
 
     output_dir = _get_path(
-        project_dir, name, output_dir, "grid_movies", "output_dir"
+        project_dir, model_name, output_dir, "grid_movies", "output_dir"
     )
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -1828,7 +1826,7 @@ def plot_similarity_dendrogram(
     coordinates,
     results,
     project_dir=None,
-    name=None,
+    model_name=None,
     save_path=None,
     pre=5,
     post=15,
@@ -1844,7 +1842,7 @@ def plot_similarity_dendrogram(
     """Plot a dendrogram showing the similarity between syllable trajectories.
 
     The dendrogram is saved to `{save_path}` if it is provided, or
-    else to `{project_dir}/{name}/similarity_dendrogram.pdf`. Plot-
+    else to `{project_dir}/{model_name}/similarity_dendrogram.pdf`. Plot-
     related parameters are described below. For the remaining parameters
     see (:py:func:`keypoint_moseq.util.get_typical_trajectories`)
 
@@ -1861,7 +1859,7 @@ def plot_similarity_dendrogram(
     project_dir: str, default=None
         Project directory. Required to save figure if `save_path` is None.
 
-    name: str, default=None
+    model_name: str, default=None
         Model name. Required to save figure if `save_path` is None.
 
     save_path: str, default=None
@@ -1869,25 +1867,11 @@ def plot_similarity_dendrogram(
         If None, the plot will be saved  to
         `{project_dir}/{name}/similarity_dendrogram.[pdf/png]`.
 
-    name: str, default=None
-        Name of the model. Required to load results if `results` is
-        None and `results_path` is None. Required to save the
-        dendrogram  plot if `output_dir` is None.
-
-    project_dir: str, default=None
-        Project directory. Required to load results if `results` is
-        None and `results_path` is None. Required to save the
-        dendrogram  plot if `output_dir` is None.
-
-    results_path: str, default=None
-        Path to a results file. If None, results will be loaded from
-        `{project_dir}/{name}/results.h5`.
-
     figsize: tuple of float, default=(10,5)
         Size of the dendrogram plot.
     """
     save_path = _get_path(
-        project_dir, name, save_path, "similarity_dendrogram"
+        project_dir, model_name, save_path, "similarity_dendrogram"
     )
 
     syllables = {k: v["syllable"] for k, v in results.items()}

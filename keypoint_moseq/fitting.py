@@ -61,7 +61,7 @@ def fit_model(
     data,
     metadata,
     project_dir=None,
-    name=None,
+    model_name=None,
     num_iters=50,
     start_iter=0,
     verbose=False,
@@ -95,7 +95,7 @@ def fit_model(
     project_dir : str, default=None
         Project directory; required if `save_every_n_iters>0`.
 
-    name : str, default=None
+    model_name : str, default=None
         Name of the model. If None, the model is named using the current date
         and time.
 
@@ -122,7 +122,7 @@ def fit_model(
 
     generate_progress_plots : bool, default=True
         If True, generate plots of the model's progress during fitting. Plots
-        are saved to `{project_dir}/{name}/plots/`.
+        are saved to `{project_dir}/{model_name}/plots/`.
 
     parallel_message_passing : bool | string, default=None,
         Use parallel implementation of Kalman sampling, which can be faster but
@@ -137,7 +137,7 @@ def fit_model(
         Model dictionary containing states, parameters, hyperparameters, noise
         prior, and random seed.
 
-    name : str
+    model_name : str
         Name of the model.
     """
     if generate_progress_plots and save_every_n_iters == 0:
@@ -150,11 +150,11 @@ def fit_model(
         )
         generate_progress_plots = False
 
-    if name is None:
-        name = str(datetime.now().strftime("%Y_%m_%d-%H_%M_%S"))
+    if model_name is None:
+        model_name = str(datetime.now().strftime("%Y_%m_%d-%H_%M_%S"))
 
     if save_every_n_iters > 0:
-        savedir = os.path.join(project_dir, name)
+        savedir = os.path.join(project_dir, model_name)
         if not os.path.exists(savedir):
             os.makedirs(savedir)
         print(fill(f"Outputs will be saved to {savedir}"))
@@ -201,11 +201,11 @@ def fit_model(
                             checkpoint_path,
                             iteration,
                             project_dir,
-                            name,
+                            model_name,
                             savefig=True,
                         )
 
-    return model, name
+    return model, model_name
 
 
 def apply_model(
@@ -214,7 +214,7 @@ def apply_model(
     data,
     metadata,
     project_dir=None,
-    name=None,
+    model_name=None,
     num_iters=20,
     ar_only=False,
     save_results=True,
@@ -245,7 +245,7 @@ def apply_model(
         Path to the project directory. Required if `save_results=True` and
         `results_path=None`.
 
-    name : str, default=None
+    model_name : str, default=None
         Name of the model. Required if `save_results=True` and
         `results_path=None`.
 
@@ -283,11 +283,11 @@ def apply_model(
 
     if save_results:
         if results_path is None:
-            assert project_dir is not None and name is not None, fill(
+            assert project_dir is not None and model_name is not None, fill(
                 "The `save_results` option requires either a `results_path` "
-                "or the `project_dir` and `name` arguments"
+                "or the `project_dir` and `model_name` arguments"
             )
-            results_path = os.path.join(project_dir, name, "results.h5")
+            results_path = os.path.join(project_dir, model_name, "results.h5")
 
     model = init_model(
         pca=pca,
@@ -312,7 +312,7 @@ def apply_model(
                 break
 
     return extract_results(
-        model, metadata, project_dir, name, save_results, results_path
+        model, metadata, project_dir, model_name, save_results, results_path
     )
 
 

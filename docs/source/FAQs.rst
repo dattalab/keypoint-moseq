@@ -97,7 +97,7 @@ Validating model outputs
 ------------------------
 **To confirm that model fitting was successful, you can check the following:**
 
-- Syllables have the target duration. You can check the median duration by inspecting the plots generated during fitting (as shown below). You can also plot the distribution of syllable durations using ``kpms.plot_duration_distribution(name=name, project_dir=project_dir)``. If the median duration is below/above the target value, adjust the ``kappa`` hyperparameter and re-fit the model. Initially it may be necessary to change `kappa` by a factor of 10 or more. 
+- Syllables have the target duration. You can check the median duration by inspecting the plots generated during fitting (as shown below). You can also plot the distribution of syllable durations using ``kpms.plot_duration_distribution(project_dir, model_name)``. If the median duration is below/above the target value, adjust the ``kappa`` hyperparameter and re-fit the model. Initially it may be necessary to change `kappa` by a factor of 10 or more. 
 
 - The syllable labels stabilized during the last few iterations of model fitting. This can be checked by inspection of the heatmaps generated during model fitting (e.g. the right-most subplot below).
 
@@ -131,7 +131,7 @@ Detecting existing syllables in new data
 If you already have a trained a MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function::
 
    # load the most recent model checkpoint and pca object
-   model = kpms.load_checkpoint(project_dir, name)[0]
+   model = kpms.load_checkpoint(project_dir, model_name)[0]
    pca = kpms.load_pca(project_dir)
 
    # load new data (e.g. from deeplabcut)
@@ -140,7 +140,7 @@ If you already have a trained a MoSeq model and would like to apply it to new da
    data, metadata = kpms.format_data(coordinates, confidences, **config())
 
    # apply saved model to new data
-   results = kpms.apply_model(model, pca, data, metadata, project_dir, name)
+   results = kpms.apply_model(model, pca, data, metadata, project_dir, model_name)
 
 
 Continue model fitting but with new data
@@ -151,7 +151,7 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
 
    project_dir = 'project/directory'
    config = lambda: kpms.load_config(project_dir)
-   name = 'name_of_model' (e.g. '2023_03_16-15_50_11')
+   model_name = 'name_of_model' (e.g. '2023_03_16-15_50_11')
    
    # load and format new data (e.g. from DeepLabCut)
    new_data = 'path/to/new/data/' # can be a file, a directory, or a list of files
@@ -160,14 +160,14 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
 
    # load previously saved PCA and model checkpoint
    pca = kpms.load_pca(project_dir)
-   model, _, _, current_iter = kpms.load_checkpoint(project_dir, name)
+   model, _, _, current_iter = kpms.load_checkpoint(project_dir, model_name)
 
    # initialize a new model using saved parameters
    model = kpms.init_model(data, pca=pca, params=model['params'], hypparams=model['hypparams'])
    
    # continue fitting, now with the new data
    model = kpms.fit_model(
-      model, data, metadata, project_dir, name, ar_only=False, 
+      model, data, metadata, project_dir, model_name, ar_only=False, 
       start_iter=current_iter, num_iters=current_iter+200)[0]
       
 
@@ -243,7 +243,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
     - After model fitting, apply the model serially to new data as follows::
 
-        model = kpms.load_checkpoint(project_dir, name)[0]
+        model = kpms.load_checkpoint(project_dir, model_name)[0]
         pca = kpms.load_pca(project_dir)
 
         new_data_batch1 = ['path/to/file3.h5', 'path/to/second/file4.h5']
@@ -253,7 +253,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
             coordinates, confidences = coordinates, confidences = kpms.load_keypoints(batch, 'deeplabcut')
             data = kpms.format_data(coordinates, confidences, **config())
-            results = kpms.apply_model(model, pca, data, metadata, project_dir, name)
+            results = kpms.apply_model(model, pca, data, metadata, project_dir, model_name)
 
 NaNs during fitting
 -------------------

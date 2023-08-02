@@ -40,7 +40,7 @@ na = np.newaxis
 output_notebook()
 
 
-def get_syllable_names(project_dir, model_dirname, syllable_ixs):
+def get_syllable_names(project_dir, model_name, syllable_ixs):
     """Get syllable names from syll_info.yaml file. Labels consist of the
     syllable index, followed by the syllable label, if it exists.
 
@@ -48,7 +48,7 @@ def get_syllable_names(project_dir, model_dirname, syllable_ixs):
     ----------
     project_dir : str
         the path to the project directory
-    model_dirname : str
+    model_name : str
         the name of the model directory
     syllable_ixs : list
         list of syllable indices to get names for
@@ -59,7 +59,7 @@ def get_syllable_names(project_dir, model_dirname, syllable_ixs):
         list of syllable names
     """
     labels = {ix: f"{ix}" for ix in syllable_ixs}
-    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+    syll_info_path = os.path.join(project_dir, model_name, "syll_info.yaml")
     if os.path.exists(syll_info_path):
         with open(syll_info_path, "r") as f:
             syll_info = yaml.safe_load(f)
@@ -70,21 +70,21 @@ def get_syllable_names(project_dir, model_dirname, syllable_ixs):
     return names
 
 
-def interactive_group_setting(project_dir, model_dirname):
+def interactive_group_setting(project_dir, model_name):
     """Start the interactive group setting widget.
 
     Parameters
     ----------
     project_dir : str
         the path to the project directory
-    model_dirname : str
+    model_name : str
         the name of the model directory
     """
 
     index_filepath = os.path.join(project_dir, "index.yaml")
 
     if not os.path.exists(index_filepath):
-        generate_index(project_dir, model_dirname, index_filepath)
+        generate_index(project_dir, model_name, index_filepath)
 
     # display the widget
     index_grid = GroupSettingWidgets(index_filepath)
@@ -326,7 +326,7 @@ def compute_stats_df(
 
 def plot_fingerprint(
     project_dir,
-    model_dirname,
+    model_name,
     moseq_df,
     bins=100,
     figsize=(15, 5),
@@ -482,38 +482,38 @@ def plot_fingerprint(
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
     else:
-        save_dir = os.path.join(project_dir, model_dirname, "figures")
+        save_dir = os.path.join(project_dir, model_name, "figures")
         os.makedirs(save_dir, exist_ok=True)
     fig.savefig(os.path.join(save_dir, "moseq_fingerprint.pdf"))
     fig.savefig(os.path.join(save_dir, "moseq_fingerprint.png"))
 
 
-def label_syllables(project_dir, model_dirname, moseq_df):
+def label_syllables(project_dir, model_name, moseq_df):
     """Label syllables in the syllable grid movie.
 
     Parameters
     ----------
     project_dir : str
         the path to the project directory
-    model_dirname : str
+    model_name : str
         the name of the model directory
     """
     output_notebook()
 
     # construct the syllable info path
-    syll_info_path = os.path.join(project_dir, model_dirname, "syll_info.yaml")
+    syll_info_path = os.path.join(project_dir, model_name, "syll_info.yaml")
 
     # generate a new syll_info yaml file
     if not os.path.exists(syll_info_path):
         # generate the syllable info yaml file
-        generate_syll_info(project_dir, model_dirname, syll_info_path)
+        generate_syll_info(project_dir, model_name, syll_info_path)
 
     # open syll_info
     with open(syll_info_path, "r") as f:
         syll_dict = yaml.safe_load(f)
 
     grid_movies = glob(
-        os.path.join(project_dir, model_dirname, "grid_movies", "*.mp4")
+        os.path.join(project_dir, model_name, "grid_movies", "*.mp4")
     )
     assert len(grid_movies) > 0, (
         "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
@@ -534,11 +534,11 @@ def label_syllables(project_dir, model_dirname, moseq_df):
     # create index.yaml if it does not exist
     if not os.path.exists(index_path):
         print("index.yaml does not exist, creating one...")
-        generate_index(project_dir, model_dirname, index_path)
+        generate_index(project_dir, model_name, index_path)
 
     # compute group-wise stats dataframe
     stats_df = compute_stats_df(
-        project_dir, model_dirname, moseq_df, groupby=["group"]
+        project_dir, model_name, moseq_df, groupby=["group"]
     )[
         [
             "group",
@@ -551,7 +551,7 @@ def label_syllables(project_dir, model_dirname, moseq_df):
     ]
 
     labeler = SyllableLabeler(
-        project_dir, model_dirname, stats_df, index_path, syll_info_path
+        project_dir, model_name, stats_df, index_path, syll_info_path
     )
 
     output = widgets.interactive_output(
@@ -1073,7 +1073,7 @@ def _validate_and_order_syll_stats_params(
 def plot_syll_stats_with_sem(
     stats_df,
     project_dir,
-    model_dirname,
+    model_name,
     save_dir=None,
     plot_sig=True,
     thresh=0.05,
@@ -1094,7 +1094,7 @@ def plot_syll_stats_with_sem(
         the dataframe that contains kinematic data and the syllable label
     project_dir : str
         the project directory
-    model_dirname : str
+    model_name : str
         the model directory name
     save_dir : str
         the path to save the analysis plots
@@ -1182,7 +1182,7 @@ def plot_syll_stats_with_sem(
     handles, labels = ax.get_legend_handles_labels()
 
     # add syllable labels if they exist
-    syll_names = get_syllable_names(project_dir, model_dirname, ordering)
+    syll_names = get_syllable_names(project_dir, model_name, ordering)
     plt.xticks(range(len(syll_names)), syll_names, rotation=90)
 
     # if a list of significant syllables is given, mark the syllables above the x-axis
@@ -1214,7 +1214,7 @@ def plot_syll_stats_with_sem(
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
     else:
-        save_dir = os.path.join(project_dir, model_dirname, "figures")
+        save_dir = os.path.join(project_dir, model_name, "figures")
         os.makedirs(save_dir, exist_ok=True)
     fig.savefig(os.path.join(save_dir, f"{stat}_{order}_stats.pdf"))
     fig.savefig(os.path.join(save_dir, f"{stat}_{order}_stats.png"))
@@ -1422,7 +1422,7 @@ def get_group_trans_mats(
 
 def visualize_transition_bigram(
     project_dir,
-    model_dirname,
+    model_name,
     group,
     trans_mats,
     syll_include,
@@ -1448,9 +1448,7 @@ def visualize_transition_bigram(
         names (True)
     """
     if show_syllable_names:
-        syll_names = get_syllable_names(
-            project_dir, model_dirname, syll_include
-        )
+        syll_names = get_syllable_names(project_dir, model_name, syll_include)
     else:
         syll_names = [f"{ix}" for ix in syll_include]
 
@@ -1488,7 +1486,7 @@ def visualize_transition_bigram(
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
     else:
-        save_dir = os.path.join(project_dir, model_dirname, "figures")
+        save_dir = os.path.join(project_dir, model_name, "figures")
         os.makedirs(save_dir, exist_ok=True)
 
     fig.savefig(os.path.join(save_dir, "transition_matrices.pdf"))
@@ -1496,7 +1494,7 @@ def visualize_transition_bigram(
 
 
 def generate_transition_matrices(
-    project_dir, model_dirname, normalize="bigram", min_frequency=0.005
+    project_dir, model_name, normalize="bigram", min_frequency=0.005
 ):
     """Generate the transition matrices for each recording.
 
@@ -1516,7 +1514,7 @@ def generate_transition_matrices(
     # index file
     index_file = os.path.join(project_dir, "index.yaml")
     if not os.path.exists(index_file):
-        generate_index(project_dir, model_dirname, index_file)
+        generate_index(project_dir, model_name, index_file)
 
     with open(index_file, "r") as f:
         index_data = yaml.safe_load(f)
@@ -1530,7 +1528,7 @@ def generate_transition_matrices(
     print("Group(s):", ", ".join(group))
 
     # load model reuslts
-    results_dict = load_results(project_dir=project_dir, name=model_dirname)
+    results_dict = load_results(project_dir=project_dir, name=model_name)
 
     # filter out syllables by freqency
     model_labels = [
@@ -1551,7 +1549,7 @@ def generate_transition_matrices(
 
 def plot_transition_graph_group(
     project_dir,
-    model_dirname,
+    model_name,
     groups,
     trans_mats,
     usages,
@@ -1580,9 +1578,7 @@ def plot_transition_graph_group(
         names (True)
     """
     if show_syllable_names:
-        syll_names = get_syllable_names(
-            project_dir, model_dirname, syll_include
-        )
+        syll_names = get_syllable_names(project_dir, model_name, syll_include)
     else:
         syll_names = [f"{ix}" for ix in syll_include]
 
@@ -1638,7 +1634,7 @@ def plot_transition_graph_group(
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
     else:
-        save_dir = os.path.join(project_dir, model_dirname, "figures")
+        save_dir = os.path.join(project_dir, model_name, "figures")
         os.makedirs(save_dir, exist_ok=True)
     fig.savefig(os.path.join(save_dir, "transition_graphs.pdf"))
     fig.savefig(os.path.join(save_dir, "transition_graphs.png"))
@@ -1646,7 +1642,7 @@ def plot_transition_graph_group(
 
 def plot_transition_graph_difference(
     project_dir,
-    model_dirname,
+    model_name,
     groups,
     trans_mats,
     usages,
@@ -1675,9 +1671,7 @@ def plot_transition_graph_difference(
         names (True)
     """
     if show_syllable_names:
-        syll_names = get_syllable_names(
-            project_dir, model_dirname, syll_include
-        )
+        syll_names = get_syllable_names(project_dir, model_name, syll_include)
     else:
         syll_names = [f"{ix}" for ix in syll_include]
 
@@ -1774,7 +1768,7 @@ def plot_transition_graph_difference(
     # saving the figure
 
     if save_dir is None:
-        save_dir = os.path.join(project_dir, model_dirname, "figures")
+        save_dir = os.path.join(project_dir, model_name, "figures")
     os.makedirs(save_dir, exist_ok=True)
     fig.savefig(os.path.join(save_dir, "transition_graphs_diff.pdf"))
     fig.savefig(os.path.join(save_dir, "transition_graphs_diff.png"))
@@ -1973,20 +1967,20 @@ def changepoint_analysis(
     return changepoints, changescores, coordinates_ego, derivatives, threshold
 
 
-def generate_index(project_dir, model_dirname, index_filepath):
+def generate_index(project_dir, model_name, index_filepath):
     """Generate index file.
 
     Parameters
     ----------
     project_dir : str
         path to project directory
-    model_dirname : str
+    model_name : str
         model directory name
     index_filepath : str
         path to index file
     """
     # generate a new index file
-    results_dict = load_results(project_dir=project_dir, name=model_dirname)
+    results_dict = load_results(project_dir=project_dir, name=model_name)
     files = []
     for recording in results_dict.keys():
         file_dict = {"name": recording, "group": "default"}
@@ -1998,9 +1992,9 @@ def generate_index(project_dir, model_dirname, index_filepath):
         yaml.safe_dump(index_data, f, default_flow_style=False)
 
 
-def generate_syll_info(project_dir, model_dirname, syll_info_path):
+def generate_syll_info(project_dir, model_name, syll_info_path):
     # parse model results
-    model_results = load_results(project_dir, model_dirname)
+    model_results = load_results(project_dir, model_name)
     unique_sylls = np.unique(
         np.concatenate([file["syllable"] for file in model_results.values()])
     )

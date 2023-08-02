@@ -31,13 +31,13 @@ def _build_yaml(sections, comments):
 
 
 def _get_path(
-    project_dir, name, path, filename, pathname_for_error_msg="path"
+    project_dir, model_name, path, filename, pathname_for_error_msg="path"
 ):
     if path is None:
-        assert project_dir is not None and name is not None, fill(
-            f"`name` and `project_dir` are required if `{pathname_for_error_msg}` is None."
+        assert project_dir is not None and model_name is not None, fill(
+            f"`model_name` and `project_dir` are required if `{pathname_for_error_msg}` is None."
         )
-        path = os.path.join(project_dir, name, filename)
+        path = os.path.join(project_dir, model_name, filename)
     return path
 
 
@@ -462,25 +462,27 @@ def load_pca(project_dir, pca_path=None):
     return joblib.load(pca_path)
 
 
-def load_checkpoint(project_dir=None, name=None, path=None, iteration=None):
+def load_checkpoint(
+    project_dir=None, model_name=None, path=None, iteration=None
+):
     """Load data and model snapshot from a saved checkpoint.
 
     The checkpoint path can be specified directly via `path` or else it is
-    assumed to be `{project_dir}/<name>/checkpoint.h5`.
+    assumed to be `{project_dir}/{model_name}/checkpoint.h5`.
 
     Parameters
     ----------
     project_dir: str, default=None
-        Project directory; used in conjunction with `name` to determine the
+        Project directory; used in conjunction with `model_name` to determine the
         checkpoint path if `path` is not specified.
 
-    name: str, default=None
+    model_name: str, default=None
         Model name; used in conjunction with `project_dir` to determine the
         checkpoint path if `path` is not specified.
 
     path: str, default=None
         Checkpoint path; if not specified, the checkpoint path is set to
-        `{project_dir}/<name>/checkpoint.h5`.
+        `{project_dir}/{model_name}/checkpoint.h5`.
 
     iteration: int, default=None
         Determines which model snapshot to load. If None, the last snapshot is
@@ -499,7 +501,7 @@ def load_checkpoint(project_dir=None, name=None, path=None, iteration=None):
     iteration: int
         Iteration of model fitting corresponding to the loaded snapshot.
     """
-    path = _get_path(project_dir, name, path, "checkpoint.h5")
+    path = _get_path(project_dir, model_name, path, "checkpoint.h5")
 
     with h5py.File(path, "r") as f:
         saved_iterations = np.sort([int(i) for i in f["model_snapshots"]])
@@ -519,7 +521,7 @@ def load_checkpoint(project_dir=None, name=None, path=None, iteration=None):
 
 
 def reindex_syllables_in_checkpoint(
-    project_dir=None, name=None, path=None, index=None, runlength=True
+    project_dir=None, model_name=None, path=None, index=None, runlength=True
 ):
     """Reindex syllable labels by their frequency in the most recent model
     snapshot in a checkpoint file.
@@ -529,12 +531,12 @@ def reindex_syllables_in_checkpoint(
     snapshots in the checkpoint.
 
     The checkpoint path can be specified directly via `path` or else it is
-    assumed to be `{project_dir}/<name>/checkpoint.h5`.
+    assumed to be `{project_dir}/{model_name}/checkpoint.h5`.
 
     Parameters
     ----------
     project_dir: str, default=None
-    name: str, default=None
+    model_name: str, default=None
     path: str, default=None
 
     index: array of shape (num_states,), default=None
@@ -552,7 +554,7 @@ def reindex_syllables_in_checkpoint(
     index: array of shape (num_states,)
         The index used for permuting syllable labels.
     """
-    path = _get_path(project_dir, name, path, "checkpoint.h5")
+    path = _get_path(project_dir, model_name, path, "checkpoint.h5")
 
     with h5py.File(path, "r") as f:
         saved_iterations = [int(i) for i in f["model_snapshots"]]
@@ -582,12 +584,17 @@ def reindex_syllables_in_checkpoint(
 
 
 def extract_results(
-    model, metadata, project_dir=None, name=None, save_results=True, path=None
+    model,
+    metadata,
+    project_dir=None,
+    model_name=None,
+    save_results=True,
+    path=None,
 ):
     """Extract model outputs and [optionally] save them to disk.
 
     Model outputs are saved to disk as a .h5 file, either at `path`
-    if it is specified, or at `{project_dir}/{name}/results.h5` if it is not.
+    if it is specified, or at `{project_dir}/{model_name}/results.h5` if it is not.
     If a .h5 file with the given path already exists, the outputs will be added
     to it. The results have the following structure::
 
@@ -616,7 +623,7 @@ def extract_results(
         Path to the project directory. Required if `save_results=True` and
         `results_path=None`.
 
-    name : str, default=None
+    model_name : str, default=None
         Name of the model. Required if `save_results=True` and
         `results_path=None`.
 
@@ -630,7 +637,7 @@ def extract_results(
         `.h5` file.
     """
     if save_results:
-        path = _get_path(project_dir, name, path, "results.h5")
+        path = _get_path(project_dir, model_name, path, "results.h5")
 
     states = jax.device_get(model["states"])
     keys, bounds = metadata
@@ -665,16 +672,16 @@ def extract_results(
     return results_dict
 
 
-def load_results(project_dir=None, name=None, path=None):
+def load_results(project_dir=None, model_name=None, path=None):
     """Load the results from a modeled dataset.
 
     The results path can be specified directly via `path`. Otherwise it is
-    assumed to be `{project_dir}/<name>/results.h5`.
+    assumed to be `{project_dir}/{model_name}/results.h5`.
 
     Parameters
     ----------
     project_dir: str, default=None
-    name: str, default=None
+    model_name: str, default=None
     path: str, default=None
 
     Returns
@@ -682,18 +689,18 @@ def load_results(project_dir=None, name=None, path=None):
     results: dict
         See :py:func:`keypoint_moseq.fitting.apply_model`
     """
-    path = _get_path(project_dir, name, path, "results.h5")
+    path = _get_path(project_dir, model_name, path, "results.h5")
     return load_hdf5(path)
 
 
 def save_results_as_csv(
-    results, project_dir=None, name=None, save_dir=None, path_sep="-"
+    results, project_dir=None, model_name=None, save_dir=None, path_sep="-"
 ):
     """Save modeling results to csv format.
 
     This function creates a directory and then saves a separate csv file for
     each recording. The directory is created at `save_dir` if provided,
-    otherwise at `{project_dir}/{name}/results`.
+    otherwise at `{project_dir}/{model_name}/results`.
 
     Parameters
     ----------
@@ -703,7 +710,7 @@ def save_results_as_csv(
     project_dir: str, default=None
         Project directory; required if `save_dir` is not provided.
 
-    name: str, default=None
+    model_name: str, default=None
         Name of the model; required if `save_dir` is not provided.
 
     save_dir: str, default=None
@@ -713,7 +720,9 @@ def save_results_as_csv(
         If a path separator ("/" or "\") is present in the recording name, it
         will be replaced with `path_sep` when saving the csv file.
     """
-    save_dir = _get_path(project_dir, name, save_dir, "results", "save_dir")
+    save_dir = _get_path(
+        project_dir, model_name, save_dir, "results", "save_dir"
+    )
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -758,9 +767,8 @@ def save_results_as_csv(
 def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
     """Create a name from a filepath.
 
-    Either return the name of the file
-    (with the extension removed) or return the full filepath, where the path
-    separators are replaced with `path_sep`.
+    Either return the name of the file (with the extension removed) or return
+    the full filepath, where the path separators are replaced with `path_sep`.
     """
     if remove_extension:
         filepath = os.path.splitext(filepath)[0]
