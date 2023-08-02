@@ -1239,7 +1239,7 @@ def plot_trajectories(
     line_width=3,
     alpha=0.2,
     num_timesteps=10,
-    plot_width=4,
+    plot_width=2.5,
     overlap=(0.2, 0),
     return_rasters=False,
 ):
