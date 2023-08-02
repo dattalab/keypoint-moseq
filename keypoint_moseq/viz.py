@@ -6,6 +6,7 @@ import warnings
 import logging
 import h5py
 import numpy as np
+import plotly
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
@@ -49,8 +50,8 @@ def crop_image(image, centroid, crop_size):
         (x,y) coordinates of the centroid.
 
     crop_size: int or tuple(int,int)
-        Size of the crop around the centroid. Either a single int for
-        a square crop, or a tuple of ints (w,h) for a rectangular crop.
+        Size of the crop around the centroid. Either a single int for a square
+        crop, or a tuple of ints (w,h) for a rectangular crop.
 
 
     Returns
@@ -88,8 +89,8 @@ def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3, 2)):
         Fitted PCA model
 
     savefig : bool, True
-        Whether to save the figure to a file. If true, the figure is
-        saved to `{project_dir}/pca_scree.pdf`.
+        Whether to save the figure to a file. If true, the figure is saved to
+        `{project_dir}/pca_scree.pdf`.
 
     project_dir : str, default=None
         Path to the project directory. Required if `savefig` is True.
@@ -134,12 +135,14 @@ def plot_pcs(
     ncols=5,
     node_size=30.0,
     linewidth=2.0,
+    interactive=True,
     **kwargs,
 ):
-    """Visualize the components of a fitted PCA model.
+    """
+    Visualize the components of a fitted PCA model.
 
-    For each PC, a subplot shows the mean pose (semi-transparent) along
-    with a perturbation of the mean pose in the direction of the PC.
+    For each PC, a subplot shows the mean pose (semi-transparent) along with a
+    perturbation of the mean pose in the direction of the PC.
 
     Parameters
     ----------
@@ -147,20 +150,20 @@ def plot_pcs(
         Fitted PCA model
 
     use_bodyparts : list of str
-        List of bodyparts to that are used in the model; used to index
-        bodypart names in the skeleton.
+        List of bodyparts to that are used in the model; used to index bodypart
+        names in the skeleton.
 
     skeleton : list
-        List of edges that define the skeleton, where each edge is a
-        pair of bodypart names.
+        List of edges that define the skeleton, where each edge is a pair of
+        bodypart names.
 
     keypoint_colormap : str
         Name of a matplotlib colormap to use for coloring the keypoints.
 
     savefig : bool, True
-        Whether to save the figure to a file. If true, the figure is
-        saved to `{project_dir}/pcs-{xy/xz/yz}.pdf` (`xz` and `yz`
-        are only included for 3D data).
+        Whether to save the figure to a file. If true, the figure is saved to
+        `{project_dir}/pcs-{xy/xz/yz}.pdf` (`xz` and `yz` are only included
+        for 3D data).
 
     project_dir : str, default=None
         Path to the project directory. Required if `savefig` is True.
@@ -182,20 +185,27 @@ def plot_pcs(
 
     linewidth: float, default=2.0
         Width of edges in skeleton
+
+    interactive : bool, default=True
+        For 3D data, whether to generate an interactive 3D plot.
     """
     k = len(use_bodyparts)
     d = len(pca.mean_) // (k - 1)
     Gamma = np.array(center_embedding(k))
     edges = get_edges(use_bodyparts, skeleton)
-    cmap = plt.cm.get_cmap(keypoint_colormap)
+    cmap = plt.colormaps[keypoint_colormap]
     plot_n_pcs = min(plot_n_pcs, pca.components_.shape[0])
+
+    magnitude = np.sqrt((pca.mean_**2).mean()) * scale
+    ymean = Gamma @ pca.mean_.reshape(k - 1, d)
+    ypcs = (pca.mean_ + magnitude * pca.components_).reshape(-1, k - 1, d)
+    ypcs = Gamma[np.newaxis] @ ypcs[:plot_n_pcs]
 
     if d == 2:
         dims_list, names = [[0, 1]], ["xy"]
     if d == 3:
         dims_list, names = [[0, 1], [0, 2]], ["xy", "xz"]
 
-    magnitude = np.sqrt((pca.mean_**2).mean()) * scale
     for dims, name in zip(dims_list, names):
         nrows = int(np.ceil(plot_n_pcs / ncols))
         fig, axs = plt.subplots(nrows, ncols, sharex=True, sharey=True)
@@ -204,34 +214,29 @@ def plot_pcs(
                 ax.axis("off")
                 continue
 
-            ymean = Gamma @ pca.mean_.reshape(k - 1, d)[:, dims]
-            y = (
-                Gamma
-                @ (pca.mean_ + magnitude * pca.components_[i]).reshape(
-                    k - 1, d
-                )[:, dims]
-            )
-
             for e in edges:
                 ax.plot(
-                    *ymean[e].T,
+                    *ymean[:, dims][e].T,
                     color=cmap(e[0] / (k - 1)),
                     zorder=0,
                     alpha=0.25,
                     linewidth=linewidth,
                 )
                 ax.plot(
-                    *y[e].T, color="k", zorder=2, linewidth=linewidth + 0.2
+                    *ypcs[i][:, dims][e].T,
+                    color="k",
+                    zorder=2,
+                    linewidth=linewidth + 0.2,
                 )
                 ax.plot(
-                    *y[e].T,
+                    *ypcs[i][:, dims][e].T,
                     color=cmap(e[0] / (k - 1)),
                     zorder=3,
                     linewidth=linewidth,
                 )
 
             ax.scatter(
-                *ymean.T,
+                *ymean[:, dims].T,
                 c=np.arange(k),
                 cmap=cmap,
                 s=node_size,
@@ -240,7 +245,7 @@ def plot_pcs(
                 linewidth=0,
             )
             ax.scatter(
-                *y.T,
+                *ypcs[i][:, dims].T,
                 c=np.arange(k),
                 cmap=cmap,
                 s=node_size,
@@ -263,6 +268,18 @@ def plot_pcs(
             plt.savefig(os.path.join(project_dir, f"pcs-{name}.pdf"))
         plt.show()
 
+    if interactive and d == 3:
+        plot_pcs_3D(
+            ymean,
+            ypcs,
+            edges,
+            keypoint_colormap,
+            savefig,
+            project_dir,
+            node_size / 3,
+            linewidth * 2,
+        )
+
 
 def plot_syllable_frequencies(
     project_dir=None,
@@ -274,9 +291,9 @@ def plot_syllable_frequencies(
 ):
     """Plot a histogram showing the frequency of each syllable.
 
-    Caller must provide a results dictionary, a path to a results .h5,
-    or a project directory and model name, in which case the results are
-    loaded from `{project_dir}/{model_name}/results.h5`.
+    Caller must provide a results dictionary, a path to a results .h5, or a
+    project directory and model name, in which case the results are loaded
+    from `{project_dir}/{model_name}/results.h5`.
 
     Parameters
     ----------
@@ -285,12 +302,12 @@ def plot_syllable_frequencies(
         :py:func:`keypoint_moseq.fitting.extract_results`)
 
     model_name: str, default=None
-        Name of the model. Required to load results if `results` is
-        None and `path` is None.
+        Name of the model. Required to load results if `results` is None and
+        `path` is None.
 
     project_dir: str, default=None
-        Project directory. Required to load results if `results` is
-        None and `path` is None.
+        Project directory. Required to load results if `results` is None and
+        `path` is None.
 
     path: str, default=None
         Path to a results file. If None, results will be loaded from
@@ -342,9 +359,9 @@ def plot_duration_distribution(
 ):
     """Plot a histogram showing the frequency of each syllable.
 
-    Caller must provide a results dictionary, a path to a results .h5,
-    or a project directory and model name, in which case the results are
-    loaded from `{project_dir}/{model_name}/results.h5`.
+    Caller must provide a results dictionary, a path to a results .h5, or a
+    project directory and model name, in which case the results are loaded from
+    `{project_dir}/{model_name}/results.h5`.
 
     Parameters
     ----------
@@ -353,20 +370,20 @@ def plot_duration_distribution(
         :py:func:`keypoint_moseq.fitting.extract_results`)
 
     model_name: str, default=None
-        Name of the model. Required to load results if `results` is
-        None and `path` is None.
+        Name of the model. Required to load results if `results` is None and
+        `path` is None.
 
     project_dir: str, default=None
-        Project directory. Required to load results if `results` is
-        None and `path` is None.
+        Project directory. Required to load results if `results` is None and
+        `path` is None.
 
     path: str, default=None
         Path to a results file. If None, results will be loaded from
         `{project_dir}/{model_name}/results.h5`.
 
     lim: tuple, default=None
-        x-axis limits as a pair of ints (in units of frames). If None,
-        the limits are set to (0, 95th-percentile).
+        x-axis limits as a pair of ints (in units of frames). If None, the
+        limits are set to (0, 95th-percentile).
 
     num_bins: int, default=30
         Number of bins in the histogram.
@@ -433,16 +450,16 @@ def plot_progress(
 
     The figure shows the following plots:
         - Duration distribution:
-            The distribution of state durations for the most recent
-            iteration of the model.
+            The distribution of state durations for the most recent iteration
+            of the model.
         - Frequency distribution:
-            The distribution of state frequencies for the most recent
-            iteration of the model.
+            The distribution of state frequencies for the most recent iteration
+            of the model.
         - Median duration:
             The median state duration across iterations.
         - State sequence history
-            The state sequence across iterations in a random window
-            (a new window is selected each time the progress is plotted).
+            The state sequence across iterations in a random window (a new
+            window is selected each time the progress is plotted).
 
     Parameters
     ----------
@@ -465,9 +482,9 @@ def plot_progress(
         Name of the model. Required if `savefig` is True.
 
     savefig : bool, default=True
-        Whether to save the figure to a file. If true, the figure is
-        either saved to `path` or, to `{project_dir}/{model_name}-progress.pdf`
-        if `path` is None.
+        Whether to save the figure to a file. If true, the figure is either
+        saved to `path` or, to `{project_dir}/{model_name}-progress.pdf` if
+        `path` is None.
 
     fig_size : tuple of float, default=None
         Size of the figure in inches.
@@ -476,8 +493,8 @@ def plot_progress(
         Window size for state sequence history plot.
 
     min_frequency : float, default=.001
-        Minimum frequency for including a state in the frequency
-        distribution plot.
+        Minimum frequency for including a state in the frequency distribution
+        plot.
 
     min_histogram_length : int, default=10
         Minimum x-axis length of the frequency distribution plot.
@@ -679,38 +696,38 @@ def grid_movie(
 ):
     """Generate a grid movie and return it as an array of frames.
 
-    Grid movies show many instances of a syllable. Each instance
-    contains a snippet of video (and/or keypoint-overlay) centered
-    on the animal and synchronized to the onset of the syllable.
-    A dot appears at syllable onset and disappears at syllable offset.
+    Grid movies show many instances of a syllable. Each instance contains a
+    snippet of video (and/or keypoint-overlay) centered on the animal and
+    synchronized to the onset of the syllable. A dot appears at syllable onset
+    and disappears at syllable offset.
 
     Parameters
     ----------
     instances: list of tuples `(key, start, end)`
-        List of syllable instances to include in the grid movie,
-        where each instance is specified as a tuple with the video
-        name, start frame and end frame. The list must have length
-        `rows*cols`. The video names must also be keys in `videos`.
+        List of syllable instances to include in the grid movie, where each
+        instance is specified as a tuple with the video name, start frame and
+        end frame. The list must have length `rows*cols`. The video names must
+        also be keys in `videos`.
 
     rows: int, cols : int
         Number of rows and columns in the grid movie grid
 
     videos: dict or None
         Dictionary mapping video names to video readers. Frames from
-        each reader should be accessible via `__getitem__(int or slice)`.
-        If None, the the grid movie will not include video frames.
+        each reader should be accessible via `__getitem__(int or slice)`. If
+        None, the the grid movie will not include video frames.
 
     centroids: dict
-        Dictionary mapping video names to arrays of shape `(n_frames, 2)`
-        with the x,y coordinates of animal centroid on each frame
+        Dictionary mapping video names to arrays of shape `(n_frames, 2)` with
+        the x,y coordinates of animal centroid on each frame
 
     headings: dict
-        Dictionary mapping video names to arrays of shape `(n_frames,)`
-        with the heading of the animal on each frame (in radians)
+        Dictionary mapping video names to arrays of shape `(n_frames,)` with
+        the heading of the animal on each frame (in radians)
 
     window_size: int
-        Size of the window around the animal. This should be a multiple
-        of 16 or imageio will complain.
+        Size of the window around the animal. This should be a multiple of 16
+        or imageio will complain.
 
     dot_color: tuple of ints, default=(255,255,255)
         RGB color of the dot indicating syllable onset and offset
@@ -725,8 +742,8 @@ def grid_movie(
         Number of frames after syllable onset to include in the movie
 
     scaled_window_size: int, default=None
-        Window size after scaling the video. If None, the no scaling
-        is performed (i.e. `scaled_window_size = window_size`)
+        Window size after scaling the video. If None, the no scaling is
+        performed (i.e. `scaled_window_size = window_size`)
 
     overlay_keypoints: bool, default=False
         If True, overlay the pose skeleton on the video frames.
@@ -948,8 +965,8 @@ def generate_grid_movies(
         Dictionary mapping recording names to keypoint coordinates as
         ndarrays of shape (n_frames, n_bodyparts, 2). Required when
         `window_size=None`, or `overlay_keypoints=True`, or if using
-        density-based sampling (i.e. when `sampling_options['mode']=='density'`; see
-        :py:func:`keypoint_moseq.util.sample_instances`).
+        density-based sampling (i.e. when `sampling_options['mode']=='density'`;
+        see :py:func:`keypoint_moseq.util.sample_instances`).
 
     bodyparts: list of str, default=None
         List of bodypart names in `coordinates`. Required when
@@ -1438,19 +1455,21 @@ def generate_trajectory_plots(
     skeleton=[],
     bodyparts=None,
     use_bodyparts=None,
-    density_sample=True,
-    sampling_options={"mode": "density", "n_neighbors": 50},
-    save_gifs=True,
-    save_mp4s=False,
     keypoint_colormap="autumn",
     plot_options={},
+    padding={"left": 0.1, "right": 0.1, "top": 0.2, "bottom": 0.2},
     save_individually=True,
+    save_gifs=True,
+    save_mp4s=False,
     fps=30,
     projection_planes=["xy", "xz"],
-    padding={"left": 0.1, "right": 0.1, "top": 0.2, "bottom": 0.2},
+    interactive=True,
+    density_sample=True,
+    sampling_options={"mode": "density", "n_neighbors": 50},
     **kwargs,
 ):
-    """Generate trajectory plots for a modeled dataset.
+    """
+    Generate trajectory plots for a modeled dataset.
 
     Each trajectory plot shows a sequence of poses along the average
     trajectory through latent space associated with a given syllable.
@@ -1519,6 +1538,10 @@ def generate_trajectory_plots(
         coordinates. A separate plot will be saved for each plane with
         the name of the plane (e.g. 'xy') as a suffix. This argument is
         ignored for 2D data.
+
+    interactive: bool, default=True
+        For 3D data, whether to create an visualization that can be
+        rotated and zoomed. This argument is ignored for 2D data.
     """
     plot_options.update({"keypoint_colormap": keypoint_colormap})
     edges = [] if len(skeleton) == 0 else get_edges(use_bodyparts, skeleton)
@@ -1572,14 +1595,14 @@ def generate_trajectory_plots(
         all_Xs = [Xs * np.array([1, -1])]  # flip y-axis
         suffixes = [""]
 
-    for Xs, suffix in zip(all_Xs, suffixes):
-        lims = get_limits(Xs, pctl=0, **padding)
+    for Xs_2D, suffix in zip(all_Xs, suffixes):
+        lims = get_limits(Xs_2D, pctl=0, **padding)
 
         # individual plots
         if save_individually:
             desc = "Generating trajectory plots"
             for title, X in tqdm.tqdm(
-                zip(titles, Xs), desc=desc, total=len(titles), ncols=72
+                zip(titles, Xs_2D), desc=desc, total=len(titles), ncols=72
             ):
                 fig, ax, rasters = plot_trajectories(
                     [title],
@@ -1605,7 +1628,7 @@ def generate_trajectory_plots(
         # grid plot
         fig, ax, rasters = plot_trajectories(
             titles,
-            Xs,
+            Xs_2D,
             lims,
             edges=edges,
             return_rasters=(save_gifs or save_mp4s),
@@ -1623,6 +1646,9 @@ def generate_trajectory_plots(
             use_fps = len(rasters) / (pre + post) * fps
             path = os.path.join(output_dir, f"all_trajectories{suffix}.mp4")
             write_video_clip(rasters, path, fps=use_fps)
+
+    if interactive and Xs.shape[-1] == 3:
+        plot_trajectories_3D(Xs, titles, edges, output_dir, **plot_options)
 
 
 def overlay_keypoints_on_image(
@@ -1675,7 +1701,7 @@ def overlay_keypoints_on_image(
         canvas = image
 
     # get colors from matplotlib and convert to 0-255 range for openc
-    colors = plt.get_cmap(keypoint_colormap)(
+    colors = plt.colormaps(keypoint_colormap)(
         np.linspace(0, 1, coordinates.shape[0])
     )
     colors = [tuple([int(c) for c in cs[:3] * 255]) for cs in colors]
@@ -1702,6 +1728,41 @@ def overlay_keypoints_on_image(
     if opacity < 1.0:
         image = cv2.addWeighted(image, 1 - opacity, canvas, opacity, 0)
     return image
+
+
+def overlay_trajectory_on_video(
+    frames,
+    trajectory,
+    smoothing_kernel=1,
+    highlight=None,
+    min_opacity=0.2,
+    max_opacity=1,
+    num_ghosts=5,
+    interval=2,
+    plot_options={},
+    edges=[],
+):
+    """
+    Overlay a trajectory of keypoints on a video.
+    """
+    if smoothing_kernel > 0:
+        trajectory = gaussian_filter1d(trajectory, smoothing_kernel, axis=0)
+
+    opacities = np.repeat(
+        np.linspace(max_opacity, min_opacity, num_ghosts + 1), interval
+    )
+    for i in np.arange(0, trajectory.shape[0], interval):
+        for j, opacity in enumerate(opacities):
+            if i + j < frames.shape[0]:
+                plot_options["opacity"] = opacity
+                if highlight is not None:
+                    start, end, highlight_factor = highlight
+                    if i + j < start or i + j > end:
+                        plot_options["opacity"] *= highlight_factor
+                frames[i + j] = overlay_keypoints_on_image(
+                    frames[i + j], trajectory[i], edges=edges, **plot_options
+                )
+    return frames
 
 
 def overlay_keypoints_on_video(
@@ -1820,6 +1881,318 @@ def overlay_keypoints_on_video(
                     )
 
                 writer.append_data(image)
+
+
+def matplotlib_colormap_to_plotly(cmap):
+    """
+    Convert a matplotlib colormap to a plotly colormap.
+
+    Parameters
+    ----------
+    cmap: str
+        Name of a matplotlib colormap.
+
+    Returns
+    -------
+    pl_colorscale: list
+        Plotly colormap.
+    """
+    cmap = plt.colormaps[cmap]
+    pl_entries = 255
+    h = 1.0 / (pl_entries - 1)
+    pl_colorscale = []
+    for k in range(pl_entries):
+        C = (np.array(cmap(k * h)[:3]) * 255).astype(np.uint8)
+        pl_colorscale.append([k * h, "rgb" + str((C[0], C[1], C[2]))])
+    return pl_colorscale
+
+
+def add_3D_pose_to_plotly_fig(
+    fig,
+    coords,
+    edges,
+    keypoint_colormap="autumn",
+    node_size=6.0,
+    linewidth=3.0,
+    visible=True,
+    opacity=1,
+):
+    """
+    Add a 3D pose to a plotly figure.
+
+    Parameters
+    ----------
+    fig: plotly figure
+        Figure to which the pose should be added.
+
+    coords: ndarray (N,3)
+        3D coordinates of the pose.
+
+    edges: list of index pairs
+        Skeleton edges
+
+    keypoint_colormap: str, default='autumn'
+        Colormap to use for coloring keypoints.
+
+    node_size: float, default=6.0
+        Size of keypoints.
+
+    linewidth: float, default=3.0
+        Width of skeleton edges.
+
+    visibility: bool, default=True
+        Initial visibility state of the nodes and edges
+
+    opacity: float, default=1
+        Opacity of the nodes and edges (0-1)
+    """
+    marker = {
+        "size": node_size,
+        "color": np.linspace(0, 1, len(coords)),
+        "colorscale": matplotlib_colormap_to_plotly(keypoint_colormap),
+        "line": dict(color="black", width=0.5),
+        "opacity": opacity,
+    }
+
+    line = {"width": linewidth, "color": f"rgba(0,0,0,{opacity})"}
+
+    fig.add_trace(
+        plotly.graph_objs.Scatter3d(
+            x=coords[:, 0],
+            y=coords[:, 1],
+            z=coords[:, 2],
+            mode="markers",
+            visible=visible,
+            marker=marker,
+        )
+    )
+
+    for e in edges:
+        fig.add_trace(
+            plotly.graph_objs.Scatter3d(
+                x=coords[e, 0],
+                y=coords[e, 1],
+                z=coords[e, 2],
+                mode="lines",
+                visible=visible,
+                line=line,
+            )
+        )
+
+
+def plot_pcs_3D(
+    ymean,
+    ypcs,
+    edges,
+    keypoint_colormap,
+    savefig,
+    project_dir=None,
+    node_size=6,
+    linewidth=2,
+    height=400,
+    mean_pose_opacity=0.2,
+):
+    """
+    Visualize the components of a fitted PCA model based on 3D components.
+
+    For each PC, a subplot shows the mean pose (semi-transparent) along
+    with a perturbation of the mean pose in the direction of the PC.
+
+    Parameters
+    ----------
+    ymean : ndarray (num_bodyparts, 3)
+        Mean pose.
+
+    ypcs : ndarray (num_pcs, num_bodyparts, 3)
+        Perturbations of the mean pose in the direction of each PC.
+
+    edges : list of index pairs
+        Skeleton edges.
+
+    keypoint_colormap : str
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    savefig : bool
+        Whether to save the figure to a file. If true, the figure is
+        saved to `{project_dir}/pcs.html
+
+    project_dir : str, default=None
+        Path to the project directory. Required if `savefig` is True.
+
+    node_size : float, default=30.0
+        Size of the keypoints in the figure.
+
+    linewidth: float, default=2.0
+        Width of edges in skeleton
+
+    height : int, default=400
+        Height of the figure in pixels.
+
+    mean_pose_opacity: float, default=0.4
+        Opacity of the mean pose
+    """
+    from plotly.subplots import make_subplots
+
+    fig = make_subplots(rows=1, cols=1, specs=[[{"type": "scatter3d"}]])
+
+    def visibility_mask(i):
+        visible = np.zeros((len(edges) + 1) * (len(ypcs) + 1))
+        visible[-(len(edges) + 1) :] = 1
+        visible[(len(edges) + 1) * i : (len(edges) + 1) * (i + 1)] = 1
+        return visible > 0
+
+    steps = []
+    for i, coords in enumerate(ypcs):
+        add_3D_pose_to_plotly_fig(
+            fig,
+            coords,
+            edges,
+            visible=(i == 0),
+            node_size=node_size,
+            linewidth=linewidth,
+            keypoint_colormap=keypoint_colormap,
+        )
+
+        steps.append(
+            dict(
+                method="update",
+                label=f"PC {i+1}",
+                args=[{"visible": visibility_mask(i)}],
+            )
+        )
+
+    add_3D_pose_to_plotly_fig(
+        fig,
+        ymean,
+        edges,
+        opacity=mean_pose_opacity,
+        node_size=node_size,
+        linewidth=linewidth,
+        keypoint_colormap=keypoint_colormap,
+    )
+
+    fig.update_layout(
+        height=height,
+        showlegend=False,
+        sliders=[dict(steps=steps)],
+        scene=dict(
+            xaxis=dict(showgrid=False, showbackground=False),
+            yaxis=dict(showgrid=False, showbackground=False),
+            zaxis=dict(showgrid=False, showline=True, linecolor="black"),
+            bgcolor="white",
+            aspectmode="data",
+        ),
+        margin=dict(l=20, r=20, b=0, t=0, pad=10),
+    )
+
+    if savefig:
+        assert project_dir is not None, fill(
+            "The `savefig` option requires a `project_dir`"
+        )
+        save_path = os.path.join(project_dir, f"pcs.html")
+        fig.write_html(save_path)
+        print(f"Saved interactive plot to {save_path}")
+
+    fig.show()
+
+
+def plot_trajectories_3D(
+    Xs,
+    titles,
+    edges,
+    output_dir,
+    keypoint_colormap="autumn",
+    node_size=8,
+    linewidth=3,
+    height=500,
+    skiprate=1,
+):
+    """
+    Visualize a set of 3D trajectories.
+
+    Parameters
+    ----------
+    Xs : list of ndarrays (num_syllables, num_frames, num_bodyparts, 3)
+        Trajectories to visualize.
+
+    titles : list of str
+        Title for each trajectory.
+
+    edges : list of index pairs
+        Skeleton edges.
+
+    output_dir : str
+        Path to save the interactive plot.
+
+    keypoint_colormap : str, default='autumn'
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    node_size : float, default=8.0
+        Size of the keypoints in the figure.
+
+    linewidth: float, default=3.0
+        Width of edges in skeleton
+
+    height : int, default=500
+        Height of the figure in pixels.
+
+    skiprate : int, default=1
+        Plot every `skiprate` frames.
+    """
+    from plotly.subplots import make_subplots
+
+    fig = make_subplots(rows=1, cols=1, specs=[[{"type": "scatter3d"}]])
+    Xs = Xs[:, ::skiprate]
+
+    def visibility_mask(i):
+        n = (len(edges) + 1) * len(Xs[1])
+        visible = np.zeros(n * len(Xs))
+        visible[n * i : n * (i + 1)] = 1
+        return visible > 0
+
+    steps = []
+    for i, X in enumerate(Xs):
+        opacities = np.linspace(0.3, 1, len(X) + 1)[1:] ** 2
+        for coords, opacity in zip(X, opacities):
+            add_3D_pose_to_plotly_fig(
+                fig,
+                coords,
+                edges,
+                visible=(i == 0),
+                node_size=node_size,
+                linewidth=linewidth,
+                keypoint_colormap=keypoint_colormap,
+                opacity=opacity,
+            )
+
+        steps.append(
+            dict(
+                method="update",
+                label=titles[i],
+                args=[{"visible": visibility_mask(i)}],
+            )
+        )
+
+    fig.update_layout(
+        height=height,
+        showlegend=False,
+        sliders=[dict(steps=steps)],
+        scene=dict(
+            xaxis=dict(showgrid=False, showbackground=False),
+            yaxis=dict(showgrid=False, showbackground=False),
+            zaxis=dict(showgrid=False, showline=True, linecolor="black"),
+            bgcolor="white",
+            aspectmode="data",
+        ),
+        margin=dict(l=20, r=20, b=0, t=0, pad=10),
+    )
+
+    if output_dir is not None:
+        save_path = os.path.join(output_dir, f"all_trajectories.html")
+        fig.write_html(save_path)
+        print(f"Saved interactive trajectories plot to {save_path}")
+
+    fig.show()
 
 
 def plot_similarity_dendrogram(

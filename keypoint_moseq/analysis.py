@@ -11,10 +11,10 @@ import seaborn as sns
 import ipywidgets as widgets
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
-from matplotlib.gridspec import GridSpec
 from bokeh.io import output_notebook
 from IPython.display import display
 from scipy import stats
+from textwrap import fill
 from statsmodels.stats.multitest import multipletests, fdrcorrection
 from itertools import combinations
 from copy import deepcopy

@@ -4,6 +4,8 @@ import tabulate
 import warnings
 import subprocess
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 from textwrap import fill
 import jax, jax.numpy as jnp
 from scipy.ndimage import median_filter, convolve1d, gaussian_filter1d
