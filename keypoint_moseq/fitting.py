@@ -66,7 +66,7 @@ def fit_model(
     start_iter=0,
     verbose=False,
     ar_only=False,
-    save_every_n_iters=10,
+    save_every_n_iters=25,
     generate_progress_plots=True,
     parallel_message_passing=None,
     **kwargs,
