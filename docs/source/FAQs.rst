@@ -128,18 +128,19 @@ It may be necessary to re-run the fitting process a few times to choose a good v
 
 Detecting existing syllables in new data
 ----------------------------------------
-If you already have a trained a MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function. This function takes as input the coordinates (and confidences) of the new data, and returns the syllable sequence and other outputs of the model. For example::
+If you already have a trained a MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function::
 
-   # load saved model checkpoint
-   checkpoint = kpms.load_checkpoint(project_dir=project_dir, name=name)
+   # load the most recent model checkpoint and pca object
+   model = kpms.load_checkpoint(project_dir, name)[0]
+   pca = kpms.load_pca(project_dir)
 
    # load new data (e.g. from deeplabcut)
    new_data = 'path/to/new/data/' # can be a file, a directory, or a list of files
-   coordinates, confidences = kpms.load_deeplabcut_results(new_data)
+   coordinates, confidences, bodyparts = kpms.load_keypoints(new_data, 'deeplabcut')
+   data, metadata = kpms.format_data(coordinates, confidences, **config())
 
-   results = kpms.apply_model(coordinates=coordinates, confidences=confidences, 
-                              project_dir=project_dir, pca=kpms.load_pca(project_dir),
-                              **config(), **checkpoint)
+   # apply saved model to new data
+   results = kpms.apply_model(model, pca, data, metadata, project_dir, name)
 
 
 Continue model fitting but with new data
@@ -153,19 +154,22 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
    name = 'name_of_model' (e.g. '2023_03_16-15_50_11')
    
    # load and format new data (e.g. from DeepLabCut)
-   coordinates, confidences,bodyparts = kpms.load_deeplabcut_results(dlc_results_directory)
-   data, labels = kpms.format_data(coordinates, confidences=confidences, **config())
+   new_data = 'path/to/new/data/' # can be a file, a directory, or a list of files
+   coordinates, confidences,bodyparts = kpms.load_keypoints(new_data, 'deeplabcut')
+   data, metadata = kpms.format_data(coordinates, confidences, **config())
 
    # load previously saved PCA and model checkpoint
    pca = kpms.load_pca(project_dir)
-   checkpoint = kpms.load_checkpoint(project_dir=project_dir, name=name)
+   model, _, _, current_iter = kpms.load_checkpoint(project_dir, name)
 
    # initialize a new model using saved parameters
-   model = kpms.init_model(data, pca=pca, params=checkpoint['params'], **config())
-
+   model = kpms.init_model(data, pca=pca, params=model['params'], hypparams=model['hypparams'])
+   
    # continue fitting, now with the new data
-   model, history, name = kpms.fit_model(model, data, labels, num_iters=20, project_dir=project_dir)
-
+   model = kpms.fit_model(
+      model, data, metadata, project_dir, name, ar_only=False, 
+      start_iter=current_iter, num_iters=current_iter+200)[0]
+      
 
 Interpreting model outputs
 --------------------------
@@ -217,6 +221,13 @@ There are two main causes of GPU out of memory (OOM) errors:
 
     - Larger GPUs can be accessed using colab pro. 
 
+  - Partially serialize the computations. By default, the modeling is parallelized across the full dataset. We also created an option, however, to split the data into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted)::
+
+      from jax_moseq.utils import set_mixed_map_iters
+      set_mixed_map_iters(4)
+
+   This will split the data into 4 batches, which should reduce the memory requirements about 4-fold but also result in a 4-fold slow-down. The number of batches can be adjusted as needed.
+
   - Switch to single-precision computing by running the code below immediarely after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs::
 
       import jax
@@ -228,25 +239,21 @@ There are two main causes of GPU out of memory (OOM) errors:
     - To fit a subset of the data, specify the subset as a list of paths during data loading::
 
         initial_data = ['path/to/file1.h5', 'path/to/file2.h5']
-        coordinates, confidences = kpms.load_deeplabcut_results(initial_data)
+        coordinates, confidences = kpms.load_keypoints(initial_data, 'deeplabcut')
 
     - After model fitting, apply the model serially to new data as follows::
 
-        checkpoint = kpms.load_checkpoint(project_dir=project_dir, name=name)
+        model = kpms.load_checkpoint(project_dir, name)[0]
+        pca = kpms.load_pca(project_dir)
 
         new_data_batch1 = ['path/to/file3.h5', 'path/to/second/file4.h5']
         new_data_batch2 = ['path/to/file5.h5', 'path/to/second/file6.h5']
 
         for batch in [initial_data, new_data_batch1, new_data_batch2]:
 
-            coordinates, confidences = kpms.load_deeplabcut_results(batch)
-
-            results = kpms.apply_model(
-                coordinates=coordinates, confidences=confidences, 
-                use_saved_states=False, pca=kpms.load_pca(project_dir),
-                project_dir=project_dir, **config(), **checkpoint, num_iters=5)
-
-
+            coordinates, confidences = coordinates, confidences = kpms.load_keypoints(batch, 'deeplabcut')
+            data = kpms.format_data(coordinates, confidences, **config())
+            results = kpms.apply_model(model, pca, data, metadata, project_dir, name)
 
 NaNs during fitting
 -------------------

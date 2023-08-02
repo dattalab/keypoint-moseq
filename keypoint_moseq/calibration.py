@@ -99,7 +99,11 @@ def load_sampled_frames(sample_keys, video_dir, video_extension=None):
     key_to_video = dict(zip(keys, videos))
     readers = {key: OpenCVReader(video) for key, video in zip(keys, videos)}
     pbar = tqdm.tqdm(
-        sample_keys, desc="Loading sample frames", position=0, leave=True
+        sample_keys,
+        desc="Loading sample frames",
+        position=0,
+        leave=True,
+        ncols=72,
     )
     return {
         (key, frame, bodypart): readers[key][frame]

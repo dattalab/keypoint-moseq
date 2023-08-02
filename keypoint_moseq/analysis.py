@@ -1,13 +1,10 @@
 from math import ceil
 from matplotlib.lines import Line2D
-from cytoolz import sliding_window, complement
-from collections import OrderedDict
-from tqdm.auto import tqdm
+from cytoolz import sliding_window
+import tqdm
 import networkx as nx
-import warnings
 import os
 import yaml
-
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -15,15 +12,12 @@ import ipywidgets as widgets
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from matplotlib.gridspec import GridSpec
-from bokeh.io import output_notebook, show
+from bokeh.io import output_notebook
 from IPython.display import display
 from scipy import stats
 from statsmodels.stats.multitest import multipletests, fdrcorrection
 from itertools import combinations
-from tqdm import tqdm
 from copy import deepcopy
-from cytoolz import sliding_window
-from os.path import join
 from glob import glob
 
 from scipy.ndimage import gaussian_filter1d
@@ -490,8 +484,8 @@ def plot_fingerprint(
     else:
         save_dir = os.path.join(project_dir, model_dirname, "figures")
         os.makedirs(save_dir, exist_ok=True)
-    fig.savefig(join(save_dir, "moseq_fingerprint.pdf"))
-    fig.savefig(join(save_dir, "moseq_fingerprint.png"))
+    fig.savefig(os.path.join(save_dir, "moseq_fingerprint.pdf"))
+    fig.savefig(os.path.join(save_dir, "moseq_fingerprint.png"))
 
 
 def label_syllables(project_dir, model_dirname, moseq_df):
@@ -1932,7 +1926,10 @@ def changepoint_analysis(
     # get changescores for each threshold
     all_changescores, all_changepoints = [], []
     for threshold in tqdm(
-        thresholds, disable=(not verbose), desc="Testing thresholds"
+        thresholds,
+        disable=(not verbose),
+        desc="Testing thresholds",
+        ncols=72,
     ):
         # permute within-recording then combine across recordings
         crossings = (dy_zscored > threshold).sum(2)[mask[:, :, 0]]

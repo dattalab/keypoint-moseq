@@ -578,7 +578,7 @@ def plot_progress(
     plt.tight_layout()
 
     if savefig:
-        path = _get_path(path, project_dir, name, "fitting_progress.pdf")
+        path = _get_path(project_dir, name, path, "fitting_progress.pdf")
         plt.savefig(path)
     plt.show()
     return fig, axs
@@ -1115,7 +1115,7 @@ def generate_grid_movies(
         )
 
     for syllable, instances in tqdm.tqdm(
-        sampled_instances.items(), desc="Generating grid movies"
+        sampled_instances.items(), desc="Generating grid movies", ncols=72
     ):
         frames = grid_movie(
             instances,
@@ -1581,7 +1581,7 @@ def generate_trajectory_plots(
         if save_individually:
             desc = "Generating trajectory plots"
             for title, X in tqdm.tqdm(
-                zip(titles, Xs), desc=desc, total=len(titles)
+                zip(titles, Xs), desc=desc, total=len(titles), ncols=72
             ):
                 fig, ax, rasters = plot_trajectories(
                     [title],
@@ -1799,7 +1799,7 @@ def overlay_keypoints_on_video(
         with imageio.get_writer(
             output_path, pixelformat="yuv420p", fps=fps, quality=quality
         ) as writer:
-            for frame in tqdm.tqdm(frames):
+            for frame in tqdm.tqdm(frames, ncols=72):
                 image = reader.get_data(frame)
 
                 image = overlay_keypoints_on_image(

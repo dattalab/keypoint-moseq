@@ -568,7 +568,7 @@ def reindex_syllables_in_checkpoint(
         ]
 
     def _reindex(model):
-        model["params"]["betas"] = model["params"]["betas"][index, :]
+        model["params"]["betas"] = model["params"]["betas"][index]
         model["params"]["pi"] = model["params"]["pi"][index, :][:, index]
         model["params"]["Ab"] = model["params"]["Ab"][index]
         model["params"]["Q"] = model["params"]["Q"][index]
@@ -630,14 +630,14 @@ def extract_results(
         `.h5` file.
     """
     if save_results:
-        path = _get_path(path, project_dir, name, "results.h5")
+        path = _get_path(project_dir, name, path, "results.h5")
 
     states = jax.device_get(model["states"])
     keys, bounds = metadata
 
     # extract syllables; repeat first syllable an extra `nlags` times
     nlags = states["x"].shape[1] - states["z"].shape[1]
-    syllables = unbatch(states["z"], keys, bounds + np.array([0, nlags]))
+    syllables = unbatch(states["z"], keys, bounds + np.array([nlags, 0]))
     syllables = {
         k: np.pad(z[nlags:], (nlags, 0), mode="edge")
         for k, z in syllables.items()
@@ -718,7 +718,7 @@ def save_results_as_csv(
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    for key in tqdm.tqdm(results.keys(), desc="Saving to csv"):
+    for key in tqdm.tqdm(results.keys(), desc="Saving to csv", ncols=72):
         column_names, data = [], []
 
         if "syllable" in results[key].keys():
@@ -907,7 +907,7 @@ def load_keypoints(
     )
 
     coordinates, confidences, bodyparts = {}, {}, None
-    for filepath in tqdm.tqdm(filepaths, desc=f"Loading keypoints"):
+    for filepath in tqdm.tqdm(filepaths, desc=f"Loading keypoints", ncols=72):
         try:
             name = _name_from_path(
                 filepath, path_in_name, path_sep, remove_extension

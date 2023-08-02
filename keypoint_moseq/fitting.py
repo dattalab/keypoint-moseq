@@ -7,9 +7,9 @@ from textwrap import fill
 from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
-from keypoint_moseq.io import save_hdf5, _get_path
+from keypoint_moseq.io import save_hdf5, extract_results
 from jax_moseq.models.keypoint_slds import resample_model, init_model
-from jax_moseq.utils import check_for_nans, unbatch, device_put_as_scalar
+from jax_moseq.utils import check_for_nans, device_put_as_scalar
 
 
 class StopResampling(Exception):
@@ -173,7 +173,7 @@ def fit_model(
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
     model = device_put_as_scalar(model)
 
-    with tqdm.trange(start_iter, num_iters + 1) as pbar:
+    with tqdm.trange(start_iter, num_iters + 1, ncols=72) as pbar:
         for iteration in pbar:
             try:
                 model = _wrapped_resample(
@@ -210,6 +210,7 @@ def fit_model(
 
 def apply_model(
     model,
+    pca,
     data,
     metadata,
     project_dir=None,
@@ -220,6 +221,7 @@ def apply_model(
     verbose=False,
     results_path=None,
     parallel_message_passing=None,
+    **kwargs,
 ):
     """Apply a model to new data.
 
@@ -228,6 +230,9 @@ def apply_model(
     model : dict
         Model dictionary containing states, parameters, hyperparameters, noise
         prior, and random seed.
+
+    pca: :py:class:`sklearn.decomposition.PCA`
+        PCA object used to initially project the data into the latent space.
 
     data: dict
         Data for model fitting (see :py:func:`keypoint_moseq.io.format_data`).
@@ -274,6 +279,7 @@ def apply_model(
         :py:func:`keypoint_moseq.io.extract_results`).
     """
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
+    data = jax.device_put(data)
 
     if save_results:
         if results_path is None:
@@ -284,13 +290,13 @@ def apply_model(
             results_path = os.path.join(project_dir, name, "results.h5")
 
     model = init_model(
+        pca=pca,
         data=data,
         params=model["params"],
-        hypparams=model["hypparams"],
-        verbose=verbose,
+        **kwargs,
     )
 
-    with tqdm.trange(num_iters, desc="Applying model") as pbar:
+    with tqdm.trange(num_iters, desc="Applying model", ncols=72) as pbar:
         for iteration in pbar:
             try:
                 model = _wrapped_resample(
