@@ -577,7 +577,9 @@ def reindex_syllables_in_checkpoint(
         model["states"]["z"] = np.argsort(index)[model["states"]["z"]]
         return model
 
-    for iteration in saved_iterations:
+    for iteration in tqdm.tqdm(
+        saved_iterations, desc="Reindexing", unit="model snapshot", ncols=72
+    ):
         model = load_hdf5(path, f"model_snapshots/{iteration}")
         save_hdf5(path, _reindex(model), f"model_snapshots/{iteration}")
     return index
