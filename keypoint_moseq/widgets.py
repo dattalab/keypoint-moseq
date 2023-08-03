@@ -453,7 +453,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
 
         Parameters
         ----------
-        base_dir: str
+        project_dir: str
             Base directory for the model.
         model_name: str
             Name of the model.
@@ -465,7 +465,7 @@ class SyllableLabeler(SyllableLabelerWidgets):
 
         super().__init__()
 
-        self.base_dir = project_dir
+        self.project_dir = project_dir
         self.model_name = model_name
         self.index_file = index_path
         self.sorted_index = read_yaml(yaml_file=index_path)
