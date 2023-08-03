@@ -10,25 +10,14 @@ import plotly
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, dendrogram
 from textwrap import fill
 from PIL import Image
 
 plt.rcParams["figure.dpi"] = 100
 
-from keypoint_moseq.util import (
-    get_edges,
-    reindex_by_bodyparts,
-    find_matching_videos,
-    get_syllable_instances,
-    sample_instances,
-    filter_centroids_headings,
-    get_instance_trajectories,
-    get_typical_trajectories,
-    interpolate_keypoints,
-    interpolate_along_axis,
-)
+from keypoint_moseq.util import *
 from keypoint_moseq.io import load_results, _get_path
 from jax_moseq.models.keypoint_slds import center_embedding
 from jax_moseq.utils import get_durations, get_frequencies
@@ -2246,16 +2235,10 @@ def plot_similarity_dendrogram(
     save_path = _get_path(
         project_dir, model_name, save_path, "similarity_dendrogram"
     )
-
-    syllables = {k: v["syllable"] for k, v in results.items()}
-    centroids = {k: v["centroid"] for k, v in results.items()}
-    headings = {k: v["heading"] for k, v in results.items()}
-
-    typical_trajectories = get_typical_trajectories(
+    
+    distances, syllable_ixs = syllable_similarity(
         coordinates,
-        syllables,
-        centroids,
-        headings,
+        results,
         pre,
         post,
         min_frequency,
@@ -2266,9 +2249,7 @@ def plot_similarity_dendrogram(
         sampling_options,
     )
 
-    syllable_ixs = sorted(typical_trajectories.keys())
-    Xs = np.stack([typical_trajectories[s] for s in syllable_ixs])
-    Z = linkage(pdist(Xs.reshape(len(Xs), -1), metric="euclidean"), "complete")
+    Z = linkage(squareform(distances), "complete")
 
     fig, ax = plt.subplots(1, 1)
     labels = [f"Syllable {s}" for s in syllable_ixs]

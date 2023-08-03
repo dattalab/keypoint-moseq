@@ -1023,9 +1023,7 @@ def format_data(
 
 def get_typical_trajectories(
     coordinates,
-    syllables,
-    centroids,
-    headings,
+    results,
     pre=5,
     post=15,
     min_frequency=0.005,
@@ -1043,17 +1041,9 @@ def get_typical_trajectories(
         Dictionary mapping recording names to keypoint coordinates as ndarrays
         of shape (n_frames, n_bodyparts, 2).
 
-    syllables: dict
-        Dictionary mapping recording names to syllable sequences as arrays of
-        shape (n_frames,).
-
-    centroids: dict
-        Dictionary mapping recording names to centroid coordinates as ndarrays
-        of shape (n_frames, 2).
-
-    headings: dict
-        Dictionary mapping recording names to heading angles in radians as
-        arrays of shape (n_frames,).
+    results: dict
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
 
     pre: int, default=5, post: int, default=15
         Defines the temporal window around syllable onset for computing the
@@ -1094,6 +1084,10 @@ def get_typical_trajectories(
         coordinates = reindex_by_bodyparts(
             coordinates, bodyparts, use_bodyparts
         )
+
+    syllables = {k: v["syllable"] for k, v in results.items()}
+    centroids = {k: v["centroid"] for k, v in results.items()}
+    headings = {k: v["heading"] for k, v in results.items()}
 
     min_instances = sampling_options["n_neighbors"] if density_sample else 1
     syllable_instances = get_syllable_instances(
@@ -1140,3 +1134,52 @@ def get_typical_trajectories(
     }
 
     return {s: np.nanmedian(ts, axis=0) for s, ts in trajectories.items()}
+
+
+def syllable_similarity(
+    coordinates,
+    results,
+    pre=5,
+    post=15,
+    min_frequency=0.005,
+    min_duration=3,
+    bodyparts=None,
+    use_bodyparts=None,
+    density_sample=False,
+    sampling_options={},
+    **kwargs,
+):
+    """Generate a distance matrix over syllable trajectories.
+
+    See :py:func:`keypoint_moseq.util.get_typical_trajectories` for a
+    description of the parameters.
+
+    Returns
+    -------
+    distances : ndarray of shape (n_syllables, n_syllables)
+        Pairwise distances between the typical trajectories associated with
+        each syllable. Only syllables with sufficient frequency of occurence
+        are included.
+
+    syllable_ixs : array of int
+        Syllable indexes corresponding to the rows and columns of `distances`.
+    """
+    typical_trajectories = get_typical_trajectories(
+        coordinates,
+        results,
+        pre,
+        post,
+        min_frequency,
+        min_duration,
+        bodyparts,
+        use_bodyparts,
+        density_sample,
+        sampling_options,
+    )
+
+    syllable_ixs = sorted(typical_trajectories.keys())
+    Xs = np.stack([typical_trajectories[s] for s in syllable_ixs])
+    distances = np.linalg.norm(
+        Xs.reshape(len(Xs), 1, -1) - Xs.reshape(1, len(Xs), -1), axis=-1
+    )
+    return distances, syllable_ixs
