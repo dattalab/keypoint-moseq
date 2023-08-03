@@ -969,9 +969,8 @@ def generate_grid_movies(
         see :py:func:`keypoint_moseq.util.sample_instances`).
 
     bodyparts: list of str, default=None
-        List of bodypart names in `coordinates`. Required when
-        `coordinates` is provided and bodyparts were reindexed
-        for modeling.
+        List of bodypart names in `coordinates`. Required when `coordinates` is
+        provided and bodyparts were reindexed for modeling.
 
     use_bodyparts: list of str, default=None
         Ordered list of bodyparts used for modeling. Required when
@@ -1019,6 +1018,7 @@ def generate_grid_movies(
     keypoint_colormap: str, default='autumn'
         Colormap used to color keypoints. Used when
         `overlay_keypoints=True`.
+
 
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """
@@ -2014,7 +2014,7 @@ def plot_pcs_3D(
 
     savefig : bool
         Whether to save the figure to a file. If true, the figure is
-        saved to `{project_dir}/pcs.html
+        saved to `{project_dir}/pcs.html`
 
     project_dir : str, default=None
         Path to the project directory. Required if `savefig` is True.
