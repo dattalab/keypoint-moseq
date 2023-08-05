@@ -552,7 +552,8 @@ def reindex_syllables_in_checkpoint(
     Returns
     -------
     index: array of shape (num_states,)
-        The index used for permuting syllable labels.
+        The index used for permuting syllable labels. If `index[i] = j`, then
+        the syllable formerly labeled `j` is now labeled `i`.
     """
     path = _get_path(project_dir, model_name, path, "checkpoint.h5")
 

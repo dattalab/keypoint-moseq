@@ -1542,15 +1542,9 @@ def generate_trajectory_plots(
         os.makedirs(output_dir)
     print(f"Saving trajectory plots to {output_dir}")
 
-    syllables = {k: v["syllable"] for k, v in results.items()}
-    centroids = {k: v["centroid"] for k, v in results.items()}
-    headings = {k: v["heading"] for k, v in results.items()}
-
     typical_trajectories = get_typical_trajectories(
         coordinates,
-        syllables,
-        centroids,
-        headings,
+        results,
         pre,
         post,
         min_frequency,
@@ -2235,7 +2229,7 @@ def plot_similarity_dendrogram(
     save_path = _get_path(
         project_dir, model_name, save_path, "similarity_dendrogram"
     )
-    
+
     distances, syllable_ixs = syllable_similarity(
         coordinates,
         results,
