@@ -2184,6 +2184,7 @@ def plot_similarity_dendrogram(
     project_dir=None,
     model_name=None,
     save_path=None,
+    metric="cosine",
     pre=5,
     post=15,
     min_frequency=0.005,
@@ -2223,6 +2224,9 @@ def plot_similarity_dendrogram(
         If None, the plot will be saved  to
         `{project_dir}/{name}/similarity_dendrogram.[pdf/png]`.
 
+    metric: str, default='cosine'
+        Distance metric to use. See :py:func:`scipy.spatial.pdist` for options.
+
     figsize: tuple of float, default=(10,5)
         Size of the dendrogram plot.
     """
@@ -2233,6 +2237,7 @@ def plot_similarity_dendrogram(
     distances, syllable_ixs = syllable_similarity(
         coordinates,
         results,
+        metric,
         pre,
         post,
         min_frequency,

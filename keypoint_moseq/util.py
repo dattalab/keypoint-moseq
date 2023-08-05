@@ -11,6 +11,7 @@ import jax, jax.numpy as jnp
 from scipy.ndimage import median_filter, convolve1d, gaussian_filter1d
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
+from scipy.spatial.distance import pdist, squareform
 from jax_moseq.models.keypoint_slds import inverse_rigid_transform
 from jax_moseq.utils import get_frequencies, batch
 
@@ -1139,6 +1140,7 @@ def get_typical_trajectories(
 def syllable_similarity(
     coordinates,
     results,
+    metric="cosine",
     pre=5,
     post=15,
     min_frequency=0.005,
@@ -1152,7 +1154,12 @@ def syllable_similarity(
     """Generate a distance matrix over syllable trajectories.
 
     See :py:func:`keypoint_moseq.util.get_typical_trajectories` for a
-    description of the parameters.
+    description of the parameters not listed below.
+
+    Parameters
+    ----------
+    metric: str, default='cosine'
+        Distance metric to use. See :py:func:`scipy.spatial.pdist` for options.
 
     Returns
     -------
@@ -1179,7 +1186,5 @@ def syllable_similarity(
 
     syllable_ixs = sorted(typical_trajectories.keys())
     Xs = np.stack([typical_trajectories[s] for s in syllable_ixs])
-    distances = np.linalg.norm(
-        Xs.reshape(len(Xs), 1, -1) - Xs.reshape(1, len(Xs), -1), axis=-1
-    )
+    distances = squareform(pdist(Xs.reshape(Xs.shape[0], -1), metric))
     return distances, syllable_ixs
