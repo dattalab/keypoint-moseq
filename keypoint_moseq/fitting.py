@@ -215,7 +215,7 @@ def apply_model(
     metadata,
     project_dir=None,
     model_name=None,
-    num_iters=20,
+    num_iters=50,
     ar_only=False,
     save_results=True,
     verbose=False,
