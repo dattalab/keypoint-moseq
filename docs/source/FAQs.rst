@@ -69,6 +69,7 @@ Non-rodents
 -----------
 Keypoint-MoSeq has only been validated on rodents (mice, rats, and anecdotal success with naked mole rats), but there is no reason in principle that it wouldn't work on other species such as insects. If you try it on another species, please let us know how it goes! A key consideration for non-rodents is setting the target syllable duration, which may differ from the 400ms, which we recommend for rodents. For additional information, see :ref:`Choosing the target syllable duration <target duration>`.
 
+.. _loading data:
 
 Loading keypoint tracking data
 ------------------------------
@@ -81,7 +82,7 @@ Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detec
 
 - If writing your own data loader, the output should be a ``coordinates`` dictionary that maps recording names to arrays of shape ``(num_frames, num_keypoints, num_dimensions)``, where ``num_dimensions`` is 2 or 3. The keypoint axis should correspond to the `bodyparts` list in the config. You can also include a ``confidences`` dictionary that maps recording names to arrays of shape ``(num_frames, num_keypoints)``. If your loader applies to a commonly used keypoint inference method, please let us know! We'd love to add it for others to use.
 
--  We are also happy to help write a loader for your data. Just open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and describe the method you used for keypoint tracking and the format of the data, including the file format, how it is organized into directories, and how the output files are typically named (especially in relation to the corresponding videos). If possible, also send one or more example files to calebsw@gmail.com. 
+- We are also happy to help write a loader for your data. Just open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and describe the method you used for keypoint tracking and the format of the data, including the file format, how it is organized into directories, and how the output files are typically named (especially in relation to the corresponding videos). If possible, also send one or more example files to calebsw@gmail.com. 
 
 
 Size variation between animals
@@ -90,7 +91,13 @@ Substantial size variation between animals may cause syllables to become over-fr
 
 3D keypoint data
 ----------------
-Keypoint-MoSeq can be used with 3D keypoint data. The only differences from the standard tutorial are in data loading and visualization. For data loading, we support Anipose and SLEAP-anipose (see `Loading keypoint tracking data`). For visualization, the :py:func:`keypoint_moseq.viz.plot_pcs` and :py:func:`keypoint_moseq.viz.generate_trajectory_plots` can be used exactly as in the standard tutorial. Both will render 2D projections in the x/y and x/z planes and also generate 3D interactive plots. The 3D plots are rendered in the notebook and can also be viewed offline in a browser using the saved .html file. Grid movies can also be generated, but they will only show 2D projections of the keypoints and not the underlying video. To generate grid movies from 3D data, include the flag `keypoints_only=True` and set the desired projection plane with the `use_dims` argument, e.g.::
+Keypoint-MoSeq can be used with 3D keypoint data.
+
+- For data loading, we support Anipose and SLEAP-anipose (see :ref:`Loading keypoint tracking data <loading data>`). 
+
+- For visualization, :py:func:`keypoint_moseq.viz.plot_pcs` and :py:func:`keypoint_moseq.viz.generate_trajectory_plots` can be run exactly as described in the tutorial. Both functions will render 2D projections in the x/y and x/z planes and also generate 3D interactive plots. The 3D plots are rendered in the notebook and can also be viewed offline in a browser using the saved .html file. 
+
+- Grid movies can also be generated, but they will only show 2D projections of the keypoints and not the underlying video. To generate grid movies from 3D data, include the flag ``keypoints_only=True`` and set the desired projection plane with the ``use_dims`` argument, e.g.::
 
    # generate grid movies in the x/y plane
    kpms.generate_grid_movies(
@@ -101,7 +108,7 @@ Keypoint-MoSeq can be used with 3D keypoint data. The only differences from the 
       keypoints_only=True, 
       use_dims=[0,1], 
       **config())
-      
+
 
 Modeling
 ========
