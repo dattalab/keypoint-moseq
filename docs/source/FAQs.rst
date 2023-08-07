@@ -221,12 +221,22 @@ There are two main causes of GPU out of memory (OOM) errors:
 
     - Larger GPUs can be accessed using colab pro. 
 
-  - Partially serialize the computations. By default, the modeling is parallelized across the full dataset. We also created an option, however, to split the data into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted)::
+
+  - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted)::
 
       from jax_moseq.utils import set_mixed_map_iters
       set_mixed_map_iters(4)
 
    This will split the data into 4 batches, which should reduce the memory requirements about 4-fold but also result in a 4-fold slow-down. The number of batches can be adjusted as needed.
+
+
+  - Use multiple GPUs if they are available. To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted)::
+
+      from jax_moseq.utils import set_mixed_map_gpus
+      set_mixed_map_gpus(2)
+
+    This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
+
 
   - Switch to single-precision computing by running the code below immediarely after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs::
 
@@ -254,6 +264,7 @@ There are two main causes of GPU out of memory (OOM) errors:
             coordinates, confidences = coordinates, confidences = kpms.load_keypoints(batch, 'deeplabcut')
             data = kpms.format_data(coordinates, confidences, **config())
             results = kpms.apply_model(model, pca, data, metadata, project_dir, model_name)
+
 
 NaNs during fitting
 -------------------
