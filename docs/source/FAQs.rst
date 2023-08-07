@@ -88,7 +88,20 @@ Size variation between animals
 ------------------------------
 Substantial size variation between animals may cause syllables to become over-fractionated, i.e. the same behaviors may be split into multiple syllables based on size alone. We plan to address this in a future release. Please get in touch if this is a pressing issue for you, either by opening a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_, or reaching out through our `Slack workspace <https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A>`_.
 
+3D keypoint data
+----------------
+Keypoint-MoSeq can be used with 3D keypoint data. The only differences from the standard tutorial are in data loading and visualization. For data loading, we support Anipose and SLEAP-anipose (see `Loading keypoint tracking data`). For visualization, the :py:func:`keypoint_moseq.viz.plot_pcs` and :py:func:`keypoint_moseq.viz.generate_trajectory_plots` can be used exactly as in the standard tutorial. Both will render 2D projections in the x/y and x/z planes and also generate 3D interactive plots. The 3D plots are rendered in the notebook and can also be viewed offline in a browser using the saved .html file. Grid movies can also be generated, but they will only show 2D projections of the keypoints and not the underlying video. To generate grid movies from 3D data, include the flag `keypoints_only=True` and set the desired projection plane with the `use_dims` argument, e.g.::
 
+   # generate grid movies in the x/y plane
+   kpms.generate_grid_movies(
+      results, 
+      project_dir, 
+      name, 
+      coordinates=coordinates, 
+      keypoints_only=True, 
+      use_dims=[0,1], 
+      **config())
+      
 
 Modeling
 ========

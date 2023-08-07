@@ -14,14 +14,13 @@ from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, dendrogram
 from textwrap import fill
 from PIL import Image
-
-plt.rcParams["figure.dpi"] = 100
-
 from keypoint_moseq.util import *
 from keypoint_moseq.io import load_results, _get_path
 from jax_moseq.models.keypoint_slds import center_embedding
 from jax_moseq.utils import get_durations, get_frequencies
 
+# set matplotlib defaults
+plt.rcParams["figure.dpi"] = 100
 
 # suppress warnings from imageio
 logging.getLogger().setLevel(logging.ERROR)
@@ -637,31 +636,51 @@ def _grid_movie_tile(
     cs = centroids[key][start - pre : start + post]
     h, c = headings[key][start], cs[pre]
     r = np.float32([[np.cos(h), np.sin(h)], [-np.sin(h), np.cos(h)]])
-    c = r @ c - window_size // 2
-    M = [[np.cos(h), np.sin(h), -c[0]], [-np.sin(h), np.cos(h), -c[1]]]
-
-    if videos is not None:
-        frames = videos[key][start - pre : start + post]
-    else:
-        w, h = (cs.max(0) + window_size // 2 + 1).astype(int)
-        frames = np.zeros((pre + post, h, w, 3), dtype=np.uint8)
 
     tile = []
-    for ii, (frame, c) in enumerate(zip(frames, cs)):
-        if overlay_keypoints:
-            coords = coordinates[key][start - pre + ii]
-            frame = overlay_keypoints_on_image(
-                frame, coords, edges=edges, **plot_options
-            )
 
-        frame = cv2.warpAffine(
-            frame, np.float32(M), (window_size, window_size)
+    if videos is not None:  # overlay keypoints on video frame, then transform
+        frames = videos[key][start - pre : start + post]
+        c = r @ c - window_size // 2
+        M = [[np.cos(h), np.sin(h), -c[0]], [-np.sin(h), np.cos(h), -c[1]]]
+
+        for ii, (frame, c) in enumerate(zip(frames, cs)):
+            if overlay_keypoints:
+                coords = coordinates[key][start - pre + ii]
+                frame = overlay_keypoints_on_image(
+                    frame, coords, edges=edges, **plot_options
+                )
+
+            frame = cv2.warpAffine(
+                frame, np.float32(M), (window_size, window_size)
+            )
+            frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
+            if 0 <= ii - pre <= end - start and dot_radius > 0:
+                pos = tuple(
+                    [int(x) for x in M @ np.append(c, 1) * scale_factor]
+                )
+                cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
+            tile.append(frame)
+
+    else:  # first transform keypoints, then overlay on black background
+        assert overlay_keypoints, fill(
+            "If no videos are provided, then `overlay_keypoints` must "
+            "be True. Otherwise there is nothing to show"
         )
-        frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
-        if 0 <= ii - pre <= end - start and dot_radius > 0:
-            pos = tuple([int(x) for x in M @ np.append(c, 1) * scale_factor])
-            cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
-        tile.append(frame)
+        scale_factor = scaled_window_size / window_size
+        coords = coordinates[key][start - pre : start + post]
+        coords = (coords - c) @ r.T * scale_factor + scaled_window_size // 2
+        cs = (cs - c) @ r.T * scale_factor + scaled_window_size // 2
+        background = np.zeros((scaled_window_size, scaled_window_size, 3))
+        for ii, (uvs, c) in enumerate(zip(coords, cs)):
+            frame = overlay_keypoints_on_image(
+                background.copy(), uvs, edges=edges, **plot_options
+            )
+            if 0 <= ii - pre <= end - start and dot_radius > 0:
+                pos = (int(c[0]), int(c[1]))
+                cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
+            tile.append(frame)
+
     return np.stack(tile)
 
 
@@ -892,6 +911,7 @@ def generate_grid_movies(
     keypoints_only=False,
     fps=30,
     plot_options={},
+    use_dims=[0, 1],
     keypoint_colormap="autumn",
     **kwargs,
 ):
@@ -952,7 +972,7 @@ def generate_grid_movies(
 
     coordinates: dict, default=None
         Dictionary mapping recording names to keypoint coordinates as
-        ndarrays of shape (n_frames, n_bodyparts, 2). Required when
+        ndarrays of shape (n_frames, n_bodyparts, [2 or 3]). Required when
         `window_size=None`, or `overlay_keypoints=True`, or if using
         density-based sampling (i.e. when `sampling_options['mode']=='density'`;
         see :py:func:`keypoint_moseq.util.sample_instances`).
@@ -1004,6 +1024,14 @@ def generate_grid_movies(
         this parameter is ignored and the framerate is determined
         inferred from the video files.
 
+    plot_options: dict, default={}
+        Dictionary of options to pass to
+        :py:func:`keypoint_moseq.viz.overlay_keypoints_on_image`.
+
+    use_dims: pair of ints, default=[0,1]
+        Dimensions to use for plotting keypoints. Only used when
+        `overlay_keypoints=True` and the keypoints are 3D.
+
     keypoint_colormap: str, default='autumn'
         Colormap used to color keypoints. Used when
         `overlay_keypoints=True`.
@@ -1011,8 +1039,7 @@ def generate_grid_movies(
 
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """
-    plot_options.update({"keypoint_colormap": keypoint_colormap})
-
+    # check inputs
     if not keypoints_only:
         assert (video_dir is not None) or (video_paths is not None), fill(
             "Either `video_dir` or `video_paths` is required unless `keypoints_only=True`"
@@ -1029,6 +1056,7 @@ def generate_grid_movies(
             "or `overlay_keypoints` is True"
         )
 
+    # prepare output directory
     output_dir = _get_path(
         project_dir, model_name, output_dir, "grid_movies", "output_dir"
     )
@@ -1036,15 +1064,18 @@ def generate_grid_movies(
         os.makedirs(output_dir)
     print(f"Writing grid movies to {output_dir}")
 
+    # reindex coordinates if necessary
     if not (bodyparts is None or use_bodyparts is None or coordinates is None):
         coordinates = reindex_by_bodyparts(
             coordinates, bodyparts, use_bodyparts
         )
 
+    # get edges for plotting skeleton
     edges = []
     if len(skeleton) > 0 and overlay_keypoints:
         edges = get_edges(use_bodyparts, skeleton)
 
+    # load results
     if results is None:
         results = load_results(project_dir, model_name)
 
@@ -1052,6 +1083,7 @@ def generate_grid_movies(
     centroids = {k: v["centroid"] for k, v in results.items()}
     headings = {k: v["heading"] for k, v in results.items()}
 
+    # load video readers if necessary
     if video_paths is None and not keypoints_only:
         video_paths = find_matching_videos(
             results.keys(),
@@ -1064,6 +1096,7 @@ def generate_grid_movies(
     else:
         videos = None
 
+    # sample instances for each syllable
     syllable_instances = get_syllable_instances(
         syllables,
         pre=pre,
@@ -1092,16 +1125,26 @@ def generate_grid_movies(
         **sampling_options,
     )
 
+    # if the data is 3D, pick 2 dimensions to use for plotting
+    keypoint_dimension = next(iter(centroids.values())).shape[-1]
+    if keypoint_dimension == 3:
+        ds = np.array(use_dims)
+        centroids = {k: v[:, ds] for k, v in centroids.items()}
+        if coordinates is not None:
+            coordinates = {k: v[:, :, ds] for k, v in coordinates.items()}
+
+    # smooth centroids and headings
     centroids, headings = filter_centroids_headings(
         centroids, headings, filter_size=filter_size
     )
 
+    # determine window size for grid movies
     if window_size is None:
         window_size = get_grid_movie_window_size(
             sampled_instances, centroids, headings, coordinates, pre, post
         )
 
-    # in practice we may need a smaller window...
+    # possibly reduce window size to keep grid movies under max_video_size
     scaled_window_size = max_video_size / max(rows, cols)
     scaled_window_size = int(np.floor(scaled_window_size / 16) * 16)
     scaled_window_size = min(scaled_window_size, window_size)
@@ -1118,6 +1161,10 @@ def generate_grid_movies(
             + "\n\n"
         )
 
+    # add colormap to plot options
+    plot_options.update({"keypoint_colormap": keypoint_colormap})
+
+    # generate grid movies
     for syllable, instances in tqdm.tqdm(
         sampled_instances.items(), desc="Generating grid movies", ncols=72
     ):
@@ -1228,7 +1275,7 @@ def plot_trajectories(
     line_width=3,
     alpha=0.2,
     num_timesteps=10,
-    plot_width=2.5,
+    plot_width=4,
     overlap=(0.2, 0),
     return_rasters=False,
 ):
@@ -1306,7 +1353,7 @@ def plot_trajectories(
     if isinstance(keypoint_colormap, list):
         colors = keypoint_colormap
     else:
-        colors = plt.cm.get_cmap(keypoint_colormap)(
+        colors = plt.colormaps[keypoint_colormap](
             np.linspace(0, 1, Xs[0].shape[1])
         )
 
@@ -1474,7 +1521,7 @@ def generate_trajectory_plots(
     ----------
     coordinates: dict
         Dictionary mapping recording names to keypoint coordinates as
-        ndarrays of shape (n_frames, n_bodyparts, 2).
+        ndarrays of shape (n_frames, n_bodyparts, [2 or 3]).
 
     results: dict
         Dictionary containing modeling results for a dataset (see
@@ -1683,8 +1730,8 @@ def overlay_keypoints_on_image(
     else:
         canvas = image
 
-    # get colors from matplotlib and convert to 0-255 range for openc
-    colors = plt.colormaps(keypoint_colormap)(
+    # get colors from matplotlib and convert to 0-255 range for opencv
+    colors = plt.colormaps[keypoint_colormap](
         np.linspace(0, 1, coordinates.shape[0])
     )
     colors = [tuple([int(c) for c in cs[:3] * 255]) for cs in colors]
@@ -2207,7 +2254,7 @@ def plot_similarity_dendrogram(
     ----------
     coordinates: dict
         Dictionary mapping recording names to keypoint coordinates as
-        ndarrays of shape (n_frames, n_bodyparts, 2).
+        ndarrays of shape (n_frames, n_bodyparts, [2 or 3]).
 
     results: dict
         Dictionary containing modeling results for a dataset (see
