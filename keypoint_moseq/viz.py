@@ -1583,7 +1583,7 @@ def generate_trajectory_plots(
     edges = [] if len(skeleton) == 0 else get_edges(use_bodyparts, skeleton)
 
     output_dir = _get_path(
-        project_dir, model_name, output_dir, "grid_movies", "output_dir"
+        project_dir, model_name, output_dir, "trajectory_plots", "output_dir"
     )
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -1603,7 +1603,7 @@ def generate_trajectory_plots(
     )
 
     syllable_ixs = sorted(typical_trajectories.keys())
-    titles = [f"Syllable {s}" for s in syllable_ixs]
+    titles = [f"Syllable{s}" for s in syllable_ixs]
     Xs = np.stack([typical_trajectories[s] for s in syllable_ixs])
 
     if Xs.shape[-1] == 3:
