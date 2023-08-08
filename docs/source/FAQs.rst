@@ -48,7 +48,7 @@ If your keypoint tracking data contains a high proportion of NaNs, you may get t
    <br />
 
 
-- Check if the NaNs are occuring in a specific subset of sessions. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic sessions. For a session-by-session breakdown of NaNs, run::
+- Check if the NaNs are occuring in a specific subset of recordings. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic recordings. For a recording-by-recording breakdown of NaNs, run::
 
    kpms.check_nan_proportions(coordinates, bodyparts, breakdown=True)
 
@@ -69,25 +69,45 @@ Non-rodents
 -----------
 Keypoint-MoSeq has only been validated on rodents (mice, rats, and anecdotal success with naked mole rats), but there is no reason in principle that it wouldn't work on other species such as insects. If you try it on another species, please let us know how it goes! A key consideration for non-rodents is setting the target syllable duration, which may differ from the 400ms, which we recommend for rodents. For additional information, see :ref:`Choosing the target syllable duration <target duration>`.
 
+.. _loading data:
 
-Loading data from methods other than SLEAP or DeepLabCut
---------------------------------------------------------
+Loading keypoint tracking data
+------------------------------
 Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detections. Currently we support SLEAP, DeepLabCut, anipose, and SLEAP-anipose. For methods not on this list, you can write a custom loading function or get in touch and request it as a new feature. 
 
-- If using one of the supported formats, data can be loaded as follows, optionally replacing ``'deeplabcut'`` with one of the following: ``'sleap', 'anipose', 'sleap-anipose'``. The file formats expected in each case are described in the docstirng for :py:func:`keypoint_moseq.io.load_keypoints`::
+- If using one of the supported formats, data can be loaded as follows, optionally replacing ``'deeplabcut'`` with one of the following: ``'sleap', 'anipose', 'sleap-anipose', 'nwb'``. The file formats expected in each case are described in the docstirng for :py:func:`keypoint_moseq.io.load_keypoints`::
 
    coordinates, confidences, bodyparts = kpms.load_keypoints(keypoint_data_path, 'deeplabcut')
 
 
-- If writing your own data loader, the output should be a ``coordinates`` dictionary that maps session names to arrays of shape ``(num_frames, num_keypoints, num_dimensions)``, where ``num_dimensions`` is 2 or 3. The keypoint axis should correspond to the `bodyparts` list in the config. You can also include a ``confidences`` dictionary that maps session names to arrays of shape ``(num_frames, num_keypoints)``. If your loader applies to a commonly used keypoint inference method, please let us know! We'd love to add it for others to use.
+- If writing your own data loader, the output should be a ``coordinates`` dictionary that maps recording names to arrays of shape ``(num_frames, num_keypoints, num_dimensions)``, where ``num_dimensions`` is 2 or 3. The keypoint axis should correspond to the `bodyparts` list in the config. You can also include a ``confidences`` dictionary that maps recording names to arrays of shape ``(num_frames, num_keypoints)``. If your loader applies to a commonly used keypoint inference method, please let us know! We'd love to add it for others to use.
 
--  We are also happy to help write a loader for your data. Just open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and describe the method you used for keypoint tracking and the format of the data, including the file format, how it is organized into directories, and how the output files are typically named (especially in relation to the corresponding videos). If possible, also send one or more example files to calebsw@gmail.com. 
+- We are also happy to help write a loader for your data. Just open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and describe the method you used for keypoint tracking and the format of the data, including the file format, how it is organized into directories, and how the output files are typically named (especially in relation to the corresponding videos). If possible, also send one or more example files to calebsw@gmail.com. 
 
 
 Size variation between animals
 ------------------------------
 Substantial size variation between animals may cause syllables to become over-fractionated, i.e. the same behaviors may be split into multiple syllables based on size alone. We plan to address this in a future release. Please get in touch if this is a pressing issue for you, either by opening a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_, or reaching out through our `Slack workspace <https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A>`_.
 
+3D keypoint data
+----------------
+Keypoint-MoSeq can be used with 3D keypoint data.
+
+- For data loading, we support Anipose and SLEAP-anipose (see :ref:`Loading keypoint tracking data <loading data>`). 
+
+- For visualization, :py:func:`keypoint_moseq.viz.plot_pcs` and :py:func:`keypoint_moseq.viz.generate_trajectory_plots` can be run exactly as described in the tutorial. Both functions will render 2D projections in the x/y and x/z planes and also generate 3D interactive plots. The 3D plots are rendered in the notebook and can also be viewed offline in a browser using the saved .html file. 
+
+- Grid movies can also be generated, but they will only show 2D projections of the keypoints and not the underlying video. To generate grid movies from 3D data, include the flag ``keypoints_only=True`` and set the desired projection plane with the ``use_dims`` argument, e.g.::
+
+   # generate grid movies in the x/y plane
+   kpms.generate_grid_movies(
+      results, 
+      project_dir, 
+      name, 
+      coordinates=coordinates, 
+      keypoints_only=True, 
+      use_dims=[0,1], 
+      **config())
 
 
 Modeling
@@ -97,7 +117,7 @@ Validating model outputs
 ------------------------
 **To confirm that model fitting was successful, you can check the following:**
 
-- Syllables have the target duration. You can check the median duration by inspecting the plots generated during fitting (as shown below). You can also plot the distribution of syllable durations using ``kpms.plot_duration_distribution(name=name, project_dir=project_dir)``. If the median duration is below/above the target value, adjust the ``kappa`` hyperparameter and re-fit the model. Initially it may be necessary to change `kappa` by a factor of 10 or more. 
+- Syllables have the target duration. You can check the median duration by inspecting the plots generated during fitting (as shown below). You can also plot the distribution of syllable durations using ``kpms.plot_duration_distribution(project_dir, model_name)``. If the median duration is below/above the target value, adjust the ``kappa`` hyperparameter and re-fit the model. Initially it may be necessary to change `kappa` by a factor of 10 or more. 
 
 - The syllable labels stabilized during the last few iterations of model fitting. This can be checked by inspection of the heatmaps generated during model fitting (e.g. the right-most subplot below).
 
@@ -128,18 +148,19 @@ It may be necessary to re-run the fitting process a few times to choose a good v
 
 Detecting existing syllables in new data
 ----------------------------------------
-If you already have a trained a MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function. This function takes as input the coordinates (and confidences) of the new data, and returns the syllable sequence and other outputs of the model. For example::
+If you already have a trained a MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function::
 
-   # load saved model checkpoint
-   checkpoint = kpms.load_checkpoint(project_dir=project_dir, name=name)
+   # load the most recent model checkpoint and pca object
+   model = kpms.load_checkpoint(project_dir, model_name)[0]
+   pca = kpms.load_pca(project_dir)
 
    # load new data (e.g. from deeplabcut)
    new_data = 'path/to/new/data/' # can be a file, a directory, or a list of files
-   coordinates, confidences = kpms.load_deeplabcut_results(new_data)
+   coordinates, confidences, bodyparts = kpms.load_keypoints(new_data, 'deeplabcut')
+   data, metadata = kpms.format_data(coordinates, confidences, **config())
 
-   results = kpms.apply_model(coordinates=coordinates, confidences=confidences, 
-                              project_dir=project_dir, pca=kpms.load_pca(project_dir),
-                              **config(), **checkpoint)
+   # apply saved model to new data
+   results = kpms.apply_model(model, pca, data, metadata, project_dir, model_name)
 
 
 Continue model fitting but with new data
@@ -150,38 +171,35 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
 
    project_dir = 'project/directory'
    config = lambda: kpms.load_config(project_dir)
-   name = 'name_of_model' (e.g. '2023_03_16-15_50_11')
+   model_name = 'name_of_model' (e.g. '2023_03_16-15_50_11')
    
    # load and format new data (e.g. from DeepLabCut)
-   coordinates, confidences,bodyparts = kpms.load_deeplabcut_results(dlc_results_directory)
-   data, labels = kpms.format_data(coordinates, confidences=confidences, **config())
+   new_data = 'path/to/new/data/' # can be a file, a directory, or a list of files
+   coordinates, confidences,bodyparts = kpms.load_keypoints(new_data, 'deeplabcut')
+   data, metadata = kpms.format_data(coordinates, confidences, **config())
 
    # load previously saved PCA and model checkpoint
    pca = kpms.load_pca(project_dir)
-   checkpoint = kpms.load_checkpoint(project_dir=project_dir, name=name)
+   model, _, _, current_iter = kpms.load_checkpoint(project_dir, model_name)
 
    # initialize a new model using saved parameters
-   model = kpms.init_model(data, pca=pca, params=checkpoint['params'], **config())
-
+   model = kpms.init_model(data, pca=pca, params=model['params'], hypparams=model['hypparams'])
+   
    # continue fitting, now with the new data
-   model, history, name = kpms.fit_model(model, data, labels, num_iters=20, project_dir=project_dir)
-
+   model = kpms.fit_model(
+      model, data, metadata, project_dir, model_name, ar_only=False, 
+      start_iter=current_iter, num_iters=current_iter+200)[0]
+      
 
 Interpreting model outputs
 --------------------------
 The final output of keypoint MoSeq is a results .h5 file (and optionally a directory of .csv files) that contain the following information:
 
-- Syllables (reindexed) 
-   The syllable label assigned to each frame. The syllable labels are reindexed so that the most common syllable is labeled 0, the second most common is labeled 1, etc. Generally there will be a core set of syllables that are used a nontrivial number of times (perhaps a few dozen), and then a long tail of syllables that are used extremely rarely. The long tail should be ignored (we typically use a frequency cutoff of 0.5%). To plot the distribution of syllable frequencies, use ``kpms.plot_syllable_frequencies(name=name, project_dir=project_dir)``.
-
-- Syllables (non-reindexed)
-   The non-reindexed syllable label assigned to each frame (i.e. the state indexes assigned by the model). Unless you are doing something unusual, you should ignore these.
+- Syllables
+   The syllable label assigned to each frame (i.e. the state indexes assigned by the model).
 
 - Centroid and heading
    The centroid and heading of the animal in each frame, as estimated by the model. 
-
-- Estimated keypoint coordinates
-   The denoised coordinates of each keypoint in each frame, as estimated by the model. These coordinates reflect the model's estimate of the "true" location of keypoint, once noise has been removed. They may be useful if the original coordinates are noisy or frequently non-detected. It's important to note, however, that these coordinates are mainly a byproduct of the model fitting process, and have not been formally validated as a replacement for the original detections. So use with caution!
 
 - Latent state
    Low-dimensional representation of the animal's pose in each frame. These are similar to PCA scores, are modified to reflect the pose dynamics and noise estimates inferred by the model. 
@@ -223,6 +241,23 @@ There are two main causes of GPU out of memory (OOM) errors:
 
     - Larger GPUs can be accessed using colab pro. 
 
+
+  - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted)::
+
+      from jax_moseq.utils import set_mixed_map_iters
+      set_mixed_map_iters(4)
+
+   This will split the data into 4 batches, which should reduce the memory requirements about 4-fold but also result in a 4-fold slow-down. The number of batches can be adjusted as needed.
+
+
+  - Use multiple GPUs if they are available. To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted)::
+
+      from jax_moseq.utils import set_mixed_map_gpus
+      set_mixed_map_gpus(2)
+
+    This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
+
+
   - Switch to single-precision computing by running the code below immediarely after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs::
 
       import jax
@@ -234,24 +269,21 @@ There are two main causes of GPU out of memory (OOM) errors:
     - To fit a subset of the data, specify the subset as a list of paths during data loading::
 
         initial_data = ['path/to/file1.h5', 'path/to/file2.h5']
-        coordinates, confidences = kpms.load_deeplabcut_results(initial_data)
+        coordinates, confidences = kpms.load_keypoints(initial_data, 'deeplabcut')
 
     - After model fitting, apply the model serially to new data as follows::
 
-        checkpoint = kpms.load_checkpoint(project_dir=project_dir, name=name)
+        model = kpms.load_checkpoint(project_dir, model_name)[0]
+        pca = kpms.load_pca(project_dir)
 
         new_data_batch1 = ['path/to/file3.h5', 'path/to/second/file4.h5']
         new_data_batch2 = ['path/to/file5.h5', 'path/to/second/file6.h5']
 
         for batch in [initial_data, new_data_batch1, new_data_batch2]:
 
-            coordinates, confidences = kpms.load_deeplabcut_results(batch)
-
-            results = kpms.apply_model(
-                coordinates=coordinates, confidences=confidences, 
-                use_saved_states=False, pca=kpms.load_pca(project_dir),
-                project_dir=project_dir, **config(), **checkpoint, num_iters=5)
-
+            coordinates, confidences = coordinates, confidences = kpms.load_keypoints(batch, 'deeplabcut')
+            data = kpms.format_data(coordinates, confidences, **config())
+            results = kpms.apply_model(model, pca, data, metadata, project_dir, model_name)
 
 
 NaNs during fitting
