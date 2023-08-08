@@ -74,8 +74,7 @@ def fit_model(
     """Fit a model to data.
 
     This method optionally:
-        - saves checkpoints of the model and data at regular intervals (see
-          :py:func:`jax_moseq.io.save_checkpoint`)
+        - saves checkpoints of the model and data at regular intervals
         - plots of the model's progress during fitting (see
           :py:func:`jax_moseq.viz.plot_progress`)
 

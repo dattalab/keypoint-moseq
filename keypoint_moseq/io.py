@@ -617,7 +617,7 @@ def extract_results(
 
     metadata: tuple (keys, bounds)
         Recordings and start/end frames for the data (see
-        :py:func:`keypoint_moseq.io.format_data`).
+        :py:func:`keypoint_moseq.util.format_data`).
 
     save_results : bool, default=True
         If True, the model outputs will be saved to disk.
