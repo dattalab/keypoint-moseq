@@ -498,6 +498,10 @@ def load_checkpoint(
         Data dictionary containing observations, confidences, mask and
         associated metadata (see :py:func:`keypoint_moseq.util.format_data`).
 
+    metadata: tuple (keys, bounds)
+        Recordings and start/end frames for the data (see
+        :py:func:`keypoint_moseq.util.format_data`).
+
     iteration: int
         Iteration of model fitting corresponding to the loaded snapshot.
     """
