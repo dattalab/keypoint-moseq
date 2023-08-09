@@ -292,6 +292,7 @@ def apply_model(
         pca=pca,
         data=data,
         params=model["params"],
+        hypparams=model["hypparams"],
         **kwargs,
     )
 
