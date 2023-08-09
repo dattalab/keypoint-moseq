@@ -37,8 +37,6 @@ from jax_moseq.models.keypoint_slds import align_egocentric
 
 na = np.newaxis
 
-output_notebook()
-
 
 def get_syllable_names(project_dir, model_name, syllable_ixs):
     """Get syllable names from syll_info.yaml file. Labels consist of the
