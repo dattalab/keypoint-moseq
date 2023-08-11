@@ -10,10 +10,13 @@ import os
 import pandas as pd
 from textwrap import fill
 import sleap_io
-from pynwb import NWBHDF5IO
+import imageio.v3
+from pynwb import NWBHDF5IO, NWBFile, TimeSeries
+from pynwb.behavior import SpatialSeries, Position, SpatialSeries, CompassDirection
 from ndx_pose import PoseEstimation
+from ndx_events import LabeledEvents
 
-from keypoint_moseq.util import list_files_with_exts, check_nan_proportions
+from keypoint_moseq.util import list_files_with_exts, check_nan_proportions, find_matching_videos
 from jax_moseq.utils import get_frequencies, unbatch
 
 
@@ -30,9 +33,7 @@ def _build_yaml(sections, comments):
     return "\n".join(text_blocks)
 
 
-def _get_path(
-    project_dir, model_name, path, filename, pathname_for_error_msg="path"
-):
+def _get_path(project_dir, model_name, path, filename, pathname_for_error_msg="path"):
     if path is None:
         assert project_dir is not None and model_name is not None, fill(
             f"`model_name` and `project_dir` are required if `{pathname_for_error_msg}` is None."
@@ -257,16 +258,10 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
 
     if build_indexes:
         config["anterior_idxs"] = jnp.array(
-            [
-                config["use_bodyparts"].index(bp)
-                for bp in config["anterior_bodyparts"]
-            ]
+            [config["use_bodyparts"].index(bp) for bp in config["anterior_bodyparts"]]
         )
         config["posterior_idxs"] = jnp.array(
-            [
-                config["use_bodyparts"].index(bp)
-                for bp in config["posterior_bodyparts"]
-            ]
+            [config["use_bodyparts"].index(bp) for bp in config["posterior_bodyparts"]]
         )
 
     if not "skeleton" in config or config["skeleton"] is None:
@@ -296,9 +291,7 @@ def update_config(project_dir, **kwargs):
       >>> print(load_config(project_dir)['trans_hypparams']['kappa'])
       100
     """
-    config = load_config(
-        project_dir, check_if_valid=False, build_indexes=False
-    )
+    config = load_config(project_dir, check_if_valid=False, build_indexes=False)
     config.update(kwargs)
     generate_config(project_dir, **config)
 
@@ -360,24 +353,16 @@ def setup_project(
             dlc_config = yaml.safe_load(stream)
             if dlc_config is None:
                 raise RuntimeError(
-                    f"{deeplabcut_config} does not exists or is not a"
-                    " valid yaml file"
+                    f"{deeplabcut_config} does not exists or is not a" " valid yaml file"
                 )
-            if (
-                "multianimalproject" in dlc_config
-                and dlc_config["multianimalproject"]
-            ):
+            if "multianimalproject" in dlc_config and dlc_config["multianimalproject"]:
                 dlc_options["bodyparts"] = dlc_config["multianimalbodyparts"]
-                dlc_options["use_bodyparts"] = dlc_config[
-                    "multianimalbodyparts"
-                ]
+                dlc_options["use_bodyparts"] = dlc_config["multianimalbodyparts"]
             else:
                 dlc_options["bodyparts"] = dlc_config["bodyparts"]
                 dlc_options["use_bodyparts"] = dlc_config["bodyparts"]
             dlc_options["skeleton"] = dlc_config["skeleton"]
-            dlc_options["video_dir"] = os.path.join(
-                dlc_config["project_path"], "videos"
-            )
+            dlc_options["video_dir"] = os.path.join(dlc_config["project_path"], "videos")
         options = {**dlc_options, **options}
 
     elif sleap_file is not None:
@@ -391,16 +376,11 @@ def setup_project(
             )
             skeleton = slp_file.skeletons[0]
             node_names = skeleton.node_names
-            edge_names = [
-                [e.source.name, e.destination.name] for e in skeleton.edges
-            ]
+            edge_names = [[e.source.name, e.destination.name] for e in skeleton.edges]
         else:
             with h5py.File(sleap_file, "r") as f:
                 node_names = [n.decode("utf-8") for n in f["node_names"]]
-                edge_names = [
-                    [n.decode("utf-8") for n in edge]
-                    for edge in f["edge_names"]
-                ]
+                edge_names = [[n.decode("utf-8") for n in edge] for edge in f["edge_names"]]
         sleap_options["bodyparts"] = node_names
         sleap_options["use_bodyparts"] = node_names
         sleap_options["skeleton"] = edge_names
@@ -456,15 +436,11 @@ def load_pca(project_dir, pca_path=None):
     """
     if pca_path is None:
         pca_path = os.path.join(project_dir, "pca.p")
-        assert os.path.exists(pca_path), fill(
-            f"No PCA model found at {pca_path}"
-        )
+        assert os.path.exists(pca_path), fill(f"No PCA model found at {pca_path}")
     return joblib.load(pca_path)
 
 
-def load_checkpoint(
-    project_dir=None, model_name=None, path=None, iteration=None
-):
+def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None):
     """Load data and model snapshot from a saved checkpoint.
 
     The checkpoint path can be specified directly via `path` or else it is
@@ -566,9 +542,7 @@ def reindex_syllables_in_checkpoint(
             num_states = f[f"model_snapshots/{last_iter}/params/pi"].shape[0]
             z = f[f"model_snapshots/{last_iter}/states/z"][()]
             mask = f["data/mask"][()]
-        index = np.argsort(get_frequencies(z, mask, num_states, runlength))[
-            ::-1
-        ]
+        index = np.argsort(get_frequencies(z, mask, num_states, runlength))[::-1]
 
     def _reindex(model):
         model["params"]["betas"] = model["params"]["betas"][index]
@@ -648,10 +622,7 @@ def extract_results(
     # extract syllables; repeat first syllable an extra `nlags` times
     nlags = states["x"].shape[1] - states["z"].shape[1]
     syllables = unbatch(states["z"], keys, bounds + np.array([nlags, 0]))
-    syllables = {
-        k: np.pad(z[nlags:], (nlags, 0), mode="edge")
-        for k, z in syllables.items()
-    }
+    syllables = {k: np.pad(z[nlags:], (nlags, 0), mode="edge") for k, z in syllables.items()}
 
     # extract latent state, centroid, and heading
     latent_state = unbatch(states["x"], keys, bounds)
@@ -696,9 +667,7 @@ def load_results(project_dir=None, model_name=None, path=None):
     return load_hdf5(path)
 
 
-def save_results_as_csv(
-    results, project_dir=None, model_name=None, save_dir=None, path_sep="-"
-):
+def save_results_as_csv(results, project_dir=None, model_name=None, save_dir=None, path_sep="-"):
     """Save modeling results to csv format.
 
     This function creates a directory and then saves a separate csv file for
@@ -723,9 +692,7 @@ def save_results_as_csv(
         If a path separator ("/" or "\") is present in the recording name, it
         will be replaced with `path_sep` when saving the csv file.
     """
-    save_dir = _get_path(
-        project_dir, model_name, save_dir, "results", "save_dir"
-    )
+    save_dir = _get_path(project_dir, model_name, save_dir, "results", "save_dir")
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -748,15 +715,10 @@ def save_results_as_csv(
 
         if "latent_state" in results[key].keys():
             latent_dim = results[key]["latent_state"].shape[1]
-            column_names.append(
-                [f"latent_state {i}" for i in range(latent_dim)]
-            )
+            column_names.append([f"latent_state {i}" for i in range(latent_dim)])
             data.append(results[key]["latent_state"])
 
-        dfs = [
-            pd.DataFrame(arr, columns=cols)
-            for arr, cols in zip(data, column_names)
-        ]
+        dfs = [pd.DataFrame(arr, columns=cols) for arr, cols in zip(data, column_names)]
         df = pd.concat(dfs, axis=1)
 
         for col in df.select_dtypes(include=[np.floating]).columns:
@@ -887,9 +849,7 @@ def load_keypoints(
         bodyparts in `coordinates` and `confidences`.
     """
     formats = ["deeplabcut", "sleap", "anipose", "sleap-anipose", "nwb"]
-    assert format in formats, fill(
-        f"Unrecognized format {format}. Must be one of {formats}"
-    )
+    assert format in formats, fill(f"Unrecognized format {format}. Must be one of {formats}")
 
     if extension is None:
         extensions = {
@@ -910,9 +870,7 @@ def load_keypoints(
         "nwb": _nwb_loader,
     }[format]
 
-    filepaths = list_files_with_exts(
-        filepath_pattern, extensions, recursive=recursive
-    )
+    filepaths = list_files_with_exts(filepath_pattern, extensions, recursive=recursive)
     assert len(filepaths) > 0, fill(
         f"No files with extensions {extensions} found for {filepath_pattern}"
     )
@@ -920,12 +878,8 @@ def load_keypoints(
     coordinates, confidences, bodyparts = {}, {}, None
     for filepath in tqdm.tqdm(filepaths, desc=f"Loading keypoints", ncols=72):
         try:
-            name = _name_from_path(
-                filepath, path_in_name, path_sep, remove_extension
-            )
-            new_coordinates, new_confidences, bodyparts = loader(
-                filepath, name
-            )
+            name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
+            new_coordinates, new_confidences, bodyparts = loader(filepath, name)
 
             if set(new_coordinates.keys()) & set(coordinates.keys()):
                 raise ValueError(
@@ -942,9 +896,7 @@ def load_keypoints(
         coordinates.update(new_coordinates)
         confidences.update(new_confidences)
 
-    assert len(coordinates) > 0, fill(
-        f"No valid results found for {filepath_pattern}"
-    )
+    assert len(coordinates) > 0, fill(f"No valid results found for {filepath_pattern}")
 
     check_nan_proportions(coordinates, bodyparts)
     return coordinates, confidences, bodyparts
@@ -999,12 +951,8 @@ def _sleap_loader(filepath, name):
         coordinates = {name: coords[0].T}
         confidences = {name: confs[0].T}
     else:
-        coordinates = {
-            f"{name}_track{i}": coords[i].T for i in range(coords.shape[0])
-        }
-        confidences = {
-            f"{name}_track{i}": confs[i].T for i in range(coords.shape[0])
-        }
+        coordinates = {f"{name}_track{i}": coords[i].T for i in range(coords.shape[0])}
+        confidences = {f"{name}_track{i}": confs[i].T for i in range(coords.shape[0])}
     return coordinates, confidences, bodyparts
 
 
@@ -1033,13 +981,8 @@ def _sleap_anipose_loader(filepath, name):
             coordinates = {name: coords[:, 0]}
             confidences = {name: confs[:, 0]}
         else:
-            coordinates = {
-                f"{name}_track{i}": coords[:, i]
-                for i in range(coords.shape[1])
-            }
-            confidences = {
-                f"{name}_track{i}": confs[:, i] for i in range(coords.shape[1])
-            }
+            coordinates = {f"{name}_track{i}": coords[:, i] for i in range(coords.shape[1])}
+            confidences = {f"{name}_track{i}": confs[:, i] for i in range(coords.shape[1])}
     return coordinates, confidences, bodyparts
 
 
@@ -1047,9 +990,7 @@ def _load_nwb_pose_obj(io, filepath):
     """Grab PoseEstimation object from an opened .nwb file."""
     all_objs = io.read().all_children()
     pose_objs = [o for o in all_objs if isinstance(o, PoseEstimation)]
-    assert len(pose_objs) > 0, fill(
-        f"No PoseEstimation objects found in {filepath}"
-    )
+    assert len(pose_objs) > 0, fill(f"No PoseEstimation objects found in {filepath}")
     assert len(pose_objs) == 1, fill(
         f"Found multiple PoseEstimation objects in {filepath}. "
         "This is not currently supported. Please open a github "
@@ -1068,15 +1009,9 @@ def _nwb_loader(filepath, name):
             [pose_obj.pose_estimation_series[bp].data[()] for bp in bodyparts],
             axis=1,
         )
-        if (
-            "confidence"
-            in pose_obj.pose_estimation_series[bodyparts[0]].fields
-        ):
+        if "confidence" in pose_obj.pose_estimation_series[bodyparts[0]].fields:
             confs = np.stack(
-                [
-                    pose_obj.pose_estimation_series[bp].confidence[()]
-                    for bp in bodyparts
-                ],
+                [pose_obj.pose_estimation_series[bp].confidence[()] for bp in bodyparts],
                 axis=1,
             )
         else:
@@ -1109,6 +1044,242 @@ def save_hdf5(filepath, save_dict, datapath=None):
         else:
             for k, tree in save_dict.items():
                 _savetree_hdf5(jax.device_get(tree), f, k)
+
+
+def save_results_as_nwb(
+    results_dict,
+    root_folder,
+    recording_start_times=None,
+    recording_descriptions=None,
+    subject_names=None,
+    video_dir=None,
+    sample_rate=None,
+):
+    """Save a dict of pytrees containing modeling results to an hdf5 file.
+
+    Since subject metadata is generally not available, data from each recording
+    will be placed in an NWB file directly under the root folder, instead of in
+    subject-wise folders as is required by the DANDI standard. A mapping from
+    recording names to subjects may be provided, in which case this function
+    will store each recording's NWB file in a directory named for the subject.
+
+    Parameters
+    ----------
+    root_folder : str
+        Path to save NWB recording files.
+
+    results_dict : dict
+        Mapping from recording names to modeling results. See
+        :py:func:`keypoint_moseq.io.extract_results`.
+
+    recording_start_times : dict, default=None
+        Mapping from recording names to the recording start time as a python
+        datetime object, as is required for writing NWB files. Required if any
+        of the NWB files do not exist.
+
+    recording_descriptions : dict or str, default=None
+        Mapping from recording names to session descriptions , as is required
+        for writing NWB files. If a string is given, then the same description
+        will be used for each session. Required if any of the NWB files do not
+        exist.
+
+    subject_names : dict, default=None
+        Mapping from recording names to names of subdirectories of the root
+        folder in which that recording NWB should be stored.
+
+    overwrite : bool, default=False
+        Whether or not to overwrite existing data in the NWB file by dropping
+        and recreating these datasets.
+
+    video_dir : str, default=None
+        Required if `sample_rate` not provided. If given, will be used to locate
+        video files and extract timestamps.
+
+    sample_rate : float, default=None
+        Required if `video_dir` is not provided, in which case will be used as a
+        fallback to determine tiemstamps.
+    """
+    assert video_dir is not None or sample_rate is not None, fill(
+        f"One of `video_dir` or `sample_rate` are required."
+    )
+
+    if isinstance(recording_descriptions, str):
+        recording_descriptions = {
+            recording_name: recording_descriptions for recording_name in results_dict.keys()
+        }
+
+    if not os.path.exists(root_folder):
+        os.makedirs(root_folder)
+
+    for recording_name in results_dict.keys():
+        if video_dir is not None:
+            timestamps = _get_video_timestamps(recording_name, video_dir)
+        else:
+            timestamps = np.arange(len(results_dict[recording_name]["latent_state"])) * (
+                1 / sample_rate
+            )
+
+        if subject_names is None:
+            nwb_path = os.path.join(root_folder, f"{recording_name}.nwb")
+        else:
+            nwb_path = os.path.join(
+                root_folder, subject_names[recording_name], f"{recording_name}.nwb"
+            )
+
+        # read or create the nwb file
+        if os.path.exists(nwb_path):
+            with NWBHDF5IO(nwb_path, "r") as io:
+                nwbfile = io.read()
+            exists = False
+        else:
+            assert recording_descriptions is not None and recording_start_times is not None, fill(
+                f"File f{nwb_path} does not exist, so `recording_descriptions` and "
+                "`recording_start_times` parameters are required."
+            )
+            nwbfile = NWBFile(
+                session_description=recording_descriptions[recording_name],
+                identifier=recording_name,
+                session_start_time=recording_start_times[recording_name],
+            )
+            exists = False
+
+        # add the processing modules and write
+        _add_modeling_results_to_nwbfile(nwbfile, results_dict[recording_name], timestamps)
+
+        with NWBHDF5IO(nwb_path, "r+" if exists else "w") as io:
+            io.write(nwbfile)
+
+
+def _add_modeling_results_to_nwbfile(nwbfile, recording_results, timestamps):
+    """Add data of one recording from a results dictionary to an NWBFile object.
+
+    Parameters
+    ----------
+    nwbfile : NWBFile
+        Object to add datasets to.
+
+    recording_results : dict
+        A value from the output of :py:func:`keypoint_moseq.io.extract_results`
+
+    timestamps : np.array (n_frames,)
+        Array of timestamps, in seconds, corresponding to each frame of
+        the arrays in `reocrding_results`.
+    """
+
+    # ----- set up data containers: spatial
+
+    position_spatial_series = SpatialSeries(
+        name="centroid_series",
+        description="Position (x, y) of the subject's centroid.",
+        data=recording_results["centroid"],
+        timestamps=timestamps,
+        reference_frame=("origin corresponds to the top left corner of " "the video."),
+        unit="pixels",
+    )
+    position = Position(spatial_series=position_spatial_series, name="centroid")
+    timestamps_ds = position_spatial_series.timestamps
+
+    direction_spatial_series = SpatialSeries(
+        name="heading_series",
+        description=("Inferred heading direction of the mouse."),
+        data=recording_results["heading"],
+        timestamps=timestamps_ds,
+        reference_frame="0 points along positive x axis, towards the right side of the "
+        "video frame.",
+        unit="radians",
+    )
+    direction = CompassDirection(spatial_series=direction_spatial_series, name="heading")
+
+    # ----- set up data containers: latents / syllables
+
+    latents = TimeSeries(
+        name="pose_latents",
+        description="Latent pose states estimated by keypoint-moseq.",
+        data=recording_results["latent_state"],
+        timestamps=timestamps,
+        unit="n/a",
+    )
+
+    syll_ix, syll_lab = _dense_syllables_to_events(recording_results["syllable"])
+    syllables = LabeledEvents(
+        name="syllable",
+        description="Syllable onset times.",
+        timestamps=timestamps[syll_ix],
+        data=syll_lab,
+        labels=[f"Syllable {i}" for i in range(np.max(syll_lab + 1))],
+    )
+
+    # ----- add data containers to nwb file
+
+    if "KeypointMoSeq" in nwbfile.processing:
+        behavior_pm = nwbfile.processing["KeypointMoSeq"]
+    else:
+        behavior_pm = nwbfile.create_processing_module(
+            name="KeypointMoSeq", description="Keypoint-MoSeq modeling results"
+        )
+    behavior_pm.add(position)
+    behavior_pm.add(direction)
+    behavior_pm.add(latents)
+    behavior_pm.add(syllables)
+
+    return nwbfile
+
+
+def _get_video_timestamps(
+    session_name,
+    video_dir,
+):
+    """
+    Get timestamps from a the video file matching a session name
+
+    Parameters
+    ----------
+    session_name : str
+        Identifier for the session as used in DLC/SLEAP/kpms
+
+    video_dir : str
+        Directory in which to search for video files
+
+    Returns
+    -------
+    timestamps : np.array (n_frames,)
+        Array of timestamps, in seconds.
+    """
+
+    # pulled from : github.com/DeepLabCut/DLC2NWB
+
+    # find the recording and extract fps
+    video_path = find_matching_videos([session_name], video_dir)[0]
+    meta = imageio.v3.immeta(video_path, plugin="pyav")
+    if "duration" not in meta or "fps" not in meta:
+        raise IOError("Missing duration / fps to read timestamps " f"from video file: {video_path}")
+
+    # construct timestamps array
+    n_frames = int(meta["duration"] / (1 / meta["fps"]))
+    timestamps = np.arange(n_frames) * (1 / meta["fps"])
+    return timestamps
+
+
+def _dense_syllables_to_events(syllables):
+    """
+    Convert syllable labels at each timestamps to an array of changepoints for
+    storing in an NWB file.
+
+    Parameters
+    ----------
+    syllables : array (n_frames,)
+        Syllable label for each frame.
+
+    Returns
+    -------
+    ixs : array (n_changept,)
+        Frame indices of the onset of each new syllable.
+
+    labels : array (n_changept,)
+        Label of the syllable switched to at each changepoint.
+    """
+    changepoints = np.where(syllables[1:] != syllables[:-1])[0]
+    return changepoints, syllables[changepoints]
 
 
 def load_hdf5(filepath, datapath=None):
