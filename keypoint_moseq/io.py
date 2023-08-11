@@ -933,11 +933,13 @@ def load_keypoints(
 
             if set(new_coordinates.keys()) & set(coordinates.keys()):
                 raise ValueError(
-                    fill(
-                        f"Duplicate names found in {filepath_pattern}: "
-                        f"{set(new_coordinates.keys()) & set(coordinates.keys())}. "
-                        f"Please use `path_in_name=True` to avoid this error."
-                    )
+                    f"Duplicate names found in {filepath_pattern}:\n\n"
+                    f"{set(new_coordinates.keys()) & set(coordinates.keys())}"
+                    f"\n\nThis may be caused by repeated filenames with "
+                    "different extensions. If so, please set the extension "
+                    "explicitly via the `extension` argument. Another possible"
+                    " cause is commonly-named files in different directories. "
+                    "if that is the case, then set `path_in_name=True`."
                 )
 
         except Exception as e:
