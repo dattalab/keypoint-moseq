@@ -80,7 +80,7 @@ Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 
    pip install keypoint-moseq
 
-*Windows users only:* install pytables::
+**Windows users only:** install pytables::
 
    conda install -c conda-forge pytables
 
@@ -95,14 +95,14 @@ Next follow `Install jupyter extensions`_ to use the interactive analysis tools.
 Install jupyter extensions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To use the interactive widgets in the analysis notebook, install the required jupyter extensions by running the following lines from a terminal in which the ``keypoint_moseq`` environment is active::
+To use the interactive widgets in the analysis notebook, install the required jupyter extensions by running the following lines from a terminal in which the ``keypoint_moseq`` environment is active.
 
-*Windows users only:* conda install the jupyter extensions package::
+**Windows users only:** conda install the jupyter extensions package::
 
    conda install -c conda-forge jupyter_contrib_nbextensions
-   
 
-All users: run the following lines::
+
+**All users:** run the following lines::
 
    # Install and Enable widget extensions configurator
    jupyter nbextension install --py jupyter_nbextensions_configurator --sys-prefix
