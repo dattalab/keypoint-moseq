@@ -242,6 +242,13 @@ There are two main causes of GPU out of memory (OOM) errors:
     - Larger GPUs can be accessed using colab pro. 
 
 
+  - Disable parallel message passing. This should results in a 2-5x reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fit_model` or :py:func:`keypoint_moseq.apply_model`. For example::
+
+      kpms.fit_model(
+         model, data, metadata, project_dir, 
+         model_name, parallel_message_passing=False)
+
+
   - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted)::
 
       from jax_moseq.utils import set_mixed_map_iters
