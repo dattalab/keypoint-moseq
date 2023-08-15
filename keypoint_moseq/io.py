@@ -173,9 +173,9 @@ def check_config_validity(config):
         - All the elements of `config["use_bodyparts"]` are also in
           `config["bodyparts"]`
         - All the elements of `config["anterior_bodyparts"]` are also in
-          `config["bodyparts"]`
+          `config["use_bodyparts"]`
         - All the elements of `config["anterior_bodyparts"]` are also in
-          `config["bodyparts"]`
+          `config["use_bodyparts"]`
         - For each pair in `config["skeleton"]`, both elements also in
           `config["bodyparts"]`
 
@@ -205,17 +205,17 @@ def check_config_validity(config):
             )
 
     for bodypart in config["anterior_bodyparts"]:
-        if not bodypart in config["bodyparts"]:
+        if not bodypart in config["use_bodyparts"]:
             error_messages.append(
                 f"ACTION REQUIRED: `anterior_bodyparts` contains {bodypart} "
-                "which is not one of the options in `bodyparts`."
+                "which is not one of the options in `use_bodyparts`."
             )
 
     for bodypart in config["posterior_bodyparts"]:
-        if not bodypart in config["bodyparts"]:
+        if not bodypart in config["use_bodyparts"]:
             error_messages.append(
                 f"ACTION REQUIRED: `posterior_bodyparts` contains {bodypart} "
-                "which is not one of the options in `bodyparts`."
+                "which is not one of the options in `use_bodyparts`."
             )
 
     if len(error_messages) == 0:
