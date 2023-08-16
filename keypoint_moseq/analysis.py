@@ -1721,7 +1721,7 @@ def changepoint_analysis(
     # Differentiating (egocentrically aligned) keypoint coordinates
     if verbose:
         print("Aligning keypoints")
-    data, labels = format_data(
+    data, metadata = format_data(
         coordinates, bodyparts=bodyparts, use_bodyparts=use_bodyparts
     )
     Y_ego, _, _ = align_egocentric(data["Y"], anterior_idxs, posterior_idxs)
@@ -1749,7 +1749,7 @@ def changepoint_analysis(
 
     # get changescores for each threshold
     all_changescores, all_changepoints = [], []
-    for threshold in tqdm(
+    for threshold in tqdm.tqdm(
         thresholds,
         disable=(not verbose),
         desc="Testing thresholds",
@@ -1773,7 +1773,7 @@ def changepoint_analysis(
         # separate back into recordings
         pvals = np.zeros(mask[:, :, 0].shape)
         pvals[mask[:, :, 0]] = ps_combined
-        pvals = unbatch(pvals, labels)
+        pvals = unbatch(pvals, *metadata)
 
         changescores = {
             k: gaussian_filter1d(-np.log10(ps), gaussian_ksize)
@@ -1792,8 +1792,8 @@ def changepoint_analysis(
     changepoints = all_changepoints[np.argmax(num_changepoints)]
     threshold = thresholds[np.argmax(num_changepoints)]
 
-    coordinates_ego = unbatch(np.array(Y_ego), labels)
-    derivatives = unbatch(dy_zscored.reshape(Y_ego.shape), labels)
+    coordinates_ego = unbatch(np.array(Y_ego), *metadata)
+    derivatives = unbatch(dy_zscored.reshape(Y_ego.shape), *metadata)
     return changepoints, changescores, coordinates_ego, derivatives, threshold
 
 
