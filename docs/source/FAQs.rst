@@ -180,15 +180,16 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
 
    # load previously saved PCA and model checkpoint
    pca = kpms.load_pca(project_dir)
-   model, _, _, current_iter = kpms.load_checkpoint(project_dir, model_name)
+   model = kpms.load_checkpoint(project_dir, model_name)[0]
 
    # initialize a new model using saved parameters
-   model = kpms.init_model(data, pca=pca, params=model['params'], hypparams=model['hypparams'])
+   model = kpms.init_model(
+      data, pca=pca, params=model['params'], 
+      hypparams=model['hypparams'], **config())
    
    # continue fitting, now with the new data
-   model = kpms.fit_model(
-      model, data, metadata, project_dir, model_name, ar_only=False, 
-      start_iter=current_iter, num_iters=current_iter+200)[0]
+   model, model_name = kpms.fit_model(
+      model, data, metadata, project_dir, ar_only=False, num_iters=200)[0]
       
 
 Interpreting model outputs
