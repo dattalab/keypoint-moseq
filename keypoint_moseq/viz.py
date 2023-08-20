@@ -639,7 +639,7 @@ def _grid_movie_tile(
 
     tile = []
 
-    if videos is not None:  # overlay keypoints on video frame, then transform
+    if videos is not None:  
         frames = videos[key][start - pre : start + post]
         c = r @ c - window_size // 2
         M = [[np.cos(h), np.sin(h), -c[0]], [-np.sin(h), np.cos(h), -c[1]]]

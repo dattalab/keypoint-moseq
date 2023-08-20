@@ -179,7 +179,7 @@ def find_matching_videos(
         video_paths.append(videos_to_paths[longest_match])
 
     if as_dict:
-        return dict(zip(sorted(keys), video_paths))
+        return dict(zip(keys, video_paths))
     else:
         return video_paths
 
