@@ -1032,7 +1032,7 @@ def get_typical_trajectories(
     bodyparts=None,
     use_bodyparts=None,
     density_sample=True,
-    sampling_options={"mode": "density", "n_neighbors": 50},
+    sampling_options={"n_neighbors": 50},
 ):
     """Generate representative keypoint trajectories for each syllable.
 
@@ -1111,9 +1111,9 @@ def get_typical_trajectories(
         return
 
     if density_sample:
+        sampling_options['mode'] = 'density'
         sampled_instances = sample_instances(
             syllable_instances,
-            sampling_options["n_neighbors"],
             coordinates=coordinates,
             centroids=centroids,
             headings=headings,
@@ -1148,7 +1148,7 @@ def syllable_similarity(
     bodyparts=None,
     use_bodyparts=None,
     density_sample=False,
-    sampling_options={},
+    sampling_options={"n_neighbors": 50},
     **kwargs,
 ):
     """Generate a distance matrix over syllable trajectories.

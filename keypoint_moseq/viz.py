@@ -2239,7 +2239,7 @@ def plot_similarity_dendrogram(
     bodyparts=None,
     use_bodyparts=None,
     density_sample=False,
-    sampling_options={},
+    sampling_options={"n_neighbors": 50},
     figsize=(6, 3),
     **kwargs,
 ):
