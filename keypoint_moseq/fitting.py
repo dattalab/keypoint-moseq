@@ -291,6 +291,7 @@ def apply_model(
     model = init_model(
         pca=pca,
         data=data,
+        seed=model["seed"],
         params=model["params"],
         hypparams=model["hypparams"],
         **kwargs,
