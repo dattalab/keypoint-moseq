@@ -56,6 +56,23 @@ def _set_parallel_flag(parallel_message_passing):
     return parallel_message_passing
 
 
+def kappa_scan(
+    model,
+    data,
+    metadata,
+    kappas,
+    project_dir=None,
+    model_name=None,
+    num_iters=50,
+    start_iter=0,
+    ar_only=False,
+    parallel_message_passing=None,
+    save_checkpoints=True,
+):
+    if model_name is None:
+        model_name = str(datetime.now().strftime("%Y_%m_%d-%H_%M_%S"))
+
+
 def fit_model(
     model,
     data,
@@ -66,9 +83,9 @@ def fit_model(
     start_iter=0,
     verbose=False,
     ar_only=False,
-    save_every_n_iters=25,
-    generate_progress_plots=True,
     parallel_message_passing=None,
+    generate_progress_plots=True,
+    save_every_n_iters=25,
     **kwargs,
 ):
     """Fit a model to data.
@@ -115,9 +132,10 @@ def fit_model(
         Otherwise fit a full keypoint-SLDS model (see
         :py:func:`jax_moseq.models.keypoint_slds.resample_model`)
 
-    save_every_n_iters : int, default=10
-        Save the current model every `save_every_n_iters`. If
-        `save_every_n_iters=0`, nothing is saved.
+    save_every_n_iters : int, default=25
+        Save the current model every `save_every_n_iters`. To only save the
+        final model, set `save_every_n_iter=-1`. To save nothing, set 
+        `save_every_n_iters=None`.
 
     generate_progress_plots : bool, default=True
         If True, generate plots of the model's progress during fitting. Plots
@@ -152,7 +170,7 @@ def fit_model(
     if model_name is None:
         model_name = str(datetime.now().strftime("%Y_%m_%d-%H_%M_%S"))
 
-    if save_every_n_iters > 0:
+    if save_every_n_iters is not None:
         savedir = os.path.join(project_dir, model_name)
         if not os.path.exists(savedir):
             os.makedirs(savedir)
@@ -186,10 +204,8 @@ def fit_model(
             except StopResampling:
                 break
 
-            if save_every_n_iters > 0 and iteration > start_iter:
-                if (
-                    iteration % save_every_n_iters
-                ) == 0 or iteration == num_iters:
+            if save_every_n_iters is not None and iteration > start_iter:
+                if iteration == num_iters or (save_every_n_iters > 0 and iteration % save_every_n_iters == 0):
                     save_hdf5(
                         checkpoint_path, model, f"model_snapshots/{iteration}"
                     )
