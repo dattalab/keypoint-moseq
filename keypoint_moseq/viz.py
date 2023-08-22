@@ -909,6 +909,7 @@ def generate_grid_movies(
     skeleton=[],
     overlay_keypoints=False,
     keypoints_only=False,
+    keypoints_scale=1,
     fps=30,
     plot_options={},
     use_dims=[0, 1],
@@ -1019,6 +1020,11 @@ def generate_grid_movies(
         Overrides `overlay_keypoints`. When this option is used,
         the framerate should be explicitly specified using `fps`.
 
+    keypoints_scale: float, default=1
+        Factor to scale keypoint coordinates before plotting. Only used when
+        `keypoints_only=True`. This is useful when the keypoints are 3D and
+        encoded in units that are larger than a pixel.
+
     fps: int, default=30
         Framerate of the grid movie. When `keypoints_only=False`,
         this parameter is ignored and the framerate is determined
@@ -1035,8 +1041,7 @@ def generate_grid_movies(
     keypoint_colormap: str, default='autumn'
         Colormap used to color keypoints. Used when
         `overlay_keypoints=True`.
-
-
+        
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """
     # check inputs
@@ -1045,9 +1050,6 @@ def generate_grid_movies(
             "Either `video_dir` or `video_paths` is required unless `keypoints_only=True`"
         )
     elif not overlay_keypoints:
-        warnings.warn(
-            "Setting `overlay_keypoints=True` since `keypoints_only=True`"
-        )
         overlay_keypoints = True
 
     if window_size is None or overlay_keypoints:
@@ -1082,6 +1084,13 @@ def generate_grid_movies(
     syllables = {k: v["syllable"] for k, v in results.items()}
     centroids = {k: v["centroid"] for k, v in results.items()}
     headings = {k: v["heading"] for k, v in results.items()}
+
+    # scale keypoints if necessary
+    if keypoints_only:
+        for k, v in coordinates.items():
+            coordinates[k] = v * keypoints_scale
+        for k, v in centroids.items():
+            centroids[k] = v * keypoints_scale
 
     # load video readers if necessary
     if video_paths is None and not keypoints_only:
@@ -1143,6 +1152,14 @@ def generate_grid_movies(
         window_size = get_grid_movie_window_size(
             sampled_instances, centroids, headings, coordinates, pre, post
         )
+        if keypoints_only:
+            if window_size < 64:
+                warnings.warn(
+                    fill(
+                        "The scale of the keypoints is very small. This may result in "
+                        "poor quality grid movies. Try increasing `keypoints_scale`."
+                    )
+                )
 
     # possibly reduce window size to keep grid movies under max_video_size
     scaled_window_size = max_video_size / max(rows, cols)
@@ -1686,8 +1703,8 @@ def overlay_keypoints_on_image(
     coordinates,
     edges=[],
     keypoint_colormap="autumn",
-    node_size=2,
-    line_width=1,
+    node_size=5,
+    line_width=2,
     copy=False,
     opacity=1.0,
 ):
@@ -1708,7 +1725,7 @@ def overlay_keypoints_on_image(
     keypoint_colormap: str, default='autumn'
         Name of a matplotlib colormap to use for coloring the keypoints.
 
-    node_size: int, default=10
+    node_size: int, default=5
         Size of the keypoints.
 
     line_width: int, default=2
