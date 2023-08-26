@@ -80,9 +80,10 @@ Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 
    pip install keypoint-moseq
 
-**Windows users only:** install pytables::
+**Windows users only:** install pytables and numpy version 1.24::
 
    conda install -c conda-forge pytables
+   conda install numpy=1.24
 
 Make the environment available to jupyter::
 
