@@ -1070,7 +1070,7 @@ def get_typical_trajectories(
         the trajectory is based on the most exemplary syllable instances,
         rather than being average across all instances.
 
-    sampling_options: dict, default={'mode':'density', 'n_neighbors':50}
+    sampling_options: dict, default={'n_neighbors':50}
         Dictionary of options for sampling syllable instances (see
         :py:func:`keypoint_moseq.util.sample_instances`). Only used when
         `density_sample` is True.
@@ -1114,6 +1114,7 @@ def get_typical_trajectories(
         sampling_options['mode'] = 'density'
         sampled_instances = sample_instances(
             syllable_instances,
+            sampling_options["n_neighbors"],
             coordinates=coordinates,
             centroids=centroids,
             headings=headings,
