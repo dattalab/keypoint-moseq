@@ -1897,37 +1897,35 @@ def overlay_keypoints_on_video(
             crop_centroid, centroid_smoothing_filter, axis=0
         )
 
-    with imageio.get_reader(video_path) as reader:
-        fps = reader.get_meta_data()["fps"]
-        if frames is None:
-            frames = np.arange(reader.count_frames())
+    reader = OpenCVReader(video_path)
+    fps = reader.fps
+    if frames is None:
+        frames = np.arange(len(reader))
 
-        with imageio.get_writer(
-            output_path, pixelformat="yuv420p", fps=fps, quality=quality
-        ) as writer:
-            for frame in tqdm.tqdm(frames, ncols=72):
-                image = reader.get_data(frame)
+    with imageio.get_writer(
+        output_path, pixelformat="yuv420p", fps=fps, quality=quality
+    ) as writer:
+        for frame in tqdm.tqdm(frames, ncols=72):
+            image = overlay_keypoints_on_image(
+                reader[frame], coordinates[frame], edges=edges, **plot_options
+            )
 
-                image = overlay_keypoints_on_image(
-                    image, coordinates[frame], edges=edges, **plot_options
+            if crop_size is not None:
+                image = crop_image(image, crop_centroid[frame], crop_size)
+
+            if show_frame_numbers:
+                image = cv2.putText(
+                    image,
+                    f"Frame {frame}",
+                    (10, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    text_color,
+                    1,
+                    cv2.LINE_AA,
                 )
 
-                if crop_size is not None:
-                    image = crop_image(image, crop_centroid[frame], crop_size)
-
-                if show_frame_numbers:
-                    image = cv2.putText(
-                        image,
-                        f"Frame {frame}",
-                        (10, 20),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        text_color,
-                        1,
-                        cv2.LINE_AA,
-                    )
-
-                writer.append_data(image)
+            writer.append_data(image)
 
 
 def matplotlib_colormap_to_plotly(cmap):
