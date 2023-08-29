@@ -1777,41 +1777,6 @@ def overlay_keypoints_on_image(
     return image
 
 
-def overlay_trajectory_on_video(
-    frames,
-    trajectory,
-    smoothing_kernel=1,
-    highlight=None,
-    min_opacity=0.2,
-    max_opacity=1,
-    num_ghosts=5,
-    interval=2,
-    plot_options={},
-    edges=[],
-):
-    """
-    Overlay a trajectory of keypoints on a video.
-    """
-    if smoothing_kernel > 0:
-        trajectory = gaussian_filter1d(trajectory, smoothing_kernel, axis=0)
-
-    opacities = np.repeat(
-        np.linspace(max_opacity, min_opacity, num_ghosts + 1), interval
-    )
-    for i in np.arange(0, trajectory.shape[0], interval):
-        for j, opacity in enumerate(opacities):
-            if i + j < frames.shape[0]:
-                plot_options["opacity"] = opacity
-                if highlight is not None:
-                    start, end, highlight_factor = highlight
-                    if i + j < start or i + j > end:
-                        plot_options["opacity"] *= highlight_factor
-                frames[i + j] = overlay_keypoints_on_image(
-                    frames[i + j], trajectory[i], edges=edges, **plot_options
-                )
-    return frames
-
-
 def overlay_keypoints_on_video(
     video_path,
     coordinates,
@@ -1877,6 +1842,7 @@ def overlay_keypoints_on_video(
     """
     if output_path is None:
         output_path = os.path.splitext(video_path)[0] + "_keypoints.mp4"
+        print(f'Saving video to {output_path}')
 
     if bodyparts is not None:
         if use_bodyparts is not None:
