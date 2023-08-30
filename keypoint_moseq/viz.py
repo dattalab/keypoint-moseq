@@ -420,6 +420,10 @@ def plot_duration_distribution(
     return fig, ax
 
 
+def plot_kappa_scan(kappas, project_dir, model_name):
+    pass
+
+
 def plot_progress(
     model,
     data,

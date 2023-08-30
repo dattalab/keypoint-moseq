@@ -6,7 +6,7 @@ import warnings
 from textwrap import fill
 from datetime import datetime
 
-from keypoint_moseq.viz import plot_progress
+from keypoint_moseq.viz import plot_progress, plot_kappa_scan
 from keypoint_moseq.io import save_hdf5, extract_results
 from jax_moseq.models.keypoint_slds import resample_model, init_model
 from jax_moseq.utils import check_for_nans, device_put_as_scalar
@@ -57,20 +57,47 @@ def _set_parallel_flag(parallel_message_passing):
 
 
 def kappa_scan(
+    kappas,
     model,
     data,
     metadata,
-    kappas,
     project_dir=None,
     model_name=None,
-    num_iters=50,
-    start_iter=0,
-    ar_only=False,
-    parallel_message_passing=None,
-    save_checkpoints=True,
+    **kwargs
 ):
+    """Fit a batch of models with varying kappa values and plot the results.
+    
+    The models will be saved to `{project_dir}/{model_name}-{kappa}/`.
+    For a description of the parameters not listed below, see 
+    :py:func:`keypoint_moseq.fitting.fit_model`.
+
+    Parameters
+    ----------
+    kappas : array-like
+        Kappa values to scan over.
+
+    model : dict
+        Model dictionary containing states, parameters, hyperparameters, noise
+        prior, and random seed. The model's kappa value will be overwritten.
+    """
     if model_name is None:
         model_name = str(datetime.now().strftime("%Y_%m_%d-%H_%M_%S"))
+    
+    for kappa in kappas:
+        print(fill(f"Fitting model with kappa={kappa}"))
+        model["hypparams"]["kappa"] = kappa
+        fit_model(
+            model,
+            data,
+            metadata,
+            project_dir,
+            f'{model_name}-{kappa}',
+            **kwargs,    
+        );
+
+    plot_kappa_scan(kappas, project_dir, model_name)
+
+
 
 
 def fit_model(
