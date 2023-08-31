@@ -1740,7 +1740,7 @@ def overlay_keypoints_on_image(
     Returns
     -------
     image: ndarray of shape (height, width, 3)
-        Image with keypoints overlayed.
+        Image with keypoints overlaid.
     """
     if copy or opacity < 1.0:
         canvas = image.copy()

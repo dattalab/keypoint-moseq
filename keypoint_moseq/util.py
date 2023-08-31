@@ -27,7 +27,7 @@ def np_io(fn):
 
 
 def print_dims_to_explain_variance(pca, f):
-    """Print the number of principal components requred to explain a given
+    """Print the number of principal components required to explain a given
     fraction of  variance.
 
     Parameters
@@ -273,7 +273,7 @@ def get_syllable_instances(
     min_frequency=0,
     min_instances=0,
 ):
-    """Map each syllable to a list of instances when it occured. Only include
+    """Map each syllable to a list of instances when it occurred. Only include
     instances that meet the criteria specified by `pre`, `post`, and
     `min_duration`. Only include syllables that meet the criteria specified by
     `min_frequency` and `min_instances`.
@@ -284,7 +284,7 @@ def get_syllable_instances(
         Dictionary mapping names to syllable sequences
 
     min_duration: int, default=3
-        Mininum duration for inclusion of a syllable instance
+        Minimum duration for inclusion of a syllable instance
 
     pre: int, default=30
         Syllable instances that start before this location in the state
@@ -427,7 +427,7 @@ def get_instance_trajectories(
     pre: int, default=0
         Number of frames to include before syllable onset
 
-    post: int, defualt=None
+    post: int, default=None
         Determines the length of the trajectory. When `post=None`, the
         trajectory terminates at the end of the syllable instance. Otherwise
         the trajectory terminates at a fixed number of frames after syllable
@@ -529,7 +529,7 @@ def sample_instances(
         Number of principal components to use for density estimation (used when
         `mode='density'`)
 
-    n_neighbors: int, defualt=50
+    n_neighbors: int, default=50
         Number of neighbors to use for density estimation and for sampling the
         neighbors of the examplar syllable instance (used when
         `mode='density'`)
@@ -1166,7 +1166,7 @@ def syllable_similarity(
     -------
     distances : ndarray of shape (n_syllables, n_syllables)
         Pairwise distances between the typical trajectories associated with
-        each syllable. Only syllables with sufficient frequency of occurence
+        each syllable. Only syllables with sufficient frequency of occurrence
         are included.
 
     syllable_ixs : array of int

@@ -172,7 +172,7 @@ class GroupSettingWidgets:
         Parameters
         ----------
         b : button click, optional
-            button click to udpate table, by default None
+            button click to update table, by default None
         """
 
         self.update_index_button.button_style = "info"
