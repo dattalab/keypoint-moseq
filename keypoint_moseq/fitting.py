@@ -228,6 +228,7 @@ def apply_model(
     verbose=False,
     results_path=None,
     parallel_message_passing=None,
+    return_model=False,
     **kwargs,
 ):
     """Apply a model to new data.
@@ -279,11 +280,18 @@ def apply_model(
         warning will be raised if `parallel_message_passing=True` and JAX is
         CPU-bound. Set to 'force' to skip this check.
 
+    return_model : bool, default=False
+        Whether to return the model after fitting.
+
     Returns
     -------
-    results_dict : dict
+    results : dict
         Dictionary of model outputs (for results format, see
         :py:func:`keypoint_moseq.io.extract_results`).
+
+    model : dict
+        Model dictionary containing states, parameters, hyperparameters, noise
+        prior, and random seed. Only returned if `return_model=True`.
     """
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
     data = jax.device_put(data)
@@ -320,9 +328,14 @@ def apply_model(
             except StopResampling:
                 break
 
-    return extract_results(
+    results = extract_results(
         model, metadata, project_dir, model_name, save_results, results_path
     )
+    
+    if return_model:
+        return results, model
+    else:
+        return results
 
 
 def update_hypparams(model_dict, **kwargs):

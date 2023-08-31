@@ -975,6 +975,7 @@ def generate_grid_movies(
     skeleton=[],
     overlay_keypoints=False,
     keypoints_only=False,
+    keypoints_scale=1,
     fps=30,
     plot_options={},
     use_dims=[0, 1],
@@ -1085,6 +1086,11 @@ def generate_grid_movies(
         Overrides `overlay_keypoints`. When this option is used,
         the framerate should be explicitly specified using `fps`.
 
+    keypoints_scale: float, default=1
+        Factor to scale keypoint coordinates before plotting. Only used when
+        `keypoints_only=True`. This is useful when the keypoints are 3D and
+        encoded in units that are larger than a pixel.
+
     fps: int, default=30
         Framerate of the grid movie. When `keypoints_only=False`,
         this parameter is ignored and the framerate is determined
@@ -1101,8 +1107,7 @@ def generate_grid_movies(
     keypoint_colormap: str, default='autumn'
         Colormap used to color keypoints. Used when
         `overlay_keypoints=True`.
-
-
+        
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """
     # check inputs
@@ -1111,9 +1116,6 @@ def generate_grid_movies(
             "Either `video_dir` or `video_paths` is required unless `keypoints_only=True`"
         )
     elif not overlay_keypoints:
-        warnings.warn(
-            "Setting `overlay_keypoints=True` since `keypoints_only=True`"
-        )
         overlay_keypoints = True
 
     if window_size is None or overlay_keypoints:
@@ -1148,6 +1150,13 @@ def generate_grid_movies(
     syllables = {k: v["syllable"] for k, v in results.items()}
     centroids = {k: v["centroid"] for k, v in results.items()}
     headings = {k: v["heading"] for k, v in results.items()}
+
+    # scale keypoints if necessary
+    if keypoints_only:
+        for k, v in coordinates.items():
+            coordinates[k] = v * keypoints_scale
+        for k, v in centroids.items():
+            centroids[k] = v * keypoints_scale
 
     # load video readers if necessary
     if video_paths is None and not keypoints_only:
@@ -1209,6 +1218,14 @@ def generate_grid_movies(
         window_size = get_grid_movie_window_size(
             sampled_instances, centroids, headings, coordinates, pre, post
         )
+        if keypoints_only:
+            if window_size < 64:
+                warnings.warn(
+                    fill(
+                        "The scale of the keypoints is very small. This may result in "
+                        "poor quality grid movies. Try increasing `keypoints_scale`."
+                    )
+                )
 
     # possibly reduce window size to keep grid movies under max_video_size
     scaled_window_size = max_video_size / max(rows, cols)
@@ -1752,8 +1769,8 @@ def overlay_keypoints_on_image(
     coordinates,
     edges=[],
     keypoint_colormap="autumn",
-    node_size=2,
-    line_width=1,
+    node_size=5,
+    line_width=2,
     copy=False,
     opacity=1.0,
 ):
@@ -1774,7 +1791,7 @@ def overlay_keypoints_on_image(
     keypoint_colormap: str, default='autumn'
         Name of a matplotlib colormap to use for coloring the keypoints.
 
-    node_size: int, default=10
+    node_size: int, default=5
         Size of the keypoints.
 
     line_width: int, default=2
@@ -1824,41 +1841,6 @@ def overlay_keypoints_on_image(
     if opacity < 1.0:
         image = cv2.addWeighted(image, 1 - opacity, canvas, opacity, 0)
     return image
-
-
-def overlay_trajectory_on_video(
-    frames,
-    trajectory,
-    smoothing_kernel=1,
-    highlight=None,
-    min_opacity=0.2,
-    max_opacity=1,
-    num_ghosts=5,
-    interval=2,
-    plot_options={},
-    edges=[],
-):
-    """
-    Overlay a trajectory of keypoints on a video.
-    """
-    if smoothing_kernel > 0:
-        trajectory = gaussian_filter1d(trajectory, smoothing_kernel, axis=0)
-
-    opacities = np.repeat(
-        np.linspace(max_opacity, min_opacity, num_ghosts + 1), interval
-    )
-    for i in np.arange(0, trajectory.shape[0], interval):
-        for j, opacity in enumerate(opacities):
-            if i + j < frames.shape[0]:
-                plot_options["opacity"] = opacity
-                if highlight is not None:
-                    start, end, highlight_factor = highlight
-                    if i + j < start or i + j > end:
-                        plot_options["opacity"] *= highlight_factor
-                frames[i + j] = overlay_keypoints_on_image(
-                    frames[i + j], trajectory[i], edges=edges, **plot_options
-                )
-    return frames
 
 
 def overlay_keypoints_on_video(
@@ -1926,6 +1908,7 @@ def overlay_keypoints_on_video(
     """
     if output_path is None:
         output_path = os.path.splitext(video_path)[0] + "_keypoints.mp4"
+        print(f'Saving video to {output_path}')
 
     if bodyparts is not None:
         if use_bodyparts is not None:
@@ -1946,37 +1929,35 @@ def overlay_keypoints_on_video(
             crop_centroid, centroid_smoothing_filter, axis=0
         )
 
-    with imageio.get_reader(video_path) as reader:
-        fps = reader.get_meta_data()["fps"]
-        if frames is None:
-            frames = np.arange(reader.count_frames())
+    reader = OpenCVReader(video_path)
+    fps = reader.fps
+    if frames is None:
+        frames = np.arange(len(reader))
 
-        with imageio.get_writer(
-            output_path, pixelformat="yuv420p", fps=fps, quality=quality
-        ) as writer:
-            for frame in tqdm.tqdm(frames, ncols=72):
-                image = reader.get_data(frame)
+    with imageio.get_writer(
+        output_path, pixelformat="yuv420p", fps=fps, quality=quality
+    ) as writer:
+        for frame in tqdm.tqdm(frames, ncols=72):
+            image = overlay_keypoints_on_image(
+                reader[frame], coordinates[frame], edges=edges, **plot_options
+            )
 
-                image = overlay_keypoints_on_image(
-                    image, coordinates[frame], edges=edges, **plot_options
+            if crop_size is not None:
+                image = crop_image(image, crop_centroid[frame], crop_size)
+
+            if show_frame_numbers:
+                image = cv2.putText(
+                    image,
+                    f"Frame {frame}",
+                    (10, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    text_color,
+                    1,
+                    cv2.LINE_AA,
                 )
 
-                if crop_size is not None:
-                    image = crop_image(image, crop_centroid[frame], crop_size)
-
-                if show_frame_numbers:
-                    image = cv2.putText(
-                        image,
-                        f"Frame {frame}",
-                        (10, 20),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        text_color,
-                        1,
-                        cv2.LINE_AA,
-                    )
-
-                writer.append_data(image)
+            writer.append_data(image)
 
 
 def matplotlib_colormap_to_plotly(cmap):
