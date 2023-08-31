@@ -325,17 +325,17 @@ def setup_project(
     deeplabcut_config: str, default=None
         Path to a deeplabcut config file. Will be used to initialize
         `bodyparts`, `skeleton`, `use_bodyparts` and `video_dir` in the
-        keypoint MoSeq config. (overrided by kwargs).
+        keypoint MoSeq config. (overridden by kwargs).
 
     sleap_file: str, default=None
         Path to a .hdf5 or .slp file containing predictions for one video. Will
         be used to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in
-        the keypoint MoSeq config. (overrided by kwargs).
+        the keypoint MoSeq config. (overridden by kwargs).
 
     nwb_file: str, default=None
         Path to a .nwb file containing predictions for one video. Will be used
         to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in the
-        keypoint MoSeq config. (overrided by kwargs).
+        keypoint MoSeq config. (overridden by kwargs).
 
     overwrite: bool, default=False
         Overwrite any config.yml that already exists at the path
