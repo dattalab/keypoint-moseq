@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import tqdm
+import h5py
 import jax
 import warnings
 from textwrap import fill
@@ -56,50 +57,6 @@ def _set_parallel_flag(parallel_message_passing):
     return parallel_message_passing
 
 
-def kappa_scan(
-    kappas,
-    model,
-    data,
-    metadata,
-    project_dir=None,
-    model_name=None,
-    **kwargs
-):
-    """Fit a batch of models with varying kappa values and plot the results.
-    
-    The models will be saved to `{project_dir}/{model_name}-{kappa}/`.
-    For a description of the parameters not listed below, see 
-    :py:func:`keypoint_moseq.fitting.fit_model`.
-
-    Parameters
-    ----------
-    kappas : array-like
-        Kappa values to scan over.
-
-    model : dict
-        Model dictionary containing states, parameters, hyperparameters, noise
-        prior, and random seed. The model's kappa value will be overwritten.
-    """
-    if model_name is None:
-        model_name = str(datetime.now().strftime("%Y_%m_%d-%H_%M_%S"))
-    
-    for kappa in kappas:
-        print(fill(f"Fitting model with kappa={kappa}"))
-        model["hypparams"]["kappa"] = kappa
-        fit_model(
-            model,
-            data,
-            metadata,
-            project_dir,
-            f'{model_name}-{kappa}',
-            **kwargs,    
-        );
-
-    plot_kappa_scan(kappas, project_dir, model_name)
-
-
-
-
 def fit_model(
     model,
     data,
@@ -121,6 +78,9 @@ def fit_model(
         - saves checkpoints of the model and data at regular intervals
         - plots of the model's progress during fitting (see
           :py:func:`jax_moseq.viz.plot_progress`)
+
+    Note that if a checkpoint file already exists, all model snapshots after
+    `start_iter` will be deleted.
 
     Parameters
     ----------
@@ -147,7 +107,7 @@ def fit_model(
 
     start_iter : int, default=0
         Index of the starting iteration, which is non-zero when continuing a
-        previous fit.
+        previous fit. 
 
     verbose : bool, default=True
         If True, print the model's progress during fitting.
@@ -213,6 +173,11 @@ def fit_model(
                     "data": data,
                 },
             )
+        else: # delete model snapshots later than start_iter
+            with h5py.File(checkpoint_path, "a") as f:
+                for k in list(f["model_snapshots"].keys()):
+                    if int(k) > start_iter:
+                        del f["model_snapshots"][k]
 
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
     model = device_put_as_scalar(model)

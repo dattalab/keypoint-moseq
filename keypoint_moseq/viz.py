@@ -420,8 +420,70 @@ def plot_duration_distribution(
     return fig, ax
 
 
-def plot_kappa_scan(kappas, project_dir, model_name):
-    pass
+def plot_kappa_scan(kappas, project_dir, prefix, figsize=(8, 2.5)):
+    """Plot the results of a kappa scan.
+
+    This function assumes that model results for each kappa value are stored
+    in `{project_dir}/{prefix}-{kappa}/checkpoint.h5`. Two plots are generated:
+    (1) a line plot showing the median syllable duration over the course of 
+    fitting for each kappa value; (2) and a plot showing the final median 
+    syllable duration as a function of kappa.
+
+    Parameters
+    ----------
+    kappas : array-like of float
+        Kapppa values used in the scan.
+
+    project_dir : str
+        Path to the project directory.
+
+    prefix : str
+        Prefix for the kappa scan model names.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure containing the plot.
+
+    final_median_durations : array of float
+        Median syllable durations for each kappa value, derived using the 
+        final iteration of each model.
+    """
+    median_dur_histories = []
+    final_median_durs = []
+
+    for kappa in tqdm.tqdm(kappas, desc='Loading checkpoints'):
+        model_dir = f"{project_dir}/{prefix}-{kappa}"
+        with h5py.File(f"{model_dir}/checkpoint.h5", "r") as h5:
+            mask = h5["data/mask"][()]
+            iterations = np.sort([int(i) for i in h5["model_snapshots"]])
+
+            history = {}
+            for itr in iterations:
+                z = h5[f"model_snapshots/{itr}/states/z"][()]
+                durs = get_durations(z, mask)
+                history[itr] = np.median(durs)
+            
+            final_median_durs.append(history[iterations[-1]])
+            median_dur_histories.append(history)
+
+    fig, axs = plt.subplots(1,2)
+    for i, (kappa, history) in enumerate(zip(kappas, median_dur_histories)):
+        color = plt.cm.viridis(i / (len(kappas)-1))
+        label = "{:.1e}".format(kappa)
+        axs[0].plot(*zip(*history.items()), color=color, label=label)
+    axs[0].legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    axs[0].set_xlabel("iteration")
+    axs[0].set_ylabel("median duration")
+
+    axs[1].scatter(kappas, final_median_durs)
+    axs[1].set_xlabel("kappa")
+    axs[1].set_ylabel("final median duration")
+    axs[1].set_xscale('log')
+
+    fig.set_size_inches(figsize)
+    plt.tight_layout()
+    return fig, np.array(final_median_durs)
 
 
 def plot_progress(
