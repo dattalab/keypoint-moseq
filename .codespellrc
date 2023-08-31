@@ -1,4 +1,6 @@
 [codespell]
-skip = .git,*.pdf,*.svg,versioneer.py
-#
-# ignore-words-list =
+skip = .git,*.pdf,*.svg,versioneer.py,modeling.ipynb,LICENSE.md
+# attempted to develop one for .ipynb but it is too noisy there -- just ignored entire modeling.ipynb file
+# still useful for the analysis.ipynb
+ignore-regex = ^\s*"image/\S+": ".*|" *[0-9]*: function _.*
+ignore-words-list = ot
