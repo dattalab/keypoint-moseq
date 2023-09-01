@@ -1019,9 +1019,9 @@ def generate_grid_movies(
 
     video_paths: dict, default=None
         Dictionary mapping recording names to video paths. The recording
-        names must correspond to keys in `results['syllables']`.
-        Unless `keypoints_only=True`, either `video_dir` or
-        `video_paths` must be provided.
+        names must correspond to keys in the results dictionary. Unless 
+        `keypoints_only=True`, either `video_dir` or `video_paths` must be 
+        provided.
 
     filter_size: int, default=9
         Size of the median filter applied to centroids and headings
