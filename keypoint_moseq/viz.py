@@ -704,7 +704,7 @@ def grid_movie(
 ):
     """Generate a grid movie and return it as an array of frames.
 
-    Grid movies show many instances of a syllable. Each instance contains a
+    Grid movies show many instances of  a syllable. Each instance contains a
     snippet of video (and/or keypoint-overlay) centered on the animal and
     synchronized to the onset of the syllable. A dot appears at syllable onset
     and disappears at syllable offset.
@@ -947,15 +947,14 @@ def generate_grid_movies(
 
     video_dir: str, default=None
         Directory containing videos of the modeled data (see
-        :py:func:`keypoint_moseq.io.find_matching_videos`).
-        Unless `keypoints_only=True`, either `video_dir` or
-        `video_paths` must be provided.
+        :py:func:`keypoint_moseq.io.find_matching_videos`). Either  `video_dir`
+        or `video_paths` must be provided unless `keypoints_only=True`.
 
     video_paths: dict, default=None
         Dictionary mapping recording names to video paths. The recording
-        names must correspond to keys in `results['syllables']`.
-        Unless `keypoints_only=True`, either `video_dir` or
-        `video_paths` must be provided.
+        names must correspond to keys in the results dictionary. Either 
+        `video_dir` or `video_paths` must be provided unless 
+        `keypoints_only=True`.
 
     filter_size: int, default=9
         Size of the median filter applied to centroids and headings
@@ -1093,13 +1092,14 @@ def generate_grid_movies(
             centroids[k] = v * keypoints_scale
 
     # load video readers if necessary
-    if video_paths is None and not keypoints_only:
-        video_paths = find_matching_videos(
-            results.keys(),
-            video_dir,
-            as_dict=True,
-            video_extension=video_extension,
-        )
+    if not keypoints_only:
+        if video_paths is None:
+            video_paths = find_matching_videos(
+                results.keys(),
+                video_dir,
+                as_dict=True,
+                video_extension=video_extension,
+            )
         videos = {k: OpenCVReader(path) for k, path in video_paths.items()}
         fps = list(videos.values())[0].fps
     else:
