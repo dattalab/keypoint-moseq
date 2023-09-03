@@ -1101,11 +1101,12 @@ def get_typical_trajectories(
     )
 
     if len(syllable_instances) == 0:
-        warnings.warn(
+        raise ValueError(
             fill(
                 "No syllables with sufficient instances to generate a trajectory. "
-                "This usually occurs when all frames have the same syllable label "
-                "(use `plot_syllable_frequencies` to check if this is the case)"
+                "This usually occurs when there is not enough inut data or when "
+                "all frames have the same syllable label (use "
+                "`plot_syllable_frequencies` to check if this is the case)"
             )
         )
         return
