@@ -19,6 +19,10 @@ from keypoint_moseq.io import load_results, _get_path
 from jax_moseq.models.keypoint_slds import center_embedding
 from jax_moseq.utils import get_durations, get_frequencies
 
+from plotly.subplots import make_subplots
+import plotly.io as pio
+pio.renderers.default='iframe'
+
 # set matplotlib defaults
 plt.rcParams["figure.dpi"] = 100
 
@@ -262,8 +266,7 @@ def plot_pcs(
             ypcs,
             edges,
             keypoint_colormap,
-            savefig,
-            project_dir,
+            project_dir if savefig else None,
             node_size / 3,
             linewidth * 2,
         )
@@ -1894,318 +1897,6 @@ def overlay_keypoints_on_video(
             writer.append_data(image)
 
 
-def matplotlib_colormap_to_plotly(cmap):
-    """
-    Convert a matplotlib colormap to a plotly colormap.
-
-    Parameters
-    ----------
-    cmap: str
-        Name of a matplotlib colormap.
-
-    Returns
-    -------
-    pl_colorscale: list
-        Plotly colormap.
-    """
-    cmap = plt.colormaps[cmap]
-    pl_entries = 255
-    h = 1.0 / (pl_entries - 1)
-    pl_colorscale = []
-    for k in range(pl_entries):
-        C = (np.array(cmap(k * h)[:3]) * 255).astype(np.uint8)
-        pl_colorscale.append([k * h, "rgb" + str((C[0], C[1], C[2]))])
-    return pl_colorscale
-
-
-def add_3D_pose_to_plotly_fig(
-    fig,
-    coords,
-    edges,
-    keypoint_colormap="autumn",
-    node_size=6.0,
-    linewidth=3.0,
-    visible=True,
-    opacity=1,
-):
-    """
-    Add a 3D pose to a plotly figure.
-
-    Parameters
-    ----------
-    fig: plotly figure
-        Figure to which the pose should be added.
-
-    coords: ndarray (N,3)
-        3D coordinates of the pose.
-
-    edges: list of index pairs
-        Skeleton edges
-
-    keypoint_colormap: str, default='autumn'
-        Colormap to use for coloring keypoints.
-
-    node_size: float, default=6.0
-        Size of keypoints.
-
-    linewidth: float, default=3.0
-        Width of skeleton edges.
-
-    visibility: bool, default=True
-        Initial visibility state of the nodes and edges
-
-    opacity: float, default=1
-        Opacity of the nodes and edges (0-1)
-    """
-    marker = {
-        "size": node_size,
-        "color": np.linspace(0, 1, len(coords)),
-        "colorscale": matplotlib_colormap_to_plotly(keypoint_colormap),
-        "line": dict(color="black", width=0.5),
-        "opacity": opacity,
-    }
-
-    line = {"width": linewidth, "color": f"rgba(0,0,0,{opacity})"}
-
-    fig.add_trace(
-        plotly.graph_objs.Scatter3d(
-            x=coords[:, 0],
-            y=coords[:, 1],
-            z=coords[:, 2],
-            mode="markers",
-            visible=visible,
-            marker=marker,
-        )
-    )
-
-    for e in edges:
-        fig.add_trace(
-            plotly.graph_objs.Scatter3d(
-                x=coords[e, 0],
-                y=coords[e, 1],
-                z=coords[e, 2],
-                mode="lines",
-                visible=visible,
-                line=line,
-            )
-        )
-
-
-def plot_pcs_3D(
-    ymean,
-    ypcs,
-    edges,
-    keypoint_colormap,
-    savefig,
-    project_dir=None,
-    node_size=6,
-    linewidth=2,
-    height=400,
-    mean_pose_opacity=0.2,
-):
-    """
-    Visualize the components of a fitted PCA model based on 3D components.
-
-    For each PC, a subplot shows the mean pose (semi-transparent) along
-    with a perturbation of the mean pose in the direction of the PC.
-
-    Parameters
-    ----------
-    ymean : ndarray (num_bodyparts, 3)
-        Mean pose.
-
-    ypcs : ndarray (num_pcs, num_bodyparts, 3)
-        Perturbations of the mean pose in the direction of each PC.
-
-    edges : list of index pairs
-        Skeleton edges.
-
-    keypoint_colormap : str
-        Name of a matplotlib colormap to use for coloring the keypoints.
-
-    savefig : bool
-        Whether to save the figure to a file. If true, the figure is
-        saved to `{project_dir}/pcs.html`
-
-    project_dir : str, default=None
-        Path to the project directory. Required if `savefig` is True.
-
-    node_size : float, default=30.0
-        Size of the keypoints in the figure.
-
-    linewidth: float, default=2.0
-        Width of edges in skeleton
-
-    height : int, default=400
-        Height of the figure in pixels.
-
-    mean_pose_opacity: float, default=0.4
-        Opacity of the mean pose
-    """
-    from plotly.subplots import make_subplots
-
-    fig = make_subplots(rows=1, cols=1, specs=[[{"type": "scatter3d"}]])
-
-    def visibility_mask(i):
-        visible = np.zeros((len(edges) + 1) * (len(ypcs) + 1))
-        visible[-(len(edges) + 1) :] = 1
-        visible[(len(edges) + 1) * i : (len(edges) + 1) * (i + 1)] = 1
-        return visible > 0
-
-    steps = []
-    for i, coords in enumerate(ypcs):
-        add_3D_pose_to_plotly_fig(
-            fig,
-            coords,
-            edges,
-            visible=(i == 0),
-            node_size=node_size,
-            linewidth=linewidth,
-            keypoint_colormap=keypoint_colormap,
-        )
-
-        steps.append(
-            dict(
-                method="update",
-                label=f"PC {i+1}",
-                args=[{"visible": visibility_mask(i)}],
-            )
-        )
-
-    add_3D_pose_to_plotly_fig(
-        fig,
-        ymean,
-        edges,
-        opacity=mean_pose_opacity,
-        node_size=node_size,
-        linewidth=linewidth,
-        keypoint_colormap=keypoint_colormap,
-    )
-
-    fig.update_layout(
-        height=height,
-        showlegend=False,
-        sliders=[dict(steps=steps)],
-        scene=dict(
-            xaxis=dict(showgrid=False, showbackground=False),
-            yaxis=dict(showgrid=False, showbackground=False),
-            zaxis=dict(showgrid=False, showline=True, linecolor="black"),
-            bgcolor="white",
-            aspectmode="data",
-        ),
-        margin=dict(l=20, r=20, b=0, t=0, pad=10),
-    )
-
-    if savefig:
-        assert project_dir is not None, fill(
-            "The `savefig` option requires a `project_dir`"
-        )
-        save_path = os.path.join(project_dir, f"pcs.html")
-        fig.write_html(save_path)
-        print(f"Saved interactive plot to {save_path}")
-
-    fig.show()
-
-
-def plot_trajectories_3D(
-    Xs,
-    titles,
-    edges,
-    output_dir,
-    keypoint_colormap="autumn",
-    node_size=8,
-    linewidth=3,
-    height=500,
-    skiprate=1,
-):
-    """
-    Visualize a set of 3D trajectories.
-
-    Parameters
-    ----------
-    Xs : list of ndarrays (num_syllables, num_frames, num_bodyparts, 3)
-        Trajectories to visualize.
-
-    titles : list of str
-        Title for each trajectory.
-
-    edges : list of index pairs
-        Skeleton edges.
-
-    output_dir : str
-        Path to save the interactive plot.
-
-    keypoint_colormap : str, default='autumn'
-        Name of a matplotlib colormap to use for coloring the keypoints.
-
-    node_size : float, default=8.0
-        Size of the keypoints in the figure.
-
-    linewidth: float, default=3.0
-        Width of edges in skeleton
-
-    height : int, default=500
-        Height of the figure in pixels.
-
-    skiprate : int, default=1
-        Plot every `skiprate` frames.
-    """
-    from plotly.subplots import make_subplots
-
-    fig = make_subplots(rows=1, cols=1, specs=[[{"type": "scatter3d"}]])
-    Xs = Xs[:, ::skiprate]
-
-    def visibility_mask(i):
-        n = (len(edges) + 1) * len(Xs[1])
-        visible = np.zeros(n * len(Xs))
-        visible[n * i : n * (i + 1)] = 1
-        return visible > 0
-
-    steps = []
-    for i, X in enumerate(Xs):
-        opacities = np.linspace(0.3, 1, len(X) + 1)[1:] ** 2
-        for coords, opacity in zip(X, opacities):
-            add_3D_pose_to_plotly_fig(
-                fig,
-                coords,
-                edges,
-                visible=(i == 0),
-                node_size=node_size,
-                linewidth=linewidth,
-                keypoint_colormap=keypoint_colormap,
-                opacity=opacity,
-            )
-
-        steps.append(
-            dict(
-                method="update",
-                label=titles[i],
-                args=[{"visible": visibility_mask(i)}],
-            )
-        )
-
-    fig.update_layout(
-        height=height,
-        showlegend=False,
-        sliders=[dict(steps=steps)],
-        scene=dict(
-            xaxis=dict(showgrid=False, showbackground=False),
-            yaxis=dict(showgrid=False, showbackground=False),
-            zaxis=dict(showgrid=False, showline=True, linecolor="black"),
-            bgcolor="white",
-            aspectmode="data",
-        ),
-        margin=dict(l=20, r=20, b=0, t=0, pad=10),
-    )
-
-    if output_dir is not None:
-        save_path = os.path.join(output_dir, f"all_trajectories.html")
-        fig.write_html(save_path)
-        print(f"Saved interactive trajectories plot to {save_path}")
-
-    fig.show()
-
-
 def plot_similarity_dendrogram(
     coordinates,
     results,
@@ -2291,3 +1982,356 @@ def plot_similarity_dendrogram(
     print(f"Saving dendrogram plot to {save_path}")
     for ext in ["pdf", "png"]:
         plt.savefig(save_path + "." + ext)
+
+
+def matplotlib_colormap_to_plotly(cmap):
+    """
+    Convert a matplotlib colormap to a plotly colormap.
+
+    Parameters
+    ----------
+    cmap: str
+        Name of a matplotlib colormap.
+
+    Returns
+    -------
+    pl_colorscale: list
+        Plotly colormap.
+    """
+    cmap = plt.colormaps[cmap]
+    pl_entries = 255
+    h = 1.0 / (pl_entries - 1)
+    pl_colorscale = []
+    for k in range(pl_entries):
+        C = (np.array(cmap(k * h)[:3]) * 255).astype(np.uint8)
+        pl_colorscale.append([k * h, "rgb" + str((C[0], C[1], C[2]))])
+    return pl_colorscale
+
+
+def initialize_3D_plot(height=500):    
+    """Create an empty 3D plotly figure."""
+    fig = make_subplots(rows=1, cols=1, specs=[[{"type": "scatter3d"}]])
+    fig.update_layout(
+        height=height,
+        showlegend=False,
+        scene=dict(
+            xaxis=dict(showgrid=False, showbackground=False),
+            yaxis=dict(showgrid=False, showbackground=False),
+            zaxis=dict(showgrid=False, showline=True, linecolor="black"),
+            bgcolor="white",
+            aspectmode="data",
+        ),
+        margin=dict(l=20, r=20, b=0, t=0, pad=10),
+    )
+    return fig
+
+
+
+def add_3D_pose_to_fig(
+    fig,
+    coords,
+    edges,
+    keypoint_colormap="autumn",
+    node_size=6.0,
+    linewidth=3.0,
+    visible=True,
+    opacity=1,
+):
+    """Add a 3D pose to a plotly figure.
+
+    Parameters
+    ----------
+    fig: plotly figure
+        Figure to which the pose should be added.
+
+    coords: ndarray (N,3)
+        3D coordinates of the pose.
+
+    edges: list of index pairs
+        Skeleton edges
+
+    keypoint_colormap: str, default='autumn'
+        Colormap to use for coloring keypoints.
+
+    node_size: float, default=6.0
+        Size of keypoints.
+
+    linewidth: float, default=3.0
+        Width of skeleton edges.
+
+    visibility: bool, default=True
+        Initial visibility state of the nodes and edges
+
+    opacity: float, default=1
+        Opacity of the nodes and edges (0-1)
+    """
+    marker = {
+        "size": node_size,
+        "color": np.linspace(0, 1, len(coords)),
+        "colorscale": matplotlib_colormap_to_plotly(keypoint_colormap),
+        "line": dict(color="black", width=0.5),
+        "opacity": opacity,
+    }
+
+    line = {"width": linewidth, "color": f"rgba(0,0,0,{opacity})"}
+
+    fig.add_trace(
+        plotly.graph_objs.Scatter3d(
+            x=coords[:, 0],
+            y=coords[:, 1],
+            z=coords[:, 2],
+            mode="markers",
+            visible=visible,
+            marker=marker,
+        )
+    )
+
+    for e in edges:
+        fig.add_trace(
+            plotly.graph_objs.Scatter3d(
+                x=coords[e, 0],
+                y=coords[e, 1],
+                z=coords[e, 2],
+                mode="lines",
+                visible=visible,
+                line=line,
+            )
+        )
+
+
+def plot_pcs_3D(
+    ymean,
+    ypcs,
+    edges,
+    keypoint_colormap,
+    project_dir=None,
+    node_size=6,
+    linewidth=2,
+    height=400,
+    mean_pose_opacity=0.2,
+):
+    """
+    Visualize the components of a fitted PCA model based on 3D components.
+
+    For each PC, a subplot shows the mean pose (semi-transparent) along
+    with a perturbation of the mean pose in the direction of the PC.
+
+    Parameters
+    ----------
+    ymean : ndarray (num_bodyparts, 3)
+        Mean pose.
+
+    ypcs : ndarray (num_pcs, num_bodyparts, 3)
+        Perturbations of the mean pose in the direction of each PC.
+
+    edges : list of index pairs
+        Skeleton edges.
+
+    keypoint_colormap : str
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    project_dir : str, default=None
+        Path to the project directory. Required if `savefig` is True.
+
+    node_size : float, default=30.0
+        Size of the keypoints in the figure.
+
+    linewidth: float, default=2.0
+        Width of edges in skeleton
+
+    height : int, default=400
+        Height of the figure in pixels.
+
+    mean_pose_opacity: float, default=0.4
+        Opacity of the mean pose
+    """
+    fig = initialize_3D_plot(height)
+
+    def visibility_mask(i):
+        visible = np.zeros((len(edges) + 1) * (len(ypcs) + 1))
+        visible[-(len(edges) + 1) :] = 1
+        visible[(len(edges) + 1) * i : (len(edges) + 1) * (i + 1)] = 1
+        return visible > 0
+
+    steps = []
+    for i, coords in enumerate(ypcs):
+        add_3D_pose_to_fig(
+            fig,
+            coords,
+            edges,
+            visible=(i == 0),
+            node_size=node_size,
+            linewidth=linewidth,
+            keypoint_colormap=keypoint_colormap,
+        )
+
+        steps.append(
+            dict(
+                method="update",
+                label=f"PC {i+1}",
+                args=[{"visible": visibility_mask(i)}],
+            )
+        )
+
+    add_3D_pose_to_fig(
+        fig,
+        ymean,
+        edges,
+        opacity=mean_pose_opacity,
+        node_size=node_size,
+        linewidth=linewidth,
+        keypoint_colormap=keypoint_colormap,
+    )
+
+    fig.update_layout(sliders=[dict(steps=steps)])
+
+    if project_dir is not None: 
+        save_path = os.path.join(project_dir, f"pcs.html")
+        fig.write_html(save_path)
+        print(f"Saved interactive plot to {save_path}")
+
+    fig.show()
+
+
+def plot_trajectories_3D(
+    Xs,
+    titles,
+    edges,
+    output_dir,
+    keypoint_colormap="autumn",
+    node_size=8,
+    linewidth=3,
+    height=500,
+    skiprate=1,
+):
+    """
+    Visualize a set of 3D trajectories.
+
+    Parameters
+    ----------
+    Xs : list of ndarrays (num_syllables, num_frames, num_bodyparts, 3)
+        Trajectories to visualize.
+
+    titles : list of str
+        Title for each trajectory.
+
+    edges : list of index pairs
+        Skeleton edges.
+
+    output_dir : str
+        Path to save the interactive plot.
+
+    keypoint_colormap : str, default='autumn'
+        Name of a matplotlib colormap to use for coloring the keypoints.
+
+    node_size : float, default=8.0
+        Size of the keypoints in the figure.
+
+    linewidth: float, default=3.0
+        Width of edges in skeleton
+
+    height : int, default=500
+        Height of the figure in pixels.
+
+    skiprate : int, default=1
+        Plot every `skiprate` frames.
+    """
+    fig = initialize_3D_plot(height)
+    
+    def visibility_mask(i):
+        n = (len(edges) + 1) * len(Xs[1])
+        visible = np.zeros(n * len(Xs))
+        visible[n * i : n * (i + 1)] = 1
+        return visible > 0
+
+    steps = []
+    Xs = Xs[:, ::skiprate]
+    for i, X in enumerate(Xs):
+        opacities = np.linspace(0.3, 1, len(X) + 1)[1:] ** 2
+        for coords, opacity in zip(X, opacities):
+            add_3D_pose_to_fig(
+                fig,
+                coords,
+                edges,
+                visible=(i == 0),
+                node_size=node_size,
+                linewidth=linewidth,
+                keypoint_colormap=keypoint_colormap,
+                opacity=opacity,
+            )
+
+        steps.append(
+            dict(
+                method="update",
+                label=titles[i],
+                args=[{"visible": visibility_mask(i)}],
+            )
+        )
+
+    fig.update_layout(sliders=[dict(steps=steps)])
+
+    if output_dir is not None:
+        save_path = os.path.join(output_dir, f"all_trajectories.html")
+        fig.write_html(save_path)
+        print(f"Saved interactive trajectories plot to {save_path}")
+
+    fig.show()
+
+
+def plot_poses_3D(
+    poses, 
+    edges, 
+    keypoint_colormap='autumn', 
+    node_size=6.0, 
+    linewidth=3.0, 
+):
+    """Plot a sequence of 3D poses.
+
+    Parameters
+    ----------
+    poses: array of shape (num_poses, num_bodyparts, 3)
+        3D poses to plot.
+
+    edges: list of index pairs
+        Skeleton edges.
+
+    keypoint_colormap: str, default='autumn'
+        Colormap to use for coloring keypoints.
+
+    node_size: float, default=6.0
+        Size of keypoints.
+
+    linewidth: float, default=3.0
+        Width of skeleton edges.
+    """
+    fig = initialize_3D_plot()
+    
+    def visibility_mask(i):
+        n = len(edges) + 1
+        visible = np.zeros(n * len(poses))
+        visible[n * i : n * (i + 1)] = 1
+        return visible > 0
+
+    steps = []
+    
+    for i, pose in enumerate(poses):
+        add_3D_pose_to_fig(
+            fig, 
+            pose, 
+            edges, 
+            visible=(i==0),
+            keypoint_colormap=keypoint_colormap, 
+            node_size=node_size, 
+            linewidth=linewidth
+        )
+        
+        steps.append(
+            dict(
+                method="update",
+                label=f"Pose {i+1}",
+                args=[{"visible": visibility_mask(i)}],
+            )
+        )
+        
+    fig.update_layout(sliders=[dict(steps=steps)])
+    fig.show()
