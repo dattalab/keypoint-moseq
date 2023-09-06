@@ -12,6 +12,7 @@ from textwrap import fill
 import sleap_io
 from pynwb import NWBHDF5IO
 from ndx_pose import PoseEstimation
+from itertools import islice
 
 from keypoint_moseq.util import list_files_with_exts, check_nan_proportions
 from jax_moseq.utils import get_frequencies, unbatch
@@ -962,7 +963,13 @@ def _deeplabcut_loader(filepath, name):
     if ext == ".h5":
         df = pd.read_hdf(filepath)
     if ext == ".csv":
-        df = pd.read_csv(filepath, header=[0, 1, 2], index_col=0)
+        with open(filepath) as f:
+            head = list(islice(f, 0, 5))
+            if "individuals" in head[1]:
+                header = [0, 1, 2, 3]
+            else:
+                header = [0, 1, 2]
+        df = pd.read_csv(filepath, header=header, index_col=0)
 
     coordinates, confidences = {}, {}
     bodyparts = df.columns.get_level_values("bodyparts").unique().tolist()
