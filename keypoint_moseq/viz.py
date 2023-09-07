@@ -21,7 +21,8 @@ from jax_moseq.utils import get_durations, get_frequencies
 
 from plotly.subplots import make_subplots
 import plotly.io as pio
-pio.renderers.default='iframe'
+
+pio.renderers.default = "iframe"
 
 # set matplotlib defaults
 plt.rcParams["figure.dpi"] = 100
@@ -64,8 +65,8 @@ def crop_image(image, centroid, crop_size):
 
     cropped = image[y_min:y_max, x_min:x_max]
     padded = np.zeros((h, w, *image.shape[2:]), dtype=image.dtype)
-    pad_x = (w - cropped.shape[1]) // 2
-    pad_y = (h - cropped.shape[0]) // 2
+    pad_x = max(w // 2 - x, 0)
+    pad_y = max(h // 2 - y, 0)
     padded[
         pad_y : pad_y + cropped.shape[0], pad_x : pad_x + cropped.shape[1]
     ] = cropped
@@ -642,7 +643,7 @@ def _grid_movie_tile(
 
     tile = []
 
-    if videos is not None:  
+    if videos is not None:
         frames = videos[key][start - pre : start + post]
         c = r @ c - window_size // 2
         M = [[np.cos(h), np.sin(h), -c[0]], [-np.sin(h), np.cos(h), -c[1]]]
@@ -955,8 +956,8 @@ def generate_grid_movies(
 
     video_paths: dict, default=None
         Dictionary mapping recording names to video paths. The recording
-        names must correspond to keys in the results dictionary. Either 
-        `video_dir` or `video_paths` must be provided unless 
+        names must correspond to keys in the results dictionary. Either
+        `video_dir` or `video_paths` must be provided unless
         `keypoints_only=True`.
 
     filter_size: int, default=9
@@ -1043,7 +1044,7 @@ def generate_grid_movies(
     keypoint_colormap: str, default='autumn'
         Colormap used to color keypoints. Used when
         `overlay_keypoints=True`.
-        
+
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """
     # check inputs
@@ -1845,7 +1846,7 @@ def overlay_keypoints_on_video(
     """
     if output_path is None:
         output_path = os.path.splitext(video_path)[0] + "_keypoints.mp4"
-        print(f'Saving video to {output_path}')
+        print(f"Saving video to {output_path}")
 
     if bodyparts is not None:
         if use_bodyparts is not None:
@@ -2008,7 +2009,7 @@ def matplotlib_colormap_to_plotly(cmap):
     return pl_colorscale
 
 
-def initialize_3D_plot(height=500):    
+def initialize_3D_plot(height=500):
     """Create an empty 3D plotly figure."""
     fig = make_subplots(rows=1, cols=1, specs=[[{"type": "scatter3d"}]])
     fig.update_layout(
@@ -2024,7 +2025,6 @@ def initialize_3D_plot(height=500):
         margin=dict(l=20, r=20, b=0, t=0, pad=10),
     )
     return fig
-
 
 
 def add_3D_pose_to_fig(
@@ -2185,7 +2185,7 @@ def plot_pcs_3D(
 
     fig.update_layout(sliders=[dict(steps=steps)])
 
-    if project_dir is not None: 
+    if project_dir is not None:
         save_path = os.path.join(project_dir, f"pcs.html")
         fig.write_html(save_path)
         print(f"Saved interactive plot to {save_path}")
@@ -2237,7 +2237,7 @@ def plot_trajectories_3D(
         Plot every `skiprate` frames.
     """
     fig = initialize_3D_plot(height)
-    
+
     def visibility_mask(i):
         n = (len(edges) + 1) * len(Xs[1])
         visible = np.zeros(n * len(Xs))
@@ -2279,11 +2279,11 @@ def plot_trajectories_3D(
 
 
 def plot_poses_3D(
-    poses, 
-    edges, 
-    keypoint_colormap='autumn', 
-    node_size=6.0, 
-    linewidth=3.0, 
+    poses,
+    edges,
+    keypoint_colormap="autumn",
+    node_size=6.0,
+    linewidth=3.0,
 ):
     """Plot a sequence of 3D poses.
 
@@ -2305,7 +2305,7 @@ def plot_poses_3D(
         Width of skeleton edges.
     """
     fig = initialize_3D_plot()
-    
+
     def visibility_mask(i):
         n = len(edges) + 1
         visible = np.zeros(n * len(poses))
@@ -2313,18 +2313,18 @@ def plot_poses_3D(
         return visible > 0
 
     steps = []
-    
+
     for i, pose in enumerate(poses):
         add_3D_pose_to_fig(
-            fig, 
-            pose, 
-            edges, 
-            visible=(i==0),
-            keypoint_colormap=keypoint_colormap, 
-            node_size=node_size, 
-            linewidth=linewidth
+            fig,
+            pose,
+            edges,
+            visible=(i == 0),
+            keypoint_colormap=keypoint_colormap,
+            node_size=node_size,
+            linewidth=linewidth,
         )
-        
+
         steps.append(
             dict(
                 method="update",
@@ -2332,6 +2332,6 @@ def plot_poses_3D(
                 args=[{"visible": visibility_mask(i)}],
             )
         )
-        
+
     fig.update_layout(sliders=[dict(steps=steps)])
     fig.show()
