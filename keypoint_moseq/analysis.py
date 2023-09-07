@@ -900,6 +900,21 @@ def _validate_and_order_syll_stats_params(
     return ordering, groups, colors, figsize
 
 
+def save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir):
+    """Save an analysis figure.
+
+    The figure is saved as both a .png and .pdf, either to `save_dir` if it is
+    provided, or else to `project_dir/model_name/figures`.
+    """
+    if save_dir is None:
+        save_dir = os.path.join(project_dir, model_name, "figures")
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, plot_name)
+    fig.savefig(save_path + ".png", dpi=300)
+    fig.savefig(save_path + ".pdf", dpi=300)
+    print(f"Saved figure to {save_path}.png")
+
+
 def plot_syll_stats_with_sem(
     stats_df,
     project_dir,
@@ -1040,14 +1055,8 @@ def plot_syll_stats_with_sem(
     sns.despine()
 
     # save the figure
-    # saving the figure
-    if save_dir is not None:
-        os.makedirs(save_dir, exist_ok=True)
-    else:
-        save_dir = os.path.join(project_dir, model_name, "figures")
-        os.makedirs(save_dir, exist_ok=True)
-    fig.savefig(os.path.join(save_dir, f"{stat}_{order}_stats.pdf"))
-    fig.savefig(os.path.join(save_dir, f"{stat}_{order}_stats.png"))
+    plot_name = f"{stat}_{order}_stats"
+    save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir)
     return fig, legend
 
 
@@ -1311,16 +1320,9 @@ def visualize_transition_bigram(
             np.arange(len(syll_include)), syll_names, rotation=90
         )
 
-    # saving the figures
-    # saving the figure
-    if save_dir is not None:
-        os.makedirs(save_dir, exist_ok=True)
-    else:
-        save_dir = os.path.join(project_dir, model_name, "figures")
-        os.makedirs(save_dir, exist_ok=True)
-
-    fig.savefig(os.path.join(save_dir, "transition_matrices.pdf"))
-    fig.savefig(os.path.join(save_dir, "transition_matrices.png"))
+    # save the figure
+    plot_name = f"transition_matrices"
+    save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir)
 
 
 def generate_transition_matrices(
@@ -1459,15 +1461,10 @@ def plot_transition_graph_group(
     # turn off the axis spines
     for sub_ax in ax:
         sub_ax.axis("off")
-    # saving the figures
-    # saving the figure
-    if save_dir is not None:
-        os.makedirs(save_dir, exist_ok=True)
-    else:
-        save_dir = os.path.join(project_dir, model_name, "figures")
-        os.makedirs(save_dir, exist_ok=True)
-    fig.savefig(os.path.join(save_dir, "transition_graphs.pdf"))
-    fig.savefig(os.path.join(save_dir, "transition_graphs.png"))
+
+    # save the figure
+    plot_name = "transition_graphs"
+    save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir)
 
 
 def plot_transition_graph_difference(
@@ -1533,7 +1530,8 @@ def plot_transition_graph_difference(
         if layout == "circular":
             pos = nx.circular_layout(G)
         else:
-            pos = nx.spring_layout(G)
+            G_for_spring = nx.from_numpy_array(np.mean(trans_mats, axis=0))
+            pos = nx.spring_layout(G_for_spring, iterations=500)
 
         nodelist = G.nodes()
         widths = nx.get_edge_attributes(G, "weight")
@@ -1594,14 +1592,10 @@ def plot_transition_graph_difference(
         ),
     ]
     plt.legend(handles=legend_elements, loc="upper left", borderaxespad=0)
-    # saving the figures
-    # saving the figure
 
-    if save_dir is None:
-        save_dir = os.path.join(project_dir, model_name, "figures")
-    os.makedirs(save_dir, exist_ok=True)
-    fig.savefig(os.path.join(save_dir, "transition_graphs_diff.pdf"))
-    fig.savefig(os.path.join(save_dir, "transition_graphs_diff.png"))
+    # save the figure
+    plot_name = "transition_graphs_diff"
+    save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir)
 
 
 def changepoint_analysis(
