@@ -91,6 +91,25 @@ def interactive_group_setting(project_dir, model_name):
     return index_filepath
 
 
+def create_index_file(project_dir, model_name):
+    index_filepath = os.path.join(project_dir, "index.yaml")
+
+    # generate index file
+    generate_index(project_dir, model_name, index_filepath)
+
+    # open index file
+    with open(index_filepath, "r") as f:
+        index_data = yaml.safe_load(f)
+
+    index_df = pd.DataFrame(
+        {
+            "group": [i["group"] for i in index_data["files"]],
+            "name": [i["name"] for i in index_data["files"]],
+        }
+    )
+    return index_df
+
+
 def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
     """Compute moseq dataframe from results dict that contains all kinematic
     values by frame.
