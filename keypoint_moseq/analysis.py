@@ -101,12 +101,17 @@ def create_index_file(project_dir, model_name):
     with open(index_filepath, "r") as f:
         index_data = yaml.safe_load(f)
 
+    # create index dataframe
     index_df = pd.DataFrame(
         {
             "group": [i["group"] for i in index_data["files"]],
             "name": [i["name"] for i in index_data["files"]],
         }
     )
+
+    # write index dataframe to csv
+    index_df.to_csv(os.path.join(project_dir, "index.csv"), index=False)
+
     return index_df
 
 
