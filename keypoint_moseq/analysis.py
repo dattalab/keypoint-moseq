@@ -1727,17 +1727,40 @@ def generate_index(project_dir, model_name, index_filepath):
     index_filepath : str
         path to index file
     """
-    # generate a new index file
-    results_dict = load_results(project_dir, model_name)
-    files = []
-    for recording in results_dict.keys():
-        file_dict = {"name": recording, "group": "default"}
-        files.append(file_dict)
 
-    index_data = {"files": files}
-    # write to file and progress_paths
-    with open(index_filepath, "w") as f:
-        yaml.safe_dump(index_data, f, default_flow_style=False)
+    # load model results
+    results_dict = load_results(project_dir, model_name)
+
+    # check if file exists
+    if os.path.exists(index_filepath):
+        # load existing index file
+        with open(index_filepath, "r") as f:
+            index_data = yaml.safe_load(f)
+        # all files are created
+        if len(index_data["files"]) == len(results_dict.keys()):
+            return
+        else:
+            # subset all the files
+            files = [i["name"] for i in index_data["files"]]
+            # find the missing file in results dict that's not in index
+            for i in results_dict.keys():
+                if i not in files:
+                    index_data["files"].append({"name": i, "group": "default"})
+            # write new index file
+            with open(index_filepath, "w") as f:
+                yaml.safe_dump(index_data, f, default_flow_style=False)
+    else:
+        # generate a new index file
+        results_dict = load_results(project_dir, model_name)
+        files = []
+        for recording in results_dict.keys():
+            file_dict = {"name": recording, "group": "default"}
+            files.append(file_dict)
+
+        index_data = {"files": files}
+        # write to file and progress_paths
+        with open(index_filepath, "w") as f:
+            yaml.safe_dump(index_data, f, default_flow_style=False)
 
 
 def generate_syll_info(project_dir, model_name, syll_info_path):
