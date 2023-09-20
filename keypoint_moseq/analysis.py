@@ -115,6 +115,25 @@ def create_index_file(project_dir, model_name):
     return index_df
 
 
+def update_index_file(project_dir, model_name):
+    index_filepath = os.path.join(project_dir, "index.yaml")
+    index_csvpath = os.path.join(project_dir, "index.csv")
+
+    # load the csv
+    index_df = pd.read_csv(index_csvpath)
+
+    # create index file from csv
+    index_data = {"files": []}
+    for i in zip(index_df.group.values, index_df.name.values):
+        index_data["files"].append({"group": i[0], "name": i[1]})
+
+    # write new index file
+    with open(index_filepath, "w") as f:
+        yaml.safe_dump(index_data, f, default_flow_style=False)
+
+    print("index.yaml updated")
+
+
 def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
     """Compute moseq dataframe from results dict that contains all kinematic
     values by frame.
