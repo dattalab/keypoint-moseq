@@ -1792,12 +1792,27 @@ def generate_syll_info(project_dir, model_name, syll_info_path):
     model_results = load_results(project_dir, model_name)
     unique_sylls = np.unique(np.concatenate([file["syllable"] for file in model_results.values()]))
     # construct the syllable dictionary
+    # group info is used by the labeling widget
+    # in the non interactive version there won't be any group info
     syll_dict = {
         int(i): {"label": "", "desc": "", "movie_path": None, "group_info": {}}
         for i in unique_sylls
     }
 
+    grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
+    assert len(grid_movies) > 0, (
+        "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
+        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
+    )
+
+    for movie_path in grid_movies:
+        syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
+        syll_dict[syll_index]["movie_path"] = movie_path
+
     # write to file
     print(syll_info_path)
     with open(syll_info_path, "w") as file:
         yaml.safe_dump(syll_dict, file, default_flow_style=False)
+    syll_info_df.to_csv(os.path.join(project_dir, model_name, "syll_info.csv"), index=False)
+
+    return syll_info_df
