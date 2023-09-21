@@ -1844,3 +1844,35 @@ def create_syll_info_file(project_dir, model_name):
     syll_info_df.to_csv(os.path.join(project_dir, model_name, "syll_info.csv"), index=False)
 
     return syll_info_df
+
+
+def update_syll_info_file(project_dir, model_name):
+    syll_info_path = os.path.join(project_dir, model_name, "syll_info.yaml")
+    syll_info_csvpath = os.path.join(project_dir, model_name, "syll_info.csv")
+
+    # open csv to record information
+    syll_info_df = pd.read_csv(syll_info_csvpath)
+    # fill na with an empty string
+    syll_info_df.fillna("", inplace=True)
+    # open yaml file to record information
+    with open(syll_info_path, "r") as f:
+        syll_info = yaml.safe_load(f)
+
+    # record new information
+    for i in zip(
+        syll_info_df.syllable.values,
+        syll_info_df.short_description.values,
+        syll_info_df.label.values,
+    ):
+        if i[1]:
+            syll_info[i[0]]["desc"] = i[1]
+        else:
+            syll_info[i[0]]["desc"] = ""
+        if i[2]:
+            syll_info[i[0]]["label"] = i[2]
+        else:
+            syll_info[i[0]]["label"] = ""
+
+    # write to file
+    with open(syll_info_path, "w") as f:
+        yaml.safe_dump(syll_info, f, default_flow_style=False)
