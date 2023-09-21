@@ -1733,11 +1733,16 @@ def create_syll_info_file(project_dir, model_name):
 
     # create dataframe for syllable info
     syll_info_df = {"syllable": [], "short_description": [], "label": [], "movie_path": []}
-    for k, v in syll_info.items():
-        syll_info_df["syllable"].append(k)
-        syll_info_df["short_description"].append(v["desc"])
-        syll_info_df["label"].append(v["label"])
-        syll_info_df["movie_path"].append(v["movie_path"])
+    try:
+        for k, v in syll_info.items():
+            syll_info_df["syllable"].append(k)
+            syll_info_df["short_description"].append(v["desc"])
+            syll_info_df["label"].append(v["label"])
+            syll_info_df["movie_path"].append(v["movie_path"])
+    except AttributeError:
+        print(
+            "syll_info.yaml file is not in the correct format. Please delete the file and re-run the function."
+        )
 
     syll_info_df = pd.DataFrame(syll_info_df)
     syll_info_df.to_csv(os.path.join(project_dir, model_name, "syll_info.csv"), index=False)
