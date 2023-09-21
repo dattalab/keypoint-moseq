@@ -1717,6 +1717,29 @@ def generate_syll_info(project_dir, model_name, syll_info_path):
     print(syll_info_path)
     with open(syll_info_path, "w") as file:
         yaml.safe_dump(syll_dict, file, default_flow_style=False)
+
+
+def create_syll_info_file(project_dir, model_name):
+    # construct the syllable info path
+    syll_info_path = os.path.join(project_dir, model_name, "syll_info.yaml")
+    # generate a new syll_info yaml file if file doesn't exist
+    if not os.path.exists(syll_info_path):
+        # generate the syllable info yaml file
+        generate_syll_info(project_dir, model_name, syll_info_path)
+
+    # open the syllable info yaml file
+    with open(syll_info_path, "r") as f:
+        syll_info = yaml.safe_load(f)
+
+    # create dataframe for syllable info
+    syll_info_df = {"syllable": [], "short_description": [], "label": [], "movie_path": []}
+    for k, v in syll_info.items():
+        syll_info_df["syllable"].append(k)
+        syll_info_df["short_description"].append(v["desc"])
+        syll_info_df["label"].append(v["label"])
+        syll_info_df["movie_path"].append(v["movie_path"])
+
+    syll_info_df = pd.DataFrame(syll_info_df)
     syll_info_df.to_csv(os.path.join(project_dir, model_name, "syll_info.csv"), index=False)
 
     return syll_info_df
