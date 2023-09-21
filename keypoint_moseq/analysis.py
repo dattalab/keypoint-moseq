@@ -301,6 +301,7 @@ def compute_stats_df(
         )
 
     # construct frequency dataframe
+    # syllable frequencies within one session add up to 1
     frequency_df = []
     for k, v in results_dict.items():
         syll_freq = get_frequencies(v["syllable"])
@@ -316,7 +317,6 @@ def compute_stats_df(
     frequency_df = pd.concat(frequency_df)
     if "name" not in groupby:
         frequency_df.drop(columns=["name"], inplace=True)
-    frequency_df = frequency_df.groupby(groupby + ["syllable"]).mean().reset_index()
 
     # filter out syllables that are used less than threshold in all recordings
     filtered_df = moseq_df[moseq_df["syllable"].isin(syll_include)].copy()
@@ -816,19 +816,25 @@ def sort_syllables_by_stat(stats_df, stat="frequency"):
         the mapping from the syllable to the new plotting label
     """
 
-    tmp = (
-        stats_df.drop(
-            [col for col, dtype in stats_df.dtypes.items() if dtype == "object"],
-            axis=1,
+    # stats_df frequency normalized by session
+    # mean frequency by syllable don't always refect the ordering from reindexing
+    # use the syllable label as ordering instead
+    if stat == "frequency":
+        ordering = sorted(stats_df.syllable.unique())
+    else:
+        ordering = (
+            stats_df.drop(
+                [col for col, dtype in stats_df.dtypes.items() if dtype == "object"],
+                axis=1,
+            )
+            .groupby("syllable")
+            .mean()
+            .sort_values(by=stat, ascending=False)
+            .index
         )
-        .groupby("syllable")
-        .mean()
-        .sort_values(by=stat, ascending=False)
-        .index
-    )
 
     # Get sorted ordering
-    ordering = list(tmp)
+    ordering = list(ordering)
 
     # Get order mapping
     relabel_mapping = {o: i for i, o in enumerate(ordering)}
