@@ -1514,6 +1514,7 @@ def generate_trajectory_plots(
     use_bodyparts=None,
     keypoint_colormap="autumn",
     plot_options={},
+    get_limits_pctl=1,
     padding={"left": 0.1, "right": 0.1, "top": 0.2, "bottom": 0.2},
     save_individually=True,
     save_gifs=True,
@@ -1570,6 +1571,10 @@ def generate_trajectory_plots(
     plot_options: dict, default={}
         Dictionary of options for trajectory plots (see
         :py:func:`keypoint_moseq.util.plot_trajectories`).
+
+    get_limits_pctl: float, default=1
+        Percentile to use for determining the axis limits. Higher values lead
+        to tighter axis limits.
 
     padding: dict, default={'left':0.1, 'right':0.1, 'top':0.2, 'bottom':0.2}
         Padding around trajectory plots. Controls the the distance
@@ -1647,7 +1652,7 @@ def generate_trajectory_plots(
         suffixes = [""]
 
     for Xs_2D, suffix in zip(all_Xs, suffixes):
-        lims = get_limits(Xs_2D, pctl=0, **padding)
+        lims = get_limits(Xs_2D, pctl=get_limits_pctl, **padding)
 
         # individual plots
         if save_individually:
