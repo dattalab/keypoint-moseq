@@ -439,7 +439,6 @@ def label_syllables(project_dir, model_name, moseq_df):
     model_name : str
         the name of the model directory
     """
-    output_notebook()
 
     # construct the syllable info path
     syll_info_path = os.path.join(project_dir, model_name, "syll_info.yaml")
@@ -458,7 +457,7 @@ def label_syllables(project_dir, model_name, moseq_df):
         "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
         "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
     )
-
+    # add grid movie paths
     for movie_path in grid_movies:
         syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
         syll_dict[syll_index]["movie_path"] = movie_path
@@ -467,34 +466,88 @@ def label_syllables(project_dir, model_name, moseq_df):
     with open(syll_info_path, "w") as file:
         yaml.safe_dump(syll_dict, file, default_flow_style=False)
 
-    # construct the index path
-    index_path = os.path.join(project_dir, "index.yaml")
+    # create select widget
+    select = pn.widgets.Select(name="Select", options=sorted(list(syll_dict.keys())))
 
-    # create index.yaml if it does not exist
-    if not os.path.exists(index_path):
-        print("index.yaml does not exist, creating one...")
-        generate_index(project_dir, model_name, index_path)
+    # call back function to create video displayer
+    def show_movie(syllable):
+        return pn.pane.Video(syll_dict[select.value]["movie_path"], width=500, loop=False)
 
-    # compute group-wise stats dataframe
-    stats_df = compute_stats_df(project_dir, model_name, moseq_df, groupby=["group"])[
-        [
-            "group",
-            "syllable",
-            "frequency",
-            "duration",
-            "heading_mean",
-            "velocity_px_s_mean",
-        ]
-    ]
+    # dynamic video displayer
+    ivideo = pn.bind(show_movie, syllable=select)
 
-    labeler = SyllableLabeler(project_dir, model_name, stats_df, index_path, syll_info_path)
+    # create the labeler dataframe
+    # only include the syllable that have grid movies
+    include = [i for i, v in syll_dict.items() if v["movie_path"] is not None]
+    syll_df = (
+        moseq_df[["syllable", "velocity_px_s"]].groupby("syllable").mean().reset_index().copy()
+    )
+    syll_df = syll_df[syll_df.syllable.isin(include)]
 
-    output = widgets.interactive_output(
-        labeler.interactive_syllable_labeler,
-        {"syllables": labeler.syll_select},
+    # get labels and description from syll info
+    lbl = []
+    desc = []
+    for i in syll_df.syllable:
+        lbl.append(syll_dict[i]["label"])
+        desc.append(syll_dict[i]["desc"])
+    syll_df["label"] = lbl
+    syll_df["short description"] = desc
+
+    # set up interactive table
+    titles = {"syllable": "syll", "velocity_px_s": "velocity"}
+    editors = {
+        "name": None,
+        "label": {
+            "type": "textarea",
+            "elementAttributes": {"maxlength": "100"},
+            "selectContents": True,
+            "verticalNavigation": "editor",
+            "shiftEnterSubmit": True,
+        },
+        "short description": {
+            "type": "textarea",
+            "elementAttributes": {"maxlength": "200"},
+            "selectContents": True,
+            "verticalNavigation": "editor",
+            "shiftEnterSubmit": True,
+        },
+    }
+
+    base_configuration = {"clipboard": "copy"}
+
+    widths = {"syllable": 5}
+    summary_table = pn.widgets.Tabulator(
+        syll_df,
+        titles=titles,
+        editors=editors,
+        layout="fit_data_table",
+        selectable=1,
+        show_index=False,
+        widths=widths,
+        configuration=base_configuration,
     )
 
-    display(labeler.clear_button, labeler.syll_select, output)
+    button = pn.widgets.Button(name="Save syllable info", button_type="primary")
+
+    # call back function to save the index file
+    def save_index(project_dir):
+        # create index file from csv
+        for key in include:
+            syll_dict[key]["label"] = syll_df[syll_df.syllable == key]["label"].values[0]
+            syll_dict[key]["desc"] = syll_df[syll_df.syllable == key]["short description"].values[0]
+
+        # write new index file
+        with open(os.path.join(project_dir, model_name, "syll_info.yaml"), "w") as f:
+            yaml.safe_dump(syll_dict, f, default_flow_style=False)
+
+    # button click action
+    def b(event, save=True):
+        save_index(project_dir)
+
+    button.on_click(b)
+
+    # bind everything together
+    return pn.Row(pn.Column(select, ivideo), pn.Column(summary_table, pn.Column(button)))
 
 
 def get_tie_correction(x, N_m):
