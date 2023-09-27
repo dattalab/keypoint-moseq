@@ -323,7 +323,7 @@ def apply_model(
     results = extract_results(
         model, metadata, project_dir, model_name, save_results, results_path
     )
-    
+
     if return_model:
         return results, model
     else:
@@ -371,11 +371,7 @@ def update_hypparams(model_dict, **kwargs):
                 else:
                     if not isinstance(v, type(old_value)):
                         warnings.warn(
-                            fill(
-                                f"{v} has type {type(v)} which differs from the current "
-                                f"value of {k} which has type {type(old_value)}. {v} will "
-                                f"will be cast to {type(old_value)}"
-                            )
+                            f"'{k}' with {type(v)} will be cast to {type(old_value)}"
                         )
 
                     model_dict["hypparams"][hypparms_group][k] = type(
