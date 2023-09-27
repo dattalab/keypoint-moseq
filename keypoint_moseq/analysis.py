@@ -92,6 +92,16 @@ def interactive_group_setting(project_dir, model_name):
 
 
 def create_index_file(project_dir, model_name):
+    """
+    create a csv from index.yaml for users to fill out for the non interactive version
+
+    Parameters
+    ----------
+    project_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
+    """
     index_filepath = os.path.join(project_dir, "index.yaml")
 
     # generate index file
@@ -116,6 +126,17 @@ def create_index_file(project_dir, model_name):
 
 
 def update_index_file(project_dir, model_name):
+    """
+    update index.yaml from index.csv for the non interactive version
+
+    Parameters
+    ----------
+    project_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
+    """
+
     index_filepath = os.path.join(project_dir, "index.yaml")
     index_csvpath = os.path.join(project_dir, "index.csv")
 
