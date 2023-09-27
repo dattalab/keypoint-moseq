@@ -23,7 +23,16 @@ from glob import glob
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import argrelextrema
 
-from keypoint_moseq.widgets import GroupSettingWidgets, SyllableLabeler
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+
+import panel as pn
+
+pn.extension("plotly", "tabulator")
+
+
+from keypoint_moseq.widgets import SyllableLabeler
 from keypoint_moseq.io import load_results
 from keypoint_moseq.util import (
     filter_angle,
@@ -84,11 +93,66 @@ def interactive_group_setting(project_dir, model_name):
     if not os.path.exists(index_filepath):
         generate_index(project_dir, model_name, index_filepath)
 
-    # display the widget
-    index_grid = GroupSettingWidgets(index_filepath)
-    display(index_grid.clear_button, index_grid.group_set)
-    display(index_grid.qgrid_widget)
-    return index_filepath
+    # making the interactive dataframe
+
+    # open index file
+    with open(os.path.join(project_dir, "index.yaml"), "r") as file:
+        index_data = yaml.safe_load(file)
+
+    # make a tabulator dataframe
+    summary_data = pd.DataFrame(
+        {
+            "name": [f["name"] for f in index_data["files"]],
+            "group": [f["group"] for f in index_data["files"]],
+        }
+    )
+
+    titles = {"name": "file name", "group": "group"}
+
+    editors = {
+        "name": None,
+        "group": {
+            "type": "textarea",
+            "elementAttributes": {"maxlength": "100"},
+            "selectContents": True,
+            "verticalNavigation": "editor",
+            "shiftEnterSubmit": True,
+        },
+    }
+    widths = {"name": 400}
+    base_configuration = {"clipboard": "copy"}
+
+    summary_table = pn.widgets.Tabulator(
+        summary_data,
+        editors=editors,
+        layout="fit_data_table",
+        selectable=1,
+        show_index=False,
+        titles=titles,
+        widths=widths,
+        configuration=base_configuration,
+    )
+    button = pn.widgets.Button(name="Update Index File", button_type="primary")
+
+    # call back function to save the index file
+    def save_index(project_dir):
+        # create index file from csv
+        index_df = summary_table.current_view.copy()
+        index_data = {"files": []}
+        for i in zip(index_df.group.values, index_df.name.values):
+            index_data["files"].append({"group": i[0], "name": i[1]})
+
+        # write new index file
+        with open(os.path.join(project_dir, "index.yaml"), "w") as f:
+            yaml.safe_dump(index_data, f, default_flow_style=False)
+
+    # button click action
+    def b(event, save=True):
+        save_index(project_dir)
+
+    button.on_click(b)
+
+    return pn.Row(summary_table, pn.Column(button))
 
 
 def create_index_file(project_dir, model_name):
