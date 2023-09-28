@@ -132,7 +132,7 @@ def interactive_group_setting(project_dir, model_name):
         widths=widths,
         configuration=base_configuration,
     )
-    button = pn.widgets.Button(name="Update Index File", button_type="primary")
+    button = pn.widgets.Button(name="Save group info", button_type="primary")
 
     # call back function to save the index file
     def save_index(project_dir):
