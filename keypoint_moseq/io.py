@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import jax
+import re
 import numpy as np
 import warnings
 import h5py
@@ -1023,13 +1024,23 @@ def _sleap_loader(filepath, name):
 
 def _anipose_loader(filepath, name):
     """Load keypoints from anipose csv files."""
-    df = pd.read_csv(
-        filepath,
-    )
-    bodyparts = [n.split("_x")[0] for n in df.columns[:-1][::5]]
-    arr = df.to_numpy()[:, :-1].reshape(len(df), len(bodyparts), 5)
-    coordinates = {name: arr[:, :, :3]}
-    confidences = {name: arr[:, :, 4]}
+    with open(filepath, "r") as f:
+        header = f.readline()
+
+    pattern = r"(?P<string>\w+)_x,(?P=string)_y,(?P=string)_z"
+    bodyparts = list(re.findall(pattern, header))
+
+    df = pd.read_csv(filepath)
+    coordinates = {
+        name: np.stack(
+            [
+                df[[f"{bp}_x", f"{bp}_y", f"{bp}_z"]].to_numpy()
+                for bp in bodyparts
+            ],
+            axis=1,
+        )
+    }
+    confidences = {name: df[[f"{bp}_score" for bp in bodyparts]].to_numpy()}
     return coordinates, confidences, bodyparts
 
 
