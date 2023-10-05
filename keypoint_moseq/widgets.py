@@ -26,24 +26,6 @@ from ipywidgets import HBox, VBox
 from bokeh.models.widgets import PreText
 
 
-def read_yaml(yaml_file):
-    """Read yaml file into dictionary.
-
-    Parameters
-    ----------
-    yaml_file : str
-        path to yaml file
-
-    Returns
-    -------
-    dict
-        dictionary of yaml file data
-    """
-
-    with open(yaml_file, "r") as f:
-        return yaml.safe_load(f)
-
-
 def show_trajectory_gif(project_dir, model_name):
     """Show trajectory gif for syllable labeling.
 
