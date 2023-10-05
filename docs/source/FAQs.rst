@@ -297,12 +297,16 @@ There are two main causes of GPU out of memory (OOM) errors:
 NaNs during fitting
 -------------------
 
-NaNs are much more likely with single-precision computing. Check the precision using::
+The following actions may help resolve NaNs during model fitting. If they don't, please contact calebsw@gmail.com and include the config, the data and code used for fitting, as well as the most recent model checkpoint. 
+
+- Make sure you are using double-precision computing. Check the precision using::
 
     import jax
     jax.config.read('jax_enable_x64')
 
-If the output is ``True`` (i.e. JAX is using double-precision), then please contact calebsw@gmail.com and include the config, the data used for fitting, and the most recent model checkpoint. 
+- Try increasing adjusting the `jitter` parameter, which controls the amount of regularization used to prevent singular matrices. The default value is 1e-3, but it may be necessary to increase this to 1e-2 or 1e-1 using the `jitter` keyword argument in `fit_model`.
+
+- Enable parallel Kalman sampling. By default, it is only enabled when fittin with a GPU. You can override this, however, using the argument `parallel_message_passing=True` when running `fit_model`.
 
 
 Installation errors
