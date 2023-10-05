@@ -6,6 +6,7 @@ from keypoint_moseq.util import (
 )
 from jax_moseq.utils import get_frequencies, unbatch
 from jax_moseq.models.keypoint_slds import align_egocentric
+from keypoint_moseq.io import load_results
 
 from math import ceil
 from matplotlib.lines import Line2D
@@ -83,18 +84,10 @@ def interactive_group_setting(project_dir, model_name):
         generate_index(project_dir, model_name, index_filepath)
 
     # making the interactive dataframe
-
-    # open index file
-    with open(os.path.join(project_dir, "index.yaml"), "r") as file:
-        index_data = yaml.safe_load(file)
+    # open index dataframe
 
     # make a tabulator dataframe
-    summary_data = pd.DataFrame(
-        {
-            "name": [f["name"] for f in index_data["files"]],
-            "group": [f["group"] for f in index_data["files"]],
-        }
-    )
+    summary_data = pd.read_csv(index_filepath, index_col=False)
 
     titles = {"name": "file name", "group": "group"}
 
@@ -124,20 +117,13 @@ def interactive_group_setting(project_dir, model_name):
     button = pn.widgets.Button(name="Save group info", button_type="primary")
 
     # call back function to save the index file
-    def save_index(project_dir):
+    def save_index(summary_data):
         # create index file from csv
-        index_df = summary_table.current_view.copy()
-        index_data = {"files": []}
-        for i in zip(index_df.group.values, index_df.name.values):
-            index_data["files"].append({"group": i[0], "name": i[1]})
-
-        # write new index file
-        with open(os.path.join(project_dir, "index.yaml"), "w") as f:
-            yaml.safe_dump(index_data, f, default_flow_style=False)
+        summary_data.to_csv(index_filepath, index=False)
 
     # button click action
     def b(event, save=True):
-        save_index(project_dir)
+        save_index(summary_data)
 
     button.on_click(b)
 
@@ -1723,7 +1709,7 @@ def plot_transition_graph_difference(
 
 
 def generate_index(project_dir, model_name, index_filepath):
-    """Generate index file.
+    """Generate index file as a csv.
 
     Parameters
     ----------
@@ -1740,34 +1726,26 @@ def generate_index(project_dir, model_name, index_filepath):
 
     # check if file exists
     if os.path.exists(index_filepath):
-        # load existing index file
-        with open(index_filepath, "r") as f:
-            index_data = yaml.safe_load(f)
+        index_df = pd.read_csv(index_filepath, index_col=False)
+
         # all files are created
-        if len(index_data["files"]) == len(results_dict.keys()):
+        if len(index_df) == len(results_dict.keys()):
             return
         else:
             # subset all the files
-            files = [i["name"] for i in index_data["files"]]
+            files = index_df.name.values
             # find the missing file in results dict that's not in index
             for i in results_dict.keys():
                 if i not in files:
-                    index_data["files"].append({"name": i, "group": "default"})
-            # write new index file
-            with open(index_filepath, "w") as f:
-                yaml.safe_dump(index_data, f, default_flow_style=False)
+                    index_df.loc[len(index_df.index)] = [i, "default"]
+            # write index dataframe
+            index_df.to_csv(index_filepath, index=False)
     else:
         # generate a new index file
         results_dict = load_results(project_dir, model_name)
-        files = []
-        for recording in results_dict.keys():
-            file_dict = {"name": recording, "group": "default"}
-            files.append(file_dict)
-
-        index_data = {"files": files}
-        # write to file and progress_paths
-        with open(index_filepath, "w") as f:
-            yaml.safe_dump(index_data, f, default_flow_style=False)
+        index_df = pd.DataFrame({"name": list(results_dict.keys()), "group": "default"})
+        # write index dataframe
+        index_df.to_csv(index_filepath, index=False)
 
 
 def generate_syll_info(project_dir, model_name, syll_info_path):
