@@ -1428,7 +1428,7 @@ def visualize_transition_bigram(
         axs[i].set_xticks(np.arange(len(syll_include)), syll_names, rotation=90)
 
     # save the figure
-    plot_name = f"transition_matrices"
+    plot_name = "transition_matrices"
     save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir)
 
 
