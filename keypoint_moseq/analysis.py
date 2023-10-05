@@ -1,3 +1,12 @@
+from keypoint_moseq.util import (
+    filter_angle,
+    filtered_derivative,
+    permute_cyclic,
+    format_data,
+)
+from jax_moseq.utils import get_frequencies, unbatch
+from jax_moseq.models.keypoint_slds import align_egocentric
+
 from math import ceil
 from matplotlib.lines import Line2D
 from cytoolz import sliding_window
@@ -8,11 +17,10 @@ import yaml
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import ipywidgets as widgets
+
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
-from bokeh.io import output_notebook
-from IPython.display import display
+
 from scipy import stats
 from textwrap import fill
 from statsmodels.stats.multitest import multipletests, fdrcorrection
@@ -22,28 +30,9 @@ from glob import glob
 
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import argrelextrema
-
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-
 import panel as pn
 
 pn.extension("plotly", "tabulator")
-
-
-from keypoint_moseq.widgets import SyllableLabeler
-from keypoint_moseq.io import load_results
-from keypoint_moseq.util import (
-    filter_angle,
-    filtered_derivative,
-    permute_cyclic,
-    format_data,
-)
-
-from jax_moseq.utils import get_frequencies, unbatch
-from jax_moseq.models.keypoint_slds import align_egocentric
-
 na = np.newaxis
 
 
