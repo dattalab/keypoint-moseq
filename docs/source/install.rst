@@ -88,29 +88,3 @@ Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 Make the environment available to jupyter::
 
    python -m ipykernel install --user --name=keypoint_moseq
-
-
-Next follow `Install jupyter extensions`_ to use the interactive analysis tools. 
-
-
-Install jupyter extensions
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-To use the interactive widgets in the analysis notebook, install the required jupyter extensions by running the following lines from a terminal in which the ``keypoint_moseq`` environment is active.
-
-**Windows users only:** conda install the jupyter extensions package::
-
-   conda install -c conda-forge jupyter_contrib_nbextensions
-
-
-**All users:** run the following lines::
-
-   # Install and Enable widget extensions configurator
-   jupyter nbextension install --py jupyter_nbextensions_configurator --sys-prefix
-   jupyter nbextension enable --py --sys-prefix widgetsnbextension
-   jupyter nbextension enable --py --sys-prefix  --py qgrid
-
-   # Install bokeh extensions
-   jupyter nbextension install --sys-prefix --symlink --py jupyter_bokeh
-   jupyter nbextension enable jupyter_bokeh --py --sys-prefix
-
