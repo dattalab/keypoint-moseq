@@ -753,40 +753,6 @@ def permute_cyclic(arr, mask=None, axis=0):
     return arr_permuted
 
 
-def check_jupyter_extensions(
-    extensions=[
-        "nbextensions_configurator",
-        "jupyter_bokeh",
-        "qgrid",
-    ]
-):
-    result = subprocess.run(
-        ["jupyter", "nbextension", "list"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    result_str = result.stdout.decode("utf-8")
-
-    # For each extension
-    for extension in extensions:
-        for line in result_str.split("\n"):
-            if extension in line and "validating" not in line:
-                # Parse the line
-                parts = line.split()
-                # Check if the extension is enabled
-                if "enabled" in parts:
-                    print(
-                        f"✅ The extension {extension} is installed and enabled."
-                    )
-                else:
-                    print(
-                        f"❌ The extension {extension} is installed but not enabled."
-                    )
-                break
-        else:
-            print(f"The extension {extension} is not installed.")
-
-
 def _print_colored_table(row_labels, col_labels, values):
     try:
         from IPython.display import display
