@@ -69,6 +69,7 @@ def fit_model(
     save_every_n_iters=25,
     generate_progress_plots=True,
     parallel_message_passing=None,
+    jitter=0.001,
     **kwargs,
 ):
     """Fit a model to data.
@@ -130,6 +131,12 @@ def fit_model(
         raised if `parallel_message_passing=True` and JAX is CPU-bound. Set to
         'force' to skip this check.
 
+    jitter : float, default=0.001
+        Amount to boost the diagonal of the dynamics covariance matrix when
+        resampling pose trajectories. Increasing this value can help prevent
+        NaNs during fitting.
+
+
     Returns
     -------
     model : dict
@@ -181,6 +188,7 @@ def fit_model(
                     pbar=pbar,
                     ar_only=ar_only,
                     verbose=verbose,
+                    jitter=jitter,
                     parallel_message_passing=parallel_message_passing,
                 )
             except StopResampling:
