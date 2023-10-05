@@ -12,7 +12,6 @@ from .io import *
 from .viz import *
 from .util import *
 from .fitting import *
-from .widgets import *
 from .analysis import *
 from .calibration import noise_calibration
 
