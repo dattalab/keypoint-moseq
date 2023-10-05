@@ -77,7 +77,7 @@ def interactive_group_setting(project_dir, model_name):
         the name of the model directory
     """
 
-    index_filepath = os.path.join(project_dir, "index.yaml")
+    index_filepath = os.path.join(project_dir, "index.csv")
 
     if not os.path.exists(index_filepath):
         generate_index(project_dir, model_name, index_filepath)
@@ -142,70 +142,6 @@ def interactive_group_setting(project_dir, model_name):
     button.on_click(b)
 
     return pn.Row(summary_table, pn.Column(button))
-
-
-def create_index_file(project_dir, model_name):
-    """
-    create a csv from index.yaml for users to fill out for the non interactive version
-
-    Parameters
-    ----------
-    project_dir : str
-        the path to the project directory
-    model_name : str
-        the name of the model directory
-    """
-    index_filepath = os.path.join(project_dir, "index.yaml")
-
-    # generate index file
-    generate_index(project_dir, model_name, index_filepath)
-
-    # open index file
-    with open(index_filepath, "r") as f:
-        index_data = yaml.safe_load(f)
-
-    # create index dataframe
-    index_df = pd.DataFrame(
-        {
-            "group": [i["group"] for i in index_data["files"]],
-            "name": [i["name"] for i in index_data["files"]],
-        }
-    )
-
-    # write index dataframe to csv
-    index_df.to_csv(os.path.join(project_dir, "index.csv"), index=False)
-
-    return index_df
-
-
-def update_index_file(project_dir, model_name):
-    """
-    update index.yaml from index.csv for the non interactive version
-
-    Parameters
-    ----------
-    project_dir : str
-        the path to the project directory
-    model_name : str
-        the name of the model directory
-    """
-
-    index_filepath = os.path.join(project_dir, "index.yaml")
-    index_csvpath = os.path.join(project_dir, "index.csv")
-
-    # load the csv
-    index_df = pd.read_csv(index_csvpath)
-
-    # create index file from csv
-    index_data = {"files": []}
-    for i in zip(index_df.group.values, index_df.name.values):
-        index_data["files"].append({"group": i[0], "name": i[1]})
-
-    # write new index file
-    with open(index_filepath, "w") as f:
-        yaml.safe_dump(index_data, f, default_flow_style=False)
-
-    print("index.yaml updated")
 
 
 def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
