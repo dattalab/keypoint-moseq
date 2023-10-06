@@ -1719,6 +1719,10 @@ def generate_trajectory_plots(
         assert set(projection_planes) <= set(["xy", "yz", "xz"]), fill(
             "`projection_planes` must be a subset of `['xy','yz','xz']`"
         )
+        if lims is not None:
+            assert lims.shape == (2, 3), fill(
+                "`lims` must be None or an ndarray of shape (2,3) when plotting 3D data"
+            )
         all_Xs, all_lims, suffixes = [], [], []
         for plane in projection_planes:
             use_dims = {"xy": [0, 1], "yz": [1, 2], "xz": [0, 2]}[plane]
