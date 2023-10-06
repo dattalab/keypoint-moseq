@@ -401,7 +401,6 @@ def generate_syll_info(project_dir, model_name, syll_info_path):
             "syllable": unique_sylls,
             "label": [""] * len(unique_sylls),
             "short_description": [""] * len(unique_sylls),
-            "movie_path": None * len(unique_sylls),
         }
     )
 
@@ -448,41 +447,33 @@ def label_syllables(project_dir, model_name, moseq_df):
         generate_syll_info(project_dir, model_name, syll_info_path)
 
     # load syll_info
-    syll_info_df = pd.read_csv(syll_info_path, index_col=False)
+    syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
+    # split into with movie and without movie
+    syll_info_df_with_movie = syll_info_df[
+        syll_info_df.movie_path.str.contains(".mp4")
+    ].copy()
+    syll_info_df_without_movie = syll_info_df[
+        ~syll_info_df.movie_path.str.contains(".mp4")
+    ].copy()
 
-    grid_movies = glob(
-        os.path.join(project_dir, model_name, "grid_movies", "*.mp4")
-    )
-    assert len(grid_movies) > 0, (
-        "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
-        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
-    )
-    # add grid movie paths
-    for movie_path in grid_movies:
-        syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
-        syll_dict[syll_index]["movie_path"] = movie_path
-
-    # write to file
-    with open(syll_info_path, "w") as file:
-        yaml.safe_dump(syll_dict, file, default_flow_style=False)
-
-    # create select widget
+    # create select widget only include the ones with a movie
     select = pn.widgets.Select(
-        name="Select", options=sorted(list(syll_dict.keys()))
+        name="Select", options=sorted(list(syll_info_df_with_movie.syllable))
     )
 
     # call back function to create video displayer
     def show_movie(syllable):
-        return pn.pane.Video(
-            syll_dict[select.value]["movie_path"], width=500, loop=False
-        )
+        movie_path = syll_info_df_with_movie[
+            syll_info_df_with_movie.syllable == select.value
+        ].movie_path.values[0]
+        return pn.pane.Video(movie_path, width=500, loop=False)
 
     # dynamic video displayer
     ivideo = pn.bind(show_movie, syllable=select)
 
     # create the labeler dataframe
     # only include the syllable that have grid movies
-    include = [i for i, v in syll_dict.items() if v["movie_path"] is not None]
+    include = syll_info_df_with_movie.syllable.values
     syll_df = (
         moseq_df[["syllable", "velocity_px_s"]]
         .groupby("syllable")
@@ -493,13 +484,9 @@ def label_syllables(project_dir, model_name, moseq_df):
     syll_df = syll_df[syll_df.syllable.isin(include)]
 
     # get labels and description from syll info
-    lbl = []
-    desc = []
-    for i in syll_df.syllable:
-        lbl.append(syll_dict[i]["label"])
-        desc.append(syll_dict[i]["desc"])
-    syll_df["label"] = lbl
-    syll_df["short description"] = desc
+    syll_df = syll_df.merge(
+        syll_info_df_with_movie[["syllable", "label", "short_description"]]
+    ).copy()
 
     # set up interactive table
     titles = {"syllable": "syll", "velocity_px_s": "velocity"}
@@ -540,25 +527,20 @@ def label_syllables(project_dir, model_name, moseq_df):
     )
 
     # call back function to save the index file
-    def save_index(project_dir):
+    def save_index(syll_df):
         # create index file from csv
-        for key in include:
-            syll_dict[key]["label"] = syll_df[syll_df.syllable == key][
-                "label"
-            ].values[0]
-            syll_dict[key]["desc"] = syll_df[syll_df.syllable == key][
-                "short description"
-            ].values[0]
-
-        # write new index file
-        with open(
-            os.path.join(project_dir, model_name, "syll_info.yaml"), "w"
-        ) as f:
-            yaml.safe_dump(syll_dict, f, default_flow_style=False)
+        temp_df = syll_df.copy()
+        temp_df.drop(columns=["velocity_px_s"], inplace=True)
+        temp_df = temp_df.merge(
+            syll_info_df_with_movie[["syllable", "movie_path"]], on="syllable"
+        ).copy()
+        pd.concat([temp_df, syll_info_df_without_movie]).fillna("").to_csv(
+            syll_info_path, index=False
+        )
 
     # button click action
     def b(event, save=True):
-        save_index(project_dir)
+        save_index(syll_df)
 
     button.on_click(b)
 
