@@ -1725,10 +1725,11 @@ def generate_trajectory_plots(
             all_Xs.append(Xs[..., use_dims])
             suffixes.append("." + plane)
             if lims is None:
-                lims = get_limits(all_Xs[-1], pctl=0, **padding)
+                all_lims.append(get_limits(all_Xs[-1], pctl=0, **padding))
                 print(
-                    f"Using axis limits: {lims} for plane {plane}. Override with the `lims` argument."
+                    f"Using axis limits: {all_lims[-1]} for plane {plane}. Override with the `lims` argument."
                 )
+
             else:
                 all_lims.append(lims[..., use_dims])
 
