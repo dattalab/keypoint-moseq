@@ -190,7 +190,7 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
 
         if index_data is not None:
             # find the group for each recording from index data
-            s_group.append(index_data[index_data["name"] == k]["group"].values[0])
+            s_group.append([index_data[index_data["name"] == k]["group"].values[0]] * n_frame)
         else:
             # no index data
             s_group.append(["default"] * n_frame)
