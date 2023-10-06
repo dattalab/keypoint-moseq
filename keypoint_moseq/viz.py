@@ -1364,8 +1364,8 @@ def plot_trajectories(
     invert=False,
     keypoint_colormap="autumn",
     keypoint_colors=None,
-    node_size=50,
-    line_width=3,
+    node_size=50.0,
+    line_width=3.0,
     alpha=0.2,
     num_timesteps=10,
     plot_width=4,
@@ -1999,7 +1999,7 @@ def add_3D_pose_to_plotly_fig(
     coords,
     edges,
     keypoint_colors,
-    node_size=6.0,
+    node_size=50.0,
     line_width=3.0,
     visible=True,
     opacity=1,
@@ -2023,7 +2023,7 @@ def add_3D_pose_to_plotly_fig(
         If the dtype is int, the values are assumed to be in the range 0-255,
         otherwise they are assumed to be in the range 0-1.
 
-    node_size: float, default=6.0
+    node_size: float, default=50.0
         Size of keypoints.
 
     line_width: float, default=3.0
@@ -2039,7 +2039,7 @@ def add_3D_pose_to_plotly_fig(
         keypoint_colors = np.array(keypoint_colors) / 255.0
 
     marker = {
-        "size": node_size,
+        "size": node_size / 10,
         "color": keypoint_colors,
         "line": dict(color="black", width=0.5),
         "opacity": opacity,
@@ -2094,8 +2094,8 @@ def plot_pcs_3D(
     keypoint_colors,
     savefig,
     project_dir=None,
-    node_size=6,
-    line_width=2,
+    node_size=50,
+    line_width=3,
     height=400,
     mean_pose_opacity=0.2,
 ):
@@ -2128,10 +2128,10 @@ def plot_pcs_3D(
     project_dir : str, default=None
         Path to the project directory. Required if `savefig` is True.
 
-    node_size : float, default=30.0
+    node_size : float, default=50.0
         Size of the keypoints in the figure.
 
-    line_width: float, default=2.0
+    line_width: float, default=3.0
         Width of edges in skeleton
 
     height : int, default=400
@@ -2212,8 +2212,8 @@ def plot_trajectories_3D(
     output_dir,
     keypoint_colormap="autumn",
     keypoint_colors=None,
-    node_size=8,
-    line_width=3,
+    node_size=50.0,
+    line_width=3.0,
     height=500,
     skiprate=1,
 ):
@@ -2242,7 +2242,7 @@ def plot_trajectories_3D(
         If the dtype is int, the values are assumed to be in the range 0-255,
         otherwise they are assumed to be in the range 0-1.
 
-    node_size : float, default=8.0
+    node_size : float, default=50.0
         Size of the keypoints in the figure.
 
     line_width: float, default=3.0
