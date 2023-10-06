@@ -123,7 +123,7 @@ def plot_pcs(
     axis_size=(2, 1.5),
     ncols=5,
     node_size=30.0,
-    linewidth=2.0,
+    line_width=2.0,
     interactive=True,
     **kwargs,
 ):
@@ -177,7 +177,7 @@ def plot_pcs(
     node_size : float, default=30.0
         Size of the keypoints in the figure.
 
-    linewidth: float, default=2.0
+    line_width: float, default=2.0
         Width of edges in skeleton
 
     interactive : bool, default=True
@@ -218,19 +218,19 @@ def plot_pcs(
                     color=keypoint_colors[e[0]],
                     zorder=0,
                     alpha=0.25,
-                    linewidth=linewidth,
+                    line_width=line_width,
                 )
                 ax.plot(
                     *ypcs[i][:, dims][e].T,
                     color="k",
                     zorder=2,
-                    linewidth=linewidth + 0.2,
+                    line_width=line_width + 0.2,
                 )
                 ax.plot(
                     *ypcs[i][:, dims][e].T,
                     color=keypoint_colors[e[0]],
                     zorder=3,
-                    linewidth=linewidth,
+                    line_width=line_width,
                 )
 
             ax.scatter(
@@ -273,7 +273,7 @@ def plot_pcs(
             savefig,
             project_dir,
             node_size / 3,
-            linewidth * 2,
+            line_width * 2,
         )
 
 
@@ -1656,9 +1656,9 @@ def generate_trajectory_plots(
         as well as the title offset.
 
     lims: ndarray of shape (2,2), default=None
-        Axis limits used for all the trajectory plots with format 
+        Axis limits used for all the trajectory plots with format
         `[[xmin,ymin],[xmax,ymax]]`. If None, the limits are determined
-        automatically based on the coordinates of the keypoints using 
+        automatically based on the coordinates of the keypoints using
         :py:func:`keypoint_moseq.util.get_limits`.
 
     save_individually: bool, default=True
@@ -1732,10 +1732,9 @@ def generate_trajectory_plots(
         suffixes = [""]
 
     for Xs_2D, suffix in zip(all_Xs, suffixes):
-
         if lims is None:
             lims = get_limits(Xs_2D, pctl=0.1, **padding)
-            print(f'Using axis limits: {lims}. To override, set `lims`.')
+            print(f"Using axis limits: {lims}. To override, set `lims`.")
 
         # individual plots
         if save_individually:
@@ -2001,7 +2000,7 @@ def add_3D_pose_to_plotly_fig(
     edges,
     keypoint_colors,
     node_size=6.0,
-    linewidth=3.0,
+    line_width=3.0,
     visible=True,
     opacity=1,
 ):
@@ -2027,7 +2026,7 @@ def add_3D_pose_to_plotly_fig(
     node_size: float, default=6.0
         Size of keypoints.
 
-    linewidth: float, default=3.0
+    line_width: float, default=3.0
         Width of skeleton edges.
 
     visibility: bool, default=True
@@ -2046,7 +2045,7 @@ def add_3D_pose_to_plotly_fig(
         "opacity": opacity,
     }
 
-    line = {"width": linewidth, "color": f"rgba(0,0,0,{opacity})"}
+    line = {"width": line_width, "color": f"rgba(0,0,0,{opacity})"}
 
     fig.add_trace(
         plotly.graph_objs.Scatter3d(
@@ -2096,7 +2095,7 @@ def plot_pcs_3D(
     savefig,
     project_dir=None,
     node_size=6,
-    linewidth=2,
+    line_width=2,
     height=400,
     mean_pose_opacity=0.2,
 ):
@@ -2132,7 +2131,7 @@ def plot_pcs_3D(
     node_size : float, default=30.0
         Size of the keypoints in the figure.
 
-    linewidth: float, default=2.0
+    line_width: float, default=2.0
         Width of edges in skeleton
 
     height : int, default=400
@@ -2160,7 +2159,7 @@ def plot_pcs_3D(
             keypoint_colors,
             visible=(i == 0),
             node_size=node_size,
-            linewidth=linewidth,
+            line_width=line_width,
         )
 
         steps.append(
@@ -2178,7 +2177,7 @@ def plot_pcs_3D(
         keypoint_colors,
         opacity=mean_pose_opacity,
         node_size=node_size,
-        linewidth=linewidth,
+        line_width=line_width,
     )
 
     fig.update_layout(
@@ -2214,7 +2213,7 @@ def plot_trajectories_3D(
     keypoint_colormap="autumn",
     keypoint_colors=None,
     node_size=8,
-    linewidth=3,
+    line_width=3,
     height=500,
     skiprate=1,
 ):
@@ -2246,7 +2245,7 @@ def plot_trajectories_3D(
     node_size : float, default=8.0
         Size of the keypoints in the figure.
 
-    linewidth: float, default=3.0
+    line_width: float, default=3.0
         Width of edges in skeleton
 
     height : int, default=500
@@ -2281,7 +2280,7 @@ def plot_trajectories_3D(
                 keypoint_colors,
                 visible=(i == 0),
                 node_size=node_size,
-                linewidth=linewidth,
+                line_width=line_width,
                 opacity=opacity,
             )
 
