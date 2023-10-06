@@ -1593,6 +1593,7 @@ def generate_trajectory_plots(
     keypoint_colormap="autumn",
     plot_options={},
     padding={"left": 0.1, "right": 0.1, "top": 0.2, "bottom": 0.2},
+    lims=None,
     save_individually=True,
     save_gifs=True,
     save_mp4s=False,
@@ -1653,6 +1654,12 @@ def generate_trajectory_plots(
         Padding around trajectory plots. Controls the the distance
         between trajectories (when multiple are shown in one figure)
         as well as the title offset.
+
+    lims: ndarray of shape (2,2), default=None
+        Axis limits used for all the trajectory plots with format 
+        `[[xmin,ymin],[xmax,ymax]]`. If None, the limits are determined
+        automatically based on the coordinates of the keypoints using 
+        :py:func:`keypoint_moseq.util.get_limits`.
 
     save_individually: bool, default=True
         If True, a separate figure is saved for each syllable (in
@@ -1725,7 +1732,10 @@ def generate_trajectory_plots(
         suffixes = [""]
 
     for Xs_2D, suffix in zip(all_Xs, suffixes):
-        lims = get_limits(Xs_2D, pctl=0, **padding)
+
+        if lims is None:
+            lims = get_limits(Xs_2D, pctl=0.1, **padding)
+            print(f'Using axis limits: {lims}. To override, set `lims`.')
 
         # individual plots
         if save_individually:
