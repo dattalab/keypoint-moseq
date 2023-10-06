@@ -157,18 +157,12 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
     results_dict = load_results(project_dir, model_name)
 
     # load index file
-    index_filepath = os.path.join(project_dir, "index.yaml")
+    index_filepath = os.path.join(project_dir, "index.csv")
     if os.path.exists(index_filepath):
-        with open(index_filepath, "r") as f:
-            index_data = yaml.safe_load(f)
-
-        # create a file dictionary for each recording
-        file_info = {}
-        for recording in index_data["files"]:
-            file_info[recording["name"]] = {"group": recording["group"]}
+        index_data = pd.read_csv(index_filepath, index_col=False)
     else:
         print(
-            "index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first"
+            "index.csv not found, if you want to include group information for each video, please run the Assign Groups widget first"
         )
 
     recording_name = []
@@ -197,9 +191,11 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
             )
         )
 
-        if file_info is not None:
+        if index_data is not None:
             # find the group for each recording from index data
-            s_group.append([file_info[k]["group"]] * n_frame)
+            s_group.append(
+                index_data[index_data["name"] == k]["group"].values[0]
+            )
         else:
             # no index data
             s_group.append(["default"] * n_frame)
@@ -291,18 +287,12 @@ def compute_stats_df(
 
     # add group information
     # load index file
-    index_filepath = os.path.join(project_dir, "index.yaml")
+    index_filepath = os.path.join(project_dir, "index.csv")
     if os.path.exists(index_filepath):
-        with open(index_filepath, "r") as f:
-            index_data = yaml.safe_load(f)
-
-        # create a file dictionary for each recording
-        file_info = {}
-        for recording in index_data["files"]:
-            file_info[recording["name"]] = {"group": recording["group"]}
+        index_df = pd.read_csv(index_filepath, index_col=False)
     else:
         print(
-            "index.yaml not found, if you want to include group information for each video, please run the Assign Groups widget first"
+            "index.csv not found, if you want to include group information for each video, please run the Assign Groups widget first"
         )
 
     # construct frequency dataframe
@@ -313,7 +303,7 @@ def compute_stats_df(
         df = pd.DataFrame(
             {
                 "name": k,
-                "group": file_info[k]["group"],
+                "group": index_df[index_df["name"] == k]["group"].values[0],
                 "syllable": np.arange(len(syll_freq)),
                 "frequency": syll_freq,
             }
@@ -1454,19 +1444,15 @@ def generate_transition_matrices(
     """
     trans_mats, usages = None, None
     # index file
-    index_file = os.path.join(project_dir, "index.yaml")
+    index_file = os.path.join(project_dir, "index.csv")
     if not os.path.exists(index_file):
         generate_index(project_dir, model_name, index_file)
 
-    with open(index_file, "r") as f:
-        index_data = yaml.safe_load(f)
-    label_group = [
-        recording_info["group"] for recording_info in index_data["files"]
-    ]
-    recordings = [
-        recording_info["name"] for recording_info in index_data["files"]
-    ]
-    group = sorted(list(set(label_group)))
+    index_data = pd.read_csv(index_file, index_col=False)
+
+    label_group = list(index_data.group.values)
+    recordings = list(index_data.name.values)
+    group = sorted(list(index_data.group.unique()))
     print("Group(s):", ", ".join(group))
 
     # load model reuslts
@@ -1743,7 +1729,9 @@ def generate_index(project_dir, model_name, index_filepath):
     else:
         # generate a new index file
         results_dict = load_results(project_dir, model_name)
-        index_df = pd.DataFrame({"name": list(results_dict.keys()), "group": "default"})
+        index_df = pd.DataFrame(
+            {"name": list(results_dict.keys()), "group": "default"}
+        )
         # write index dataframe
         index_df.to_csv(index_filepath, index=False)
 
