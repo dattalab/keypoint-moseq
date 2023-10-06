@@ -38,7 +38,7 @@ na = np.newaxis
 
 
 def get_syllable_names(project_dir, model_name, syllable_ixs):
-    """Get syllable names from syll_info.yaml file. Labels consist of the
+    """Get syllable names from syll_info.csv file. Labels consist of the
     syllable index, followed by the syllable label, if it exists.
 
     Parameters
@@ -56,13 +56,13 @@ def get_syllable_names(project_dir, model_name, syllable_ixs):
         list of syllable names
     """
     labels = {ix: f"{ix}" for ix in syllable_ixs}
-    syll_info_path = os.path.join(project_dir, model_name, "syll_info.yaml")
+    syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
     if os.path.exists(syll_info_path):
-        with open(syll_info_path, "r") as f:
-            syll_info = yaml.safe_load(f)
-            for ix in syllable_ixs:
-                if len(syll_info[ix]["label"]) > 0:
-                    labels[ix] = f'{ix} ({syll_info[ix]["label"]})'
+        syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
+
+    for ix in syllable_ixs:
+        if len(syll_info_df[syll_info_df.syllable == ix].label.values[0]) > 0:
+            labels[ix] = f"{ix} ({syll_info_df[syll_info_df.syllable == ix].label.values[0]})"
     names = [labels[ix] for ix in syllable_ixs]
     return names
 
