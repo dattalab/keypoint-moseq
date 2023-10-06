@@ -1719,23 +1719,25 @@ def generate_trajectory_plots(
         assert set(projection_planes) <= set(["xy", "yz", "xz"]), fill(
             "`projection_planes` must be a subset of `['xy','yz','xz']`"
         )
-        all_Xs = [
-            Xs[
-                ...,
-                np.array({"xy": [0, 1], "yz": [1, 2], "xz": [0, 2]}[plane]),
-            ]
-            for plane in projection_planes
-        ]
-        suffixes = ["." + plane for plane in projection_planes]
+        all_Xs, all_lims, suffixes = [], [], []
+        for plane in projection_planes:
+            use_dims = {"xy": [0, 1], "yz": [1, 2], "xz": [0, 2]}[plane]
+            all_Xs.append(Xs[..., use_dims])
+            suffixes.append("." + plane)
+            if lims is None:
+                lims = get_limits(all_Xs[-1], pctl=0, **padding)
+                print(
+                    f"Using axis limits: {lims} for plane {plane}. Override with the `lims` argument."
+                )
+            else:
+                all_lims.append(lims[..., use_dims])
+
     else:
         all_Xs = [Xs * np.array([1, -1])]  # flip y-axis
+        all_lims = [lims]
         suffixes = [""]
 
-    for Xs_2D, suffix in zip(all_Xs, suffixes):
-        if lims is None:
-            lims = get_limits(Xs_2D, pctl=0, **padding)
-            print(f"Using axis limits: {lims}. To override, set `lims`.")
-
+    for Xs_2D, lims, suffix in zip(all_Xs, all_lims, suffixes):
         # individual plots
         if save_individually:
             desc = "Generating trajectory plots"
