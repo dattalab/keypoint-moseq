@@ -358,7 +358,7 @@ def label_syllables(project_dir, model_name, moseq_df):
     """
 
     # construct the syllable info path
-    syll_info_path = os.path.join(project_dir, model_name, "syll_info.yaml")
+    syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
 
     # generate a new syll_info yaml file
     if not os.path.exists(syll_info_path):
@@ -1744,12 +1744,15 @@ def generate_syll_info(project_dir, model_name, syll_info_path):
         np.concatenate([file["syllable"] for file in model_results.values()])
     )
     # construct the syllable dictionary
-    # group info is used by the labeling widget
     # in the non interactive version there won't be any group info
-    syll_dict = {
-        int(i): {"label": "", "desc": "", "movie_path": None, "group_info": {}}
-        for i in unique_sylls
-    }
+    syll_info_df = pd.DataFrame(
+        {
+            "syllable": unique_sylls,
+            "label": [""] * len(unique_sylls),
+            "short_description": [""] * len(unique_sylls),
+            "movie_path": None * len(unique_sylls),
+        }
+    )
 
     grid_movies = glob(
         os.path.join(project_dir, model_name, "grid_movies", "*.mp4")
@@ -1758,15 +1761,20 @@ def generate_syll_info(project_dir, model_name, syll_info_path):
         "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
         "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
     )
+    # make movie paths into a dataframe
+    movie_df = pd.DataFrame(
+        {
+            "syllable": [
+                int(os.path.splitext(os.path.basename(movie_path))[0][8:])
+                for movie_path in grid_movies
+            ],
+            "movie_path": grid_movies,
+        }
+    )
 
-    for movie_path in grid_movies:
-        syll_index = int(os.path.splitext(os.path.basename(movie_path))[0][8:])
-        syll_dict[syll_index]["movie_path"] = movie_path
-
-    # write to file
-    print(syll_info_path)
-    with open(syll_info_path, "w") as file:
-        yaml.safe_dump(syll_dict, file, default_flow_style=False)
+    syll_info_df.merge(movie_df, on="syllable", how="outer").fillna("").to_csv(
+        syll_info_path, index=False
+    )
 
 
 def create_syll_info_file(project_dir, model_name):
