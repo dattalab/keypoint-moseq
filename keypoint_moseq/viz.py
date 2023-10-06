@@ -1341,9 +1341,9 @@ def get_limits(
         padding = np.mod(lims[0] - lims[1], blocksize) / 2
         lims[0] -= padding
         lims[1] += padding
-        lims = np.ceil(lims).astype(int)
+        lims = np.ceil(lims)
 
-    return lims
+    return lims.astype(int)
 
 
 def rasterize_figure(fig):
@@ -1659,7 +1659,7 @@ def generate_trajectory_plots(
         Axis limits used for all the trajectory plots with format
         `[[xmin,ymin],[xmax,ymax]]`. If None, the limits are determined
         automatically based on the coordinates of the keypoints using
-        :py:func:`keypoint_moseq.util.get_limits`.
+        :py:func:`keypoint_moseq.viz.get_limits`.
 
     save_individually: bool, default=True
         If True, a separate figure is saved for each syllable (in
@@ -1733,7 +1733,7 @@ def generate_trajectory_plots(
 
     for Xs_2D, suffix in zip(all_Xs, suffixes):
         if lims is None:
-            lims = get_limits(Xs_2D, pctl=0.1, **padding)
+            lims = get_limits(Xs_2D, pctl=0, **padding)
             print(f"Using axis limits: {lims}. To override, set `lims`.")
 
         # individual plots
