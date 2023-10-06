@@ -67,6 +67,46 @@ def get_syllable_names(project_dir, model_name, syllable_ixs):
     return names
 
 
+def generate_index(project_dir, model_name, index_filepath):
+    """Generate index file as a csv.
+
+    Parameters
+    ----------
+    project_dir : str
+        path to project directory
+    model_name : str
+        model directory name
+    index_filepath : str
+        path to index file
+    """
+
+    # load model results
+    results_dict = load_results(project_dir, model_name)
+
+    # check if file exists
+    if os.path.exists(index_filepath):
+        index_df = pd.read_csv(index_filepath, index_col=False)
+
+        # all files are created
+        if len(index_df) == len(results_dict.keys()):
+            return
+        else:
+            # subset all the files
+            files = index_df.name.values
+            # find the missing file in results dict that's not in index
+            for i in results_dict.keys():
+                if i not in files:
+                    index_df.loc[len(index_df.index)] = [i, "default"]
+            # write index dataframe
+            index_df.to_csv(index_filepath, index=False)
+    else:
+        # generate a new index file
+        results_dict = load_results(project_dir, model_name)
+        index_df = pd.DataFrame({"name": list(results_dict.keys()), "group": "default"})
+        # write index dataframe
+        index_df.to_csv(index_filepath, index=False)
+
+
 def interactive_group_setting(project_dir, model_name):
     """Start the interactive group setting widget.
 
@@ -328,6 +368,42 @@ def compute_stats_df(
     return stats_df
 
 
+def generate_syll_info(project_dir, model_name, syll_info_path):
+    # parse model results
+    model_results = load_results(project_dir, model_name)
+    unique_sylls = np.unique(np.concatenate([file["syllable"] for file in model_results.values()]))
+    # construct the syllable dictionary
+    # in the non interactive version there won't be any group info
+    syll_info_df = pd.DataFrame(
+        {
+            "syllable": unique_sylls,
+            "label": [""] * len(unique_sylls),
+            "short_description": [""] * len(unique_sylls),
+            "movie_path": None * len(unique_sylls),
+        }
+    )
+
+    grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
+    assert len(grid_movies) > 0, (
+        "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
+        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
+    )
+    # make movie paths into a dataframe
+    movie_df = pd.DataFrame(
+        {
+            "syllable": [
+                int(os.path.splitext(os.path.basename(movie_path))[0][8:])
+                for movie_path in grid_movies
+            ],
+            "movie_path": grid_movies,
+        }
+    )
+
+    syll_info_df.merge(movie_df, on="syllable", how="outer").fillna("").to_csv(
+        syll_info_path, index=False
+    )
+
+
 def label_syllables(project_dir, model_name, moseq_df):
     """Label syllables in the syllable grid movie.
 
@@ -347,9 +423,8 @@ def label_syllables(project_dir, model_name, moseq_df):
         # generate the syllable info yaml file
         generate_syll_info(project_dir, model_name, syll_info_path)
 
-    # open syll_info
-    with open(syll_info_path, "r") as f:
-        syll_dict = yaml.safe_load(f)
+    # load syll_info
+    syll_info_df = pd.read_csv(syll_info_path, index_col=False)
 
     grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
     assert len(grid_movies) > 0, (
@@ -1780,142 +1855,3 @@ def changepoint_analysis(
     coordinates_ego = unbatch(np.array(Y_ego), *metadata)
     derivatives = unbatch(dy_zscored.reshape(Y_ego.shape), *metadata)
     return changepoints, changescores, coordinates_ego, derivatives, threshold
-
-
-def generate_index(project_dir, model_name, index_filepath):
-    """Generate index file as a csv.
-
-    Parameters
-    ----------
-    project_dir : str
-        path to project directory
-    model_name : str
-        model directory name
-    index_filepath : str
-        path to index file
-    """
-
-    # load model results
-    results_dict = load_results(project_dir, model_name)
-
-    # check if file exists
-    if os.path.exists(index_filepath):
-        index_df = pd.read_csv(index_filepath, index_col=False)
-
-        # all files are created
-        if len(index_df) == len(results_dict.keys()):
-            return
-        else:
-            # subset all the files
-            files = index_df.name.values
-            # find the missing file in results dict that's not in index
-            for i in results_dict.keys():
-                if i not in files:
-                    index_df.loc[len(index_df.index)] = [i, "default"]
-            # write index dataframe
-            index_df.to_csv(index_filepath, index=False)
-    else:
-        # generate a new index file
-        results_dict = load_results(project_dir, model_name)
-        index_df = pd.DataFrame({"name": list(results_dict.keys()), "group": "default"})
-        # write index dataframe
-        index_df.to_csv(index_filepath, index=False)
-
-
-def generate_syll_info(project_dir, model_name, syll_info_path):
-    # parse model results
-    model_results = load_results(project_dir, model_name)
-    unique_sylls = np.unique(np.concatenate([file["syllable"] for file in model_results.values()]))
-    # construct the syllable dictionary
-    # in the non interactive version there won't be any group info
-    syll_info_df = pd.DataFrame(
-        {
-            "syllable": unique_sylls,
-            "label": [""] * len(unique_sylls),
-            "short_description": [""] * len(unique_sylls),
-            "movie_path": None * len(unique_sylls),
-        }
-    )
-
-    grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
-    assert len(grid_movies) > 0, (
-        "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
-        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
-    )
-    # make movie paths into a dataframe
-    movie_df = pd.DataFrame(
-        {
-            "syllable": [
-                int(os.path.splitext(os.path.basename(movie_path))[0][8:])
-                for movie_path in grid_movies
-            ],
-            "movie_path": grid_movies,
-        }
-    )
-
-    syll_info_df.merge(movie_df, on="syllable", how="outer").fillna("").to_csv(
-        syll_info_path, index=False
-    )
-
-
-def create_syll_info_file(project_dir, model_name):
-    # construct the syllable info path
-    syll_info_path = os.path.join(project_dir, model_name, "syll_info.yaml")
-    # generate a new syll_info yaml file if file doesn't exist
-    if not os.path.exists(syll_info_path):
-        # generate the syllable info yaml file
-        generate_syll_info(project_dir, model_name, syll_info_path)
-
-    # open the syllable info yaml file
-    with open(syll_info_path, "r") as f:
-        syll_info = yaml.safe_load(f)
-
-    # create dataframe for syllable info
-    syll_info_df = {"syllable": [], "short_description": [], "label": [], "movie_path": []}
-    try:
-        for k, v in syll_info.items():
-            syll_info_df["syllable"].append(k)
-            syll_info_df["short_description"].append(v["desc"])
-            syll_info_df["label"].append(v["label"])
-            syll_info_df["movie_path"].append(v["movie_path"])
-    except AttributeError:
-        print(
-            "syll_info.yaml file is not in the correct format. Please delete the file and re-run the function."
-        )
-
-    syll_info_df = pd.DataFrame(syll_info_df)
-    syll_info_df.to_csv(os.path.join(project_dir, model_name, "syll_info.csv"), index=False)
-
-    return syll_info_df
-
-
-def update_syll_info_file(project_dir, model_name):
-    syll_info_path = os.path.join(project_dir, model_name, "syll_info.yaml")
-    syll_info_csvpath = os.path.join(project_dir, model_name, "syll_info.csv")
-
-    # open csv to record information
-    syll_info_df = pd.read_csv(syll_info_csvpath)
-    # fill na with an empty string
-    syll_info_df.fillna("", inplace=True)
-    # open yaml file to record information
-    with open(syll_info_path, "r") as f:
-        syll_info = yaml.safe_load(f)
-
-    # record new information
-    for i in zip(
-        syll_info_df.syllable.values,
-        syll_info_df.short_description.values,
-        syll_info_df.label.values,
-    ):
-        if i[1]:
-            syll_info[i[0]]["desc"] = i[1]
-        else:
-            syll_info[i[0]]["desc"] = ""
-        if i[2]:
-            syll_info[i[0]]["label"] = i[2]
-        else:
-            syll_info[i[0]]["label"] = ""
-
-    # write to file
-    with open(syll_info_path, "w") as f:
-        yaml.safe_dump(syll_info, f, default_flow_style=False)
