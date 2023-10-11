@@ -6,6 +6,7 @@ Reconstruct coordinates
 
 During fitting, keypoint-MoSeq tries to estimate the "true" pose trajectory of the animal, discounting anomolous or low-confidence keypoints. The pose trajectory is stored in the model as a variable "x" that encodes a low-dimensional representation of the keypoints (similar to PCA). The code below shows how to project the pose trajectory back into the original coordinate space. This is useful for visualizing the estimated pose trajectory.::
 
+    import os
     import h5py
     import numpy as np
     import jax.numpy as jnp
@@ -30,8 +31,6 @@ During fitting, keypoint-MoSeq tries to estimate the "true" pose trajectory of t
 
 
 The following code generates a video showing frames 0-3600 from one recording with the reconstructed keypoints overlaid.::
-
-    import os
 
     config = lambda: kpms.load_config(project_dir)
     keypoint_data_path = 'dlc_project/videos' # can be a file, a directory, or a list of files
