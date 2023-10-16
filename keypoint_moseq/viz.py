@@ -997,136 +997,136 @@ def generate_grid_movies(
 ):
     """Generate grid movies for a modeled dataset.
 
-    Grid movies show many instances of a syllable and are useful in
-    figuring out what behavior the syllable captures
-    (see :py:func:`keypoint_moseq.viz.grid_movie`). This method
-    generates a grid movie for each syllable that is used sufficiently
-    often (i.e. has at least `rows*cols` instances with duration
-    of at least `min_duration` and an overall frequency of at least
-    `min_frequency`). The grid movies are saved to `output_dir` if
-    specified, or else to `{project_dir}/{model_name}/grid_movies`.
+        Grid movies show many instances of a syllable and are useful in
+        figuring out what behavior the syllable captures
+        (see :py:func:`keypoint_moseq.viz.grid_movie`). This method
+        generates a grid movie for each syllable that is used sufficiently
+        often (i.e. has at least `rows*cols` instances with duration
+        of at least `min_duration` and an overall frequency of at least
+        `min_frequency`). The grid movies are saved to `output_dir` if
+        specified, or else to `{project_dir}/{model_name}/grid_movies`.
 
-    Parameters
-    ----------
-    results: dict
-        Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`)
+        Parameters
+        ----------
+        results: dict
+            Dictionary containing modeling results for a dataset (see
+            :py:func:`keypoint_moseq.fitting.extract_results`)
 
-    project_dir: str, default=None
-        Project directory. Required to save grid movies if `output_dir`
-        is None.
+        project_dir: str, default=None
+            Project directory. Required to save grid movies if `output_dir`
+            is None.
 
-    model_name: str, default=None
-        Name of the model. Required to save grid movies if
-        `output_dir` is None.
+        model_name: str, default=None
+            Name of the model. Required to save grid movies if
+            `output_dir` is None.
 
-    output_dir: str, default=None
-        Directory where grid movies should be saved. If None, grid
-        movies will be saved to `{project_dir}/{model_name}/grid_movies`.
+        output_dir: str, default=None
+            Directory where grid movies should be saved. If None, grid
+            movies will be saved to `{project_dir}/{model_name}/grid_movies`.
 
-    video_dir: str, default=None
-        Directory containing videos of the modeled data (see
-        :py:func:`keypoint_moseq.io.find_matching_videos`). Either  `video_dir`
-        or `video_paths` must be provided unless `keypoints_only=True`.
+        video_dir: str, default=None
+            Directory containing videos of the modeled data (see
+            :py:func:`keypoint_moseq.io.find_matching_videos`). Either  `video_dir`
+            or `video_paths` must be provided unless `keypoints_only=True`.
 
-    video_paths: dict, default=None
-        Dictionary mapping recording names to video paths. The recording
-<<<<<<< HEAD
-        names must correspond to keys in the results dictionary. Either
-        `video_dir` or `video_paths` must be provided unless
-        `keypoints_only=True`.
-=======
-        names must correspond to keys in the results dictionary. Unless
-        `keypoints_only=True`, either `video_dir` or `video_paths` must be
-        provided.
->>>>>>> pass_keypoint_color_list
+        video_paths: dict, default=None
+            Dictionary mapping recording names to video paths. The recording
+    <<<<<<< HEAD
+            names must correspond to keys in the results dictionary. Either
+            `video_dir` or `video_paths` must be provided unless
+            `keypoints_only=True`.
+    =======
+            names must correspond to keys in the results dictionary. Unless
+            `keypoints_only=True`, either `video_dir` or `video_paths` must be
+            provided.
+    >>>>>>> pass_keypoint_color_list
 
-    filter_size: int, default=9
-        Size of the median filter applied to centroids and headings
+        filter_size: int, default=9
+            Size of the median filter applied to centroids and headings
 
-    min_frequency: float, default=0.005
-        Minimum frequency of a syllable to be included in the grid movies.
+        min_frequency: float, default=0.005
+            Minimum frequency of a syllable to be included in the grid movies.
 
-    min_duration: int, default=3
-        Minimum duration of a syllable instance to be included in the
-        grid movie for that syllable.
+        min_duration: int, default=3
+            Minimum duration of a syllable instance to be included in the
+            grid movie for that syllable.
 
-    sampling_options: dict, default={}
-        Dictionary of options for sampling syllable instances (see
-        :py:func:`keypoint_moseq.util.sample_instances`).
+        sampling_options: dict, default={}
+            Dictionary of options for sampling syllable instances (see
+            :py:func:`keypoint_moseq.util.sample_instances`).
 
-    coordinates: dict, default=None
-        Dictionary mapping recording names to keypoint coordinates as
-        ndarrays of shape (n_frames, n_bodyparts, [2 or 3]). Required when
-        `window_size=None`, or `overlay_keypoints=True`, or if using
-        density-based sampling (i.e. when `sampling_options['mode']=='density'`;
-        see :py:func:`keypoint_moseq.util.sample_instances`).
+        coordinates: dict, default=None
+            Dictionary mapping recording names to keypoint coordinates as
+            ndarrays of shape (n_frames, n_bodyparts, [2 or 3]). Required when
+            `window_size=None`, or `overlay_keypoints=True`, or if using
+            density-based sampling (i.e. when `sampling_options['mode']=='density'`;
+            see :py:func:`keypoint_moseq.util.sample_instances`).
 
-    bodyparts: list of str, default=None
-        List of bodypart names in `coordinates`. Required when `coordinates` is
-        provided and bodyparts were reindexed for modeling.
+        bodyparts: list of str, default=None
+            List of bodypart names in `coordinates`. Required when `coordinates` is
+            provided and bodyparts were reindexed for modeling.
 
-    use_bodyparts: list of str, default=None
-        Ordered list of bodyparts used for modeling. Required when
-        `coordinates` is provided and bodyparts were reindexed
-        for modeling.
+        use_bodyparts: list of str, default=None
+            Ordered list of bodyparts used for modeling. Required when
+            `coordinates` is provided and bodyparts were reindexed
+            for modeling.
 
-    quality: int, default=7
-        Quality of the grid movies. Higher values result in higher
-        quality movies but larger file sizes.
+        quality: int, default=7
+            Quality of the grid movies. Higher values result in higher
+            quality movies but larger file sizes.
 
-    rows, cols, pre, post, dot_radius, dot_color, window_size
-        See :py:func:`keypoint_moseq.viz.grid_movie`
+        rows, cols, pre, post, dot_radius, dot_color, window_size
+            See :py:func:`keypoint_moseq.viz.grid_movie`
 
-    video_extension: str, default=None
-        Preferred video extension (passed to
-        :py:func:`keypoint_moseq.util.find_matching_videos`)
+        video_extension: str, default=None
+            Preferred video extension (passed to
+            :py:func:`keypoint_moseq.util.find_matching_videos`)
 
-    window_size: int, default=None
-        Size of the window around the animal. If None, the window
-        size is determined automatically based on the size of the
-        animal. If provided explicitly, `window_size` should be a
-        multiple of 16 or imageio will complain.
+        window_size: int, default=None
+            Size of the window around the animal. If None, the window
+            size is determined automatically based on the size of the
+            animal. If provided explicitly, `window_size` should be a
+            multiple of 16 or imageio will complain.
 
-    max_video_size: int, default=4000
-        Maximum size of the grid movie in pixels. If the grid movie
-        is larger than this, it will be downsampled.
+        max_video_size: int, default=4000
+            Maximum size of the grid movie in pixels. If the grid movie
+            is larger than this, it will be downsampled.
 
-    skeleton: list of tuples, default=[]
-        List of tuples specifying the skeleton. Used when
-        `overlay_keypoints=True`.
+        skeleton: list of tuples, default=[]
+            List of tuples specifying the skeleton. Used when
+            `overlay_keypoints=True`.
 
-    overlay_keypoints: bool, default=False
-        Whether to overlay the keypoints on the grid movie.
+        overlay_keypoints: bool, default=False
+            Whether to overlay the keypoints on the grid movie.
 
-    keypoints_only: bool, default=False
-        Whether to only show the keypoints (i.e. no video frames).
-        Overrides `overlay_keypoints`. When this option is used,
-        the framerate should be explicitly specified using `fps`.
+        keypoints_only: bool, default=False
+            Whether to only show the keypoints (i.e. no video frames).
+            Overrides `overlay_keypoints`. When this option is used,
+            the framerate should be explicitly specified using `fps`.
 
-    keypoints_scale: float, default=1
-        Factor to scale keypoint coordinates before plotting. Only used when
-        `keypoints_only=True`. This is useful when the keypoints are 3D and
-        encoded in units that are larger than a pixel.
+        keypoints_scale: float, default=1
+            Factor to scale keypoint coordinates before plotting. Only used when
+            `keypoints_only=True`. This is useful when the keypoints are 3D and
+            encoded in units that are larger than a pixel.
 
-    fps: int, default=30
-        Framerate of the grid movie. When `keypoints_only=False`,
-        this parameter is ignored and the framerate is determined
-        inferred from the video files.
+        fps: int, default=30
+            Framerate of the grid movie. When `keypoints_only=False`,
+            this parameter is ignored and the framerate is determined
+            inferred from the video files.
 
-    plot_options: dict, default={}
-        Dictionary of options to pass to
-        :py:func:`keypoint_moseq.viz.overlay_keypoints_on_image`.
+        plot_options: dict, default={}
+            Dictionary of options to pass to
+            :py:func:`keypoint_moseq.viz.overlay_keypoints_on_image`.
 
-    use_dims: pair of ints, default=[0,1]
-        Dimensions to use for plotting keypoints. Only used when
-        `overlay_keypoints=True` and the keypoints are 3D.
+        use_dims: pair of ints, default=[0,1]
+            Dimensions to use for plotting keypoints. Only used when
+            `overlay_keypoints=True` and the keypoints are 3D.
 
-    keypoint_colormap: str, default='autumn'
-        Colormap used to color keypoints. Used when
-        `overlay_keypoints=True`.
+        keypoint_colormap: str, default='autumn'
+            Colormap used to color keypoints. Used when
+            `overlay_keypoints=True`.
 
-    See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
+        See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
     """
     # check inputs
     if not keypoints_only:
@@ -1602,7 +1602,7 @@ def generate_trajectory_plots(
     use_bodyparts=None,
     keypoint_colormap="autumn",
     plot_options={},
-    get_limits_pctl=1,
+    get_limits_pctl=0,
     padding={"left": 0.1, "right": 0.1, "top": 0.2, "bottom": 0.2},
     lims=None,
     save_individually=True,
@@ -1661,7 +1661,7 @@ def generate_trajectory_plots(
         Dictionary of options for trajectory plots (see
         :py:func:`keypoint_moseq.util.plot_trajectories`).
 
-    get_limits_pctl: float, default=1
+    get_limits_pctl: float, default=0
         Percentile to use for determining the axis limits. Higher values lead
         to tighter axis limits.
 
@@ -1744,7 +1744,9 @@ def generate_trajectory_plots(
             all_Xs.append(Xs[..., use_dims])
             suffixes.append("." + plane)
             if lims is None:
-                all_lims.append(get_limits(all_Xs[-1], pctl=0, **padding))
+                all_lims.append(
+                    get_limits(all_Xs[-1], pctl=get_limits_pctl, **padding)
+                )
                 print(
                     f"Using axis limits: {all_lims[-1]} for plane {plane}. Override with the `lims` argument."
                 )
