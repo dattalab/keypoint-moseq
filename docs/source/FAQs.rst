@@ -206,6 +206,71 @@ The final output of keypoint MoSeq is a results .h5 file (and optionally a direc
    Low-dimensional representation of the animal's pose in each frame. These are similar to PCA scores, are modified to reflect the pose dynamics and noise estimates inferred by the model. 
 
 
+Visualization
+=============
+
+Why are there only trajectory plots for a subset of syllables?
+--------------------------------------------------------------
+
+There are two reasons why a syllable might be excluded from the trajectory plots:
+
+1) It's frequency is below ``min_frequency``. By default ``min_frequency=0.005``, meaning that the syllable must make up at least 0.5% of all syllable instances. Lowering ``min_frequency`` may result in more syllables being included in the trajectory plots.
+
+2) There aren't enough usable instances of the syllable. The number of required instances (50 by default) is set by the ``n_neighbors`` key of the ``sampling_options`` parameter. If you want to lower this number, (e.g. to 20) then you could call ``generate_trajectory_plots`` as follows.
+
+   .. code-block:: python
+
+      kpms.generate_trajectory_plots(..., sampling_options={"mode": "density", "n_neighbors": 20})
+
+   Note that the number of *usable* syllable instances may be less than the total number of instances. Three criteria determine whether an instance is usable:
+
+   - ``pre``: the number of frames prior to syllable onset that are included in the trajectory. By default, ``pre=5``, meaning that the trajectory will include the 5 frames prior to syllable onset. If a particular syllable instance starts within the first 5 frames of the video, then it is excluded.
+
+   - ``post``: the number of frames after syllable onset that are included in the trajectory. By default, ``post=15``, meaning that the trajectory will include the 15 frames after syllable onset. If a particular syllable instance starts within the last 15 frames of the video, then it is excluded.
+
+   - ``min_duration``: the minimum duration of a syllable instance. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
+
+In summary, the following parameter changes will tend to increase the number of syllables included in the trajectory plots: 
+
+- Lowering ``min_frequency`` (e.g. to 0.001)
+
+- Lowering ``n_neighbors`` (e.g. to 20)
+
+- Lowering ``pre`` (at this point you're scraping the bottom of the barrel)
+
+- Lowering ``post`` (again, scraping the bottom of the barrel here)
+
+- Lowering ``min_duration`` (this should be avoided; why are your syllables so short?)
+
+
+Why are there only grid movies for a subset of syllables?
+---------------------------------------------------------
+
+There are two reasons why a syllable might not have a grid movie:
+
+1) It's frequency is below ``min_frequency``. By default ``min_frequency=0.005``, meaning that the syllable must make up at least 0.5% of all syllable instances. Lowering ``min_frequency`` may result in more syllables being included among the grid movies.
+
+2) There aren't enough usable instances of the syllable. There have to be at least enough instances to fill up every cell of the grid. The number of grid cells is determined by the ``rows`` and ``cols`` parameters. Note that the number of *usable* syllable instances may be less than the total number of instances. Three criteria determine whether an instance is usable:
+
+   - ``pre``: the number of frames prior to syllable onset that are included in the grid movie. By default, ``pre=30``, meaning that movie in each grid cell starts 30 frames prior to syllable onset. So if a particular syllable instance starts within the first 30 frames of the experiment, then it is excluded.
+
+   - ``post``: the number of frames after syllable onset that are included in the grid movie. By default, ``post=60``, meaning that the movie in each grid cell ends 60 frames after syllavle onset. If a particular syllable instance starts within the last 60 frames of the experiment, then it is excluded.
+
+   - ``min_duration``: the minimum duration of a syllable instance. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
+
+In summary, the following parameter changes will tend to increase the number of syllables included in the grid movies:
+
+- Lowering ``min_frequency`` (e.g. to 0.001)
+
+- Lowering ``pre`` (at this point you're scraping the bottom of the barrel)
+
+- Lowering ``post`` (again, scraping the bottom of the barrel here)
+
+- Lowering ``min_duration`` (this should be avoided; why are your syllables so short?)
+
+
+
+
 Troubleshooting
 ===============
 
