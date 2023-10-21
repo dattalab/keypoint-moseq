@@ -1210,7 +1210,7 @@ def generate_grid_movies(
 
         path = os.path.join(output_dir, f"syllable{syllable}.mp4")
         write_video_clip(frames, path, fps=fps, quality=quality)
-
+    return sampled_instances
 
 def get_limits(
     coordinates,
