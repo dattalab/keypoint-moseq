@@ -62,7 +62,9 @@ def get_syllable_names(project_dir, model_name, syllable_ixs):
 
     for ix in syllable_ixs:
         if len(syll_info_df[syll_info_df.syllable == ix].label.values[0]) > 0:
-            labels[ix] = f"{ix} ({syll_info_df[syll_info_df.syllable == ix].label.values[0]})"
+            labels[
+                ix
+            ] = f"{ix} ({syll_info_df[syll_info_df.syllable == ix].label.values[0]})"
     names = [labels[ix] for ix in syllable_ixs]
     return names
 
@@ -1179,7 +1181,7 @@ def plot_syll_stats_with_sem(
         y=stat,
         hue=hue,
         order=ordering,
-        join=join,
+        linestyle="none",
         dodge=True,
         errorbar=("ci", 68),
         ax=ax,
