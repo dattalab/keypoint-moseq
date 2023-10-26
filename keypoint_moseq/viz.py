@@ -1531,7 +1531,7 @@ def generate_trajectory_plots(
     projection_planes=["xy", "xz"],
     interactive=True,
     density_sample=True,
-    sampling_options={"mode": "density", "n_neighbors": 50},
+    sampling_options={"n_neighbors": 50},
     **kwargs,
 ):
     """
