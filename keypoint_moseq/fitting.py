@@ -1,12 +1,13 @@
 import os
 import numpy as np
 import tqdm
+import h5py
 import jax
 import warnings
 from textwrap import fill
 from datetime import datetime
 
-from keypoint_moseq.viz import plot_progress
+from keypoint_moseq.viz import plot_progress, plot_kappa_scan
 from keypoint_moseq.io import save_hdf5, extract_results
 from jax_moseq.models.keypoint_slds import resample_model, init_model
 from jax_moseq.utils import check_for_nans, device_put_as_scalar
@@ -66,9 +67,10 @@ def fit_model(
     start_iter=0,
     verbose=False,
     ar_only=False,
-    save_every_n_iters=25,
-    generate_progress_plots=True,
     parallel_message_passing=None,
+    jitter=0.001,
+    generate_progress_plots=True,
+    save_every_n_iters=25,
     **kwargs,
 ):
     """Fit a model to data.
@@ -77,6 +79,9 @@ def fit_model(
         - saves checkpoints of the model and data at regular intervals
         - plots of the model's progress during fitting (see
           :py:func:`jax_moseq.viz.plot_progress`)
+
+    Note that if a checkpoint file already exists, all model snapshots after
+    `start_iter` will be deleted.
 
     Parameters
     ----------
@@ -115,9 +120,10 @@ def fit_model(
         Otherwise fit a full keypoint-SLDS model (see
         :py:func:`jax_moseq.models.keypoint_slds.resample_model`)
 
-    save_every_n_iters : int, default=10
-        Save the current model every `save_every_n_iters`. If
-        `save_every_n_iters=0`, nothing is saved.
+    save_every_n_iters : int, default=25
+        Save the current model every `save_every_n_iters`. To only save the
+        final model, set `save_every_n_iter=-1`. To save nothing, set
+        `save_every_n_iters=None`.
 
     generate_progress_plots : bool, default=True
         If True, generate plots of the model's progress during fitting. Plots
@@ -129,6 +135,12 @@ def fit_model(
         based on the backend (True for GPU, False for CPU). A warning will be
         raised if `parallel_message_passing=True` and JAX is CPU-bound. Set to
         'force' to skip this check.
+
+    jitter : float, default=0.001
+        Amount to boost the diagonal of the dynamics covariance matrix when
+        resampling pose trajectories. Increasing this value can help prevent
+        NaNs during fitting.
+
 
     Returns
     -------
@@ -152,7 +164,7 @@ def fit_model(
     if model_name is None:
         model_name = str(datetime.now().strftime("%Y_%m_%d-%H_%M_%S"))
 
-    if save_every_n_iters > 0:
+    if save_every_n_iters is not None:
         savedir = os.path.join(project_dir, model_name)
         if not os.path.exists(savedir):
             os.makedirs(savedir)
@@ -168,6 +180,11 @@ def fit_model(
                     "data": data,
                 },
             )
+        else:  # delete model snapshots later than start_iter
+            with h5py.File(checkpoint_path, "a") as f:
+                for k in list(f["model_snapshots"].keys()):
+                    if int(k) > start_iter:
+                        del f["model_snapshots"][k]
 
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
     model = device_put_as_scalar(model)
@@ -181,15 +198,17 @@ def fit_model(
                     pbar=pbar,
                     ar_only=ar_only,
                     verbose=verbose,
+                    jitter=jitter,
                     parallel_message_passing=parallel_message_passing,
                 )
             except StopResampling:
                 break
 
-            if save_every_n_iters > 0 and iteration > start_iter:
-                if (
-                    iteration % save_every_n_iters
-                ) == 0 or iteration == num_iters:
+            if save_every_n_iters is not None and iteration > start_iter:
+                if iteration == num_iters or (
+                    save_every_n_iters > 0
+                    and iteration % save_every_n_iters == 0
+                ):
                     save_hdf5(
                         checkpoint_path, model, f"model_snapshots/{iteration}"
                     )
@@ -323,7 +342,7 @@ def apply_model(
     results = extract_results(
         model, metadata, project_dir, model_name, save_results, results_path
     )
-    
+
     if return_model:
         return results, model
     else:
@@ -371,11 +390,7 @@ def update_hypparams(model_dict, **kwargs):
                 else:
                     if not isinstance(v, type(old_value)):
                         warnings.warn(
-                            fill(
-                                f"{v} has type {type(v)} which differs from the current "
-                                f"value of {k} which has type {type(old_value)}. {v} will "
-                                f"will be cast to {type(old_value)}"
-                            )
+                            f"'{k}' with {type(v)} will be cast to {type(old_value)}"
                         )
 
                     model_dict["hypparams"][hypparms_group][k] = type(
