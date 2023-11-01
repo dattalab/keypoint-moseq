@@ -41,7 +41,7 @@ Activate the new environment::
 
    conda install -c conda-forge pytables
 
-To use the keypoint_moseq environment in a notebook, either launch jupyterlab (`jupyter lab`) or register the environment as a jupyter notebook kernel as follows::
+To use the keypoint_moseq environment in a notebook, either launch jupyterlab or register the environment as a jupyter notebook kernel as follows::
 
    python -m ipykernel install --user --name=keypoint_moseq
    
