@@ -1121,6 +1121,13 @@ def generate_grid_movies(
         `overlay_keypoints=True`.
 
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
+
+    Returns
+    -------
+    sampled_instances: dict
+        Dictionary mapping syllables to lists of instances shown in each in
+        grid movie (in row-major order), where each instance is specified as a
+        tuple with the video name, start frame and end frame.
     """
     # check inputs
     if not keypoints_only:
@@ -1285,6 +1292,8 @@ def generate_grid_movies(
 
         path = os.path.join(output_dir, f"syllable{syllable}.mp4")
         write_video_clip(frames, path, fps=fps, quality=quality)
+
+    return sampled_instances
 
 
 def get_limits(
@@ -1606,7 +1615,7 @@ def generate_trajectory_plots(
     projection_planes=["xy", "xz"],
     interactive=True,
     density_sample=True,
-    sampling_options={"mode": "density", "n_neighbors": 50},
+    sampling_options={"n_neighbors": 50},
     **kwargs,
 ):
     """
