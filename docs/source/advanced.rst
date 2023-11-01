@@ -1,8 +1,5 @@
-Advanced Topics
----------------
-
-Reconstruct coordinates
-~~~~~~~~~~~~~~~~~~~~~~~
+Exporting pose estimates
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 During fitting, keypoint-MoSeq tries to estimate the "true" pose trajectory of the animal, discounting anomolous or low-confidence keypoints. The pose trajectory is stored in the model as a variable "x" that encodes a low-dimensional representation of the keypoints (similar to PCA). The code below shows how to project the pose trajectory back into the original coordinate space. This is useful for visualizing the estimated pose trajectory.::
 
@@ -80,6 +77,6 @@ Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the ra
    :align: center
 
 
-Testing model convergence
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Model selection
+~~~~~~~~~~~~~~~
 

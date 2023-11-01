@@ -95,19 +95,7 @@ Keypoint-MoSeq can be used with 3D keypoint data.
 
 - For data loading, we support Anipose and SLEAP-anipose (see :ref:`Loading keypoint tracking data <loading data>`). 
 
-- For visualization, :py:func:`keypoint_moseq.viz.plot_pcs` and :py:func:`keypoint_moseq.viz.generate_trajectory_plots` can be run exactly as described in the tutorial. Both functions will render 2D projections in the x/y and x/z planes and also generate 3D interactive plots. The 3D plots are rendered in the notebook and can also be viewed offline in a browser using the saved .html file. 
-
-- Grid movies can also be generated, but they will only show 2D projections of the keypoints and not the underlying video. To generate grid movies from 3D data, include the flag ``keypoints_only=True`` and set the desired projection plane with the ``use_dims`` argument, e.g.::
-
-   # generate grid movies in the x/y plane
-   kpms.generate_grid_movies(
-      results, 
-      project_dir, 
-      name, 
-      coordinates=coordinates, 
-      keypoints_only=True, 
-      use_dims=[0,1], 
-      **config())
+- For visualization, :py:func:`keypoint_moseq.viz.plot_pcs` and :py:func:`keypoint_moseq.viz.generate_trajectory_plots` can be run exactly as described in the tutorial. Both functions will render 2D projections in the x/y and x/z planes and also generate 3D interactive plots. The 3D plots are rendered in the notebook and can also be viewed offline in a browser using the saved .html file. For grid movies, see :ref:`Making grid movies for 3D data <3d grid movies>`.
 
 
 Modeling
@@ -209,6 +197,79 @@ The final output of keypoint MoSeq is a results .h5 file (and optionally a direc
 Visualization
 =============
 
+.. _3d grid movies:
+
+Making grid movies for 3D data
+------------------------------
+
+Grid movies show examples of each syllable. For 2D keypoints, these clips are cropped from the original video recordings and rotated so that the animal faces in a consistent direction. Doing the same thing for 3D data is complicated because:
+
+   - there are usually multiple videos (from different angles) associated with each recording
+   - 3D keypoints alone don't provide enough information to crop videos around the animal
+   - rotating videos to change the heading only makes sense for top-down or bottom-up views
+   
+Below we provide two code recipes to get around these issues. The first recipe is simpler and recommended for people without much programming experience. 
+
+1) Make grid movies that just show the keypoints (i.e., without showing clips from original videos). This can be done by setting ``keypoints_only=True`` when calling :py:func:`keypoint_moseq.viz.generate_grid_movies`, as shown below. It may be necessary to adjust ``keypoints_scale``, which determines the number of pixels per 3D unit (the default value ``keypoints_scale=1.0`` means that 1 unit in 3D space corresponds to 1 pixel in the grid movie).
+
+   .. code-block:: python
+
+      kpms.generate_grid_movies(
+         results, 
+         project_dir, 
+         model_name, 
+         coordinates=coordinates, 
+         keypoints_only=True, 
+         keypoints_scale=1,
+         use_dims=[0,1], # controls projection plane
+         **config());
+
+
+2) Pick a camera angle and load the 2D keypoint detections from that camera. The exact code for this will depend on the format of the 2D keypoints and the way that the 3D keypoint files, 2D keypoint files, and video files are organized. To take a simple example, let's say you filmed a mouse from the top and the side, performed 2D keypoint detection using SLEAP, and now have the following files for each recording:
+
+   .. code-block:: bash
+
+      <video_dir>/
+      ├──<recording_name>.h5        # 3D keypoints
+      ├──top-<recording_name>.h5    # 2D keypoints from top camera
+      ├──top-<recording_name>.mp4   # video from top camera
+      ├──side-<recording_name>.h5   # 2D keypoints from side camera
+      ├──side-<recording_name>.mp4  # video from side camera
+
+   To make grid movies using the top-camera, you'd need to load the top-camera 2D keypoints and match them up with the modeling results (which were most likely named using the 3D keypoints files), then compute 2D centroids and headings, and finally pass everything to :py:func:`keypoint_moseq.viz.generate_grid_movies`.
+
+   .. code-block:: python
+
+      # load 2D keypoints for the top camera
+      coordinates_2D,_,_ = kpms.load_keypoints('<video_dir>/top-*', 'sleap')
+
+      # rename the keys of coordinates_2D to match the results dictionary
+      coordinates_2D = {k.replace('top-', ''): v for k, v in coordinates_2D.items()}
+
+      # compute the 2D centroid and heading
+      centroids, headings = kpms.get_centroids_headings(coordinates_2D, **config())
+
+      # create mapping to 2D video files
+      video_paths = {k: f'<video_dir>/top-{k}.mp4' for k in coordinates_2D.keys()}
+
+      # make the grid movies
+      kpms.generate_grid_movies(
+         results, 
+         project_dir, 
+         model_name, 
+         video_paths=video_paths,
+         coordinates=coordinates_2D, 
+         centroids=centroids,
+         headings=headings,
+         **config());
+
+   You could follow a similar procedure for the side camera, but adding an extra line to zero-out the heading so the video clips aren't rotated.
+
+   .. code-block:: python
+
+      heading = {k: np.zeros_like(v) for k in heading.items()}
+
+
 Why are there only trajectory plots for a subset of syllables?
 --------------------------------------------------------------
 
@@ -269,6 +330,16 @@ In summary, the following parameter changes will tend to increase the number of 
 - Lowering ``min_duration`` (this should be avoided; why are your syllables so short?)
 
 
+Why do my trajectory plots and grid movies disagree?
+----------------------------------------------------
+
+Users occasionally find that the trajectory plot and grid movie for a given syllable don't match up. For example the animal might turn left in the trajectory plot but not consistently do so in the grid movie. Similarly, trajectory plots can occasionally change dramatically when a trained keypoint-MoSeq model is applied to new data. In most cases, these inconsistencies are caused by **density sampling of syllable instances**. Turning this feature off may result in more stable trajectory plots.
+
+.. code-block:: python
+
+   kpms.generate_trajectory_plots(..., density_sample=False)
+
+Density sampling is a way of selecting syllable instances that are most representative relative to the full dataset. Specifically, for each syllable, a syllable-specific density function is computed in trajectory space and compared to the overall density across all syllables. An exemplar instance that maximizes the ratio between these densities is chosen for each syllable, and its nearest neighbors are randomly sampled. When the distribution of trajectories for a syllable is multimodal (i.e., it represents a mixture of distinct behaviors), the examplar syllable may not capture the full range of behaviors, or it may jump from one mode to another when an existing model is applied to new data. In these cases, it may be better to sample syllable instances uniformly by setting turning off density sampling as shown above.
 
 
 Troubleshooting

@@ -235,18 +235,76 @@ def filter_angle(angles, size=9, axis=0, method="median"):
     return np.arctan2(filter(np.sin(angles)), filter(np.cos(angles)))
 
 
+def get_centroids_headings(
+    coordinates,
+    anterior_idxs,
+    posterior_idxs,
+    bodyparts=None,
+    use_bodyparts=None,
+    **kwargs,
+):
+    """Compute centroids and headings from keypoint coordinates.
+
+    Parameters
+    -------
+    coordinates: dict
+        Dictionary mapping recording names to keypoint coordinates as
+        ndarrays of shape (n_frames, n_bodyparts, [2 or 3]).
+
+    anterior_idxs: array-like of int
+        Indices of anterior bodyparts (after reindexing by `use_bodyparts`
+        when the latter is specified).
+
+    posterior_idxs: array-like of int
+        Indices of anterior bodyparts (after reindexing by `use_bodyparts`
+        when the latter is specified).
+
+    bodyparts: list of str, default=None
+        List of bodypart names in `coordinates`. Used to reindex coordinates
+        when `use_bodyparts` is specified.
+
+    use_bodyparts: list of str, default=None
+        Ordered list of bodyparts used to reindex `coordinates`.
+
+    Returns
+    -------
+    centroids: dict
+        Dictionary mapping recording names to centroid coordinates as ndarrays
+        of shape (n_frames, [2 or 3]).
+
+    headings: dict
+        Dictionary mapping recording names to heading angles (in radians) as 1d
+        arrays of shape (n_frames,).
+    """
+    if bodyparts is not None and use_bodyparts is not None:
+        coordinates = reindex_by_bodyparts(
+            coordinates, bodyparts, use_bodyparts
+        )
+
+    centroids, headings = {}, {}
+    for key, coords in coordinates.items():
+        coords = interpolate_keypoints(coords, np.isnan(coords).any(-1))
+        centroids[key] = np.median(coords, axis=1)
+        anterior_loc = coords[:, posterior_idxs].mean(1)
+        posterior_loc = coords[:, anterior_idxs].mean(1)
+        heading_vec = anterior_loc - posterior_loc
+        headings[key] = np.arctan2(*heading_vec.T[::-1]) + np.pi
+
+    return centroids, headings
+
+
 def filter_centroids_headings(centroids, headings, filter_size=9):
     """Perform median filtering on centroids and headings.
 
     Parameters
     -------
-    centroids: dict {str : ndarray, shape (t,2)}
+    centroids: dict
         Centroids stored as a dictionary mapping recording names to ndarrays,
-        where the first dim represents time
+        of shape (n_frames, [2 or 3]).
 
-    headings: dict {str : 1d array }
-        Headings stored as a dictionary mapping recording names to 1d arrays
-        representing an angle in radians
+    headings: dict
+        Dictionary mapping recording names to heading angles (in radians) as 1d
+        arrays of shape (n_frames,).
 
     filter_size: int, default=9
         Kernel size for median filtering
@@ -1112,7 +1170,7 @@ def get_typical_trajectories(
         return
 
     if density_sample:
-        sampling_options['mode'] = 'density'
+        sampling_options["mode"] = "density"
         sampled_instances = sample_instances(
             syllable_instances,
             sampling_options["n_neighbors"],
