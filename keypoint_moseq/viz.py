@@ -223,19 +223,19 @@ def plot_pcs(
                     color=keypoint_colors[e[0]],
                     zorder=0,
                     alpha=0.25,
-                    line_width=line_width,
+                    linewidth=line_width,
                 )
                 ax.plot(
                     *ypcs[i][:, dims][e].T,
                     color="k",
                     zorder=2,
-                    line_width=line_width + 0.2,
+                    linewidth=line_width + 0.2,
                 )
                 ax.plot(
                     *ypcs[i][:, dims][e].T,
                     color=keypoint_colors[e[0]],
                     zorder=3,
-                    line_width=line_width,
+                    linewidth=line_width,
                 )
 
             ax.scatter(

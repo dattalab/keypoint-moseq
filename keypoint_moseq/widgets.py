@@ -3,7 +3,8 @@ pipeline."""
 
 # group setting widget imports
 import os
-import qgrid
+
+# import qgrid
 import pandas as pd
 import yaml
 import ipywidgets as widgets
