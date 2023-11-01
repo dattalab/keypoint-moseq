@@ -1360,7 +1360,7 @@ def generate_transition_matrices(
     # load model reuslts
     results_dict = load_results(project_dir, model_name)
 
-    # filter out syllables by freqency
+    # filter out syllables by frequency
     model_labels = [
         results_dict[recording]["syllable"] for recording in recordings
     ]
@@ -1570,8 +1570,8 @@ def plot_transition_graph_difference(
         sub_ax.axis("off")
     # add legend
     legend_elements = [
-        Line2D([0], [0], color="r", lw=2, label=f"Up-regulated transistion"),
-        Line2D([0], [0], color="b", lw=2, label=f"Down-regulated transistion"),
+        Line2D([0], [0], color="r", lw=2, label=f"Up-regulated transition"),
+        Line2D([0], [0], color="b", lw=2, label=f"Down-regulated transition"),
         Line2D(
             [0],
             [0],

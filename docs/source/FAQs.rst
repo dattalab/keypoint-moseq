@@ -48,7 +48,7 @@ If your keypoint tracking data contains a high proportion of NaNs, you may get t
    <br />
 
 
-- Check if the NaNs are occuring in a specific subset of recordings. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic recordings. For a recording-by-recording breakdown of NaNs, run::
+- Check if the NaNs are occurring in a specific subset of recordings. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic recordings. For a recording-by-recording breakdown of NaNs, run::
 
    kpms.check_nan_proportions(coordinates, bodyparts, breakdown=True)
 
