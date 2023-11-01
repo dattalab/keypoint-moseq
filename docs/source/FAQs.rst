@@ -240,17 +240,17 @@ Below we provide two code recipes to get around these issues. The first recipe i
 
    .. code-block:: python
 
-      # load 2D keypoints for the top camera
-      coordinates_2D,_,_ = kpms.load_keypoints('<video_dir>/top-*', 'sleap')
+      video_dir = ... # insert path to video directory
 
-      # rename the keys of coordinates_2D to match the results dictionary
+      coordinates_2D,_,_ = kpms.load_keypoints(f'{video_dir}/top-*', 'sleap')
+      video_paths = kpms.find_matching_videos(coordinates_2D.keys(), video_dir, as_dict=True)
+
+      # rename keys to match the results dictionary
       coordinates_2D = {k.replace('top-', ''): v for k, v in coordinates_2D.items()}
+      video_paths    = {k.replace('top-', ''): v for k, v in video_paths.items()}
 
       # compute the 2D centroid and heading
       centroids, headings = kpms.get_centroids_headings(coordinates_2D, **config())
-
-      # create mapping to 2D video files
-      video_paths = {k: f'<video_dir>/top-{k}.mp4' for k in coordinates_2D.keys()}
 
       # make the grid movies
       kpms.generate_grid_movies(
@@ -433,7 +433,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 NaNs during fitting
 -------------------
 
-The following actions may help resolve NaNs during model fitting. If they don't, please contact calebsw@gmail.com and include the config, the data and code used for fitting, as well as the most recent model checkpoint. 
+The following actions may help resolve NaNs during model fitting. If they don't, please contact calebsw@gmail.com and include the data, config file, and code used for fitting, as well as the most recent model checkpoint. 
 
 - Make sure you are using double-precision computing. Check the precision using::
 
