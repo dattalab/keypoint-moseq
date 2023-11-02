@@ -216,7 +216,6 @@ def _noise_calibration_widget(
 
     max_height = np.max([sample_images[k].shape[0] for k in sample_keys])
     max_width = np.max([sample_images[k].shape[1] for k in sample_keys])
-    max_zoom = int(max(max_width, max_height))
 
     edges = np.array(get_edges(bodyparts, skeleton))
     conf_vals = np.hstack([v.flatten() for v in confidences.values()])
@@ -237,7 +236,6 @@ def _noise_calibration_widget(
 
     img_tap = Tap(transient=True)
     vline_tap = Tap(transient=True)
-    crop_size = hv.Dimension("Crop size", range=(0, max_zoom), default=200)
 
     def update_scatter(x, y, annotations):
         confs, dists = _confs_and_dists_from_annotations(
@@ -307,13 +305,14 @@ def _noise_calibration_widget(
             ylabel="log10(error)",
         )
 
-    def update_img(crop_size, sample_ix, x, y):
+    def update_img(sample_ix, x, y):
         key, frame, bodypart = sample_key = sample_keys[sample_ix]
         image = sample_images[sample_key]
         h, w = image.shape[:2]
 
         keypoint_ix = bodyparts.index(bodypart)
         xys = coordinates[key][frame].copy()
+        crop_size = np.sqrt(((xys - xys[keypoint_ix]) ** 2).sum(1)).max() * 2.5
         xys[:, 1] = h - xys[:, 1]
         masked_nodes = np.nonzero(~np.isnan(xys).any(1))[0]
         confs = confidences[key][frame]
@@ -390,42 +389,20 @@ def _noise_calibration_widget(
 
     prev_button = pn.widgets.Button(name="\u25c0", width=50, align="center")
     next_button = pn.widgets.Button(name="\u25b6", width=50, align="center")
-    save_button = pn.widgets.Button(name="Save:", width=100, align="center")
-    sample_slider = pn.widgets.IntSlider(
-        name="sample",
-        value=0,
-        start=0,
-        end=len(sample_keys),
-        width=100,
-        align="center",
-    )
-    zoom_slider = pn.widgets.IntSlider(
-        name="Zoom",
-        value=200,
-        start=1,
-        end=max_zoom,
-        width=100,
-        align="center",
-    )
+    save_button = pn.widgets.Button(name="Save", width=100, align="center")
     estimator_textbox = pn.widgets.StaticText(align="center")
 
     def next_sample(event):
         if current_sample.sample_ix < len(sample_keys) - 1:
             current_sample.event(sample_ix=int(current_sample.sample_ix) + 1)
-        sample_slider.value = int(current_sample.sample_ix)
 
     def prev_sample(event):
         if current_sample.sample_ix > 0:
             current_sample.event(sample_ix=int(current_sample.sample_ix) - 1)
-        sample_slider.value = int(current_sample.sample_ix)
 
     def save_all(event):
         save_annotations(project_dir, annotations_stream.annotations)
         save_params(project_dir, estimator)
-
-    @pn.depends(sample_slider.param.value, watch=True)
-    def change_sample(value):
-        current_sample.event(sample_ix=int(value))
 
     prev_button.on_click(prev_sample)
     next_button.on_click(next_sample)
@@ -434,7 +411,7 @@ def _noise_calibration_widget(
     estimator.event()
 
     img_dmap = hv.DynamicMap(
-        pn.bind(update_img, crop_size=zoom_slider),
+        update_img,
         streams=[current_sample, img_tap],
     ).opts(framewise=True)
 
@@ -446,12 +423,9 @@ def _noise_calibration_widget(
     controls = pn.Row(
         prev_button,
         next_button,
-        # sample_slider,
-        pn.Spacer(sizing_mode="stretch_width"),
-        zoom_slider,
-        pn.Spacer(sizing_mode="stretch_width"),
+        pn.Spacer(width=50),
         save_button,
-        pn.Spacer(sizing_mode="stretch_width"),
+        pn.Spacer(width=50),
         estimator_textbox,
     )
     plots = pn.Row(img_dmap, scatter_dmap)
@@ -468,26 +442,23 @@ def noise_calibration(
     video_dir,
     video_extension=None,
     conf_pseudocount=0.001,
-    verbose=False,
     **kwargs,
 ):
     """Perform manual annotation to calibrate the relationship between keypoint
     error and neural network confidence.
 
-    This function creates a widget for interactive annotation in a
-    jupyter notebook. Users mark correct keypoint locations for a
-    sequence of frames, and a regression line is fit to the
-    `log(confidence), log(error)` pairs obtained through annotation.
-    The regression coefficients are used during modeling to set a
-    prior on the noise level for each keypoint on each frame.
+    This function creates a widget for interactive annotation in jupyter lab.
+    Users mark correct keypoint locations for a sequence of frames, and a
+    regression line is fit to the `log(confidence), log(error)` pairs obtained
+    through annotation. The regression coefficients are used during modeling to
+    set a prior on the noise level for each keypoint on each frame.
 
     Follow these steps to use the widget:
         - After executing this function, a widget should appear with a
           video frame in the center.
         - Annotate the labeled bodypart in each frame by left-clicking
           at the correct location. An "X" should appear there.
-        - Use the arrow buttons and/or sample slider on the left to
-          annotate additional frames.
+        - Use the arrow buttons to annotate additional frames.
         - Each annotation adds a point to the right-hand scatter plot.
           Continue until the regression line stabilizes.
         - At any point, adjust the confidence threshold by clicking on
@@ -529,9 +500,6 @@ def noise_calibration(
 
     conf_pseudocount: float, default=0.001
         Pseudocount added to confidence values to avoid log(0) errors.
-
-    verbose: bool, default=False
-        Print progress.
     """
     dim = list(coordinates.values())[0].shape[-1]
     assert dim == 2, "Calibration is only supported for 2D keypoints."
