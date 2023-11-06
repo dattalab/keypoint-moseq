@@ -429,6 +429,13 @@ def label_syllables(project_dir, model_name, moseq_df):
         # generate the syllable info yaml file
         generate_syll_info(project_dir, model_name, syll_info_path)
 
+    # ensure there is grid movies
+    grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
+    assert len(grid_movies) > 0, (
+        "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
+        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
+    )
+
     # load syll_info
     syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
     # split into with movie and without movie
