@@ -458,7 +458,7 @@ def label_syllables(project_dir, model_name, moseq_df):
     ).copy()
 
     # set up interactive table
-    titles = {"syllable": "syll", "velocity_px_s": "velocity"}
+    titles = {"syllable": "syllable", "label": "label", "short_description": "short description"}
     editors = {
         "name": None,
         "label": {
@@ -479,7 +479,7 @@ def label_syllables(project_dir, model_name, moseq_df):
 
     base_configuration = {"clipboard": "copy"}
 
-    widths = {"syllable": 5}
+    widths = {"syllable": 100}
     summary_table = pn.widgets.Tabulator(
         syll_df,
         titles=titles,
