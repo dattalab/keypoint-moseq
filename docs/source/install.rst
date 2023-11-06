@@ -1,11 +1,17 @@
 Local installation
 ------------------
 
-- To use keypoint MoSeq without a local installation, try `Google colab <colab>`_.
-- Note that the first import of ``keypoint_moseq`` after installation can take a few minutes.
+- Total installation time is around 10 minutes.
+- The first import of ``keypoint_moseq`` after installation can take a few minutes.
 - If you are using a GPU, confirm that jax has access to it once installation is complete::
 
    python -c "import jax; print(jax.devices())"
+
+
+.. note::
+
+   For installation on Windows 11, you must use XXX.
+
 
 
 Install using conda
