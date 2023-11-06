@@ -497,6 +497,8 @@ def label_syllables(project_dir, model_name, moseq_df):
     def save_index(syll_df):
         # create index file from csv
         temp_df = syll_df.copy()
+        temp_df["label"] = temp_df["label"].str.strip()
+        temp_df["short_description"] = temp_df["short_description"].str.strip()
         temp_df = temp_df.merge(
             syll_info_df_with_movie[["syllable", "movie_path"]], on="syllable"
         ).copy()
