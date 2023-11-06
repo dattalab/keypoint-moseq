@@ -10,7 +10,7 @@ Local installation
 
 .. note::
 
-   For installation on Windows 11, you must use XXX.
+   For installation on Windows 11, you must use Windows Subsystem for Linux.
 
 
 
