@@ -223,19 +223,19 @@ def plot_pcs(
                     color=keypoint_colors[e[0]],
                     zorder=0,
                     alpha=0.25,
-                    line_width=line_width,
+                    linewidth=line_width,
                 )
                 ax.plot(
                     *ypcs[i][:, dims][e].T,
                     color="k",
                     zorder=2,
-                    line_width=line_width + 0.2,
+                    linewidth=line_width + 0.2,
                 )
                 ax.plot(
                     *ypcs[i][:, dims][e].T,
                     color=keypoint_colors[e[0]],
                     zorder=3,
-                    line_width=line_width,
+                    linewidth=line_width,
                 )
 
             ax.scatter(
@@ -979,6 +979,8 @@ def generate_grid_movies(
     quality=7,
     window_size=None,
     coordinates=None,
+    centroids=None,
+    headings=None,
     bodyparts=None,
     use_bodyparts=None,
     sampling_options={},
@@ -992,7 +994,6 @@ def generate_grid_movies(
     plot_options={},
     use_dims=[0, 1],
     keypoint_colormap="autumn",
-    keypoint_colors=None,
     **kwargs,
 ):
     """Generate grid movies for a modeled dataset.
@@ -1055,6 +1056,14 @@ def generate_grid_movies(
         `window_size=None`, or `overlay_keypoints=True`, or if using
         density-based sampling (i.e. when `sampling_options['mode']=='density'`;
         see :py:func:`keypoint_moseq.util.sample_instances`).
+
+    centroids: dict, default=None
+        Dictionary mapping recording names to arrays of shape `(n_frames, 2)`.
+        Overrides the centroid information in `results`.
+
+    headings: dict, default=None
+        Dictionary mapping recording names to arrays of shape `(n_frames,)`.
+        Overrides the heading information in `results`.
 
     bodyparts: list of str, default=None
         List of bodypart names in `coordinates`. Required when `coordinates` is
@@ -1120,15 +1129,23 @@ def generate_grid_movies(
         Colormap used to color keypoints. Used when
         `overlay_keypoints=True`.
 
+
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
+
+    Returns
+    -------
+    sampled_instances: dict
+        Dictionary mapping syllables to lists of instances shown in each in
+        grid movie (in row-major order), where each instance is specified as a
+        tuple with the video name, start frame and end frame.
     """
     # check inputs
-    if not keypoints_only:
+    if keypoints_only:
+        overlay_keypoints = True
+    else:
         assert (video_dir is not None) or (video_paths is not None), fill(
             "Either `video_dir` or `video_paths` is required unless `keypoints_only=True`"
         )
-    elif not overlay_keypoints:
-        overlay_keypoints = True
 
     if window_size is None or overlay_keypoints:
         assert coordinates is not None, fill(
@@ -1159,9 +1176,18 @@ def generate_grid_movies(
     if results is None:
         results = load_results(project_dir, model_name)
 
+    # extract syllables from results
     syllables = {k: v["syllable"] for k, v in results.items()}
-    centroids = {k: v["centroid"] for k, v in results.items()}
-    headings = {k: v["heading"] for k, v in results.items()}
+
+    # extract and smooth centroids and headings
+    if centroids is None:
+        centroids = {k: v["centroid"] for k, v in results.items()}
+    if headings is None:
+        headings = {k: v["heading"] for k, v in results.items()}
+
+    centroids, headings = filter_centroids_headings(
+        centroids, headings, filter_size=filter_size
+    )
 
     # scale keypoints if necessary
     if keypoints_only:
@@ -1220,11 +1246,6 @@ def generate_grid_movies(
         centroids = {k: v[:, ds] for k, v in centroids.items()}
         if coordinates is not None:
             coordinates = {k: v[:, :, ds] for k, v in coordinates.items()}
-
-    # smooth centroids and headings
-    centroids, headings = filter_centroids_headings(
-        centroids, headings, filter_size=filter_size
-    )
 
     # determine window size for grid movies
     if window_size is None:
@@ -1285,6 +1306,8 @@ def generate_grid_movies(
 
         path = os.path.join(output_dir, f"syllable{syllable}.mp4")
         write_video_clip(frames, path, fps=fps, quality=quality)
+
+    return sampled_instances
 
 
 def get_limits(
