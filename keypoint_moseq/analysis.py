@@ -129,7 +129,7 @@ def interactive_group_setting(project_dir, model_name):
     # make a tabulator dataframe
     summary_data = pd.read_csv(index_filepath, index_col=False)
 
-    titles = {"name": "file name", "group": "group"}
+    titles = {"name": "recording name", "group": "group"}
 
     editors = {
         "name": None,
