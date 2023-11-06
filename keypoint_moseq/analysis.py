@@ -159,7 +159,10 @@ def interactive_group_setting(project_dir, model_name):
     # call back function to save the index file
     def save_index(summary_data):
         # create index file from csv
-        summary_data.to_csv(index_filepath, index=False)
+        data_to_save = summary_data.copy()
+        # remove newlines
+        data_to_save["group"] = data_to_save["group"].str.strip()
+        data_to_save.to_csv(index_filepath, index=False)
 
     # button click action
     def b(event, save=True):
