@@ -449,9 +449,7 @@ def label_syllables(project_dir, model_name, moseq_df):
     # create the labeler dataframe
     # only include the syllable that have grid movies
     include = syll_info_df_with_movie.syllable.values
-    syll_df = (
-        moseq_df[["syllable", "velocity_px_s"]].groupby("syllable").mean().reset_index().copy()
-    )
+    syll_df = moseq_df[["syllable"]].groupby("syllable").mean().reset_index().copy()
     syll_df = syll_df[syll_df.syllable.isin(include)]
 
     # get labels and description from syll info
@@ -499,7 +497,6 @@ def label_syllables(project_dir, model_name, moseq_df):
     def save_index(syll_df):
         # create index file from csv
         temp_df = syll_df.copy()
-        temp_df.drop(columns=["velocity_px_s"], inplace=True)
         temp_df = temp_df.merge(
             syll_info_df_with_movie[["syllable", "movie_path"]], on="syllable"
         ).copy()
