@@ -1412,13 +1412,13 @@ def plot_trajectories(
         List of pose trajectories as ndarrays of shape
         (n_frames, n_keypoints, 2).
 
-    edges: list of tuples, default=[]
-        List of edges, where each edge is a tuple of two integers
-
     lims: ndarray
         Axis limits used for all the trajectory plots. The limits
         should be provided as an array of shape (2,2) with the format
         `[[xmin,ymin],[xmax,ymax]]`.
+
+    edges: list of tuples, default=[]
+        List of edges, where each edge is a tuple of two integers
 
     n_cols: int, default=4
         Number of columns in the figure (used when plotting multiple
@@ -1764,15 +1764,13 @@ def generate_trajectory_plots(
                 all_lims.append(
                     get_limits(all_Xs[-1], pctl=get_limits_pctl, **padding)
                 )
-                print(
-                    f"Using axis limits: {all_lims[-1]} for plane {plane}. Override with the `lims` argument."
-                )
-
             else:
                 all_lims.append(lims[..., use_dims])
 
     else:
         all_Xs = [Xs * np.array([1, -1])]  # flip y-axis
+        if lims is None:
+            lims = get_limits(all_Xs[-1], pctl=get_limits_pctl, **padding)
         all_lims = [lims]
         suffixes = [""]
 
