@@ -51,9 +51,7 @@ To use the keypoint_moseq environment in a notebook, either launch jupyterlab or
 
    python -m ipykernel install --user --name=keypoint_moseq
    
-
-Next follow `Install jupyter extensions`_ to use the interactive analysis tools. 
-
+   
 
 Install using pip
 ~~~~~~~~~~~~~~~~~
