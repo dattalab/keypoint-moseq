@@ -61,7 +61,7 @@ Install using pip
    If you are using Windows with a GPU, CUDA 11.1 / cuDNN 8.2 is required. If you have a different version of CUDA installed, then follow the directions to `Install using conda`_.
 
 
-Create a new conda environment::
+Create a new conda environment with python 3.9::
 
    conda create -n keypoint_moseq python=3.9
    conda activate keypoint_moseq
