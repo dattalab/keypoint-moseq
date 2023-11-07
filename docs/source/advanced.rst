@@ -75,8 +75,3 @@ Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the ra
 
 .. image:: _static/kappa_scan.jpg
    :align: center
-
-
-Model selection
-~~~~~~~~~~~~~~~
-
