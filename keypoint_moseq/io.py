@@ -2,7 +2,6 @@ import jax.numpy as jnp
 import jax
 import re
 import numpy as np
-import warnings
 import h5py
 import joblib
 import tqdm

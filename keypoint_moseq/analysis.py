@@ -1,36 +1,19 @@
-from keypoint_moseq.util import (
-    filter_angle,
-    filtered_derivative,
-    permute_cyclic,
-    format_data,
-)
-from jax_moseq.utils import get_frequencies, unbatch
-from jax_moseq.models.keypoint_slds import align_egocentric
+from keypoint_moseq.util import filter_angle
 from keypoint_moseq.io import load_results
-
 from math import ceil
 from matplotlib.lines import Line2D
 from cytoolz import sliding_window
-import tqdm
 import networkx as nx
 import os
-import yaml
 import numpy as np
 import pandas as pd
 import seaborn as sns
-
 import matplotlib.pyplot as plt
-import matplotlib.lines as mlines
-
 from scipy import stats
-from textwrap import fill
-from statsmodels.stats.multitest import multipletests, fdrcorrection
+from statsmodels.stats.multitest import multipletests
 from itertools import combinations
 from copy import deepcopy
 from glob import glob
-
-from scipy.ndimage import gaussian_filter1d
-from scipy.signal import argrelextrema
 import panel as pn
 
 pn.extension("plotly", "tabulator")
@@ -62,7 +45,9 @@ def get_syllable_names(project_dir, model_name, syllable_ixs):
 
     for ix in syllable_ixs:
         if len(syll_info_df[syll_info_df.syllable == ix].label.values[0]) > 0:
-            labels[ix] = f"{ix} ({syll_info_df[syll_info_df.syllable == ix].label.values[0]})"
+            labels[
+                ix
+            ] = f"{ix} ({syll_info_df[syll_info_df.syllable == ix].label.values[0]})"
     names = [labels[ix] for ix in syllable_ixs]
     return names
 
@@ -102,7 +87,9 @@ def generate_index(project_dir, model_name, index_filepath):
     else:
         # generate a new index file
         results_dict = load_results(project_dir, model_name)
-        index_df = pd.DataFrame({"name": list(results_dict.keys()), "group": "default"})
+        index_df = pd.DataFrame(
+            {"name": list(results_dict.keys()), "group": "default"}
+        )
         # write index dataframe
         index_df.to_csv(index_filepath, index=False)
 
@@ -230,14 +217,20 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
             np.concatenate(
                 (
                     [0],
-                    np.sqrt(np.square(np.diff(v["centroid"], axis=0)).sum(axis=1)) * fps,
+                    np.sqrt(
+                        np.square(np.diff(v["centroid"], axis=0)).sum(axis=1)
+                    )
+                    * fps,
                 )
             )
         )
 
         if index_data is not None:
             # find the group for each recording from index data
-            s_group.append([index_data[index_data["name"] == k]["group"].values[0]] * n_frame)
+            s_group.append(
+                [index_data[index_data["name"] == k]["group"].values[0]]
+                * n_frame
+            )
         else:
             # no index data
             s_group.append(["default"] * n_frame)
@@ -252,8 +245,12 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
         heading.append(recording_heading)
 
         # compute angular velocity (radian per second)
-        gaussian_smoothed_heading = filter_angle(recording_heading, size=3, method="gaussian")
-        angular_velocity.append(np.concatenate(([0], np.diff(gaussian_smoothed_heading) * fps)))
+        gaussian_smoothed_heading = filter_angle(
+            recording_heading, size=3, method="gaussian"
+        )
+        angular_velocity.append(
+            np.concatenate(([0], np.diff(gaussian_smoothed_heading) * fps))
+        )
 
         # add syllable data
         syllables.append(v["syllable"])
@@ -263,7 +260,9 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
     moseq_df = pd.concat(
         [
             moseq_df,
-            pd.DataFrame(np.concatenate(centroid), columns=["centroid_x", "centroid_y"]),
+            pd.DataFrame(
+                np.concatenate(centroid), columns=["centroid_x", "centroid_y"]
+            ),
         ],
         axis=1,
     )
@@ -357,18 +356,24 @@ def compute_stats_df(
         ["heading", "angular_velocity", "velocity_px_s"]
     ].agg(["mean", "std", "min", "max"])
 
-    features.columns = ["_".join(col).strip() for col in features.columns.values]
+    features.columns = [
+        "_".join(col).strip() for col in features.columns.values
+    ]
     features.reset_index(inplace=True)
 
     # get durations
     trials = filtered_df["onset"].cumsum()
     trials.name = "trials"
-    durations = filtered_df.groupby(groupby + ["syllable"] + [trials])["onset"].count()
+    durations = filtered_df.groupby(groupby + ["syllable"] + [trials])[
+        "onset"
+    ].count()
     # average duration in seconds
     durations = durations.groupby(groupby + ["syllable"]).mean() / fps
     durations.name = "duration"
     # only keep the columns we need
-    durations = durations.fillna(0).reset_index()[groupby + ["syllable", "duration"]]
+    durations = durations.fillna(0).reset_index()[
+        groupby + ["syllable", "duration"]
+    ]
 
     stats_df = pd.merge(features, frequency_df, on=groupby + ["syllable"])
     stats_df = pd.merge(stats_df, durations, on=groupby + ["syllable"])
@@ -378,7 +383,9 @@ def compute_stats_df(
 def generate_syll_info(project_dir, model_name, syll_info_path):
     # parse model results
     model_results = load_results(project_dir, model_name)
-    unique_sylls = np.unique(np.concatenate([file["syllable"] for file in model_results.values()]))
+    unique_sylls = np.unique(
+        np.concatenate([file["syllable"] for file in model_results.values()])
+    )
     # construct the syllable dictionary
     # in the non interactive version there won't be any group info
     syll_info_df = pd.DataFrame(
@@ -389,7 +396,9 @@ def generate_syll_info(project_dir, model_name, syll_info_path):
         }
     )
 
-    grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
+    grid_movies = glob(
+        os.path.join(project_dir, model_name, "grid_movies", "*.mp4")
+    )
     assert len(grid_movies) > 0, (
         "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
         "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
@@ -424,13 +433,15 @@ def label_syllables(project_dir, model_name, moseq_df):
     # construct the syllable info path
     syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
 
-    # generate a new syll_info yaml file
+    # generate a new syll_info csv file
     if not os.path.exists(syll_info_path):
-        # generate the syllable info yaml file
+        # generate the syllable info csv file
         generate_syll_info(project_dir, model_name, syll_info_path)
 
     # ensure there is grid movies
-    grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
+    grid_movies = glob(
+        os.path.join(project_dir, model_name, "grid_movies", "*.mp4")
+    )
     assert len(grid_movies) > 0, (
         "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
         "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
@@ -439,8 +450,12 @@ def label_syllables(project_dir, model_name, moseq_df):
     # load syll_info
     syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
     # split into with movie and without movie
-    syll_info_df_with_movie = syll_info_df[syll_info_df.movie_path.str.contains(".mp4")].copy()
-    syll_info_df_without_movie = syll_info_df[~syll_info_df.movie_path.str.contains(".mp4")].copy()
+    syll_info_df_with_movie = syll_info_df[
+        syll_info_df.movie_path.str.contains(".mp4")
+    ].copy()
+    syll_info_df_without_movie = syll_info_df[
+        ~syll_info_df.movie_path.str.contains(".mp4")
+    ].copy()
 
     # create select widget only include the ones with a movie
     select = pn.widgets.Select(
@@ -460,7 +475,9 @@ def label_syllables(project_dir, model_name, moseq_df):
     # create the labeler dataframe
     # only include the syllable that have grid movies
     include = syll_info_df_with_movie.syllable.values
-    syll_df = moseq_df[["syllable"]].groupby("syllable").mean().reset_index().copy()
+    syll_df = (
+        moseq_df[["syllable"]].groupby("syllable").mean().reset_index().copy()
+    )
     syll_df = syll_df[syll_df.syllable.isin(include)]
 
     # get labels and description from syll info
@@ -509,7 +526,9 @@ def label_syllables(project_dir, model_name, moseq_df):
         configuration=base_configuration,
     )
 
-    button = pn.widgets.Button(name="Save syllable info", button_type="primary")
+    button = pn.widgets.Button(
+        name="Save syllable info", button_type="primary"
+    )
 
     # call back function to save the index file
     def save_index(syll_df):
@@ -531,7 +550,9 @@ def label_syllables(project_dir, model_name, moseq_df):
     button.on_click(b)
 
     # bind everything together
-    return pn.Row(pn.Column(select, ivideo), pn.Column(summary_table, pn.Column(button)))
+    return pn.Row(
+        pn.Column(select, ivideo), pn.Column(summary_table, pn.Column(button))
+    )
 
 
 def get_tie_correction(x, N_m):
@@ -616,7 +637,10 @@ def run_manual_KW_test(
     # get square of sums for each group
     ssbn = np.zeros((n_perm, N_s))
     for i in range(num_groups):
-        ssbn += perm_ranks[:, cum_group_idx[i] : cum_group_idx[i + 1]].sum(1) ** 2 / n_per_group[i]
+        ssbn += (
+            perm_ranks[:, cum_group_idx[i] : cum_group_idx[i + 1]].sum(1) ** 2
+            / n_per_group[i]
+        )
 
     # h-statistic
     h_all = 12.0 / (N_m * (N_m + 1)) * ssbn - 3 * (N_m + 1)
@@ -627,7 +651,9 @@ def run_manual_KW_test(
     p_i = np.random.randint(n_perm)
     s_i = np.random.randint(N_s)
     kr = stats.kruskal(
-        *np.array_split(merged_usages_all[perm[p_i, :], s_i], np.cumsum(n_per_group[:-1]))
+        *np.array_split(
+            merged_usages_all[perm[p_i, :], s_i], np.cumsum(n_per_group[:-1])
+        )
     )
     assert (kr.statistic == h_all[p_i, s_i]) & (
         kr.pvalue == p_vals[p_i, s_i]
@@ -680,16 +706,20 @@ def dunns_z_test_permute_within_group_pairs(
 
         n_mice = is_i.sum() + is_j.sum()
 
-        ranks_perm = real_ranks[(is_i | is_j)][rnd.rand(n_perm, n_mice).argsort(-1)]
+        ranks_perm = real_ranks[(is_i | is_j)][
+            rnd.rand(n_perm, n_mice).argsort(-1)
+        ]
         diff = np.abs(
-            ranks_perm[:, : is_i.sum(), :].mean(1) - ranks_perm[:, is_i.sum() :, :].mean(1)
+            ranks_perm[:, : is_i.sum(), :].mean(1)
+            - ranks_perm[:, is_i.sum() :, :].mean(1)
         )
         B = 1.0 / vc.loc[i_n] + 1.0 / vc.loc[j_n]
 
         # also do for real data
         group_ranks = real_ranks[(is_i | is_j)]
         real_diff = np.abs(
-            group_ranks[: is_i.sum(), :].mean(0) - group_ranks[is_i.sum() :, :].mean(0)
+            group_ranks[: is_i.sum(), :].mean(0)
+            - group_ranks[is_i.sum() :, :].mean(0)
         )
 
         # add to dict
@@ -743,7 +773,9 @@ def compute_pvalues_for_group_pairs(
 
     p_vals_allperm = {}
     for pair in combinations(group_names, 2):
-        p_vals_allperm[pair] = ((null_zs[pair] > real_zs_within_group[pair]).sum(0) + 1) / n_perm
+        p_vals_allperm[pair] = (
+            (null_zs[pair] > real_zs_within_group[pair]).sum(0) + 1
+        ) / n_perm
 
     # summarize into df
     df_pval = pd.DataFrame(p_vals_allperm)
@@ -751,9 +783,13 @@ def compute_pvalues_for_group_pairs(
     def correct_p(x):
         return multipletests(x, alpha=thresh, method=mc_method)[1]
 
-    df_pval_corrected = df_pval.apply(correct_p, axis=1, result_type="broadcast")
+    df_pval_corrected = df_pval.apply(
+        correct_p, axis=1, result_type="broadcast"
+    )
 
-    return df_pval_corrected, ((df_pval_corrected[df_k_real.is_sig] < thresh).sum(0))
+    return df_pval_corrected, (
+        (df_pval_corrected[df_k_real.is_sig] < thresh).sum(0)
+    )
 
 
 def run_kruskal(
@@ -793,7 +829,9 @@ def run_kruskal(
     rnd = np.random.RandomState(seed=seed)
     # get grouped mean data
     grouped_data = (
-        stats_df.pivot_table(index=["group", "name"], columns="syllable", values=statistic)
+        stats_df.pivot_table(
+            index=["group", "name"], columns="syllable", values=statistic
+        )
         .replace(np.nan, 0)
         .reset_index()
     )
@@ -825,7 +863,11 @@ def run_kruskal(
     # find the real k_real
     df_k_real = pd.DataFrame(
         [
-            stats.kruskal(*np.array_split(syllable_data[:, s_i], np.cumsum(n_per_group[:-1])))
+            stats.kruskal(
+                *np.array_split(
+                    syllable_data[:, s_i], np.cumsum(n_per_group[:-1])
+                )
+            )
             for s_i in range(N_s)
         ]
     )
@@ -875,7 +917,9 @@ def run_kruskal(
 
 
 # frequency plot stuff
-def sort_syllables_by_stat_difference(stats_df, ctrl_group, exp_group, stat="frequency"):
+def sort_syllables_by_stat_difference(
+    stats_df, ctrl_group, exp_group, stat="frequency"
+):
     """Sort syllables by the difference in the stat between the control and
     experimental group.
 
@@ -915,7 +959,9 @@ def sort_syllables_by_stat_difference(stats_df, ctrl_group, exp_group, stat="fre
     exp_df = mutation_df.loc[exp_group]
 
     # compute mean difference at each syll frequency and reorder based on difference
-    ordering = (exp_df[stat] - control_df[stat]).sort_values(ascending=False).index
+    ordering = (
+        (exp_df[stat] - control_df[stat]).sort_values(ascending=False).index
+    )
 
     return list(ordering)
 
@@ -946,7 +992,11 @@ def sort_syllables_by_stat(stats_df, stat="frequency"):
     else:
         ordering = (
             stats_df.drop(
-                [col for col, dtype in stats_df.dtypes.items() if dtype == "object"],
+                [
+                    col
+                    for col, dtype in stats_df.dtypes.items()
+                    if dtype == "object"
+                ],
                 axis=1,
             )
             .groupby("syllable")
@@ -1008,7 +1058,9 @@ def _validate_and_order_syll_stats_params(
             raise ValueError(
                 f"Attempting to sort by {stat} differences, but {ctrl_group} or {exp_group} not in {groups}."
             )
-        ordering = sort_syllables_by_stat_difference(complete_df, ctrl_group, exp_group, stat=stat)
+        ordering = sort_syllables_by_stat_difference(
+            complete_df, ctrl_group, exp_group, stat=stat
+        )
     if colors is None:
         colors = []
     if len(colors) == 0 or len(colors) != len(groups):
@@ -1104,7 +1156,9 @@ def plot_syll_stats_with_sem(
             else:
                 sig_sylls = sig_pairs.get((exp_group, ctrl_group))
         else:
-            print("No control or experimental group specified. Not plotting significant syllables.")
+            print(
+                "No control or experimental group specified. Not plotting significant syllables."
+            )
 
     xlabel = f"Syllables sorted by {stat}"
     if order == "diff":
@@ -1153,7 +1207,7 @@ def plot_syll_stats_with_sem(
         plt.scatter(markings, [-0.005] * len(markings), color="r", marker="*")
 
         # manually define a new patch
-        patch = mlines.Line2D(
+        patch = Line2D(
             [],
             [],
             color="red",
@@ -1294,7 +1348,9 @@ def get_transition_matrix(
             # Get syllable transitions
             transitions = get_transitions(v)[0]
 
-            trans_mat = n_gram_transition_matrix(transitions, n=2, max_label=max_syllable)
+            trans_mat = n_gram_transition_matrix(
+                transitions, n=2, max_label=max_syllable
+            )
             init_matrix.append(trans_mat)
 
         init_matrix = np.sum(init_matrix, axis=0) + smoothing
@@ -1307,7 +1363,10 @@ def get_transition_matrix(
             transitions = get_transitions(v)[0]
 
             trans_mat = (
-                n_gram_transition_matrix(transitions, n=2, max_label=max_syllable) + smoothing
+                n_gram_transition_matrix(
+                    transitions, n=2, max_label=max_syllable
+                )
+                + smoothing
             )
 
             # Normalize matrix
@@ -1317,7 +1376,9 @@ def get_transition_matrix(
     return all_mats
 
 
-def get_group_trans_mats(labels, label_group, group, syll_include, normalize="bigram"):
+def get_group_trans_mats(
+    labels, label_group, group, syll_include, normalize="bigram"
+):
     """Get the transition matrices for each group.
 
     Parameters
@@ -1346,16 +1407,18 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize="bi
     # Computing transition matrices for each given group
     for plt_group in group:
         # list of syll labels in recordings in the group
-        use_labels = [lbl for lbl, grp in zip(labels, label_group) if grp == plt_group]
+        use_labels = [
+            lbl for lbl, grp in zip(labels, label_group) if grp == plt_group
+        ]
         # find stack np array shape
         row_num = len(use_labels)
         max_len = max([len(lbl) for lbl in use_labels])
         # Get recordings to include in trans_mat
         # subset only syllable included
         trans_mats.append(
-            get_transition_matrix(use_labels, normalize=normalize, combine=True)[syll_include, :][
-                :, syll_include
-            ]
+            get_transition_matrix(
+                use_labels, normalize=normalize, combine=True
+            )[syll_include, :][:, syll_include]
         )
 
         # Getting frequency information for node scaling
@@ -1400,7 +1463,9 @@ def visualize_transition_bigram(
     # infer max_syllables
     max_syllables = trans_mats[0].shape[0]
 
-    fig, ax = plt.subplots(1, len(group), figsize=figsize, sharex=False, sharey=True)
+    fig, ax = plt.subplots(
+        1, len(group), figsize=figsize, sharex=False, sharey=True
+    )
     title_map = dict(bigram="Bigram", columns="Incoming", rows="Outgoing")
     color_lim = max([x.max() for x in trans_mats])
     if len(group) == 1:
@@ -1420,14 +1485,18 @@ def visualize_transition_bigram(
         cb.set_label(f"{title_map[normalize]} transition probability")
         axs[i].set_xlabel("Outgoing syllable")
         axs[i].set_title(g)
-        axs[i].set_xticks(np.arange(len(syll_include)), syll_names, rotation=90)
+        axs[i].set_xticks(
+            np.arange(len(syll_include)), syll_names, rotation=90
+        )
 
     # save the figure
     plot_name = "transition_matrices"
     save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir)
 
 
-def generate_transition_matrices(project_dir, model_name, normalize="bigram", min_frequency=0.005):
+def generate_transition_matrices(
+    project_dir, model_name, normalize="bigram", min_frequency=0.005
+):
     """Generate the transition matrices for each recording.
 
     Parameters
@@ -1459,7 +1528,9 @@ def generate_transition_matrices(project_dir, model_name, normalize="bigram", mi
     results_dict = load_results(project_dir, model_name)
 
     # filter out syllables by freqency
-    model_labels = [results_dict[recording]["syllable"] for recording in recordings]
+    model_labels = [
+        results_dict[recording]["syllable"] for recording in recordings
+    ]
     frequencies = get_frequencies(model_labels)
     syll_include = np.where(frequencies > min_frequency)[0]
 
@@ -1523,7 +1594,9 @@ def plot_transition_graph_group(
         nodelist = G.nodes()
         # normalize the usage values
         sum_usages = sum(usages[i])
-        normalized_usages = np.array([u / sum_usages for u in usages[i]]) * node_scaling + 1000
+        normalized_usages = (
+            np.array([u / sum_usages for u in usages[i]]) * node_scaling + 1000
+        )
         nx.draw_networkx_nodes(
             G,
             pos,
@@ -1611,7 +1684,9 @@ def plot_transition_graph_difference(
         # left tm minus right tm
         tm_diff = trans_mats[left_ind] - trans_mats[right_ind]
         # left usage minus right usage
-        usages_diff = np.array(list(usages[left_ind])) - np.array(list(usages[right_ind]))
+        usages_diff = np.array(list(usages[left_ind])) - np.array(
+            list(usages[right_ind])
+        )
         normlized_usg_abs_diff = (
             np.abs(usages_diff) / np.abs(usages_diff).sum()
         ) * node_scaling + 500

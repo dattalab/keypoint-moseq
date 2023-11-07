@@ -7,7 +7,7 @@ import warnings
 from textwrap import fill
 from datetime import datetime
 
-from keypoint_moseq.viz import plot_progress, plot_kappa_scan
+from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_hdf5, extract_results
 from jax_moseq.models.keypoint_slds import resample_model, init_model
 from jax_moseq.utils import check_for_nans, device_put_as_scalar
