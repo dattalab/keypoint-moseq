@@ -15,6 +15,7 @@ from itertools import combinations
 from copy import deepcopy
 from glob import glob
 import panel as pn
+from jax_moseq.utils import get_durations, get_frequencies
 
 pn.extension("plotly", "tabulator")
 na = np.newaxis
