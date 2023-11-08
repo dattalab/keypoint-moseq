@@ -1189,7 +1189,6 @@ def plot_syll_stats_with_sem(
         hue=hue,
         order=ordering,
         linestyles="none",
-        dodge=True,
         errorbar=("ci", 68),
         ax=ax,
         hue_order=groups,
