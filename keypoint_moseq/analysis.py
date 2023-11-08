@@ -1188,7 +1188,7 @@ def plot_syll_stats_with_sem(
         y=stat,
         hue=hue,
         order=ordering,
-        linestyle="none",
+        linestyles="none",
         dodge=True,
         errorbar=("ci", 68),
         ax=ax,
@@ -1216,7 +1216,7 @@ def plot_syll_stats_with_sem(
             [],
             color="red",
             marker="*",
-            linestyle="None",
+            linestyles="None",
             markersize=9,
             label="Significant Syllable",
         )
