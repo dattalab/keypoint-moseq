@@ -834,6 +834,19 @@ def load_keypoints(
         bodypart. Confidence values are optional and will be set to 1 if not
         present.
 
+    - facemap
+        .h5 files saved by Facemap. See Facemap documentation for details:
+        https://facemap.readthedocs.io/en/latest/outputs.html#keypoints-processing
+        The files should have the format::
+
+            [filename].h5
+            └──Facemap
+                ├──keypoint1
+                │  ├──x
+                │  ├──y
+                │  └──likelihood
+                ⋮
+
     Parameters
     ----------
     filepath_pattern: str or list of str
@@ -891,7 +904,14 @@ def load_keypoints(
         List of bodypart names. The order of the names matches the order of the
         bodyparts in `coordinates` and `confidences`.
     """
-    formats = ["deeplabcut", "sleap", "anipose", "sleap-anipose", "nwb"]
+    formats = [
+        "deeplabcut",
+        "sleap",
+        "anipose",
+        "sleap-anipose",
+        "nwb",
+        "facemap",
+    ]
     assert format in formats, fill(
         f"Unrecognized format {format}. Must be one of {formats}"
     )
@@ -903,6 +923,7 @@ def load_keypoints(
             "anipose": [".csv"],
             "sleap-anipose": [".h5", ".hdf5"],
             "nwb": [".nwb"],
+            "facemap": [".h5", ".hdf5"],
         }[format]
     else:
         extensions = [extension]
@@ -913,6 +934,7 @@ def load_keypoints(
         "anipose": _anipose_loader,
         "sleap-anipose": _sleap_anipose_loader,
         "nwb": _nwb_loader,
+        "facemap": _facemap_loader,
     }[format]
 
     filepaths = list_files_with_exts(
@@ -1106,6 +1128,20 @@ def _nwb_loader(filepath, name):
             confs = np.ones_like(coords[..., 0])
         coordinates = {name: coords}
         confidences = {name: confs}
+    return coordinates, confidences, bodyparts
+
+
+def _facemap_loader(filepath, name):
+    """Load keypoints from facemap h5 files."""
+    with h5py.File(filepath, "r") as h5:
+        dset = h5["Facemap"]
+        bodyparts = sorted(dset.keys())
+        coords, confs = [], []
+        for bp in bodyparts:
+            coords.append(np.stack([dset[bp]["x"], dset[bp]["y"]], axis=1))
+            confs.append(dset[bp]["likelihood"])
+        coordinates = {name: np.stack(coords, axis=1)}
+        confidences = {name: np.stack(confs, axis=1)}
     return coordinates, confidences, bodyparts
 
 
