@@ -10,7 +10,7 @@ Local installation
 
 .. note::
 
-   For installation on Windows 11, you must use Windows Subsystem for Linux.
+   For installation on Windows 11, you must use Windows Subsystem for Linux. CUDA and cuDNN should be installed system-wide (i.e. through the usual Windows OS).
 
 
 
@@ -69,7 +69,7 @@ Create a new conda environment with python 3.9::
 Install jax using one of the lines below::
 
    # MacOS or Linux (CPU)
-   pip install "jax[cpu]==0.3.22"
+   pip install "jax[cpu]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_releases.html
 
    # MacOS or Linux (GPU)
    pip install "jax[cuda11_cudnn82]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
