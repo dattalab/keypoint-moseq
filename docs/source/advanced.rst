@@ -70,7 +70,7 @@ Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the ra
             model_name, ar_only=True, num_iters=100, 
             save_every_n_iters=25);
 
-    kpms.plot_kappa_scan(kappas, project_dir, model_name)
+    kpms.plot_kappa_scan(kappas, project_dir, prefix)
 
 
 .. image:: _static/kappa_scan.jpg
