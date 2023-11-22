@@ -2,20 +2,18 @@ Local installation
 ------------------
 
 - Total installation time is around 10 minutes.
-- The first import of ``keypoint_moseq`` after installation can take a few minutes.
-- If you are using a GPU, confirm that jax has access to it once installation is complete::
-
-   python -c "import jax; print(jax.devices())"
-
+- The first import of keypoint_moseq after installation can take a few minutes.
+- If you experience any issues, reach out to us on `slack <https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A>`_! We're happy to help.
 
 .. note::
 
-   For installation on Windows 11, you must use Windows Subsystem for Linux. CUDA and cuDNN should be installed system-wide (i.e. through the usual Windows OS).
-
+   If using Windows, make sure to run all the commands below from an Anaconda Prompt.
 
 
 Install using conda
 ~~~~~~~~~~~~~~~~~~~
+
+
 
 Use conda environment files to automatically install the appropriate GPU drivers and other dependencies. Start by cloning the repository::
 
@@ -43,23 +41,23 @@ Activate the new environment::
 
    conda activate keypoint_moseq
 
-*Windows users only:* install pytables::
 
-   conda install -c conda-forge pytables
-
-To use the keypoint_moseq environment in a notebook, either launch jupyterlab or register the environment as a jupyter notebook kernel as follows::
+To run keypoint-moseq in jupyter, either launch jupyterlab directly from the `keypoint_moseq` environment or register a globally-accessible jupyter kernel as follows::
 
    python -m ipykernel install --user --name=keypoint_moseq
    
    
+.. note::
+
+   If you are using Windows with a GPU and see the error ``XlaRuntimeError: UNKNOWN: no kernel image is available for execution on the device`` try updating your GPU drivers to the latest version. 
+
 
 Install using pip
 ~~~~~~~~~~~~~~~~~
 
 .. note::
 
-   If you are using Windows with a GPU, CUDA 11.1 / cuDNN 8.2 is required. If you have a different version of CUDA installed, then follow the directions to `Install using conda`_.
-
+   If you are using Windows with a GPU and would like to pip install keypoint-moseq, then you must also have CUDA 11.1 / cuDNN 8.2 installed system-wide (i.e. through the usual Windows OS). Furthermore, if you are using Windows 11, you must use Windows Subsystem for Linux.
 
 Create a new conda environment with python 3.9::
 
@@ -84,11 +82,6 @@ Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 
    pip install keypoint-moseq
 
-**Windows users only:** install pytables and numpy version 1.24::
-
-   conda install -c conda-forge pytables
-   conda install numpy=1.24
-
-Make the environment available to jupyter::
+To run keypoint-moseq in jupyter, either launch jupyterlab directly from the ``keypoint_moseq`` environment or register a globally-accessible jupyter kernel as follows::
 
    python -m ipykernel install --user --name=keypoint_moseq
