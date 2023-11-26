@@ -67,9 +67,7 @@ def crop_image(image, centroid, crop_size):
     padded = np.zeros((h, w, *image.shape[2:]), dtype=image.dtype)
     pad_x = max(w // 2 - x, 0)
     pad_y = max(h // 2 - y, 0)
-    padded[
-        pad_y : pad_y + cropped.shape[0], pad_x : pad_x + cropped.shape[1]
-    ] = cropped
+    padded[pad_y : pad_y + cropped.shape[0], pad_x : pad_x + cropped.shape[1]] = cropped
     return padded
 
 
@@ -333,9 +331,7 @@ def plot_syllable_frequencies(
     syllables = {k: res["syllable"] for k, res in results.items()}
     frequencies = get_frequencies(syllables)
     frequencies = frequencies[frequencies > min_frequency]
-    xmax = max(
-        minlength, np.max(np.nonzero(frequencies > min_frequency)[0]) + 1
-    )
+    xmax = max(minlength, np.max(np.nonzero(frequencies > min_frequency)[0]) + 1)
 
     fig, ax = plt.subplots()
     ax.bar(range(len(frequencies)), frequencies, width=1)
@@ -582,9 +578,7 @@ def plot_progress(
         saved_iterations = np.sort([int(i) for i in f["model_snapshots"]])
 
     if len(saved_iterations) > 1:
-        fig, axs = plt.subplots(
-            1, 4, gridspec_kw={"width_ratios": [1, 1, 1, 3]}
-        )
+        fig, axs = plt.subplots(1, 4, gridspec_kw={"width_ratios": [1, 1, 1, 3]})
         if fig_size is None:
             fig_size = (12, 2.5)
     else:
@@ -603,9 +597,7 @@ def plot_progress(
 
     lim = int(np.percentile(durations, 95))
     binsize = max(int(np.floor(lim / 30)), 1)
-    axs[1].hist(
-        durations, range=(1, lim), bins=(int(lim / binsize)), density=True
-    )
+    axs[1].hist(durations, range=(1, lim), bins=(int(lim / binsize)), density=True)
     axs[1].set_xlim([1, lim])
     axs[1].set_xlabel("syllable duration (frames)")
     axs[1].set_ylabel("probability")
@@ -623,9 +615,7 @@ def plot_progress(
         for i in saved_iterations:
             with h5py.File(checkpoint_path, "r") as f:
                 z = np.array(f[f"model_snapshots/{i}/states/z"])
-                sample_state_history.append(
-                    z[batch_ix, start : start + window_size]
-                )
+                sample_state_history.append(z[batch_ix, start : start + window_size])
                 median_durations.append(np.median(get_durations(z, mask)))
 
         axs[2].scatter(saved_iterations, median_durations)
@@ -645,9 +635,7 @@ def plot_progress(
         axs[3].set_title("State sequence history")
 
         yticks = [
-            int(y)
-            for y in axs[3].get_yticks()
-            if y < len(saved_iterations) and y > 0
+            int(y) for y in axs[3].get_yticks() if y < len(saved_iterations) and y > 0
         ]
         yticklabels = saved_iterations[yticks]
         axs[3].set_yticks(yticks)
@@ -729,14 +717,10 @@ def _grid_movie_tile(
                     frame, coords, edges=edges, **plot_options
                 )
 
-            frame = cv2.warpAffine(
-                frame, np.float32(M), (window_size, window_size)
-            )
+            frame = cv2.warpAffine(frame, np.float32(M), (window_size, window_size))
             frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
             if 0 <= ii - pre <= end - start and dot_radius > 0:
-                pos = tuple(
-                    [int(x) for x in M @ np.append(c, 1) * scale_factor]
-                )
+                pos = tuple([int(x) for x in M @ np.append(c, 1) * scale_factor])
                 cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
             tile.append(frame)
 
@@ -951,9 +935,7 @@ def get_grid_movie_window_size(
     )
 
     all_trajectories = np.concatenate(all_trajectories, axis=0)
-    all_trajectories = all_trajectories[
-        ~np.isnan(all_trajectories).all((1, 2))
-    ]
+    all_trajectories = all_trajectories[~np.isnan(all_trajectories).all((1, 2))]
     max_distances = np.nanmax(np.abs(all_trajectories), axis=1)
     window_size = np.percentile(max_distances, pctl) * fudge_factor * 2
     window_size = int(np.ceil(window_size / blocksize) * blocksize)
@@ -1163,9 +1145,7 @@ def generate_grid_movies(
 
     # reindex coordinates if necessary
     if not (bodyparts is None or use_bodyparts is None or coordinates is None):
-        coordinates = reindex_by_bodyparts(
-            coordinates, bodyparts, use_bodyparts
-        )
+        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
 
     # get edges for plotting skeleton
     edges = []
@@ -1252,6 +1232,7 @@ def generate_grid_movies(
         window_size = get_grid_movie_window_size(
             sampled_instances, centroids, headings, coordinates, pre, post
         )
+        print(f"Using window size of {window_size} pixels")
         if keypoints_only:
             if window_size < 64:
                 warnings.warn(
@@ -1761,9 +1742,7 @@ def generate_trajectory_plots(
             all_Xs.append(Xs[..., use_dims])
             suffixes.append("." + plane)
             if lims is None:
-                all_lims.append(
-                    get_limits(all_Xs[-1], pctl=get_limits_pctl, **padding)
-                )
+                all_lims.append(get_limits(all_Xs[-1], pctl=get_limits_pctl, **padding))
             else:
                 all_lims.append(lims[..., use_dims])
 
@@ -1898,18 +1877,14 @@ def overlay_keypoints_on_image(
             continue
         pos1 = (int(coordinates[i, 0]), int(coordinates[i, 1]))
         pos2 = (int(coordinates[j, 0]), int(coordinates[j, 1]))
-        canvas = cv2.line(
-            canvas, pos1, pos2, colors[i], line_width, cv2.LINE_AA
-        )
+        canvas = cv2.line(canvas, pos1, pos2, colors[i], line_width, cv2.LINE_AA)
 
     # overlay keypoints
     for i, (x, y) in enumerate(coordinates):
         if np.isnan(x) or np.isnan(y):
             continue
         pos = (int(x), int(y))
-        canvas = cv2.circle(
-            canvas, pos, node_size, colors[i], -1, lineType=cv2.LINE_AA
-        )
+        canvas = cv2.circle(canvas, pos, node_size, colors[i], -1, lineType=cv2.LINE_AA)
 
     if opacity < 1.0:
         image = cv2.addWeighted(image, 1 - opacity, canvas, opacity, 0)
@@ -1985,9 +1960,7 @@ def overlay_keypoints_on_video(
 
     if bodyparts is not None:
         if use_bodyparts is not None:
-            coordinates = reindex_by_bodyparts(
-                coordinates, bodyparts, use_bodyparts
-            )
+            coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
         else:
             use_bodyparts = bodyparts
         edges = get_edges(use_bodyparts, skeleton)
@@ -2405,9 +2378,7 @@ def plot_similarity_dendrogram(
     figsize: tuple of float, default=(10,5)
         Size of the dendrogram plot.
     """
-    save_path = _get_path(
-        project_dir, model_name, save_path, "similarity_dendrogram"
-    )
+    save_path = _get_path(project_dir, model_name, save_path, "similarity_dendrogram")
 
     distances, syllable_ixs = syllable_similarity(
         coordinates,
