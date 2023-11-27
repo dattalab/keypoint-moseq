@@ -11,6 +11,5 @@ dependencies:
   - pip:
     - jax==0.3.22
     - "https://whls.blob.core.windows.net/unstable/cpu/jaxlib-0.3.22-cp39-cp39-win_amd64.whl"
-    - "jax-moseq==0.0.0"
-    - "--editable=."
+    - "keypoint-moseq"
     - jupyterlab

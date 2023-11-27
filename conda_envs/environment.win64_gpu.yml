@@ -7,14 +7,13 @@ channels:
 
 dependencies:
   - python=3.9
+  - conda-forge::cudatoolkit=11.8.0
+  - conda-forge::cudnn=8.8.0.121
+  - nvidia::cuda-nvcc
   - pytables
-  - cudatoolkit=11.1
-  - cudnn=8.2
-  - cuda-nvcc
   - pip
   - pip:
     - jax==0.3.22
     - "https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl"
-    - "jax-moseq==0.0.0"
-    - "--editable=."
+    - "keypoint-moseq"
     - jupyterlab

@@ -1,21 +1,76 @@
-Install using pip
------------------
+Local installation
+------------------
 
-To use a GPU (recommended), install the appropriate driver and CUDA version. CUDA ≥11.1 and cuDNN ≥8.2 are required. `This section of the DeepLabCut docs <https://deeplabcut.github.io/DeepLabCut/docs/installation.html#gpu-support>`_ may be helpful. Next use `Anaconda <https://docs.anaconda.com/anaconda/install/index.html>`_  or `Miniconda <https://docs.conda.io/en/latest/miniconda.html>`_ to configure a new python environment called ``keypoint_moseq``::
+- Total installation time is around 10 minutes.
+- The first import of keypoint_moseq after installation can take a few minutes.
+- If you experience any issues, reach out to us on `slack <https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A>`_! We're happy to help.
+
+.. note::
+
+   If using Windows, make sure to run all the commands below from an Anaconda Prompt.
+
+
+Install using conda
+~~~~~~~~~~~~~~~~~~~
+
+
+
+Use conda environment files to automatically install the appropriate GPU drivers and other dependencies. Start by cloning the repository::
+
+   git clone https://github.com/dattalab/keypoint-moseq
+   cd keypoint-moseq
+
+Install the appropriate conda environment for your platform::
+
+   # Windows (CPU-only)
+   conda env create -f conda_envs\environment.win64_cpu.yml
+
+   # Windows (GPU)
+   conda env create -f conda_envs\environment.win64_gpu.yml
+
+   # Linux (CPU-only)
+   conda env create -f conda_envs/environment.linux_cpu.yml
+
+   # Linux (GPU)
+   conda env create -f conda_envs/environment.linux_gpu.yml
+
+   # Mac (CPU-only)
+   conda env create -f conda_envs/environment.mac_cpu.yml
+
+Activate the new environment::
+
+   conda activate keypoint_moseq
+
+
+To run keypoint-moseq in jupyter, either launch jupyterlab directly from the `keypoint_moseq` environment or register a globally-accessible jupyter kernel as follows::
+
+   python -m ipykernel install --user --name=keypoint_moseq
+   
+   
+.. note::
+
+   If you are using Windows with a GPU and see the error ``XlaRuntimeError: UNKNOWN: no kernel image is available for execution on the device`` try updating your GPU drivers to the latest version. 
+
+
+Install using pip
+~~~~~~~~~~~~~~~~~
+
+.. note::
+
+   If you are using Windows with a GPU and would like to pip install keypoint-moseq, then you must also have CUDA 11.1 / cuDNN 8.2 installed system-wide (i.e. through the usual Windows OS). Furthermore, if you are using Windows 11, you must use Windows Subsystem for Linux.
+
+Create a new conda environment with python 3.9::
 
    conda create -n keypoint_moseq python=3.9
    conda activate keypoint_moseq
 
-   # Include the following line if installing on Windows
-   # conda install -c conda-forge pytables
-
 Install jax using one of the lines below::
 
    # MacOS or Linux (CPU)
-   pip install "jax[cpu]"
+   pip install "jax[cpu]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_releases.html
 
    # MacOS or Linux (GPU)
-   pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+   pip install "jax[cuda11_cudnn82]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
    # Windows (CPU)
    pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cpu/jaxlib-0.3.22-cp39-cp39-win_amd64.whl
@@ -23,57 +78,10 @@ Install jax using one of the lines below::
    # Windows (GPU)
    pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl
 
-
 Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 
    pip install keypoint-moseq
 
-Make the environment available to jupyter::
+To run keypoint-moseq in jupyter, either launch jupyterlab directly from the ``keypoint_moseq`` environment or register a globally-accessible jupyter kernel as follows::
 
    python -m ipykernel install --user --name=keypoint_moseq
-
-Install using conda
--------------------
-
-As an alternative, you can install directly from conda environment files. This will automatically install the appropriate GPU drivers and other dependencies. Start by cloning the repository::
-
-   git clone https://github.com/dattalab/keypoint-moseq && cd keypoint-moseq
-
-Install the appropriate conda environment for your platform::
-
-   # Windows (CPU-only)
-   conda env create -f conda_envs/environment.win64_cpu.yml
-
-   # Windows (GPU)
-   conda env create -f conda_envs/environment.win64_gpu.yml
-
-   # Linux (CPU-only)
-   conda env create -f conda_envs/environment.linux_cpu.yml
-
-   #Linux (GPU)
-   conda env create -f conda_envs/environment.linux_gpu.yml
-
-Activate the new environment::
-
-   conda activate keypoint_moseq
-
-Troubleshooting
----------------
-
-- ``UNKNOWN: no kernel image is available for execution on the device``
-
-  If you're running into issues when trying to use the GPU-accelerated version, you might see this error message::
-
-     jaxlib.xla_extension.XlaRuntimeError: UNKNOWN: no kernel image is available for execution on the device
-
-  First, check if jax can detect your GPU::
-
-     python -c "import jax; print(jax.default_backend())
-
-  The result should be "gpu". If it isn't, then you might not be using the right version of ``cudatoolkit`` or ``cudnn``. If you installed these via ``conda``, you can check by doing a ``conda list | grep cud``. If you are on the right versions, try `updating your GPU driver to the latest version <https://nvidia.com/drivers>`_.
-
-
-License
--------
-
-MoSeq is freely available for academic use under a license provided by Harvard University. Please refer to the `license file <https://github.com/dattalab/keypoint-moseq/blob/main/LICENSE.md>`_ for details. If you are interested in using MoSeq for commercial purposes please contact Bob Datta directly at srdatta@hms.harvard.edu, who will put you in touch with the Harvard Technology Transfer office.
