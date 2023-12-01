@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import networkx as nx
 from textwrap import fill
 import jax, jax.numpy as jnp
 from scipy.ndimage import median_filter, convolve1d, gaussian_filter1d
@@ -421,6 +422,66 @@ def get_edges(use_bodyparts, skeleton):
                         [use_bodyparts.index(bp1), use_bodyparts.index(bp2)]
                     )
     return edges
+
+
+def build_node_hierarchy(bodyparts, skeleton, root_node):
+    """
+    Define a rooted hierarchy based on the edges of a spanning tree.
+
+    Parameters
+    ----------
+    bodyparts: list of str
+        Ordered list of node names.
+
+    skeleton: list of tuples
+        Edges of the spanning tree as pairs of node names.
+
+    root_node: str
+        The desired root node of the hierarchy
+
+    Returns
+    -------
+    node_order: array of shape (num_nodes,)
+        Integer array specifying an ordering of nodes in which parents
+        precede children (i.e. a topological ordering).
+
+    parents: array of shape (num_nodes,)
+        Child-parent relationships using the indexes from `node_order`,
+        such that `parent[i]==j` when `node_order[j]` is the parent of
+        `node_order[i]`.
+
+    Raises
+    ------
+    ValueError
+        The edges in `skeleton` do not define a spanning tree.  
+    """
+    G = nx.Graph()
+    G.add_nodes_from(bodyparts)
+    G.add_edges_from(skeleton)
+
+    if not nx.is_tree(G):
+        cycles = list(nx.cycle_basis(G))
+        raise ValueError(
+            'The skeleton does not define a spanning tree, '
+            'as it contains the following cycles: {}'.format(cycles))
+
+    if not nx.is_connected(G):
+        raise ValueError(
+            'The skeleton does not define a spanning tree, '
+            'as it contains multiple connected components.')
+
+    node_order = list(nx.dfs_preorder_nodes(G, root_node))
+    parents = np.zeros(len(node_order), dtype=int)
+
+    for i, j in skeleton:
+        i, j = node_order.index(i), node_order.index(j)
+        if i < j:
+            parents[j] = i
+        else:
+            parents[i] = j
+
+    node_order = np.array([bodyparts.index(n) for n in node_order])
+    return node_order, parents
 
 
 def reindex_by_bodyparts(data, bodyparts, use_bodyparts, axis=1):
