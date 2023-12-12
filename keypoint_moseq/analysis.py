@@ -258,12 +258,15 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
 
     # construct dataframe
     moseq_df = pd.DataFrame(np.concatenate(recording_name), columns=["name"])
+    column_names = (
+        ["centroid_x", "centroid_y"]
+        if centroid[0].shape[1] == 2
+        else ["centroid_x", "centroid_y", "centroid_z"]
+    )
     moseq_df = pd.concat(
         [
             moseq_df,
-            pd.DataFrame(
-                np.concatenate(centroid), columns=["centroid_x", "centroid_y"]
-            ),
+            pd.DataFrame(np.concatenate(centroid), columns=column_names),
         ],
         axis=1,
     )
