@@ -355,7 +355,7 @@ Note that for any already open notebooks, you will need to restart the kernel to
 Dead kernel
 -----------
 
-On Windows, GPU out of memory (OOM) errors may cause silent kernel failure. To determine whether this is the likely cause, compare keypoint MoSeq's expected memory usage during model fitting (roughly 1MB per 100 frames of data) to the total memory available (VRAM) on your GPU. To check the total available VRAM, use ``nvidia-smi`` for Mac and Linux or the Task Manager in Windows. 
+On Windows, GPU out of memory (OOM) errors may cause silent kernel failure. To determine whether this is the likely cause, try re-fitting the model using a small subset of the data. If the kernel still dies, then it is likely a different issue. If the kernel does not die, then it is likely an OOM error. Some workarounds for OOM errors are described below.
 
 
 Out of memory
