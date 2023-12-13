@@ -10,8 +10,9 @@ import plotly
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
-from scipy.spatial.distance import squareform
-from scipy.cluster.hierarchy import linkage, dendrogram
+from scipy.spatial.distance import squareform, pdist
+from scipy.cluster.hierarchy import linkage, dendrogram, leaves_list
+
 from textwrap import fill
 from PIL import Image
 from keypoint_moseq.util import *
@@ -2761,3 +2762,135 @@ def plot_poses_3D(
 
     fig.update_layout(sliders=[dict(steps=steps)])
     fig.show()
+
+
+def hierarchical_clustering_order(X, dist_metric="euclidean", linkage_method="ward"):
+    """Linearly order a set of points using hierarchical clustering.
+
+    Parameters
+    ----------
+    X: ndarray of shape (num_points, num_features)
+        Points to order.
+
+    dist_metric: str, default='euclidean'
+        Distance metric to use.
+
+    linkage_method: str, default='ward'
+        Linkage method to use.
+
+    Returns
+    -------
+    ordering: ndarray of shape (num_points,)
+        Linear ordering of the points.
+    """
+    D = pdist(X, dist_metric)
+    Z = linkage(D, linkage_method)
+    ordering = leaves_list(Z)
+    return ordering
+
+
+def plot_confusion_matrix(
+    results1, results2, min_frequency=0.005, sort=True, normalize=True
+):
+    """Plot a confusion matrix that compares syllables across two models.
+
+    Parameters
+    ----------
+    results1: dict
+        Dictionary containing modeling results for the first model (see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
+
+    results2: dict
+        Dictionary containing modeling results for the second model (see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
+
+    min_frequency: float, default=0.005
+        Minimum frequency of a syllable to include in the confusion matrix.
+
+    sort: bool, default=True
+        Whether to sort the syllables from each model to emphasize the diagonal.
+
+    normalize: bool, default=True
+        Whether to row-normalize the confusion matrix.
+
+    Returns
+    -------
+    fig: matplotlib figure
+        Figure containing the confusion matrix.
+
+    ax: matplotlib axis
+        Axis containing the confusion matrix.
+    """
+    syllables1 = np.concatenate(
+        [results1[k]["syllable"] for k in sorted(results1.keys())]
+    )
+    syllables2 = np.concatenate(
+        [results2[k]["syllable"] for k in sorted(results2.keys())]
+    )
+
+    C = np.zeros((np.max(syllables1) + 1, np.max(syllables2) + 1))
+    np.add.at(C, (syllables1, syllables2), 1)
+
+    if normalize:
+        C = C / np.sum(C, axis=1, keepdims=True)
+
+    ix1 = (get_frequencies(syllables1) > 0.005).nonzero()[0]
+    ix2 = (get_frequencies(syllables2) > 0.005).nonzero()[0]
+    C = C[ix1, :][:, ix2]
+
+    if sort:
+        row_order = hierarchical_clustering_order(C)
+        C = C[row_order, :]
+        ix1 = ix1[row_order]
+
+        col_order = np.argsort(np.argmax(C, axis=0))
+        C = C[:, col_order]
+        ix2 = ix2[col_order]
+
+    fig, ax = plt.subplots(1, 1)
+    im = ax.imshow(C)
+    ax.set_xticks(np.arange(len(ix2)))
+    ax.set_xticklabels(ix2)
+    ax.set_yticks(np.arange(len(ix1)))
+    ax.set_yticklabels(ix1)
+    ax.set_xlabel("Model 2")
+    ax.set_ylabel("Model 1")
+    ax.set_title("Confusion matrix")
+    cbar = fig.colorbar(im, ax=ax)
+    cbar.set_label("Probability")
+    fig.tight_layout()
+    return fig, ax
+
+
+def plot_eml_scores(eml_scores, eml_std_errs, model_names):
+    """Plot expected marginal likelihood scores for a set of models.
+
+    Parameters
+    ----------
+    eml_scores: ndarray of shape (num_models,)
+        EML score for each model.
+
+    eml_std_errs: ndarray of shape (num_models,)
+        Standard error of the EML score for each model.
+
+    model_names: list of str
+        Name of each model.
+    """
+    num_models = len(eml_scores)
+    ordering = np.argsort(eml_scores)
+    eml_scores = eml_scores[ordering]
+    eml_std_errs = eml_std_errs[ordering]
+    model_names = [model_names[i] for i in ordering]
+
+    err_low = eml_scores - eml_std_errs
+    err_high = eml_scores + eml_std_errs
+
+    fig, ax = plt.subplots(1, 1, figsize=(4, 3.5))
+    for i in range(num_models):
+        ax.plot([i, i], [err_low[i], err_high[i]], c="k", linewidth=1)
+    ax.scatter(range(num_models), eml_scores, c="k")
+    ax.set_xticks(range(num_models))
+    ax.set_xticklabels(model_names, rotation=90)
+    ax.set_ylabel("EML score")
+    plt.tight_layout()
+    return fig, ax

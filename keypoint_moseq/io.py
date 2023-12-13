@@ -608,10 +608,10 @@ def extract_results(
 
         results.h5
         ├──recording_name1
-        │  ├──syllable      # model state sequence (z), shape=(T,)
-        │  ├──latent_state  # model latent state (x), shape=(T,latent_dim)
-        │  ├──centroid      # model centroid (v), shape=(T,dim)
-        │  └──heading       # model heading (h), shape=(T,)
+        │  ├──syllable      # model state sequence (z), shape=(num_timepoints,)
+        │  ├──latent_state  # model latent state (x), shape=(num_timepoints,latent_dim)
+        │  ├──centroid      # model centroid (v), shape=(num_timepoints,keypoint_dim)
+        │  └──heading       # model heading (h), shape=(num_timepoints,)
         ⋮
 
     Parameters
