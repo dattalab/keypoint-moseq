@@ -108,7 +108,10 @@ Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the ra
 Model selection and comparison
 ------------------------------
 
-Keypoint-MoSeq uses a stochastic fitting procedure, and thus produces slightly different syllable segmentations when run multiple times with different random seeds. Below, we show how to fit multiple models, compare the resulting syllables, and then select an optimal model for further analysis. It may also be useful in some cases to show that downstream analyses are robust to the choice of model.::
+Keypoint-MoSeq uses a stochastic fitting procedure, and thus produces slightly different syllable segmentations when run multiple times with different random seeds. Below, we show how to fit multiple models, compare the resulting syllables, and then select an optimal model for further analysis. It may also be useful in some cases to show that downstream analyses are robust to the choice of model.
+
+
+.. _fitting-multiple-models:
 
 Fitting multiple models
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -187,20 +190,18 @@ Selecting a model
 
 We developed a matric called the expected marginal likelihood (EML) score that can be used to rank models. To calculate EML scores, you must first fit an ensemble of models to a given dataset, as shown in :ref:`Fitting multiple models <fitting-multiple-models>`. The code below loads this ensemble and then calculates the EML score for each model. The model with the highest EML score can then be selected for further analysis.::
 
-    import numpy as np
 
     # change the following line as needed
     model_names = ['my_models-{}'.format(i) for i in range(20)]
 
-    eml_scores = np.zeros(num_model_fits)
-    for restart in range(num_model_fits):
-        model_name = f'{prefix}-{restart}'
-        results = kpms.extract_results(model, metadata, project_dir, model_name)
-        eml_scores[restart] = results['eml_score']
-
-    best_model_idx = np.argmax(eml_scores)
-    best_model_name = f'{prefix}-{best_model_idx}'
+    eml_scores, eml_std_errs = kpms.expected_marginal_likelihoods(project_dir, model_names)
+    best_model = model_names[np.argmax(eml_scores)]
     print(f"Best model: {best_model_name}")
+
+    kpms.plot_eml_scores(eml_scores, eml_std_errs, model_names)
+
+
+.. image:: _static/EML_scores.jpg
 
 
 Model averaging
@@ -214,7 +215,6 @@ Keypoint-MoSeq is probabilistic. So even once fitting is complete and the syllab
 
     # load the model (change `project_dir` and `model_name` as needed)
     model = kpms.load_checkpoint(project_dir, model_name)[0]
-    pca = kpms.load_pca(project_dir)
 
     # load data (e.g. from deeplabcut)
     data_path = 'path/to/data/' # can be a file, a directory, or a list of files
@@ -222,6 +222,6 @@ Keypoint-MoSeq is probabilistic. So even once fitting is complete and the syllab
     data, metadata = kpms.format_data(coordinates, confidences, **config())
 
     # compute the marginal probabilities of syllable labels
-    marginal_probs = kpms.compute_marginal_probs(
-        model, data, metadata, pca, burnin_iters, num_samples, steps_per_sample
+    marginal_probs = kpms.estimate_syllable_marginals(
+        model, data, metadata, burnin_iters, num_samples, steps_per_sample, **config()
     )
