@@ -225,3 +225,44 @@ Keypoint-MoSeq is probabilistic. So even once fitting is complete and the syllab
     marginal_probs = kpms.estimate_syllable_marginals(
         model, data, metadata, burnin_iters, num_samples, steps_per_sample, **config()
     )
+
+
+Location-aware modeling
+-----------------------
+
+Because keypoint-MoSeq uses centered and aligned pose estimates to define syllables, it is effectively blind to absolute movements of the animal in space. The only thing that keypoint-MoSeq normally cares about is change in pose -- defined here as the relative location of each keypoint. For example, if an animal were capable of simply sliding forward without otherwise moving, this would fail to show up in the syllable segmentation. To address this gap, we developed an experimental version of keypoint-MoSeq that leverages location and heading dynamics (in addition to pose) when defining syllables. To use this "location-aware" model, simply pass ``location_aware=True`` as an additional argument when calling the following functions.
+
+- :py:func:`keypoint_moseq.init_model`
+- :py:func:`keypoint_moseq.fit_model`
+- :py:func:`keypoint_moseq.apply_model`
+- :py:func:`keypoint_moseq.estimate_syllable_marginals`
+
+Note that the location-aware model was not tested in the keypoint-MoSeq paper remains experimental. We welcome feedback and suggestions for improvement.
+
+
+Mathematical details
+~~~~~~~~~~~~~~~~~~~~
+
+In the published version of keypoint-MoSeq, the animal's location :math:`v_t` and heading :math:`h_t` at each timepoint are conditionally independent of the current syllable :math:`z_t`. In particular, we assume
+
+.. math::
+    v_{t+1} & \sim \mathcal{N}(v_t, \sigma^2_\text{loc} I_2) \\
+    h_{t+1} & \sim \text{Uniform}(-\pi, \pi)
+
+
+In the location-aware model, we relax this assumption and allow the animal's location and heading to depend on the current syllable. Specifically, each syllable is associated with a pair of normal distributions that specify the animal's expected rotation and translation at each timestep. This can be expressed formally as follows:
+
+.. math::
+    h_{t+1} = h_t + \Delta h_{z_t} + \epsilon_h,
+    & \ \text{ where } \ 
+    \epsilon_h \mid z_t \sim \mathcal{N}(0, \sigma^2_{h,z_t}) \\
+    v_{t+1} = v_t + R(h_t)^\top \Delta v_{z_t} + \epsilon_v, 
+    & \ \text{ where } \ 
+    \epsilon_v \mid z_t \sim \mathcal{N}(0, \sigma^2_{v, z_t} I_2)
+
+where :math:`R(h)` is a rotation matrix that rotates a vector by angle :math:`h`. The parameters :math:`\Delta h_i`, :math:`\Delta v_i`, :math:`\sigma^2_{h,i}`, and :math:`\sigma^2_{v,i}` for each syllable :math:`i` have a normal-inverse-gamma prior:
+
+.. math::
+    \sigma^2_{v,i} & \sim \text{InverseGamma}(\alpha_v, \beta_v), \ \ \ \  \Delta v_i \sim \mathcal{N}(0, \sigma^2_{v,i} I_2 / \lambda_v) \\
+    \sigma^2_{h,i} & \sim \text{InverseGamma}(\alpha_h, \beta_h), \ \ \ \  \Delta h_i \sim \mathcal{N}(0, \sigma^2_{h,i} / \lambda_h)
+
