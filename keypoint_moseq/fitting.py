@@ -10,7 +10,7 @@ from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_hdf5, extract_results, load_checkpoint
-from jax_moseq.models.keypoint_slds import resample_model, init_model
+from jax_moseq.models import allo_keypoint_slds, keypoint_slds
 from jax_moseq.models.arhmm import stateseq_marginals, marginal_log_likelihood
 from jax_moseq.utils.autoregression import get_nlags
 from jax_moseq.utils import check_for_nans, device_put_as_scalar, unbatch
@@ -20,9 +20,9 @@ class StopResampling(Exception):
     pass
 
 
-def _wrapped_resample(data, model, pbar=None, **resample_options):
+def _wrapped_resample(resample_func, data, model, pbar=None, **resample_options):
     try:
-        model = resample_model(data, **model, **resample_options)
+        model = resample_func(data, **model, **resample_options)
     except KeyboardInterrupt:
         print("Early termination of fitting: user interruption")
         raise StopResampling()
@@ -60,6 +60,52 @@ def _set_parallel_flag(parallel_message_passing):
     return parallel_message_passing
 
 
+def init_model(
+    *args, location_aware=False, allo_hypparams=None, trans_hypparams=None, **kwargs
+):
+    """Initialize a model. Wrapper for `jax_moseq.models.keypoint_slds.init_model`
+    and `jax_moseq.models.allo_keypoint_slds.init_model`.
+
+    Parameters
+    ----------
+    location_aware : bool, default=False
+        If True, the model will be initialized using the location-aware version
+        of the keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
+
+    allo_hypparams : dict, default=None
+        Hyperparameters for the `allo_keypoint_slds` model. If None, default
+        hyperparameters will be used.
+
+    Returns
+    -------
+    model : dict
+        Model dictionary containing states, parameters, hyperparameters, noise
+        prior, and random seed.
+    """
+    if location_aware:
+        num_states = trans_hypparams["num_states"]
+        allo_hypparams = {
+            "alpha0_v": 10,
+            "beta0_v": 0.1,
+            "lambda0_v": 1,
+            "alpha0_h": 10,
+            "beta0_h": 0.1,
+            "lambda0_h": 1,
+            "num_states": num_states,
+        }
+
+        return allo_keypoint_slds.init_model(
+            *args,
+            allo_hypparams=allo_hypparams,
+            trans_hypparams=trans_hypparams,
+            **kwargs,
+        )
+    else:
+        return keypoint_slds.init_model(
+            *args, trans_hypparams=trans_hypparams, **kwargs
+        )
+
+
 def fit_model(
     model,
     data,
@@ -74,6 +120,7 @@ def fit_model(
     jitter=0.001,
     generate_progress_plots=True,
     save_every_n_iters=25,
+    location_aware=False,
     **kwargs,
 ):
     """Fit a model to data.
@@ -144,6 +191,9 @@ def fit_model(
         resampling pose trajectories. Increasing this value can help prevent
         NaNs during fitting.
 
+    location_aware : bool, default=False
+        If True, the model will be fit using the location-aware version of the
+        keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
 
     Returns
     -------
@@ -192,10 +242,16 @@ def fit_model(
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
     model = device_put_as_scalar(model)
 
+    if location_aware:
+        resample_func = allo_keypoint_slds.resample_model
+    else:
+        resample_func = keypoint_slds.resample_model
+
     with tqdm.trange(start_iter, num_iters + 1, ncols=72) as pbar:
         for iteration in pbar:
             try:
                 model = _wrapped_resample(
+                    resample_func,
                     data,
                     model,
                     pbar=pbar,
@@ -239,6 +295,7 @@ def apply_model(
     results_path=None,
     parallel_message_passing=None,
     return_model=False,
+    location_aware=False,
     **kwargs,
 ):
     """Apply a model to new data.
@@ -290,6 +347,10 @@ def apply_model(
     return_model : bool, default=False
         Whether to return the model after fitting.
 
+    location_aware : bool, default=False
+        If True, the model will be fit using the location-aware version of the
+        keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
+
     Returns
     -------
     results : dict
@@ -316,13 +377,20 @@ def apply_model(
         seed=model["seed"],
         params=model["params"],
         hypparams=model["hypparams"],
+        location_aware=location_aware,
         **kwargs,
     )
+
+    if location_aware:
+        resample_func = allo_keypoint_slds.resample_model
+    else:
+        resample_func = keypoint_slds.resample_model
 
     with tqdm.trange(num_iters, desc="Applying model", ncols=72) as pbar:
         for iteration in pbar:
             try:
                 model = _wrapped_resample(
+                    resample_func,
                     data,
                     model,
                     pbar=pbar,
@@ -354,6 +422,7 @@ def estimate_syllable_marginals(
     return_samples=False,
     verbose=False,
     parallel_message_passing=None,
+    location_aware=False,
     **kwargs,
 ):
     """Estimate marginal distributions over syllables.
@@ -394,6 +463,10 @@ def estimate_syllable_marginals(
         warning will be raised if `parallel_message_passing=True` and JAX is
         CPU-bound. Set to 'force' to skip this check.
 
+    location_aware : bool, default=False
+        If True, the model will be fit using the location-aware version of the
+        keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
+
     Returns
     -------
     marginal_estimates : dict
@@ -421,11 +494,17 @@ def estimate_syllable_marginals(
     marginal_estimates = np.zeros((*model["states"]["z"].shape, num_syllables))
     samples = []
 
+    if location_aware:
+        resample_func = allo_keypoint_slds.resample_model
+    else:
+        resample_func = keypoint_slds.resample_model
+
     total_iters = burn_in_iters + num_samples * steps_per_sample
     with tqdm.trange(total_iters, desc="Applying model", ncols=72) as pbar:
         for iteration in pbar:
             try:
                 model = _wrapped_resample(
+                    resample_func,
                     data,
                     model,
                     pbar=pbar,
