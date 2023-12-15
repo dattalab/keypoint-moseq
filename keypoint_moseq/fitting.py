@@ -3,23 +3,26 @@ import numpy as np
 import tqdm
 import h5py
 import jax
+import jax.numpy as jnp
 import warnings
 from textwrap import fill
 from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
-from keypoint_moseq.io import save_hdf5, extract_results
-from jax_moseq.models.keypoint_slds import resample_model, init_model
-from jax_moseq.utils import check_for_nans, device_put_as_scalar
+from keypoint_moseq.io import save_hdf5, extract_results, load_checkpoint
+from jax_moseq.models import allo_keypoint_slds, keypoint_slds
+from jax_moseq.models.arhmm import stateseq_marginals, marginal_log_likelihood
+from jax_moseq.utils.autoregression import get_nlags
+from jax_moseq.utils import check_for_nans, device_put_as_scalar, unbatch
 
 
 class StopResampling(Exception):
     pass
 
 
-def _wrapped_resample(data, model, pbar=None, **resample_options):
+def _wrapped_resample(resample_func, data, model, pbar=None, **resample_options):
     try:
-        model = resample_model(data, **model, **resample_options)
+        model = resample_func(data, **model, **resample_options)
     except KeyboardInterrupt:
         print("Early termination of fitting: user interruption")
         raise StopResampling()
@@ -57,6 +60,52 @@ def _set_parallel_flag(parallel_message_passing):
     return parallel_message_passing
 
 
+def init_model(
+    *args, location_aware=False, allo_hypparams=None, trans_hypparams=None, **kwargs
+):
+    """Initialize a model. Wrapper for `jax_moseq.models.keypoint_slds.init_model`
+    and `jax_moseq.models.allo_keypoint_slds.init_model`.
+
+    Parameters
+    ----------
+    location_aware : bool, default=False
+        If True, the model will be initialized using the location-aware version
+        of the keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
+
+    allo_hypparams : dict, default=None
+        Hyperparameters for the `allo_keypoint_slds` model. If None, default
+        hyperparameters will be used.
+
+    Returns
+    -------
+    model : dict
+        Model dictionary containing states, parameters, hyperparameters, noise
+        prior, and random seed.
+    """
+    if location_aware:
+        num_states = trans_hypparams["num_states"]
+        allo_hypparams = {
+            "alpha0_v": 10,
+            "beta0_v": 0.1,
+            "lambda0_v": 1,
+            "alpha0_h": 10,
+            "beta0_h": 0.1,
+            "lambda0_h": 1,
+            "num_states": num_states,
+        }
+
+        return allo_keypoint_slds.init_model(
+            *args,
+            allo_hypparams=allo_hypparams,
+            trans_hypparams=trans_hypparams,
+            **kwargs,
+        )
+    else:
+        return keypoint_slds.init_model(
+            *args, trans_hypparams=trans_hypparams, **kwargs
+        )
+
+
 def fit_model(
     model,
     data,
@@ -71,6 +120,7 @@ def fit_model(
     jitter=0.001,
     generate_progress_plots=True,
     save_every_n_iters=25,
+    location_aware=False,
     **kwargs,
 ):
     """Fit a model to data.
@@ -141,6 +191,9 @@ def fit_model(
         resampling pose trajectories. Increasing this value can help prevent
         NaNs during fitting.
 
+    location_aware : bool, default=False
+        If True, the model will be fit using the location-aware version of the
+        keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
 
     Returns
     -------
@@ -189,10 +242,16 @@ def fit_model(
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
     model = device_put_as_scalar(model)
 
+    if location_aware:
+        resample_func = allo_keypoint_slds.resample_model
+    else:
+        resample_func = keypoint_slds.resample_model
+
     with tqdm.trange(start_iter, num_iters + 1, ncols=72) as pbar:
         for iteration in pbar:
             try:
                 model = _wrapped_resample(
+                    resample_func,
                     data,
                     model,
                     pbar=pbar,
@@ -206,12 +265,9 @@ def fit_model(
 
             if save_every_n_iters is not None and iteration > start_iter:
                 if iteration == num_iters or (
-                    save_every_n_iters > 0
-                    and iteration % save_every_n_iters == 0
+                    save_every_n_iters > 0 and iteration % save_every_n_iters == 0
                 ):
-                    save_hdf5(
-                        checkpoint_path, model, f"model_snapshots/{iteration}"
-                    )
+                    save_hdf5(checkpoint_path, model, f"model_snapshots/{iteration}")
                     if generate_progress_plots:
                         plot_progress(
                             model,
@@ -228,7 +284,6 @@ def fit_model(
 
 def apply_model(
     model,
-    pca,
     data,
     metadata,
     project_dir=None,
@@ -240,6 +295,7 @@ def apply_model(
     results_path=None,
     parallel_message_passing=None,
     return_model=False,
+    location_aware=False,
     **kwargs,
 ):
     """Apply a model to new data.
@@ -249,9 +305,6 @@ def apply_model(
     model : dict
         Model dictionary containing states, parameters, hyperparameters, noise
         prior, and random seed.
-
-    pca: :py:class:`sklearn.decomposition.PCA`
-        PCA object used to initially project the data into the latent space.
 
     data: dict
         Data for model fitting (see :py:func:`keypoint_moseq.io.format_data`).
@@ -268,7 +321,7 @@ def apply_model(
         Name of the model. Required if `save_results=True` and
         `results_path=None`.
 
-    num_iters : int, default=20
+    num_iters : int, default=50
         Number of iterations to run the model.
 
     ar_only : bool, default=False
@@ -294,6 +347,10 @@ def apply_model(
     return_model : bool, default=False
         Whether to return the model after fitting.
 
+    location_aware : bool, default=False
+        If True, the model will be fit using the location-aware version of the
+        keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
+
     Returns
     -------
     results : dict
@@ -316,18 +373,24 @@ def apply_model(
             results_path = os.path.join(project_dir, model_name, "results.h5")
 
     model = init_model(
-        pca=pca,
         data=data,
         seed=model["seed"],
         params=model["params"],
         hypparams=model["hypparams"],
+        location_aware=location_aware,
         **kwargs,
     )
+
+    if location_aware:
+        resample_func = allo_keypoint_slds.resample_model
+    else:
+        resample_func = keypoint_slds.resample_model
 
     with tqdm.trange(num_iters, desc="Applying model", ncols=72) as pbar:
         for iteration in pbar:
             try:
                 model = _wrapped_resample(
+                    resample_func,
                     data,
                     model,
                     pbar=pbar,
@@ -347,6 +410,140 @@ def apply_model(
         return results, model
     else:
         return results
+
+
+def estimate_syllable_marginals(
+    model,
+    data,
+    metadata,
+    burn_in_iters=50,
+    num_samples=100,
+    steps_per_sample=10,
+    return_samples=False,
+    verbose=False,
+    parallel_message_passing=None,
+    location_aware=False,
+    **kwargs,
+):
+    """Estimate marginal distributions over syllables.
+
+    Parameters
+    ----------
+    model : dict
+        Model dictionary containing states, parameters, hyperparameters, noise
+        prior, and random seed.
+
+    data: dict
+        Data for model fitting (see :py:func:`keypoint_moseq.io.format_data`).
+
+    metadata: tuple (keys, bounds)
+        Recordings and start/end frames for the data (see
+        :py:func:`keypoint_moseq.io.format_data`).
+
+    burn_in_iters : int, default=50
+        Number of resampling iterations to run before collecting samples.
+
+    num_samples : int, default=100
+        Number of samples to collect for marginalization.
+
+    steps_per_sample : int, default=10
+        Number of resampling iterations to run between collecting samples.
+
+    return_samples : bool, default=False
+        Whether to store and return sampled syllable sequences. May require
+        significant RAM.
+
+    verbose : bool, default=False
+        Whether to print progress updates.
+
+    parallel_message_passing : bool | string, default=None,
+        Use parallel implementation of Kalman sampling, which can be faster
+        but has a significantly longer jit time. If None, will be set
+        automatically based on the backend (True for GPU, False for CPU). A
+        warning will be raised if `parallel_message_passing=True` and JAX is
+        CPU-bound. Set to 'force' to skip this check.
+
+    location_aware : bool, default=False
+        If True, the model will be fit using the location-aware version of the
+        keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
+
+    Returns
+    -------
+    marginal_estimates : dict
+        Estimated marginal distributions over syllables in the form of a
+        dictionary mapping recoriding names to arrays of shape
+        ``(num_timepoints, num_syllables)``.
+
+    samples : dict
+        Sampled syllable sequences in the form of a dictionary mapping
+        recording names to arrays of shape ``(num_samples, num_timepoints)``.
+        Only returned if `return_samples=True`.
+    """
+    parallel_message_passing = _set_parallel_flag(parallel_message_passing)
+    data = jax.device_put(data)
+
+    model = init_model(
+        data=data,
+        seed=model["seed"],
+        params=model["params"],
+        hypparams=model["hypparams"],
+        **kwargs,
+    )
+
+    num_syllables = model["hypparams"]["trans_hypparams"]["num_states"]
+    marginal_estimates = np.zeros((*model["states"]["z"].shape, num_syllables))
+    samples = []
+
+    if location_aware:
+        resample_func = allo_keypoint_slds.resample_model
+    else:
+        resample_func = keypoint_slds.resample_model
+
+    total_iters = burn_in_iters + num_samples * steps_per_sample
+    with tqdm.trange(total_iters, desc="Applying model", ncols=72) as pbar:
+        for iteration in pbar:
+            try:
+                model = _wrapped_resample(
+                    resample_func,
+                    data,
+                    model,
+                    pbar=pbar,
+                    states_only=True,
+                    verbose=verbose,
+                    parallel_message_passing=parallel_message_passing,
+                )
+            except StopResampling:
+                break
+
+            if (
+                iteration >= burn_in_iters
+                and (iteration - burn_in_iters) % steps_per_sample == 0
+            ):
+                marginal_estimates += np.array(
+                    stateseq_marginals(
+                        model["states"]["x"], data["mask"], **model["params"]
+                    )
+                )
+                if return_samples:
+                    samples.append(np.array(model["states"]["z"]))
+
+    nlags = get_nlags(model["params"]["Ab"])
+    keys, bounds = metadata
+    bounds = bounds + np.array([nlags, 0])
+    marginal_estimates = unbatch(marginal_estimates / num_samples, keys, bounds)
+    marginal_estimates = {
+        k: np.pad(v[nlags:], ((nlags, 0), (0, 0)), mode="edge")
+        for k, v in marginal_estimates.items()
+    }
+    if return_samples:
+        samples = unbatch(np.moveaxis(samples, 0, 2), keys, bounds)
+        samples = {
+            k: np.pad(v[nlags:], ((nlags, 0), (0, 0)), mode="edge")
+            for k, v in samples.items()
+        }
+        return marginal_estimates, samples
+    else:
+        return marginal_estimates
 
 
 def update_hypparams(model_dict, **kwargs):
@@ -393,14 +590,77 @@ def update_hypparams(model_dict, **kwargs):
                             f"'{k}' with {type(v)} will be cast to {type(old_value)}"
                         )
 
-                    model_dict["hypparams"][hypparms_group][k] = type(
-                        old_value
-                    )(v)
+                    model_dict["hypparams"][hypparms_group][k] = type(old_value)(v)
                     not_updated.remove(k)
 
     if len(not_updated) > 0:
-        warnings.warn(
-            fill(f"The following hypparams were not found {not_updated}")
-        )
+        warnings.warn(fill(f"The following hypparams were not found {not_updated}"))
 
     return model_dict
+
+
+def expected_marginal_likelihoods(
+    project_dir=None, model_names=None, checkpoint_paths=None
+):
+    """Calculate the expected marginal likelihood score for each model.
+
+    The score is calculated as follows, where $\theta^{(i)}$ denotes the
+    autoregressive parameters and transition matrix for the i'th model,
+    $x^{(i)}$ denotes the latent trajectories for the i'th model, and the
+    number of models iss $N$
+
+    .. math::
+        \text{score}(\theta^{(i)}) = \frac{1}{(N-1)} \sum_{j \neq i} P(x^{(j)} | \theta^{(i)})$
+
+    Parameters
+    ----------
+    project_dir : str
+        Path to the project directory. Required if ``checkpoint_paths`` is None.
+
+    model_names : list of str
+        Names of the models to compare. Required if ``checkpoint_paths`` is None.
+
+    checkpoint_paths : list of str
+        Paths to the checkpoints to compare. Required if ``model_names`` and
+        ``project_dir`` are None.
+
+    Returns
+    -------
+    scores : numpy array
+        Expected marginal likelihood score for each model.
+
+    standard_errors : numpy array
+        Standard error of the expected marginal likelihood score for each model.
+    """
+    if checkpoint_paths is None:
+        assert project_dir is not None and model_names is not None, fill(
+            "Must provide either `checkpoint_paths` or `project_dir` and `model_names`"
+        )
+        checkpoint_paths = [
+            os.path.join(project_dir, model_name, "checkpoint.h5")
+            for model_name in model_names
+        ]
+
+    xs, params = [], []
+    for checkpoint_path in checkpoint_paths:
+        model, data, _, _ = load_checkpoint(path=checkpoint_path)
+        xs.append(model["states"]["x"])
+        params.append(model["params"])
+
+    num_models = len(xs)
+    mlls = np.zeros((num_models, num_models))
+    for i in tqdm.trange(num_models, ncols=72):
+        for j in range(num_models):
+            if i != j:
+                mlls[i, j] = marginal_log_likelihood(
+                    jnp.array(data["mask"]),
+                    jnp.array(xs[j]),
+                    jnp.array(params[i]["Ab"]),
+                    jnp.array(params[i]["Q"]),
+                    jnp.array(params[i]["pi"]),
+                ).item()
+
+    scores = mlls.sum(1) / (num_models - 1)
+    variances = (mlls**2).sum(1) / (num_models - 1) - scores**2
+    standard_errors = np.sqrt(variances / (num_models - 1))
+    return scores, standard_errors
