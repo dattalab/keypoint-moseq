@@ -648,20 +648,16 @@ def extract_results(
         path = _get_path(project_dir, model_name, path, "results.h5")
 
     states = jax.device_get(model["states"])
-    keys, bounds = metadata
 
     # extract syllables; repeat first syllable an extra `nlags` times
     nlags = states["x"].shape[1] - states["z"].shape[1]
-    syllables = unbatch(states["z"], keys, bounds + np.array([nlags, 0]))
-    syllables = {
-        k: np.pad(z[nlags:], (nlags, 0), mode="edge")
-        for k, z in syllables.items()
-    }
+    z = np.pad(states["z"], ((0,0),(nlags, 0)), mode="edge")
+    syllables = unbatch(z, *metadata)
 
     # extract latent state, centroid, and heading
-    latent_state = unbatch(states["x"], keys, bounds)
-    centroid = unbatch(states["v"], keys, bounds)
-    heading = unbatch(states["h"], keys, bounds)
+    latent_state = unbatch(states["x"], *metadata)
+    centroid = unbatch(states["v"], *metadata)
+    heading = unbatch(states["h"], *metadata)
 
     results_dict = {
         recording_name: {
