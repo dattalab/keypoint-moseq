@@ -973,7 +973,7 @@ def generate_grid_movies(
     overlay_keypoints=False,
     keypoints_only=False,
     keypoints_scale=1,
-    fps=30,
+    fps=None,
     plot_options={},
     use_dims=[0, 1],
     keypoint_colormap="autumn",
@@ -1096,9 +1096,8 @@ def generate_grid_movies(
         encoded in units that are larger than a pixel.
 
     fps: int, default=30
-        Framerate of the grid movie. When `keypoints_only=False`,
-        this parameter is ignored and the framerate is determined
-        inferred from the video files.
+        Framerate of the grid movie. If None, the framerate is determined
+        from the videos.
 
     plot_options: dict, default={}
         Dictionary of options to pass to
@@ -1187,7 +1186,9 @@ def generate_grid_movies(
                 video_extension=video_extension,
             )
         videos = {k: OpenCVReader(path) for k, path in video_paths.items()}
-        fps = list(videos.values())[0].fps
+
+        if fps is None:
+            fps = list(videos.values())[0].fps
     else:
         videos = None
 
