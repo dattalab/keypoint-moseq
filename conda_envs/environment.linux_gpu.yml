@@ -10,8 +10,9 @@ dependencies:
   - pytables
   - jaxlib=0.3.22=*cuda*
   - jax=0.3.22
-  - cuda-nvcc
+  - cuda-nvcc=11.8.89
   - pip
   - pip:
     - "keypoint-moseq"
     - jupyterlab
+    - etils==1.5.2
