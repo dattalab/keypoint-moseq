@@ -11,6 +11,7 @@ warnings.formatwarning = lambda msg, *a: str(msg)
 from .io import *
 from .viz import *
 from .util import *
+from .tools import *
 from .fitting import *
 from .analysis import *
 from .calibration import noise_calibration
