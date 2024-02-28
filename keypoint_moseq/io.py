@@ -833,7 +833,7 @@ def save_keypoints(
         bodyparts = [f"bodypart{i}" for i in range(num_keypoints)]
 
     # create column names
-    suffixes = ["x", "y", "z"][: coords.shape[-1]]
+    suffixes = ["x", "y", "z"][:num_keypoints]
     if confidences is not None:
         suffixes += ["conf"]
     columns = [f"{bp}_{suffix}" for bp in bodyparts for suffix in suffixes]
@@ -843,9 +843,9 @@ def save_keypoints(
         if confidences is not None:
             data = np.concatenate(
                 [coords, confidences[recording_name][..., np.newaxis]], axis=-1
-            ).reshape(-1, num_dims + 1)
+            ).reshape(-1, (num_dims + 1) * num_keypoints)
         else:
-            data = coords.reshape(-1, num_dims)
+            data = coords.reshape(-1, num_dims * num_keypoints)
         save_name = recording_name.replace(os.path.sep, path_sep)
         save_path = os.path.join(save_dir, save_name)
         pd.DataFrame(data, columns=columns).to_csv(f"{save_path}.csv", index=False)
@@ -1223,7 +1223,7 @@ def _freipose_loader(filepath, name):
     """Load keypoints from freipose json files."""
     with open(filepath, "r") as f:
         data = json.load(f)
-    coords = np.stack([d["kp_xyz"] for d in data], axis=0)
+    coords = np.concatenate([d["kp_xyz"] for d in data], axis=0)
     coordinates = {name: coords}
     confidences = {name: np.ones_like(coords[..., 0])}
     return coordinates, confidences, None
