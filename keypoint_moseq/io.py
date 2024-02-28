@@ -1,6 +1,8 @@
 import jax.numpy as jnp
 import jax
 import re
+import commentjson
+import json
 import numpy as np
 import h5py
 import joblib
@@ -299,6 +301,7 @@ def setup_project(
     deeplabcut_config=None,
     sleap_file=None,
     nwb_file=None,
+    freipose_config=None,
     overwrite=False,
     **options,
 ):
@@ -311,22 +314,27 @@ def setup_project(
     Parameters
     ----------
     project_dir: str
-        Path to the project directory (relative or absolute)
+        Path to the project directory (relative or absolute).
 
     deeplabcut_config: str, default=None
         Path to a deeplabcut config file. Will be used to initialize
         `bodyparts`, `skeleton`, `use_bodyparts` and `video_dir` in the
-        keypoint MoSeq config. (overrided by kwargs).
+        keypoint MoSeq config (overrided by kwargs).
 
     sleap_file: str, default=None
         Path to a .hdf5 or .slp file containing predictions for one video. Will
         be used to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in
-        the keypoint MoSeq config. (overrided by kwargs).
+        the keypoint MoSeq config (overrided by kwargs).
 
     nwb_file: str, default=None
         Path to a .nwb file containing predictions for one video. Will be used
         to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in the
         keypoint MoSeq config. (overrided by kwargs).
+
+    freipose_config: str, default=None
+        Path to a freipose skeleton config file. Will be used to initialize
+        `bodyparts`, `skeleton`, and `use_bodyparts` in the keypoint MoSeq config
+        (overrided by kwargs).
 
     overwrite: bool, default=False
         Overwrite any config.yml that already exists at the path
@@ -401,6 +409,23 @@ def setup_project(
                 skeleton = [[bodyparts[i], bodyparts[j]] for i, j in edges]
                 nwb_options["skeleton"] = skeleton
         options = {**nwb_options, **options}
+
+    elif freipose_config is not None:
+        freipose_options = {}
+        with open(freipose_config, "r") as stream:
+            freipose_config = commentjson.load(stream)
+            bodyparts = [kp for kp, color in freipose_config["keypoints"]]
+            skeleton = []
+            for [bp1, bp2], color in freipose_config["limbs"]:
+                if isinstance(bp1, list):
+                    bp1 = bp1[0]
+                if isinstance(bp2, list):
+                    bp2 = bp2[0]
+                skeleton.append(tuple(sorted([bodyparts[bp1], bodyparts[bp2]])))
+            freipose_options["bodyparts"] = bodyparts
+            freipose_options["use_bodyparts"] = bodyparts
+            freipose_options["skeleton"] = list(map(list, sorted(set(skeleton))))
+        options = {**freipose_options, **options}
 
     if not os.path.exists(project_dir):
         os.makedirs(project_dir)
@@ -751,6 +776,81 @@ def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
         return os.path.basename(filepath)
 
 
+def save_keypoints(
+    save_dir, coordinates, confidences=None, bodyparts=None, path_sep="-"
+):
+    """Convenience function for saving keypoint detections to csv files.
+
+    One csv file is saved for each recording in `coordinates`. Each row in the
+    csv corresponds to one frame and the columns are named
+
+        "BODYPART1_x", "BODYPART1_y", "BODYPART1_conf", "BODYPART2_x", ...
+
+    Columns with confidence scores are ommitted if `confidences` is not provided.
+    Besides confidences, there can be 2 or 3 columns for each bodypart, depending
+    on whether the keypoints are 2D or 3D.
+
+    Parameters
+    ----------
+    save_dir: str
+        Directory to save the results. A separate csv file will be saved for
+        each recording in `coordinates`.
+
+    coordinates: dict
+        Dictionary mapping recording names to numpy arrays of shape
+        (n_frames, n_keypoints, 2[or 3]) that contain the x and y (and z)
+        coordinates of the keypoints. If any keys contain a path separator
+        (such as "/"), it will be replaced with `path_sep` when naming the
+        csv file.
+
+    confidences: dict, default=None
+        Dictionary mapping recording names to numpy arrays of shape
+        (n_frames, n_keypoints) with the confidence scores of the keypoints.
+        Must have the same keys as `coordinates`.
+
+    bodyparts: list, default=None
+        List of bodypart names, in the same order as the keypoints in the
+        `coordinates` and `confidences` arrays. If None, the bodypart names
+        will be set to ["bodypart1", "bodypart2", ...].
+
+    path_sep: str, default='-'
+        If a path separator ("/" or "\") is present in the recording name, it
+        will be replaced with `path_sep` when saving the csv file.
+    """
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    if confidences is not None:
+        assert set(coordinates.keys()) == set(confidences.keys()), fill(
+            "The keys in `coordinates` and `confidences` must be the same."
+        )
+
+    # get number of keypoints and dimensions
+    _, num_keypoints, num_dims = next(iter(coordinates.values())).shape
+
+    # generate bodypart names if not provided
+    if bodyparts is None:
+        bodyparts = [f"bodypart{i}" for i in range(num_keypoints)]
+
+    # create column names
+    suffixes = ["x", "y", "z"][:num_keypoints]
+    if confidences is not None:
+        suffixes += ["conf"]
+    columns = [f"{bp}_{suffix}" for bp in bodyparts for suffix in suffixes]
+
+    # save data to csv
+    for recording_name, coords in coordinates.items():
+        if confidences is not None:
+            data = np.concatenate(
+                [coords, confidences[recording_name][..., np.newaxis]], axis=-1
+            ).reshape(-1, (num_dims + 1) * num_keypoints)
+        else:
+            data = coords.reshape(-1, num_dims * num_keypoints)
+        save_name = recording_name.replace(os.path.sep, path_sep)
+        save_path = os.path.join(save_dir, save_name)
+        pd.DataFrame(data, columns=columns).to_csv(f"{save_path}.csv", index=False)
+
+
 def load_keypoints(
     filepath_pattern,
     format,
@@ -813,6 +913,15 @@ def load_keypoints(
                 │  └──likelihood
                 ⋮
 
+    - freipose
+        .json files saved by FreiPose. Each file should contain a list of dicts
+        that each include a "kp_xyz" key with the 3D coordinates for one frame.
+        Keypoint scores (saved under "kp_score") are not loaded because they are
+        not bounded between 0 and 1, which is required for modeling. Since
+        FreiPose does not save the bodypart names, the `bodyparts` return
+        value is set to None.
+
+
     Parameters
     ----------
     filepath_pattern: str or list of str
@@ -836,6 +945,9 @@ def load_keypoints(
         - deeplabcut: 'csv' or 'h5'
         - anipose: 'csv'
         - sleap-anipose: 'h5'
+        - nwb: 'nwb'
+        - facemap: 'h5'
+        - freipose: 'json'
 
     recursive: bool, default=True
         Whether to search recursively for deeplabcut csv or hdf5 files.
@@ -874,49 +986,39 @@ def load_keypoints(
         List of bodypart names. The order of the names matches the order of the
         bodyparts in `coordinates` and `confidences`.
     """
-    formats = [
-        "deeplabcut",
-        "sleap",
-        "anipose",
-        "sleap-anipose",
-        "nwb",
-        "facemap",
-    ]
-    assert format in formats, fill(
-        f"Unrecognized format {format}. Must be one of {formats}"
-    )
+    formats = {
+        "deeplabcut": (_deeplabcut_loader, [".csv", ".h5", ".hdf5"]),
+        "sleap": (_sleap_loader, [".h5", ".hdf5", ".slp"]),
+        "anipose": (_anipose_loader, [".csv"]),
+        "sleap-anipose": (_sleap_anipose_loader, [".h5", ".hdf5"]),
+        "nwb": (_nwb_loader, [".nwb"]),
+        "facemap": (_facemap_loader, [".h5", ".hdf5"]),
+        "freipose": (_freipose_loader, [".json"]),
+    }
 
-    if extension is None:
-        extensions = {
-            "deeplabcut": [".csv", ".h5", ".hdf5"],
-            "sleap": [".h5", ".hdf5", ".slp"],
-            "anipose": [".csv"],
-            "sleap-anipose": [".h5", ".hdf5"],
-            "nwb": [".nwb"],
-            "facemap": [".h5", ".hdf5"],
-        }[format]
-    else:
+    # get format-specific loader and extensions
+    assert format in formats, fill(
+        f"Unrecognized format {format}. Must be one of {list(formats.keys())}"
+    )
+    loader, extensions = formats[format]
+
+    # optionally override default extension list
+    if extension is not None:
         extensions = [extension]
 
-    loader = {
-        "deeplabcut": _deeplabcut_loader,
-        "sleap": _sleap_loader,
-        "anipose": _anipose_loader,
-        "sleap-anipose": _sleap_anipose_loader,
-        "nwb": _nwb_loader,
-        "facemap": _facemap_loader,
-    }[format]
-
+    # optionally add format-specific arguments
     if format == "deeplabcut":
         additional_args = {"exclude_individuals": exclude_individuals}
     else:
         additional_args = {}
 
+    # get list of filepaths
     filepaths = list_files_with_exts(filepath_pattern, extensions, recursive=recursive)
     assert len(filepaths) > 0, fill(
         f"No files with extensions {extensions} found for {filepath_pattern}"
     )
 
+    # load keypoints from each file
     coordinates, confidences, bodyparts = {}, {}, None
     for filepath in tqdm.tqdm(filepaths, desc=f"Loading keypoints", ncols=72):
         try:
@@ -942,8 +1044,8 @@ def load_keypoints(
         coordinates.update(new_coordinates)
         confidences.update(new_confidences)
 
+    # check for valid results
     assert len(coordinates) > 0, fill(f"No valid results found for {filepath_pattern}")
-
     check_nan_proportions(coordinates, bodyparts)
     return coordinates, confidences, bodyparts
 
@@ -1115,6 +1217,16 @@ def _facemap_loader(filepath, name):
         coordinates = {name: np.stack(coords, axis=1)}
         confidences = {name: np.stack(confs, axis=1)}
     return coordinates, confidences, bodyparts
+
+
+def _freipose_loader(filepath, name):
+    """Load keypoints from freipose json files."""
+    with open(filepath, "r") as f:
+        data = json.load(f)
+    coords = np.concatenate([d["kp_xyz"] for d in data], axis=0)
+    coordinates = {name: coords}
+    confidences = {name: np.ones_like(coords[..., 0])}
+    return coordinates, confidences, None
 
 
 def save_hdf5(filepath, save_dict, datapath=None):
