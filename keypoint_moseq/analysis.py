@@ -1091,7 +1091,7 @@ def plot_syll_stats_with_sem(
         the threshold for significance, by default 0.05
     stat : str, optional
         the statistic to plot, by default 'frequency'
-    ordering : str, optional
+    order : str, optional
         the ordering of the syllables, by default 'stat'
     groups : list, optional
         the list of groups to plot, by default None
@@ -1174,8 +1174,12 @@ def plot_syll_stats_with_sem(
     if sig_sylls is not None:
         markings = []
         for s in sig_sylls:
-            markings.append(ordering.index(s))
-        plt.scatter(markings, [-0.005] * len(markings), color="r", marker="*")
+            if s in ordering:
+                markings.append(np.where(ordering == s)[0])
+            else:
+                continue
+        markings = np.concatenate(markings)
+        plt.scatter(markings, [-0.05] * len(markings), color="r", marker="*")
 
         # manually define a new patch
         patch = Line2D(
