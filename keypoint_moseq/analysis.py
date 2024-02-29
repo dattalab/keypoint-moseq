@@ -880,7 +880,10 @@ def run_kruskal(
     # combine Dunn's test results into single DataFrame
     df_z = pd.DataFrame(real_zs_within_group)
     df_z.index = df_z.index.set_names("syllable")
-    dunn_results_df = df_z.reset_index().melt(id_vars="syllable")
+    dunn_results_df = df_z.reset_index().melt(id_vars=[("syllable", "")])
+    dunn_results_df.rename(
+        columns={"variable_0": "group1", "variable_1": "group2"}, inplace=True
+    )
 
     # Get intersecting significant syllables between
     intersect_sig_syllables = {}
