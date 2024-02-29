@@ -1036,7 +1036,7 @@ def _validate_and_order_syll_stats_params(
     if len(colors) == 0 or len(colors) != len(groups):
         colors = sns.color_palette(n_colors=len(groups))
 
-    return ordering, groups, colors, figsize
+    return np.array(ordering), groups, colors, figsize
 
 
 def save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir):
