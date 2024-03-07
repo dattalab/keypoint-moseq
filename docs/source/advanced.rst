@@ -53,7 +53,7 @@ The following code generates a video showing frames 0-3600 from one recording wi
 Automatic kappa scan
 --------------------
 
-Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the rate of transitions between syllables. Higher values of kappa lead to longer syllables and smaller values lead to shorter syllables. Users should choose a value of kappa based their desired distribution of syllable durations. The code below shows how to automatically scan over a range of kappa values and choose te optimal value.::
+Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the rate of transitions between syllables. Higher values of kappa lead to longer syllables and smaller values lead to shorter syllables. Users should choose a value of kappa based their desired distribution of syllable durations. The code below shows how to automatically scan over a range of kappa values and choose the optimal value.::
 
     import numpy as np
 
@@ -265,4 +265,25 @@ where :math:`R(h)` is a rotation matrix that rotates a vector by angle :math:`h`
 .. math::
     \sigma^2_{v,i} & \sim \text{InverseGamma}(\alpha_v, \beta_v), \ \ \ \  \Delta v_i \sim \mathcal{N}(0, \sigma^2_{v,i} I_2 / \lambda_v) \\
     \sigma^2_{h,i} & \sim \text{InverseGamma}(\alpha_h, \beta_h), \ \ \ \  \Delta h_i \sim \mathcal{N}(0, \sigma^2_{h,i} / \lambda_h)
+
+
+Temporal downsampling
+---------------------
+
+Sometimes it's useful to downsample a dataset, e.g. if the original recording has a much higher framerate than is needed for modeling. To downsample, run the following lines right after loading the keypoints.::
+
+    downsample_rate = 2 # keep every 2nd frame
+    kpms.downsample_timepoints(coordinates, downsample_rate)
+    kpms.downsample_timepoints(confidences, downsample_rate) # skip if `confidences=None`
+
+After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case `downsample_rate` should be passed as an additional argument.::
+
+    # Calibration step
+    kpms.noise_calibration(..., downsample_rate=downsample_rate)
+
+    # Making grid movies
+    kpms.generate_grid_movies(..., downsample_rate=downsample_rate)
+
+    # Overlaying keypoints
+    kpms.overlay_keypoints_on_video(..., downsample_rate=downsample_rate)
 

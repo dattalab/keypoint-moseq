@@ -698,6 +698,7 @@ def _grid_movie_tile(
     edges,
     coordinates,
     plot_options,
+    downsample_rate,
 ):
     scale_factor = scaled_window_size / window_size
     cs = centroids[key][start - pre : start + post]
@@ -707,7 +708,9 @@ def _grid_movie_tile(
     tile = []
 
     if videos is not None:
-        frames = videos[key][start - pre : start + post]
+        frames = videos[key][
+            (start - pre) * downsample_rate : (start + post) * downsample_rate
+        ][::downsample_rate]
         c = r @ c - window_size // 2
         M = [[np.cos(h), np.sin(h), -c[0]], [-np.sin(h), np.cos(h), -c[1]]]
 
@@ -764,41 +767,40 @@ def grid_movie(
     overlay_keypoints=False,
     coordinates=None,
     plot_options={},
+    downsample_rate=1,
 ):
     """Generate a grid movie and return it as an array of frames.
 
-    Grid movies show many instances of  a syllable. Each instance contains a
-    snippet of video (and/or keypoint-overlay) centered on the animal and
-    synchronized to the onset of the syllable. A dot appears at syllable onset
-    and disappears at syllable offset.
+    Grid movies show many instances of  a syllable. Each instance contains a snippet of
+    video (and/or keypoint-overlay) centered on the animal and synchronized to the onset
+    of the syllable. A dot appears at syllable onset and disappears at syllable offset.
 
     Parameters
     ----------
     instances: list of tuples `(key, start, end)`
-        List of syllable instances to include in the grid movie, where each
-        instance is specified as a tuple with the video name, start frame and
-        end frame. The list must have length `rows*cols`. The video names must
-        also be keys in `videos`.
+        List of syllable instances to include in the grid movie, where each instance is
+        specified as a tuple with the video name, start frame and end frame. The list
+        must have length `rows*cols`. The video names must also be keys in `videos`.
 
     rows: int, cols : int
         Number of rows and columns in the grid movie grid
 
     videos: dict or None
-        Dictionary mapping video names to video readers. Frames from
-        each reader should be accessible via `__getitem__(int or slice)`. If
-        None, the the grid movie will not include video frames.
+        Dictionary mapping video names to video readers. Frames from each reader should
+        be accessible via `__getitem__(int or slice)`. If None, the the grid movie will
+        not include video frames.
 
     centroids: dict
-        Dictionary mapping video names to arrays of shape `(n_frames, 2)` with
-        the x,y coordinates of animal centroid on each frame
+        Dictionary mapping video names to arrays of shape `(n_frames, 2)` with the x,y
+        coordinates of animal centroid on each frame
 
     headings: dict
-        Dictionary mapping video names to arrays of shape `(n_frames,)` with
-        the heading of the animal on each frame (in radians)
+        Dictionary mapping video names to arrays of shape `(n_frames,)` with the heading
+        of the animal on each frame (in radians)
 
     window_size: int
-        Size of the window around the animal. This should be a multiple of 16
-        or imageio will complain.
+        Size of the window around the animal. This should be a multiple of 16 or imageio
+        will complain.
 
     dot_color: tuple of ints, default=(255,255,255)
         RGB color of the dot indicating syllable onset and offset
@@ -813,23 +815,26 @@ def grid_movie(
         Number of frames after syllable onset to include in the movie
 
     scaled_window_size: int, default=None
-        Window size after scaling the video. If None, the no scaling is
-        performed (i.e. `scaled_window_size = window_size`)
+        Window size after scaling the video. If None, the no scaling is performed (i.e.
+        `scaled_window_size = window_size`)
 
     overlay_keypoints: bool, default=False
         If True, overlay the pose skeleton on the video frames.
 
     edges: list of tuples, default=[]
-        List of edges defining pose skeleton. Used when
-        `overlay_keypoints=True`.
+        List of edges defining pose skeleton. Used when `overlay_keypoints=True`.
 
     coordinates: dict, default=None
-        Dictionary mapping video names to arrays of shape `(n_frames, 2)`.
-        Used when `overlay_keypoints=True`.
+        Dictionary mapping video names to arrays of shape `(n_frames, 2)`. Used when
+        `overlay_keypoints=True`.
 
     plot_options: dict, default={}
-        Dictionary of options to pass to `overlay_keypoints_on_image`.
-        Used when `overlay_keypoints=True`.
+        Dictionary of options to pass to `overlay_keypoints_on_image`. Used when
+        `overlay_keypoints=True`.
+
+    downsample_rate: int, default=1
+        Downsampling rate for the video frames. Coordinates at index `i` will be
+        plotted on the video frame at index `i*downsample_rate`.
 
     Returns
     -------
@@ -868,6 +873,7 @@ def grid_movie(
                 edges,
                 coordinates,
                 plot_options,
+                downsample_rate,
             )
         )
 
@@ -977,6 +983,7 @@ def generate_grid_movies(
     plot_options={},
     use_dims=[0, 1],
     keypoint_colormap="autumn",
+    downsample_rate=1,
     **kwargs,
 ):
     """Generate grid movies for a modeled dataset.
@@ -1111,6 +1118,9 @@ def generate_grid_movies(
         Colormap used to color keypoints. Used when
         `overlay_keypoints=True`.
 
+    downsample_rate: int, default=1
+        Downsampling rate for the video frames. Coordinates at index `i` will be
+        plotted on the video frame at index `i*downsample_rate`.
 
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
 
@@ -1285,6 +1295,7 @@ def generate_grid_movies(
             overlay_keypoints=overlay_keypoints,
             coordinates=coordinates,
             plot_options=plot_options,
+            downsample_rate=downsample_rate,
         )
 
         path = os.path.join(output_dir, f"syllable{syllable}.mp4")
@@ -1907,6 +1918,7 @@ def overlay_keypoints_on_video(
     quality=7,
     centroid_smoothing_filter=10,
     plot_options={},
+    downsample_rate=1,
 ):
     """Overlay keypoints on a video.
 
@@ -1919,19 +1931,19 @@ def overlay_keypoints_on_video(
         Array of keypoint coordinates.
 
     skeleton: list of tuples, default=[]
-        List of edges that define the skeleton, where each edge is a
-        pair of bodypart names or a pair of indexes.
+        List of edges that define the skeleton, where each edge is a pair of bodypart
+        names or a pair of indexes.
 
     bodyparts: list of str, default=None
-        List of bodypart names in `coordinates`. Required if
-        `skeleton` is defined using bodypart names.
+        List of bodypart names in `coordinates`. Required if `skeleton` is defined using
+        bodypart names.
 
     use_bodyparts: list of str, default=None
         Subset of bodyparts to plot. If None, all bodyparts are plotted.
 
     output_path: str, default=None
-        Path to save the video. If None, the video is saved to
-        `video_path` with the suffix `_keypoints`.
+        Path to save the video. If None, the video is saved to `video_path` with the
+        suffix `_keypoints`.
 
     show_frame_numbers: bool, default=True
         Whether to overlay the frame number in the video.
@@ -1940,8 +1952,8 @@ def overlay_keypoints_on_video(
         Color for the frame number overlay.
 
     crop_size: int, default=None
-        Size of the crop around the keypoints to overlay on the video.
-        If None, the entire video is used.
+        Size of the crop around the keypoints to overlay on the video. If None, the
+        entire video is used.
 
     frames: iterable of int, default=None
         Frames to overlay keypoints on. If None, all frames are used.
@@ -1955,6 +1967,10 @@ def overlay_keypoints_on_video(
     plot_options: dict, default={}
         Additional keyword arguments to pass to
         :py:func:`keypoint_moseq.viz.overlay_keypoints`.
+
+    downsample_rate: int, default=1
+        Downsampling rate for the video frames. Coordinates at index `i` will be
+        overlayed on the frame at index `i*downsample_rate`.
     """
     if output_path is None:
         output_path = os.path.splitext(video_path)[0] + "_keypoints.mp4"

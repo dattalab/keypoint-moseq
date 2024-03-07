@@ -69,7 +69,9 @@ def sample_error_frames(
     return sample_keys
 
 
-def load_sampled_frames(sample_keys, video_dir, video_extension=None):
+def load_sampled_frames(
+    sample_keys, video_dir, video_extension=None, downsample_rate=1
+):
     """Load sampled frames from a directory of videos.
 
     Parameters
@@ -83,6 +85,10 @@ def load_sampled_frames(sample_keys, video_dir, video_extension=None):
 
     video_extension: str, default=None
         Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
+
+    downsample_rate: int, default=1
+        Downsampling rate for the video frames. Only change if keypoint detections were
+        also downsampled.
 
     Returns
     -------
@@ -102,7 +108,8 @@ def load_sampled_frames(sample_keys, video_dir, video_extension=None):
         ncols=72,
     )
     return {
-        (key, frame, bodypart): readers[key][frame] for key, frame, bodypart in pbar
+        (key, frame, bodypart): readers[key][frame * downsample_rate]
+        for key, frame, bodypart in pbar
     }
 
 
@@ -445,6 +452,7 @@ def noise_calibration(
     video_dir,
     video_extension=None,
     conf_pseudocount=0.001,
+    downsample_rate=1,
     **kwargs,
 ):
     """Perform manual annotation to calibrate the relationship between keypoint
@@ -503,6 +511,10 @@ def noise_calibration(
 
     conf_pseudocount: float, default=0.001
         Pseudocount added to confidence values to avoid log(0) errors.
+
+    downsample_rate: int, default=1
+        Downsampling rate for the video frames. Only change if keypoint detections were
+        also downsampled.
     """
     dim = list(coordinates.values())[0].shape[-1]
     assert dim == 2, "Calibration is only supported for 2D keypoints."
@@ -514,7 +526,7 @@ def noise_calibration(
     sample_keys.extend(annotations.keys())
 
     sample_images = load_sampled_frames(
-        sample_keys, video_dir, video_extension=video_extension
+        sample_keys, video_dir, video_extension, downsample_rate
     )
 
     return _noise_calibration_widget(
