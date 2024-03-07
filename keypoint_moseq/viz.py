@@ -1122,6 +1122,7 @@ def generate_grid_movies(
         Downsampling rate for the video frames. Coordinates at index `i` will be
         plotted on the video frame at index `i*downsample_rate`.
 
+
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
 
     Returns

@@ -276,7 +276,7 @@ Sometimes it's useful to downsample a dataset, e.g. if the original recording ha
     kpms.downsample_timepoints(coordinates, downsample_rate)
     kpms.downsample_timepoints(confidences, downsample_rate) # skip if `confidences=None`
 
-After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case `downsample_rate` should be passed as an additional argument.::
+After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case ``downsample_rate`` should be passed as an additional argument.::
 
     # Calibration step
     kpms.noise_calibration(..., downsample_rate=downsample_rate)
