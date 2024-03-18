@@ -957,6 +957,7 @@ def format_data(
     max_seg_length=10_000,
     max_percent_padding=50,
     min_fragment_length=4,
+    auxiliary_obs=None,
     **kwargs,
 ):
     """Format keypoint coordinates and confidences for inference.
@@ -989,6 +990,12 @@ def format_data(
     keys: list of str, default=None
         (See :py:func:`keypoint_moseq.util.batch`)
 
+    seg_length: int, default=None
+        Length of each segment. If `seg_length=None`, a length is chosen so
+        that no time-series are broken into multiple segments. If all
+        time-series are shorter than `seg_length`, then  `seg_length` is set to
+        the length of the shortest time-series.
+
     bodyparts: list, default=None
         Label for each keypoint represented in `coordinates`. Required to
         reindex coordinates and confidences according to `use_bodyparts`.
@@ -1015,6 +1022,13 @@ def format_data(
 
     min_fragment_length: int, default=4
         Minimum allowed sequence length after batching (see :py:func:`keypoint_moseq.util.batch`).
+    added_noise_level: float, default=0.1
+        Level of uniform noise added to the keypoint coordinates for regularization.
+
+    auxiliary_obs: dict, default=None
+        Dictionary of auxiliary observations. Each value is an array of shape
+        (T, num_features). The keys and number of timepoints must match those
+        of `coordinates`.
 
     Returns
     -------
@@ -1106,7 +1120,13 @@ def format_data(
         rng = np.random.default_rng(42)
         Y += rng.uniform(-added_noise_level, added_noise_level, Y.shape)
 
-    data = jax.device_put({"mask": mask, "Y": Y, "conf": conf})
+    data = {"mask": mask, "Y": Y, "conf": conf}
+
+    if auxiliary_obs is not None:
+        aux, _, _ = batch(auxiliary_obs, seg_length=seg_length, keys=keys)
+        data["aux_obs"] = aux
+
+    data = jax.device_put(data)
     return data, metadata
 
 

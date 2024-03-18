@@ -59,10 +59,13 @@ def generate_config(project_dir, **kwargs):
     def _update_dict(new, original):
         return {k: new[k] if k in new else v for k, v in original.items()}
 
-    hypperams = _update_dict(
+    hypparams = _update_dict(
         kwargs,
         {
-            "error_estimator": {"slope": -0.5, "intercept": 0.25},
+            "error_estimator": {
+                "slope": -0.5,
+                "intercept": 0.25,
+            },
             "obs_hypparams": {
                 "sigmasq_0": 0.1,
                 "sigmasq_C": 0.1,
@@ -81,11 +84,27 @@ def generate_config(project_dir, **kwargs):
                 "alpha": 5.7,
                 "kappa": 1e6,
             },
-            "cen_hypparams": {"sigmasq_loc": 0.5},
+            "cen_hypparams": {
+                "sigmasq_loc": 0.5,
+            },
+            "aux_hypparams": {
+                "lambda_aux": 1,
+                "nu_aux": 10,
+                "psi_aux_scale": 1e-2,
+                "num_aux_features": 1,
+            },
+            "allo_hypparams": {
+                "alpha0_v": 10,
+                "beta0_v": 0.1,
+                "lambda0_v": 1,
+                "alpha0_h": 10,
+                "beta0_h": 0.1,
+                "lambda0_h": 1,
+            },
         },
     )
 
-    hypperams = {k: _update_dict(kwargs, v) for k, v in hypperams.items()}
+    hypparams = {k: _update_dict(kwargs, v) for k, v in hypparams.items()}
 
     anatomy = _update_dict(
         kwargs,
@@ -147,6 +166,8 @@ def generate_config(project_dir, **kwargs):
         "ar_hypparams": "autoregressive hyperparameters",
         "obs_hypparams": "keypoint observation hyperparameters",
         "cen_hypparams": "centroid movement hyperparameters",
+        "allo_hypparams": "allocentric dynamics hyperparameters (only used for location-aware modeling)",
+        "aux_hypparams": "auxiliary observations hyperparameters (only used for modeling with auxiliary observations)",
         "error_estimator": "parameters to convert neural net likelihoods to error size priors",
         "save_every_n_iters": "frequency for saving model snapshots during fitting; if 0 only final state is saved",
         "kappa_scan_target_duration": "target median syllable duration (in frames) for choosing kappa",
@@ -160,7 +181,7 @@ def generate_config(project_dir, **kwargs):
     sections = [
         ("ANATOMY", anatomy),
         ("FITTING", fitting),
-        ("HYPER PARAMS", hypperams),
+        ("HYPER PARAMS", hypparams),
         ("OTHER", other),
     ]
 

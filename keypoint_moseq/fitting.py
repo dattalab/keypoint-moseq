@@ -10,7 +10,7 @@ from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_hdf5, extract_results, load_checkpoint
-from jax_moseq.models import allo_keypoint_slds, keypoint_slds
+from jax_moseq.models import allo_keypoint_slds, keypoint_slds, aux_keypoint_slds
 from jax_moseq.models.arhmm import stateseq_marginals, marginal_log_likelihood
 from jax_moseq.utils.autoregression import get_nlags
 from jax_moseq.utils import check_for_nans, device_put_as_scalar, unbatch
@@ -60,11 +60,11 @@ def _set_parallel_flag(parallel_message_passing):
     return parallel_message_passing
 
 
-def init_model(
-    *args, location_aware=False, allo_hypparams=None, trans_hypparams=None, **kwargs
-):
-    """Initialize a model. Wrapper for `jax_moseq.models.keypoint_slds.init_model`
-    and `jax_moseq.models.allo_keypoint_slds.init_model`.
+def init_model(*args, location_aware=False, use_auxiliary_obs=False, **kwargs):
+    """Initialize a model. Wrapper for
+        - `jax_moseq.models.keypoint_slds.init_model` (default)
+        - `jax_moseq.models.allo_keypoint_slds.init_model`
+        - `jax_moseq.models.aux_keypoint_slds.init_model`.
 
     Parameters
     ----------
@@ -72,9 +72,9 @@ def init_model(
         If True, the model will be initialized using the location-aware version
         of the keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
 
-    allo_hypparams : dict, default=None
-        Hyperparameters for the `allo_keypoint_slds` model. If None, default
-        hyperparameters will be used.
+    use_auxiliary_obs : bool, default=False
+        If True, the model will be initialized using the auxiliary-observation
+        version of the keypoint-SLDS model (`jax_moseq.models.aux_keypoint_slds`).
 
     Returns
     -------
@@ -82,28 +82,15 @@ def init_model(
         Model dictionary containing states, parameters, hyperparameters, noise
         prior, and random seed.
     """
+    assert not (location_aware and use_auxiliary_obs), fill(
+        "At most one of `location_aware` and `use_auxiliary_obs` can be True"
+    )
     if location_aware:
-        num_states = trans_hypparams["num_states"]
-        allo_hypparams = {
-            "alpha0_v": 10,
-            "beta0_v": 0.1,
-            "lambda0_v": 1,
-            "alpha0_h": 10,
-            "beta0_h": 0.1,
-            "lambda0_h": 1,
-            "num_states": num_states,
-        }
-
-        return allo_keypoint_slds.init_model(
-            *args,
-            allo_hypparams=allo_hypparams,
-            trans_hypparams=trans_hypparams,
-            **kwargs,
-        )
+        return allo_keypoint_slds.init_model(*args, **kwargs)
+    elif use_auxiliary_obs:
+        return aux_keypoint_slds.init_model(*args, **kwargs)
     else:
-        return keypoint_slds.init_model(
-            *args, trans_hypparams=trans_hypparams, **kwargs
-        )
+        return keypoint_slds.init_model(*args, **kwargs)
 
 
 def fit_model(
@@ -121,6 +108,7 @@ def fit_model(
     generate_progress_plots=True,
     save_every_n_iters=25,
     location_aware=False,
+    use_auxiliary_obs=False,
     **kwargs,
 ):
     """Fit a model to data.
@@ -195,6 +183,10 @@ def fit_model(
         If True, the model will be fit using the location-aware version of the
         keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
 
+    use_auxiliary_obs : bool, default=False
+        If True, the model will be fit using the auxiliary-observation version
+        of the keypoint-SLDS model (`jax_moseq.models.aux_keypoint_slds`).
+
     Returns
     -------
     model : dict
@@ -204,6 +196,10 @@ def fit_model(
     model_name : str
         Name of the model.
     """
+    assert not (location_aware and use_auxiliary_obs), fill(
+        "At most one of `location_aware` and `use_auxiliary_obs` can be True"
+    )
+
     if generate_progress_plots and save_every_n_iters == 0:
         warnings.warn(
             fill(
@@ -244,6 +240,8 @@ def fit_model(
 
     if location_aware:
         resample_func = allo_keypoint_slds.resample_model
+    elif use_auxiliary_obs:
+        resample_func = aux_keypoint_slds.resample_model
     else:
         resample_func = keypoint_slds.resample_model
 
@@ -301,6 +299,7 @@ def apply_model(
     parallel_message_passing=None,
     return_model=False,
     location_aware=False,
+    use_auxiliary_obs=False,
     **kwargs,
 ):
     """Apply a model to new data.
@@ -356,6 +355,10 @@ def apply_model(
         If True, the model will be fit using the location-aware version of the
         keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
 
+    use_auxiliary_obs : bool, default=False
+        If True, the model will be fit using the auxiliary-observation version
+        of the keypoint-SLDS model (`jax_moseq.models.aux_keypoint_slds`).
+
     Returns
     -------
     results : dict
@@ -383,11 +386,14 @@ def apply_model(
         params=model["params"],
         hypparams=model["hypparams"],
         location_aware=location_aware,
+        use_auxiliary_obs=use_auxiliary_obs,
         **kwargs,
     )
 
     if location_aware:
         resample_func = allo_keypoint_slds.resample_model
+    elif use_auxiliary_obs:
+        resample_func = aux_keypoint_slds.resample_model
     else:
         resample_func = keypoint_slds.resample_model
 
@@ -428,6 +434,7 @@ def estimate_syllable_marginals(
     verbose=False,
     parallel_message_passing=None,
     location_aware=False,
+    use_auxiliary_obs=False,
     **kwargs,
 ):
     """Estimate marginal distributions over syllables.
@@ -472,6 +479,10 @@ def estimate_syllable_marginals(
         If True, the model will be fit using the location-aware version of the
         keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
 
+    use_auxiliary_obs : bool, default=False
+        If True, the model will be fit using the auxiliary-observation version
+        of the keypoint-SLDS model (`jax_moseq.models.aux_keypoint_slds`).
+
     Returns
     -------
     marginal_estimates : dict
@@ -484,6 +495,15 @@ def estimate_syllable_marginals(
         recording names to arrays of shape ``(num_samples, num_timepoints)``.
         Only returned if `return_samples=True`.
     """
+    if location_aware:
+        raise NotImplementedError(
+            "Estimating syllable marginals is not yet implemented for location-aware models"
+        )
+    if use_auxiliary_obs:
+        raise NotImplementedError(
+            "Estimating syllable marginals is not yet implemented for models with auxiliary observations"
+        )
+
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
     data = jax.device_put(data)
 
@@ -499,11 +519,7 @@ def estimate_syllable_marginals(
     marginal_estimates = np.zeros((*model["states"]["z"].shape, num_syllables))
     samples = []
 
-    if location_aware:
-        resample_func = allo_keypoint_slds.resample_model
-    else:
-        resample_func = keypoint_slds.resample_model
-
+    resample_func = keypoint_slds.resample_model
     total_iters = burn_in_iters + num_samples * steps_per_sample
     with tqdm.trange(total_iters, desc="Applying model", ncols=72) as pbar:
         for iteration in pbar:
