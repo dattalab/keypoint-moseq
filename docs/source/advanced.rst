@@ -232,10 +232,18 @@ Location-aware modeling
 
 Because keypoint-MoSeq uses centered and aligned pose estimates to define syllables, it is effectively blind to absolute movements of the animal in space. The only thing that keypoint-MoSeq normally cares about is change in pose -- defined here as the relative location of each keypoint. For example, if an animal were capable of simply sliding forward without otherwise moving, this would fail to show up in the syllable segmentation. To address this gap, we developed an experimental version of keypoint-MoSeq that leverages location and heading dynamics (in addition to pose) when defining syllables. To use this "location-aware" model, simply pass ``location_aware=True`` as an additional argument when calling the following functions.
 
-- :py:func:`keypoint_moseq.init_model`
-- :py:func:`keypoint_moseq.fit_model`
-- :py:func:`keypoint_moseq.apply_model`
-- :py:func:`keypoint_moseq.estimate_syllable_marginals`
+- :py:func:`keypoint_moseq.fitting.init_model`
+- :py:func:`keypoint_moseq.fitting.fit_model`
+- :py:func:`keypoint_moseq.fitting.apply_model`
+- :py:func:`keypoint_moseq.fitting.estimate_syllable_marginals`
+
+Hyperparameters for the location-aware model are contained in the usual keypoint-moseq config file. These parameters can be adjusted to control the relative weight of keypoints, location, and heading dynamics in defining syllables. Higher values of the "alpha" hyperparameters and lower values of the "beta" hyperparameters will increase the relative weight of location and heading dynamics respectively. The code below shows how to update the config file before calling ``init_model``.
+
+.. code-block:: python
+
+    keypoint_moseq.update_config(
+        project_dir, alpha0_v=10, beta0_v=0.1, alpha0_h=10, beta0_h=0.1
+    )
 
 Note that the location-aware model was not tested in the keypoint-MoSeq paper remains experimental. We welcome feedback and suggestions for improvement.
 
@@ -266,3 +274,60 @@ where :math:`R(h)` is a rotation matrix that rotates a vector by angle :math:`h`
     \sigma^2_{v,i} & \sim \text{InverseGamma}(\alpha_v, \beta_v), \ \ \ \  \Delta v_i \sim \mathcal{N}(0, \sigma^2_{v,i} I_2 / \lambda_v) \\
     \sigma^2_{h,i} & \sim \text{InverseGamma}(\alpha_h, \beta_h), \ \ \ \  \Delta h_i \sim \mathcal{N}(0, \sigma^2_{h,i} / \lambda_h)
 
+
+
+Non-keypoint observations
+-------------------------
+
+In some cases it may be useful to include non-keypoint observations in the definition of a syllable. These observations can be single or multi-variate, and can include anything from an animal's heart rate to the presence of a particular object in the environment. Such variables can be included in the model by passing a dictionary of "auxiliary" observations when formating the ``data`` dictionary, and then passing ``use_auxiliary_obs=True`` when calling the following functions:
+
+- :py:func:`keypoint_moseq.fitting.init_model`
+- :py:func:`keypoint_moseq.fitting.fit_model`
+- :py:func:`keypoint_moseq.fitting.apply_model`
+- :py:func:`keypoint_moseq.fitting.estimate_syllable_marginals`
+
+Below is a mininal code example. The variable ``auxiliary_obs`` should be a dictionary mapping recording names to arrays of shape ``(num_timepoints, num_features)`` (where the recording names and number of timepoints match the keypoint data). The optional config update is useful for controlling the relative weight of keypoints versus auxiliary observations in defining each syllable: higher values of ``nu_aux`` and lower values of ``psi_aux_scale`` will increase the relative weight of auxiliary observations.
+
+.. code-block:: python
+
+    import keypoint_moseq as kpms
+
+    # setup
+    project_dir = 'path/to/project'
+    config = lambda: kpms.load_config(project_dir)
+
+    # load keypoint data
+    coordinates, confidences, bodyparts = kpms.load_keypoints('path', 'deeplabcut')
+
+    # load auxiliary observations
+    auxiliary_obs = # custom loading code
+
+    # format the data dictionary
+    data, metadata = kpms.format_data(
+        coordinates, confidences, auxiliary_obs=auxiliary_obs, **config()
+    )
+
+    # [optional] update auxiliary observation hyperparameters in the config
+    kpms.update_config(project_dir, nu_aux=10, psi_aux_scale=1e-2)
+
+    # [REEQUIRED] update the config to include the number of features
+    kpms.update_config(project_dir, num_aux_features=num_aux_features)
+
+    """
+    Perform the remaining steps as usual, but passing ``use_auxiliary_obs=True`` when
+    calling the functions noted above.
+    """"
+
+
+Mathematical details
+~~~~~~~~~~~~~~~~~~~~
+
+In the published version of keypoint-MoSeq, the observed data consist entirely of keypoint coordinates :math:`y_t` at each timepoint. To handle non-keypoint observations, we introduce a second set of "auxiliary" observations :math:`w_t` that are conditionally independent of all other variables given the current syllable :math:`z_t`, and for which :math:`P(w_t \mid z_t)` is multivariate normal:
+
+.. math::
+    w_t \mid z_t \sim \mathcal{N}(\mu^\text{aux}_{z_t}, \Sigma^\text{aux}_{z_t})
+
+The parameters :math:`\mu^\text{aux}_i` and :math:`\Sigma^\text{aux}_i` for each syllable :math:`i` have a normal-inverse-Wishart prior:
+
+.. math::
+    \Sigma^\text{aux}_i \sim \text{InverseWishart}(\nu^\text{aux}, \Psi^\text{aux}), \ \ \ \  \mu^\text{aux}_i \sim \mathcal{N}(0, \Sigma^\text{aux}_i / \lambda^\text{aux})
