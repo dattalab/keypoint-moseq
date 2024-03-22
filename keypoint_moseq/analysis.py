@@ -44,11 +44,11 @@ def get_syllable_names(project_dir, model_name, syllable_ixs):
     if os.path.exists(syll_info_path):
         syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
 
-    for ix in syllable_ixs:
-        if len(syll_info_df[syll_info_df.syllable == ix].label.values[0]) > 0:
-            labels[ix] = (
-                f"{ix} ({syll_info_df[syll_info_df.syllable == ix].label.values[0]})"
-            )
+        for ix in syllable_ixs:
+            if len(syll_info_df[syll_info_df.syllable == ix].label.values[0]) > 0:
+                labels[ix] = (
+                    f"{ix} ({syll_info_df[syll_info_df.syllable == ix].label.values[0]})"
+                )
     names = [labels[ix] for ix in syllable_ixs]
     return names
 
