@@ -1423,10 +1423,15 @@ def visualize_transition_bigram(
         whether to show just syllable indexes (False) or syllable indexes and
         names (True)
     """
+
+    # syllable info path
+    syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
+    # initialize syllable names
+    syll_names = [f"{ix}" for ix in syll_include]
+
     if show_syllable_names:
-        syll_names = get_syllable_names(project_dir, model_name, syll_include)
-    else:
-        syll_names = [f"{ix}" for ix in syll_include]
+        if os.path.exists(syll_info_path):
+            syll_names = get_syllable_names(project_dir, model_name, syll_include)
 
     # infer max_syllables
     max_syllables = trans_mats[0].shape[0]
