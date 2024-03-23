@@ -826,7 +826,6 @@ def run_kruskal(
     syllable_data = grouped_data.drop(["group", "name"], axis=1).values
 
     N_m, N_s = syllable_data.shape
-
     # Run KW and return H-stats
     h_all, real_ranks, X_ties = run_manual_KW_test(
         df_usage=df_only_stats,
@@ -1116,12 +1115,14 @@ def plot_syll_stats_with_sem(
 
     # get significant syllables
     sig_sylls = None
+    if groups is None:
+        groups = stats_df["group"].unique()
 
     if plot_sig and len(stats_df["group"].unique()) > 1:
         # run kruskal wallis and dunn's test
         _, _, sig_pairs = run_kruskal(stats_df, statistic=stat, thresh=thresh)
-        # plot significant syllables for control and experimental group
-        if ctrl_group is not None and exp_group is not None:
+        # plot significant syllables for control and experimental group when user specify something
+        if ctrl_group in groups and exp_group in groups:
             # check if the group pair is in the sig pairs dict
             if (ctrl_group, exp_group) in sig_pairs.keys():
                 sig_sylls = sig_pairs.get((ctrl_group, exp_group))
@@ -1129,9 +1130,8 @@ def plot_syll_stats_with_sem(
             else:
                 sig_sylls = sig_pairs.get((exp_group, ctrl_group))
         else:
-            print(
-                "No control or experimental group specified. Not plotting significant syllables."
-            )
+            # plot everything if no group pair is specified
+            sig_sylls = sig_pairs
 
     xlabel = f"Syllables sorted by {stat}"
     if order == "diff":
@@ -1172,14 +1172,30 @@ def plot_syll_stats_with_sem(
 
     # if a list of significant syllables is given, mark the syllables above the x-axis
     if sig_sylls is not None:
-        markings = []
-        for s in sig_sylls:
-            if s in ordering:
-                markings.append(np.where(ordering == s)[0])
-            else:
-                continue
-        markings = np.concatenate(markings)
-        plt.scatter(markings, [-0.05] * len(markings), color="r", marker="*")
+        init_y = -0.05
+        # plot all sig syllables when no reasonable control and experimental group is specified
+        if isinstance(sig_sylls, dict):
+            for key in sig_sylls.keys():
+                markings = []
+                for s in sig_sylls[key]:
+                    markings.append(np.where(ordering == s)[0])
+                markings = np.concatenate(markings)
+                plt.scatter(markings, [init_y] * len(markings), color="r", marker="*")
+                plt.text(
+                    plt.xlim()[1],
+                    init_y,
+                    f"{key[0]} vs. {key[1]} - Total {len(sig_sylls[key])} S.S.",
+                )
+                init_y += -0.05
+        else:
+            markings = []
+            for s in sig_sylls:
+                if s in ordering:
+                    markings.append(np.where(ordering == s)[0])
+                else:
+                    continue
+            markings = np.concatenate(markings)
+            plt.scatter(markings, [-0.05] * len(markings), color="r", marker="*")
 
         # manually define a new patch
         patch = Line2D(
