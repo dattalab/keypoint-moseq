@@ -1179,14 +1179,19 @@ def plot_syll_stats_with_sem(
                 markings = []
                 for s in sig_sylls[key]:
                     markings.append(np.where(ordering == s)[0])
-                markings = np.concatenate(markings)
-                plt.scatter(markings, [init_y] * len(markings), color="r", marker="*")
-                plt.text(
-                    plt.xlim()[1],
-                    init_y,
-                    f"{key[0]} vs. {key[1]} - Total {len(sig_sylls[key])} S.S.",
-                )
-                init_y += -0.05
+                if len(markings) > 0:
+                    markings = np.concatenate(markings)
+                    plt.scatter(
+                        markings, [init_y] * len(markings), color="r", marker="*"
+                    )
+                    plt.text(
+                        plt.xlim()[1],
+                        init_y,
+                        f"{key[0]} vs. {key[1]} - Total {len(sig_sylls[key])} S.S.",
+                    )
+                    init_y += -0.05
+                else:
+                    print("No significant syllables found.")
         else:
             markings = []
             for s in sig_sylls:
@@ -1194,8 +1199,11 @@ def plot_syll_stats_with_sem(
                     markings.append(np.where(ordering == s)[0])
                 else:
                     continue
-            markings = np.concatenate(markings)
-            plt.scatter(markings, [-0.05] * len(markings), color="r", marker="*")
+            if len(markings) > 0:
+                markings = np.concatenate(markings)
+                plt.scatter(markings, [-0.05] * len(markings), color="r", marker="*")
+            else:
+                print("No significant syllables found.")
 
         # manually define a new patch
         patch = Line2D(
