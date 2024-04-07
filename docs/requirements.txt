@@ -1,5 +1,5 @@
 # docs/requirements.txt
-sphinx==4.4.0
+sphinx
 sphinx-rtd-theme
 autodocsumm
 myst-nb
