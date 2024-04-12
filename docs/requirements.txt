@@ -4,4 +4,4 @@ sphinx-rtd-theme
 autodocsumm
 myst-nb
 requests>=2.5.0
-jax<0.4.14
+jax[cpu]==0.4.10
