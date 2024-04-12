@@ -4,3 +4,4 @@ sphinx-rtd-theme
 autodocsumm
 myst-nb
 requests>=2.5.0
+chex==0.1.84
