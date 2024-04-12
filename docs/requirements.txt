@@ -5,3 +5,4 @@ autodocsumm
 myst-nb
 requests>=2.5.0
 jax[cpu]==0.4.10
+ml_dtypes==0.2.0
