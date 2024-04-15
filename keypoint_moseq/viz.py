@@ -1196,6 +1196,7 @@ def generate_grid_movies(
                 as_dict=True,
                 video_extension=video_extension,
             )
+        check_video_paths(video_paths, results.keys())
         videos = {k: OpenCVReader(path) for k, path in video_paths.items()}
 
         if fps is None:
