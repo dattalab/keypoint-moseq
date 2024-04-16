@@ -288,7 +288,7 @@ def apply_model(
     metadata,
     project_dir=None,
     model_name=None,
-    num_iters=50,
+    num_iters=500,
     ar_only=False,
     save_results=True,
     verbose=False,
@@ -321,7 +321,7 @@ def apply_model(
         Name of the model. Required if `save_results=True` and
         `results_path=None`.
 
-    num_iters : int, default=50
+    num_iters : int, default=500
         Number of iterations to run the model.
 
     ar_only : bool, default=False
@@ -416,7 +416,7 @@ def estimate_syllable_marginals(
     model,
     data,
     metadata,
-    burn_in_iters=50,
+    burn_in_iters=200,
     num_samples=100,
     steps_per_sample=10,
     return_samples=False,
@@ -440,7 +440,7 @@ def estimate_syllable_marginals(
         Recordings and start/end frames for the data (see
         :py:func:`keypoint_moseq.io.format_data`).
 
-    burn_in_iters : int, default=50
+    burn_in_iters : int, default=200
         Number of resampling iterations to run before collecting samples.
 
     num_samples : int, default=100

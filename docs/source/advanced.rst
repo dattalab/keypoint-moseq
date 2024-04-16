@@ -209,7 +209,7 @@ Model averaging
 
 Keypoint-MoSeq is probabilistic. So even once fitting is complete and the syllable parameters are fixed, there is still a distribution of possible syllable sequences given the observed data. In the default pipeline, one such sequence is sampled from this distribution and used for downstream analyses. Alternatively, one can estimate the marginal probability distribution over syllable labels at each timepoint. The code below shows how to do this. It can be applied to new data or the same data that was used for fitting (or a combination of the two).::
 
-    burnin_iters = 50
+    burnin_iters = 200
     num_samples = 100
     steps_per_sample = 5
 
@@ -273,8 +273,8 @@ Temporal downsampling
 Sometimes it's useful to downsample a dataset, e.g. if the original recording has a much higher framerate than is needed for modeling. To downsample, run the following lines right after loading the keypoints.::
 
     downsample_rate = 2 # keep every 2nd frame
-    kpms.downsample_timepoints(coordinates, downsample_rate)
-    kpms.downsample_timepoints(confidences, downsample_rate) # skip if `confidences=None`
+    coordinates = kpms.downsample_timepoints(coordinates, downsample_rate)
+    confidences = kpms.downsample_timepoints(confidences, downsample_rate) # skip if `confidences=None`
 
 After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case ``downsample_rate`` should be passed as an additional argument.::
 

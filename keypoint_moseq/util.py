@@ -13,6 +13,7 @@ from sklearn.neighbors import NearestNeighbors
 from scipy.spatial.distance import pdist, squareform
 from jax_moseq.models.keypoint_slds import inverse_rigid_transform
 from jax_moseq.utils import get_frequencies, batch
+from vidio.read import OpenCVReader
 
 na = jnp.newaxis
 
@@ -1177,3 +1178,55 @@ def downsample_timepoints(data, downsample_rate):
         return {k: downsample_timepoints(v, downsample_rate) for k, v in data.items()}
     else:
         return data[::downsample_rate]
+
+
+def check_video_paths(video_paths, keys):
+    """
+    Check if video paths are valid and match the keys.
+
+    Parameters
+    ----------
+    video_paths: dict
+        Dictionary mapping keys to video paths.
+
+    keys: list
+        List of keys that require a video path.
+
+    Raises
+    ------
+    ValueError
+        If any of the following are true:
+        - a video path is not provided for a key in `keys`
+        - a video isn't readable.
+        - a video path does not exist.
+    """
+    missing_keys = set(keys) - set(video_paths.keys())
+
+    nonexistent_videos = []
+    unreadable_videos = []
+    for path in video_paths.values():
+        if not os.path.exists(path):
+            nonexistent_videos.append(path)
+        else:
+            try:
+                OpenCVReader(path)[0]
+            except:
+                unreadable_videos.append(path)
+
+    error_messages = []
+
+    if len(missing_keys) > 0:
+        error_messages.append(
+            "The following keys require a video path: {}".format(missing_keys)
+        )
+    if len(nonexistent_videos) > 0:
+        error_messages.append(
+            "The following videos do not exist: {}".format(nonexistent_videos)
+        )
+    if len(unreadable_videos) > 0:
+        error_messages.append(
+            "The following videos are not readable and must be reencoded: {}".format(unreadable_videos)
+        )
+    
+    if len(error_messages) > 0:
+        raise ValueError("\n\n".join(error_messages))
