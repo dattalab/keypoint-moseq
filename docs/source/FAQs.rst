@@ -194,6 +194,42 @@ The final output of keypoint MoSeq is a results .h5 file (and optionally a direc
    Low-dimensional representation of the animal's pose in each frame. These are similar to PCA scores, are modified to reflect the pose dynamics and noise estimates inferred by the model. 
 
 
+Validating results when applying a model to new data
+---------------------------------------------------
+When applying a model to new data, it may be useful to generate new grid movies and trajectory plots so you can confirm that the meaning of the syllables has been preserved. Let's say you've already applied the model to new data as follows:
+
+   .. code-block:: python
+
+      # load new data (e.g. from deeplabcut)
+      coordinates, confidences, bodyparts = kpms.load_keypoints(new_data_path, 'deeplabcut')
+      data, metadata = kpms.format_data(coordinates, confidences, **config())
+
+      # apply saved model to new data
+      results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
+
+By default, the `results` dictionary above contains results for both the new and old data. To generate grid movies and trajectory plots for the new data only, we can subset the `results` dictionary to include only the new data. We will also need to specify alternative paths for saving the new movies and plots so the original ones aren't overwritten.
+
+   .. code-block:: python
+      
+      import os 
+
+      # only include results for the new data
+      new_results = {k:v for k,v in results.items() if k in coordinates}
+
+      # save trajectory plots for the new data
+      output_dir = os.path.join(project_dir, model_name, "new_trajectory_plots")
+      kpms.generate_trajectory_plots(
+         coordinates, new_results, project_dir,model_name, output_dir=output_dir, **config()
+      )
+
+      # save grid movies for the new data
+      output_dir = os.path.join(project_dir, model_name, "new_grid_movies")
+      kpms.generate_grid_movies(
+         new_results, project_dir, model_name, coordinates=coordinates, output_dir=output_dir, **config()
+      );
+
+
+
 Visualization
 =============
 
