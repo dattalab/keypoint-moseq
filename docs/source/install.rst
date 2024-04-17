@@ -69,7 +69,7 @@ Install jax using one of the lines below::
    # MacOS or Linux (CPU)
    pip install "jax[cpu]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_releases.html
 
-   # MacOS or Linux (GPU)
+   # MacOS or Linux (GPU with CUDA 11.X)
    pip install "jax[cuda11_cudnn82]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
    # Windows (CPU)
