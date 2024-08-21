@@ -212,33 +212,6 @@ def _estimate_transformation(source, closest):
     return R, t
 
 
-def get_boundary_distance(coordinates, arena, return_closest_point=False):
-    """
-    Compute the distance from each coordinate to the nearest point on the arena boundary.
-
-    Parameters
-    ----------
-    coordinates : np.ndarray
-        Array of shape (..., 2) containing 2D keypoint coordinates.
-
-    arena : np.ndarray
-        Array of shape (N, 2) representing the arena as a polygon.
-
-    return_closest_point : bool, default=False
-        If True, also return the closest point on the boundary for each coordinate.
-
-    Returns
-    -------
-    distances : np.ndarray
-        Array of shape (...) containing boundary distances.
-    """
-    arena_polygon = Polygon(arena)
-    distances = np.array(
-        [Point(coord).distance(arena_polygon.boundary) for coord in coordinates]
-    )
-    return distances
-
-
 def point_to_segment_distances(points, segment_start, segment_end):
     """
     Vectorized calculation of distances from multiple points to a single line segment.
