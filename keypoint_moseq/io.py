@@ -18,6 +18,7 @@ from itertools import islice
 
 from keypoint_moseq.util import list_files_with_exts, check_nan_proportions
 from jax_moseq.utils import get_frequencies, unbatch
+from scipy.io import loadmat
 
 
 def _build_yaml(sections, comments):
@@ -302,6 +303,7 @@ def setup_project(
     sleap_file=None,
     nwb_file=None,
     freipose_config=None,
+    dannce_config=None,
     overwrite=False,
     **options,
 ):
@@ -335,6 +337,11 @@ def setup_project(
         Path to a freipose skeleton config file. Will be used to initialize
         `bodyparts`, `skeleton`, and `use_bodyparts` in the keypoint MoSeq config
         (overrided by kwargs).
+
+    dannce_config: str, default=None
+        Path to a dannce config file. Will be used to initialize `bodyparts`,
+        `skeleton`, and `use_bodyparts` in the keypoint MoSeq config (overrided
+        by kwargs).
 
     overwrite: bool, default=False
         Overwrite any config.yml that already exists at the path
@@ -427,6 +434,19 @@ def setup_project(
             freipose_options["skeleton"] = list(map(list, sorted(set(skeleton))))
         options = {**freipose_options, **options}
 
+    elif dannce_config is not None:
+        dannce_config = loadmat(dannce_config)
+        bodyparts = [n[0][0].item() for n in dannce_config["joint_names"]]
+        skeleton = [
+            [bodyparts[i], bodyparts[j]] for i, j in dannce_config["joints_idx"] - 1
+        ]
+        dannce_options = {
+            "bodyparts": bodyparts,
+            "use_bodyparts": bodyparts,
+            "skeleton": skeleton,
+        }
+        options = {**dannce_options, **options}
+
     if not os.path.exists(project_dir):
         os.makedirs(project_dir)
     generate_config(project_dir, **options)
@@ -503,7 +523,7 @@ def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None
         associated metadata (see :py:func:`keypoint_moseq.util.format_data`).
 
     metadata: tuple (keys, bounds)
-        Recordings and start/end frames for the data (see
+        Recording names and start/end frames for the data (see
         :py:func:`keypoint_moseq.util.format_data`).
 
     iteration: int
@@ -921,6 +941,8 @@ def load_keypoints(
         FreiPose does not save the bodypart names, the `bodyparts` return
         value is set to None.
 
+    - dannce
+        .mat files saved by Dannce.
 
     Parameters
     ----------
@@ -948,6 +970,7 @@ def load_keypoints(
         - nwb: 'nwb'
         - facemap: 'h5'
         - freipose: 'json'
+        - dannce: 'mat'
 
     recursive: bool, default=True
         Whether to search recursively for deeplabcut csv or hdf5 files.
@@ -994,6 +1017,7 @@ def load_keypoints(
         "nwb": (_nwb_loader, [".nwb"]),
         "facemap": (_facemap_loader, [".h5", ".hdf5"]),
         "freipose": (_freipose_loader, [".json"]),
+        "dannce": (_dannce_loader, [".mat"]),
     }
 
     # get format-specific loader and extensions
@@ -1226,6 +1250,16 @@ def _freipose_loader(filepath, name):
     coords = np.concatenate([d["kp_xyz"] for d in data], axis=0)
     coordinates = {name: coords}
     confidences = {name: np.ones_like(coords[..., 0])}
+    return coordinates, confidences, None
+
+
+def _dannce_loader(filepath, name):
+    """Load keypoints from dannce mat files."""
+    mat = loadmat(filepath)
+    coords = mat["pred"].transpose((0, 2, 1))
+    confs = np.ones_like(coords[..., 0])
+    coordinates = {name: coords}
+    confidences = {name: confs}
     return coordinates, confidences, None
 
 

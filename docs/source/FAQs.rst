@@ -73,9 +73,9 @@ Keypoint-MoSeq has only been validated on rodents (mice, rats, and anecdotal suc
 
 Loading keypoint tracking data
 ------------------------------
-Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detections. Currently we support SLEAP, DeepLabCut, anipose, SLEAP-anipose, Neurodata Without Borders (NWB), Facemap, and FreiPose. For methods not on this list, you can write a custom loading function or get in touch and request it as a new feature. 
+Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detections. Currently we support SLEAP, DeepLabCut, anipose, SLEAP-anipose, Neurodata Without Borders (NWB), Facemap, FreiPose and DANNCE. For methods not on this list, you can write a custom loading function or get in touch and request it as a new feature. 
 
-- If using one of the supported formats, data can be loaded as follows, optionally replacing ``'deeplabcut'`` with one of the following: ``'sleap', 'anipose', 'sleap-anipose', 'nwb', 'facemap', 'freipose'``. The file formats expected in each case are described in the docstirng for :py:func:`keypoint_moseq.io.load_keypoints`::
+- If using one of the supported formats, data can be loaded as follows, optionally replacing ``'deeplabcut'`` with one of the following: ``'sleap', 'anipose', 'sleap-anipose', 'nwb', 'facemap', 'freipose', 'DANNCE'``. The file formats expected in each case are described in the docstirng for :py:func:`keypoint_moseq.io.load_keypoints`::
 
    coordinates, confidences, bodyparts = kpms.load_keypoints(keypoint_data_path, 'deeplabcut')
 
