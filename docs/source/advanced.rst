@@ -1,7 +1,7 @@
 Exporting pose estimates
 ------------------------
 
-During fitting, keypoint-MoSeq tries to estimate the "true" pose trajectory of the animal, discounting anomolous or low-confidence keypoints. The pose trajectory is stored in the model as a variable "x" that encodes a low-dimensional representation of the keypoints (similar to PCA). The code below shows how to project the pose trajectory back into the original coordinate space. This is useful for visualizing the estimated pose trajectory.::
+During fitting, keypoint-MoSeq tries to estimate the "true" pose trajectory of the animal, discounting anomolous or low-confidence keypoints. The pose trajectory is stored in the model as a variable "x" that encodes a low-dimensional representation of the keypoints (similar to PCA). The code below shows how to project the pose trajectory back into the original coordinate space. This is useful for visualizing the estimated pose trajectory.
 
     import os
     import h5py
@@ -27,7 +27,9 @@ During fitting, keypoint-MoSeq tries to estimate the "true" pose trajectory of t
     coordinates_est = unbatch(Y_est, *metadata)
 
 
-The following code generates a video showing frames 0-3600 from one recording with the reconstructed keypoints overlaid.::
+The following code generates a video showing frames 0-3600 from one recording with the reconstructed keypoints overlaid.
+
+.. code-block:: python
 
     config = lambda: kpms.load_config(project_dir)
     keypoint_data_path = 'dlc_project/videos' # can be a file, a directory, or a list of files
@@ -53,7 +55,9 @@ The following code generates a video showing frames 0-3600 from one recording wi
 Automatic kappa scan
 --------------------
 
-Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the rate of transitions between syllables. Higher values of kappa lead to longer syllables and smaller values lead to shorter syllables. Users should choose a value of kappa based their desired distribution of syllable durations. The code below shows how to automatically scan over a range of kappa values and choose the optimal value.::
+Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the rate of transitions between syllables. Higher values of kappa lead to longer syllables and smaller values lead to shorter syllables. Users should choose a value of kappa based their desired distribution of syllable durations. The code below shows how to automatically scan over a range of kappa values and choose the optimal value.
+
+.. code-block:: python
 
     import numpy as np
 
@@ -116,7 +120,9 @@ Keypoint-MoSeq uses a stochastic fitting procedure, and thus produces slightly d
 Fitting multiple models
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-The code below shows how to fit multiple models with different random seeds.::
+The code below shows how to fit multiple models with different random seeds.
+
+.. code-block:: python
 
     import jax
 
@@ -171,7 +177,9 @@ The code below shows how to fit multiple models with different random seeds.::
 Comparing syllables
 ~~~~~~~~~~~~~~~~~~~
 
-To get a sense of the variability across model runs, it may be useful to compare syllables produced by each model. The code below shows how to load results from two models runs (e.g., produced by the code above) and plot a confusion matrix showing the overlap between syllable labels.::
+To get a sense of the variability across model runs, it may be useful to compare syllables produced by each model. The code below shows how to load results from two models runs (e.g., produced by the code above) and plot a confusion matrix showing the overlap between syllable labels.
+
+.. code-block:: python
 
     model_name_1 = 'my_models-0'
     model_name_2 = 'my_models-1'
@@ -188,8 +196,9 @@ To get a sense of the variability across model runs, it may be useful to compare
 Selecting a model
 ~~~~~~~~~~~~~~~~~
 
-We developed a matric called the expected marginal likelihood (EML) score that can be used to rank models. To calculate EML scores, you must first fit an ensemble of models to a given dataset, as shown in :ref:`Fitting multiple models <fitting-multiple-models>`. The code below loads this ensemble and then calculates the EML score for each model. The model with the highest EML score can then be selected for further analysis.::
+We developed a matric called the expected marginal likelihood (EML) score that can be used to rank models. To calculate EML scores, you must first fit an ensemble of models to a given dataset, as shown in :ref:`Fitting multiple models <fitting-multiple-models>`. The code below loads this ensemble and then calculates the EML score for each model. The model with the highest EML score can then be selected for further analysis.
 
+.. code-block:: python
 
     # change the following line as needed
     model_names = ['my_models-{}'.format(i) for i in range(20)]
@@ -207,7 +216,9 @@ We developed a matric called the expected marginal likelihood (EML) score that c
 Model averaging
 ~~~~~~~~~~~~~~~
 
-Keypoint-MoSeq is probabilistic. So even once fitting is complete and the syllable parameters are fixed, there is still a distribution of possible syllable sequences given the observed data. In the default pipeline, one such sequence is sampled from this distribution and used for downstream analyses. Alternatively, one can estimate the marginal probability distribution over syllable labels at each timepoint. The code below shows how to do this. It can be applied to new data or the same data that was used for fitting (or a combination of the two).::
+Keypoint-MoSeq is probabilistic. So even once fitting is complete and the syllable parameters are fixed, there is still a distribution of possible syllable sequences given the observed data. In the default pipeline, one such sequence is sampled from this distribution and used for downstream analyses. Alternatively, one can estimate the marginal probability distribution over syllable labels at each timepoint. The code below shows how to do this. It can be applied to new data or the same data that was used for fitting (or a combination of the two).
+
+.. code-block:: python
 
     burnin_iters = 200
     num_samples = 100
@@ -270,13 +281,17 @@ where :math:`R(h)` is a rotation matrix that rotates a vector by angle :math:`h`
 Temporal downsampling
 ---------------------
 
-Sometimes it's useful to downsample a dataset, e.g. if the original recording has a much higher framerate than is needed for modeling. To downsample, run the following lines right after loading the keypoints.::
+Sometimes it's useful to downsample a dataset, e.g. if the original recording has a much higher framerate than is needed for modeling. To downsample, run the following lines right after loading the keypoints.
+
+.. code-block:: python
 
     downsample_rate = 2 # keep every 2nd frame
     coordinates = kpms.downsample_timepoints(coordinates, downsample_rate)
     confidences = kpms.downsample_timepoints(confidences, downsample_rate) # skip if `confidences=None`
 
-After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case ``downsample_rate`` should be passed as an additional argument.::
+After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case ``downsample_rate`` should be passed as an additional argument.
+
+.. code-block:: python
 
     # Calibration step
     kpms.noise_calibration(..., downsample_rate=downsample_rate)
