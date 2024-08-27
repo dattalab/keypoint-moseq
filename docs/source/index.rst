@@ -8,7 +8,7 @@ Keypoint MoSeq
 
    * - `GitHub <https://github.com/dattalab/keypoint-moseq/>`_
      - `Colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb>`_
-     - `Paper <https://www.biorxiv.org/content/10.1101/2023.03.16.532307v2>`_
+     - `Paper <https://www.nature.com/articles/s41592-024-02318-2>`_
      - `Slack <https://join.slack.com/t/moseqworkspace/shared_invite/zt-151x0shoi-z4J0_g_5rwJDlO1IfCU34A>`_
      - `License <https://github.com/dattalab/keypoint-moseq/blob/main/LICENSE.md>`_
 
