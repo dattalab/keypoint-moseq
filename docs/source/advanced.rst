@@ -57,6 +57,11 @@ Automatic kappa scan
 
 Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the rate of transitions between syllables. Higher values of kappa lead to longer syllables and smaller values lead to shorter syllables. Users should choose a value of kappa based their desired distribution of syllable durations. The code below shows how to automatically scan over a range of kappa values and choose the optimal value.
 
+.. note::
+
+    The following code reduces ``kappa`` by a factor of 10 (``decrease_kappa_factor``) before fitting the full model. You will need to recapitulate this step when fitting your own final model.
+    
+
 .. code-block:: python
 
     import numpy as np
