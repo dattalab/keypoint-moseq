@@ -2913,3 +2913,56 @@ def plot_eml_scores(eml_scores, eml_std_errs, model_names):
     ax.set_ylabel("EML score")
     plt.tight_layout()
     return fig, ax
+
+
+def plot_pose(
+    coordinates, bodyparts, skeleton, cmap="autumn", node_size=6, linewidth=3, ax=None
+):
+    """
+    Plot a single pose using matplotlib.
+
+    Parameters
+    ----------
+    coordinates: ndarray of shape (num_bodyparts, 2)
+        2D coordinates of the pose.
+
+    bodyparts: list of str
+        Bodypart names.
+
+    skeleton: list of tuples
+        Skeleton edges as pairs of bodypart names.
+
+    cmap: str, default='autumn'
+        Colormap to use for coloring keypoints.
+
+    node_size: float, default=6
+        Size of keypoints.
+
+    linewidth: float, default=3
+        Width of skeleton edges.
+
+    ax: matplotlib axis, default=None
+        Axis to plot on. If None, a new axis is created.
+
+    Returns
+    -------
+    ax: matplotlib axis
+        Axis containing the plot.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+
+    cmap = plt.get_cmap(cmap)
+    colors = cmap(np.linspace(0, 1, len(bodyparts)))
+    edges = get_edges(bodyparts, skeleton)
+
+    for i, (x, y) in enumerate(coordinates):
+        ax.scatter(x, y, s=node_size, c=[colors[i]])
+
+    for i, j in edges:
+        x = [coordinates[i, 0], coordinates[j, 0]]
+        y = [coordinates[i, 1], coordinates[j, 1]]
+        ax.plot(x, y, c=colors[i], linewidth=linewidth)
+
+    ax.set_aspect("equal")
+    return ax
