@@ -1134,20 +1134,20 @@ def _sleap_loader(filepath, name):
 
         bodyparts = slp_file.skeletons[0].node_names
         arr = slp_file.numpy(return_confidence=True)
-        coords = arr[:, :, :-1]
-        confs = arr[:, :, -1]
+        coords = arr[:, :, :, :-1].transpose((1, 0, 2, 3))
+        confs = arr[:, :, :, -1].transpose((1, 0, 2))
     else:
         with h5py.File(filepath, "r") as f:
-            coords = f["tracks"][()]
-            confs = f["point_scores"][()]
+            coords = f["tracks"][()].transpose((0, 3, 2, 1))
+            confs = f["point_scores"][()].transpose((0, 2, 1))
             bodyparts = [name.decode("utf-8") for name in f["node_names"]]
 
     if coords.shape[0] == 1:
-        coordinates = {name: coords[0].T}
-        confidences = {name: confs[0].T}
+        coordinates = {name: coords[0]}
+        confidences = {name: confs[0]}
     else:
-        coordinates = {f"{name}_track{i}": coords[i].T for i in range(coords.shape[0])}
-        confidences = {f"{name}_track{i}": confs[i].T for i in range(coords.shape[0])}
+        coordinates = {f"{name}_track{i}": coords[i] for i in range(coords.shape[0])}
+        confidences = {f"{name}_track{i}": confs[i] for i in range(coords.shape[0])}
     return coordinates, confidences, bodyparts
 
 
