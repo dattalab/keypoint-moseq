@@ -974,6 +974,14 @@ def format_data(
     Y, mask, metadata = batch(coordinates, seg_length=seg_length, keys=keys)
     Y = Y.astype(float)
 
+    min_segment_length = np.diff(metadata[1], axis=1).min()
+    assert min_segment_length >= 4, (
+        f"The shortest segment has length  {min_segment_length} which is below the "
+        "minimum of 4. Try increasing `seg_length` in the config (e.g. add "
+        f"{min_segment_length} to its current value) and also make sure that all your "
+        "input recordings are at least 4 frames long."
+    )
+
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
     if np.min(conf) < 0:
         conf = np.maximum(conf, 0)
@@ -1225,8 +1233,10 @@ def check_video_paths(video_paths, keys):
         )
     if len(unreadable_videos) > 0:
         error_messages.append(
-            "The following videos are not readable and must be reencoded: {}".format(unreadable_videos)
+            "The following videos are not readable and must be reencoded: {}".format(
+                unreadable_videos
+            )
         )
-    
+
     if len(error_messages) > 0:
         raise ValueError("\n\n".join(error_messages))
