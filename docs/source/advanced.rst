@@ -291,19 +291,59 @@ Sometimes it's useful to downsample a dataset, e.g. if the original recording ha
 .. code-block:: python
 
     downsample_rate = 2 # keep every 2nd frame
-    coordinates = kpms.downsample_timepoints(coordinates, downsample_rate)
-    confidences = kpms.downsample_timepoints(confidences, downsample_rate) # skip if `confidences=None`
+    coordinates, video_frame_indexes = kpms.downsample_timepoints(
+        coordinates, downsample_rate
+    )
+    confidences, video_frame_indexes = kpms.downsample_timepoints(
+        confidences, downsample_rate
+    ) # skip if `confidences=None`
 
-After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case ``downsample_rate`` should be passed as an additional argument.
+After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case ``video_frame_indexes`` should be passed as an additional argument.
 
 .. code-block:: python
 
     # Calibration step
-    kpms.noise_calibration(..., downsample_rate=downsample_rate)
+    kpms.noise_calibration(..., video_frame_indexes=video_frame_indexes)
 
     # Making grid movies
-    kpms.generate_grid_movies(..., downsample_rate=downsample_rate)
+    kpms.generate_grid_movies(..., video_frame_indexes=video_frame_indexes)
 
     # Overlaying keypoints
-    kpms.overlay_keypoints_on_video(..., downsample_rate=downsample_rate)
+    kpms.overlay_keypoints_on_video(..., video_frame_indexes=video_frame_indexes)
+
+
+Trimming inputs
+---------------
+
+In some datasets, the animal is missing at the beginning and/or end of each video. In these cases, the easiest solution is to trim the videos before running keypoint detection. However, it's also possible to directly trim the inputs to keypoint-MoSeq. Let's assume that you already have a dictionary called ``bounds`` that has the same keys as ``coordinates`` and contains the desired start/end times for each recording. The next step would be to trim ``coordinates`` and ``confindences``
+
+.. code-block:: python
+
+    coordinates = {k: coords[bounds[k][0]:bounds[k][1]] for k,coords in coordinates.items()}
+    confidences = {k: confs[bounds[k][0]:bounds[k][1]] for k,confs in confidences.items()}
+ 
+    
+
+You'll also need to generate a dictionary called ``video_frame_indexes`` that maps the timepoints of ``coordinates`` and ``confindences`` to frame indexes from the original videos.
+
+.. code-block:: python
+
+    import numpy as np
+    video_frame_indexes = {k : np.arange(bounds[k][0], bounds[k][1]) for k in bounds}
+
+
+After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case ``video_frame_indexes`` should be passed as an additional argument.
+
+.. code-block:: python
+
+    # Calibration step
+    kpms.noise_calibration(..., video_frame_indexes=video_frame_indexes)
+
+    # Making grid movies
+    kpms.generate_grid_movies(..., video_frame_indexes=video_frame_indexes)
+
+    # Overlaying keypoints
+    kpms.overlay_keypoints_on_video(..., video_frame_indexes=video_frame_indexes)
+
+
 

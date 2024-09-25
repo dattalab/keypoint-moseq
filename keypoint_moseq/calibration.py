@@ -70,7 +70,10 @@ def sample_error_frames(
 
 
 def load_sampled_frames(
-    sample_keys, video_dir, video_extension=None, downsample_rate=1
+    sample_keys,
+    video_dir,
+    video_frame_indexes,
+    video_extension=None,
 ):
     """Load sampled frames from a directory of videos.
 
@@ -83,12 +86,14 @@ def load_sampled_frames(
     video_dir: str
         Path to directory containing videos
 
+    video_frame_indexes: dict
+        Dictionary mapping recording names to arrays of video frame indexes.
+        This is useful when the original keypoint coordinates used for modeling
+        corresponded to a subset of frames from each video (i.e. if videos were
+        trimmed or coordinates were downsampled).
+
     video_extension: str, default=None
         Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
-
-    downsample_rate: int, default=1
-        Downsampling rate for the video frames. Only change if keypoint detections were
-        also downsampled.
 
     Returns
     -------
@@ -107,10 +112,11 @@ def load_sampled_frames(
         leave=True,
         ncols=72,
     )
-    return {
-        (key, frame, bodypart): readers[key][frame * downsample_rate]
-        for key, frame, bodypart in pbar
-    }
+    sampled_keys = {}
+    for key, frame, bodypart in pbar:
+        frame_ix = video_frame_indexes[key][frame]
+        sampled_keys[(key, frame, bodypart)] = readers[key][frame_ix]
+    return sampled_keys
 
 
 def load_annotations(project_dir):
@@ -452,7 +458,7 @@ def noise_calibration(
     video_dir,
     video_extension=None,
     conf_pseudocount=0.001,
-    downsample_rate=1,
+    video_frame_indexes=None,
     **kwargs,
 ):
     """Perform manual annotation to calibrate the relationship between keypoint
@@ -512,10 +518,26 @@ def noise_calibration(
     conf_pseudocount: float, default=0.001
         Pseudocount added to confidence values to avoid log(0) errors.
 
-    downsample_rate: int, default=1
-        Downsampling rate for the video frames. Only change if keypoint detections were
-        also downsampled.
+    video_frame_indexes: dict, default-None
+        Dictionary mapping recording names to arrays of video frame indexes.
+        This is useful when the original keypoint coordinates used for modeling
+        corresponded to a subset of frames from each video (i.e. if videos were
+        trimmed or coordinates were downsampled).
     """
+    if video_frame_indexes is None:
+        video_frame_indexes = {k: np.arange(len(v)) for k, v in coordinates.items()}
+    else:
+        assert set(video_frame_indexes.keys()) == set(
+            coordinates.keys()
+        ), "The keys of `video_frame_indexes` must match the keys of `results`"
+        for k, v in coordinates.items():
+            assert len(v) == len(video_frame_indexes[k]), (
+                "There is a mismatch between the length of `video_frame_indexes` "
+                f"and the length of `coordinates` results for key {k}."
+                f"\n\tLength of video_frame_indexes = {len(video_frame_indexes[k])}"
+                f"\n\tLength of coordinates = {len(v)}"
+            )
+
     dim = list(coordinates.values())[0].shape[-1]
     assert dim == 2, "Calibration is only supported for 2D keypoints."
 
@@ -526,7 +548,10 @@ def noise_calibration(
     sample_keys.extend(annotations.keys())
 
     sample_images = load_sampled_frames(
-        sample_keys, video_dir, video_extension, downsample_rate
+        sample_keys,
+        video_dir,
+        video_frame_indexes,
+        video_extension,
     )
 
     return _noise_calibration_widget(
