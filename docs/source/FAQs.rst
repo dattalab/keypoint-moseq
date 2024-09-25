@@ -195,7 +195,7 @@ The final output of keypoint MoSeq is a results .h5 file (and optionally a direc
 
 
 Validating results when applying a model to new data
----------------------------------------------------
+----------------------------------------------------
 When applying a model to new data, it may be useful to generate new grid movies and trajectory plots so you can confirm that the meaning of the syllables has been preserved. Let's say you've already applied the model to new data as follows:
 
    .. code-block:: python
