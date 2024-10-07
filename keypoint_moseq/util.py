@@ -1167,7 +1167,7 @@ def syllable_similarity(
 
 def downsample_timepoints(data, downsample_rate):
     """
-    Downsample timepoints, e.g. for of coordinates or confidences.
+    Downsample timepoints, e.g. of coordinates or confidences.
 
     Parameters
     ----------
@@ -1181,11 +1181,19 @@ def downsample_timepoints(data, downsample_rate):
     -------
     downsampled_data: ndarray or dict
         Downsampled array or dictionary of arrays.
+
+    indexes: ndarray or dict
+        Downsampled timepoints (in the original numbering)
     """
     if isinstance(data, dict):
-        return {k: downsample_timepoints(v, downsample_rate) for k, v in data.items()}
+        downsampled_data = {}
+        indexes = {}
+        for k, v in data.items():
+            downsampled_data[k], indexes[k] = downsample_timepoints(v, downsample_rate)
     else:
-        return data[::downsample_rate]
+        downsampled_data = data[::downsample_rate]
+        indexes = np.arange(len(downsampled_data)) * downsample_rate
+    return downsampled_data, indexes
 
 
 def check_video_paths(video_paths, keys):

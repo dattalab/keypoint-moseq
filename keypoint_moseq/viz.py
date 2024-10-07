@@ -698,7 +698,7 @@ def _grid_movie_tile(
     edges,
     coordinates,
     plot_options,
-    downsample_rate,
+    video_frame_indexes,
 ):
     scale_factor = scaled_window_size / window_size
     cs = centroids[key][start - pre : start + post]
@@ -708,9 +708,8 @@ def _grid_movie_tile(
     tile = []
 
     if videos is not None:
-        frames = videos[key][
-            (start - pre) * downsample_rate : (start + post) * downsample_rate
-        ][::downsample_rate]
+        frame_ixs = video_frame_indexes[key][start - pre : start + post]
+        frames = [videos[key][ix] for ix in frame_ixs]
         c = r @ c - window_size // 2
         M = [[np.cos(h), np.sin(h), -c[0]], [-np.sin(h), np.cos(h), -c[1]]]
 
@@ -758,6 +757,7 @@ def grid_movie(
     centroids,
     headings,
     window_size,
+    video_frame_indexes,
     dot_color=(255, 255, 255),
     dot_radius=4,
     pre=30,
@@ -767,7 +767,6 @@ def grid_movie(
     overlay_keypoints=False,
     coordinates=None,
     plot_options={},
-    downsample_rate=1,
 ):
     """Generate a grid movie and return it as an array of frames.
 
@@ -802,6 +801,12 @@ def grid_movie(
         Size of the window around the animal. This should be a multiple of 16 or imageio
         will complain.
 
+    video_frame_indexes: dict
+        Dictionary mapping recording names to arrays of video frame indexes.
+        This is useful when the original keypoint coordinates used for modeling
+        corresponded to a subset of frames from each video (i.e. if videos were
+        trimmed or coordinates were downsampled).
+
     dot_color: tuple of ints, default=(255,255,255)
         RGB color of the dot indicating syllable onset and offset
 
@@ -831,10 +836,6 @@ def grid_movie(
     plot_options: dict, default={}
         Dictionary of options to pass to `overlay_keypoints_on_image`. Used when
         `overlay_keypoints=True`.
-
-    downsample_rate: int, default=1
-        Downsampling rate for the video frames. Coordinates at index `i` will be
-        plotted on the video frame at index `i*downsample_rate`.
 
     Returns
     -------
@@ -873,7 +874,7 @@ def grid_movie(
                 edges,
                 coordinates,
                 plot_options,
-                downsample_rate,
+                video_frame_indexes,
             )
         )
 
@@ -956,6 +957,7 @@ def generate_grid_movies(
     output_dir=None,
     video_dir=None,
     video_paths=None,
+    video_frame_indexes=None,
     rows=4,
     cols=6,
     filter_size=9,
@@ -983,7 +985,6 @@ def generate_grid_movies(
     plot_options={},
     use_dims=[0, 1],
     keypoint_colormap="autumn",
-    downsample_rate=1,
     **kwargs,
 ):
     """Generate grid movies for a modeled dataset.
@@ -1025,6 +1026,12 @@ def generate_grid_movies(
         names must correspond to keys in the results dictionary. Either
         `video_dir` or `video_paths` must be provided unless
         `keypoints_only=True`.
+
+    video_frame_indexes: dict, default=None
+        Dictionary mapping recording names to arrays of video frame indexes.
+        This is useful when the original keypoint coordinates used for modeling
+        corresponded to a subset of frames from each video (i.e. if videos were
+        trimmed or coordinates were downsampled).
 
     filter_size: int, default=9
         Size of the median filter applied to centroids and headings
@@ -1118,11 +1125,6 @@ def generate_grid_movies(
         Colormap used to color keypoints. Used when
         `overlay_keypoints=True`.
 
-    downsample_rate: int, default=1
-        Downsampling rate for the video frames. Coordinates at index `i` will be
-        plotted on the video frame at index `i*downsample_rate`.
-
-
     See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
 
     Returns
@@ -1201,6 +1203,20 @@ def generate_grid_movies(
 
         if fps is None:
             fps = list(videos.values())[0].fps
+
+        if video_frame_indexes is None:
+            video_frame_indexes = {k: np.arange(len(v)) for k, v in syllables.items()}
+        else:
+            assert set(video_frame_indexes.keys()) == set(
+                syllables.keys()
+            ), "The keys of `video_frame_indexes` must match the keys of `results`"
+            for k, v in syllables.items():
+                assert len(v) == len(video_frame_indexes[k]), (
+                    "There is a mismatch between the length of `video_frame_indexes` "
+                    f"and the length of modeling results for key {k}."
+                    f"\n\tLength of `video_frame_indexes` = {len(video_frame_indexes[k])}"
+                    f"\n\tLength of modeling results = {len(v)}"
+                )
     else:
         videos = None
 
@@ -1287,8 +1303,9 @@ def generate_grid_movies(
             videos,
             centroids,
             headings,
+            window_size,
+            video_frame_indexes,
             edges=edges,
-            window_size=window_size,
             scaled_window_size=scaled_window_size,
             dot_color=dot_color,
             pre=pre,
@@ -1297,7 +1314,6 @@ def generate_grid_movies(
             overlay_keypoints=overlay_keypoints,
             coordinates=coordinates,
             plot_options=plot_options,
-            downsample_rate=downsample_rate,
         )
 
         path = os.path.join(output_dir, f"syllable{syllable}.mp4")
@@ -1920,7 +1936,7 @@ def overlay_keypoints_on_video(
     quality=7,
     centroid_smoothing_filter=10,
     plot_options={},
-    downsample_rate=1,
+    video_frame_indexes=None,
 ):
     """Overlay keypoints on a video.
 
@@ -1958,7 +1974,10 @@ def overlay_keypoints_on_video(
         entire video is used.
 
     frames: iterable of int, default=None
-        Frames to overlay keypoints on. If None, all frames are used.
+        Frames to overlay keypoints on (in the numbering of `coordinates`). If None,
+        all of `coordinates` is used. This option can be used in conjunction with
+        `video_frame_indexes` when the entries of `coordinates` do not correspond
+        one-to-one with frames of the video.
 
     quality: int, default=7
         Quality of the output video.
@@ -1970,9 +1989,9 @@ def overlay_keypoints_on_video(
         Additional keyword arguments to pass to
         :py:func:`keypoint_moseq.viz.overlay_keypoints`.
 
-    downsample_rate: int, default=1
-        Downsampling rate for the video frames. Coordinates at index `i` will be
-        overlayed on the frame at index `i*downsample_rate`.
+    video_frame_indexes: array, default=None
+        Video frames corresponding to the entries of `coordinates`. If None, it is
+        assumed that the i'th entry of `coordinate` corresponds to the i'th video frame.
     """
     if output_path is None:
         output_path = os.path.splitext(video_path)[0] + "_keypoints.mp4"
@@ -1999,6 +2018,9 @@ def overlay_keypoints_on_video(
     fps = reader.fps
     if frames is None:
         frames = np.arange(len(reader))
+
+    if video_frame_indexes is None:
+        video_frame_indexes = np.arange(len(coordinates))
 
     with imageio.get_writer(
         output_path, pixelformat="yuv420p", fps=fps, quality=quality
