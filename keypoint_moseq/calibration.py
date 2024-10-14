@@ -102,7 +102,7 @@ def load_sampled_frames(
         corresponding videos frames.
     """
     keys = sorted(set([k[0] for k in sample_keys]))
-    videos = find_matching_videos(keys, video_dir)
+    videos = find_matching_videos(keys, video_dir, video_extension=video_extension)
     key_to_video = dict(zip(keys, videos))
     readers = {key: OpenCVReader(video) for key, video in zip(keys, videos)}
     pbar = tqdm.tqdm(
