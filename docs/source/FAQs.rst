@@ -159,6 +159,11 @@ If you already have a trained a MoSeq model and would like to apply it to new da
    results = kpms.apply_model(model, pca, data, metadata, project_dir, model_name)
 
 
+.. note::
+
+   Some users have reported systematic differences in the way syllables are assigned when applying a model to new data. To control for this, we recommend running `apply_model` to both the new and original data and using these new results instead of the original model output. To save the original results, simply rename the original `results.h5` file or save the new results to a different filename using `results_path="new_file_name.h5"`.
+
+
 Continue model fitting but with new data
 ----------------------------------------
 If you already trained keypoint MoSeq model, but would like to improve it using newly collected data (without starting from scratch), then follow the recipe below. Briefly, the code shows how to load model parameters from a saved checkpoint and then use them as the starting point for a new round of model fitting.
