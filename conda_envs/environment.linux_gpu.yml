@@ -14,5 +14,6 @@ dependencies:
   - pip
   - pip:
     - "keypoint-moseq"
+    - "jax-moseq[cuda11]"
     - jupyterlab
     - etils==1.5.2
