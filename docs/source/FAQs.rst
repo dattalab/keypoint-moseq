@@ -434,7 +434,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
   - Disable parallel message passing. This should results in a 2-5x reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fit_model` or :py:func:`keypoint_moseq.apply_model`. For example
 
-.. code-block:: python
+  .. code-block:: python
 
       kpms.fit_model(
          model, data, metadata, project_dir, 
@@ -443,7 +443,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
   - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
 
-.. code-block:: python
+  .. code-block:: python
 
       from jax_moseq.utils import set_mixed_map_iters
       set_mixed_map_iters(4)
@@ -453,7 +453,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
   - Use multiple GPUs if they are available. To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
 
-.. code-block:: python
+  .. code-block:: python
 
       from jax_moseq.utils import set_mixed_map_gpus
       set_mixed_map_gpus(2)
@@ -463,7 +463,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
   - Switch to single-precision computing by running the code below immediarely after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs.
 
-.. code-block:: python
+  .. code-block:: python
    
       import jax
       jax.config.update('jax_enable_x64', False)
@@ -496,10 +496,13 @@ NaNs during fitting
 
 The following actions may help resolve NaNs during model fitting. If they don't, please contact calebsw@gmail.com and include the data, config file, and code used for fitting, as well as the most recent model checkpoint. 
 
-- Make sure you are using double-precision computing. Check the precision using::
+- Make sure you are using double-precision computing. Check the precision using
+
+.. code-block:: python
 
     import jax
     jax.config.read('jax_enable_x64')
+
 
 - Try increasing adjusting the `jitter` parameter, which controls the amount of regularization used to prevent singular matrices. The default value is 1e-3, but it may be necessary to increase this to 1e-2 or 1e-1 using the `jitter` keyword argument in `fit_model`.
 
