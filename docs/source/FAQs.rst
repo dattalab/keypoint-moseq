@@ -434,7 +434,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
   - Disable parallel message passing. This should results in a 2-5x reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fit_model` or :py:func:`keypoint_moseq.apply_model`. For example
 
-  .. code-block:: python
+   .. code-block:: python
 
       kpms.fit_model(
          model, data, metadata, project_dir, 
@@ -443,7 +443,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
   - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
 
-  .. code-block:: python
+   .. code-block:: python
 
       from jax_moseq.utils import set_mixed_map_iters
       set_mixed_map_iters(4)
@@ -453,12 +453,12 @@ There are two main causes of GPU out of memory (OOM) errors:
 
   - Use multiple GPUs if they are available. To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
 
-  .. code-block:: python
+   .. code-block:: python
 
       from jax_moseq.utils import set_mixed_map_gpus
       set_mixed_map_gpus(2)
 
-    This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
+   This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
 
 
   - Switch to single-precision computing by running the code below immediarely after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs.
