@@ -156,7 +156,7 @@ If you already have a trained a MoSeq model and would like to apply it to new da
    data, metadata = kpms.format_data(coordinates, confidences, **config())
 
    # apply saved model to new data
-   results = kpms.apply_model(model, pca, data, metadata, project_dir, model_name)
+   results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
 
 
 .. note::
@@ -471,12 +471,16 @@ There are two main causes of GPU out of memory (OOM) errors:
     
   - Fit to a subset of the data, then apply the model to the rest of the data. 
 
-    - To fit a subset of the data, specify the subset as a list of paths during data loading::
+    - To fit a subset of the data, specify the subset as a list of paths during data loading
+
+      .. code-block:: python
 
         initial_data = ['path/to/file1.h5', 'path/to/file2.h5']
-        coordinates, confidences = kpms.load_keypoints(initial_data, 'deeplabcut')
+        coordinates, confidences, bodyparts = kpms.load_keypoints(initial_data, 'deeplabcut')
 
-    - After model fitting, apply the model serially to new data as follows::
+    - After model fitting, apply the model serially to new data as follows
+
+      .. code-block:: python
 
         model = kpms.load_checkpoint(project_dir, model_name)[0]
         pca = kpms.load_pca(project_dir)
@@ -486,9 +490,9 @@ There are two main causes of GPU out of memory (OOM) errors:
 
         for batch in [initial_data, new_data_batch1, new_data_batch2]:
 
-            coordinates, confidences = coordinates, confidences = kpms.load_keypoints(batch, 'deeplabcut')
+            coordinates, confidences, bodyparts = kpms.load_keypoints(batch, 'deeplabcut')
             data = kpms.format_data(coordinates, confidences, **config())
-            results = kpms.apply_model(model, pca, data, metadata, project_dir, model_name)
+            results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
 
 
 NaNs during fitting

@@ -996,7 +996,9 @@ def generate_grid_movies(
     often (i.e. has at least `rows*cols` instances with duration
     of at least `min_duration` and an overall frequency of at least
     `min_frequency`). The grid movies are saved to `output_dir` if
-    specified, or else to `{project_dir}/{model_name}/grid_movies`.
+    specified, or else to `{project_dir}/{model_name}/grid_movies`. 
+    A subset of parameters are documented below. See 
+    :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
 
     Parameters
     ----------
@@ -1125,7 +1127,6 @@ def generate_grid_movies(
         Colormap used to color keypoints. Used when
         `overlay_keypoints=True`.
 
-    See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
 
     Returns
     -------

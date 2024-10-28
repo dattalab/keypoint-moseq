@@ -604,13 +604,12 @@ def expected_marginal_likelihoods(
 ):
     """Calculate the expected marginal likelihood score for each model.
 
-    The score is calculated as follows, where $\theta^{(i)}$ denotes the
+    The score is calculated as follows, where theta^i denotes the
     autoregressive parameters and transition matrix for the i'th model,
-    $x^{(i)}$ denotes the latent trajectories for the i'th model, and the
-    number of models iss $N$
+    x^i denotes the latent trajectories for the i'th model, and the
+    number of models is N:
 
-    .. math::
-        \text{score}(\theta^{(i)}) = \frac{1}{(N-1)} \sum_{j \neq i} P(x^{(j)} | \theta^{(i)})$
+    score(theta^i) = 1/(N-1) sum_{j ≠ i} P(x^j | theta^i)
 
     Parameters
     ----------
