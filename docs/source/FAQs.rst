@@ -491,7 +491,7 @@ There are two main causes of GPU out of memory (OOM) errors:
         for batch in [initial_data, new_data_batch1, new_data_batch2]:
 
             coordinates, confidences, bodyparts = kpms.load_keypoints(batch, 'deeplabcut')
-            data = kpms.format_data(coordinates, confidences, **config())
+            data, metadata = kpms.format_data(coordinates, confidences, **config())
             results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
 
 
