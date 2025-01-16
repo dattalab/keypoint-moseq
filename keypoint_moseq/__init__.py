@@ -15,7 +15,7 @@ from .fitting import *
 from .analysis import *
 from .calibration import noise_calibration
 
-from jax_moseq.models.keypoint_slds import fit_pca, init_model
+from jax_moseq.models.keypoint_slds import fit_pca
 from jax_moseq.utils import get_frequencies, get_durations
 
 from . import _version

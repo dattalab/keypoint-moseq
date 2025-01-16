@@ -13,6 +13,7 @@ from sklearn.neighbors import NearestNeighbors
 from scipy.spatial.distance import pdist, squareform
 from jax_moseq.models.keypoint_slds import inverse_rigid_transform
 from jax_moseq.utils import get_frequencies, batch
+from vidio.read import OpenCVReader
 
 na = jnp.newaxis
 
@@ -36,9 +37,7 @@ def print_dims_to_explain_variance(pca, f):
     """
     cs = np.cumsum(pca.explained_variance_ratio_)
     if cs[-1] < f:
-        print(
-            f"All components together only explain {cs[-1]*100}% of variance."
-        )
+        print(f"All components together only explain {cs[-1]*100}% of variance.")
     else:
         print(
             f">={f*100}% of variance exlained by {(cs>f).nonzero()[0].min()+1} components."
@@ -88,9 +87,7 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
 
         # filter matches by extension
         matches = [
-            match
-            for match in matches
-            if os.path.splitext(match)[1].lower() in ext_list
+            match for match in matches if os.path.splitext(match)[1].lower() in ext_list
         ]
         return matches
 
@@ -161,9 +158,7 @@ def find_matching_videos(
         extensions = [video_extension]
 
     videos = list_files_with_exts(video_dir, extensions, recursive=recursive)
-    videos_to_paths = {
-        os.path.splitext(os.path.basename(f))[0]: f for f in videos
-    }
+    videos_to_paths = {os.path.splitext(os.path.basename(f))[0]: f for f in videos}
 
     video_paths = []
     for key in keys:
@@ -276,9 +271,7 @@ def get_centroids_headings(
         arrays of shape (n_frames,).
     """
     if bodyparts is not None and use_bodyparts is not None:
-        coordinates = reindex_by_bodyparts(
-            coordinates, bodyparts, use_bodyparts
-        )
+        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
 
     centroids, headings = {}, {}
     for key, coords in coordinates.items():
@@ -313,12 +306,8 @@ def filter_centroids_headings(centroids, headings, filter_size=9):
     filtered_centroids: dict
     filtered_headings: dict
     """
-    centroids = {
-        k: median_filter(v, (filter_size, 1)) for k, v in centroids.items()
-    }
-    headings = {
-        k: filter_angle(v, size=filter_size) for k, v in headings.items()
-    }
+    centroids = {k: median_filter(v, (filter_size, 1)) for k, v in centroids.items()}
+    headings = {k: filter_angle(v, size=filter_size) for k, v in headings.items()}
     return centroids, headings
 
 
@@ -378,15 +367,9 @@ def get_syllable_instances(
                 syllable_instances[syllable].append((key, s, e))
 
     frequencies_filter = get_frequencies(stateseqs) >= min_frequency
-    counts_filter = (
-        np.array(list(map(len, syllable_instances))) >= min_instances
-    )
-    use_syllables = np.all(
-        [frequencies_filter, counts_filter], axis=0
-    ).nonzero()[0]
-    return {
-        syllable: syllable_instances[syllable] for syllable in use_syllables
-    }
+    counts_filter = np.array(list(map(len, syllable_instances))) >= min_instances
+    use_syllables = np.all([frequencies_filter, counts_filter], axis=0).nonzero()[0]
+    return {syllable: syllable_instances[syllable] for syllable in use_syllables}
 
 
 def get_edges(use_bodyparts, skeleton):
@@ -417,9 +400,7 @@ def get_edges(use_bodyparts, skeleton):
 
             for bp1, bp2 in skeleton:
                 if bp1 in use_bodyparts and bp2 in use_bodyparts:
-                    edges.append(
-                        [use_bodyparts.index(bp1), use_bodyparts.index(bp2)]
-                    )
+                    edges.append([use_bodyparts.index(bp1), use_bodyparts.index(bp2)])
     return edges
 
 
@@ -519,25 +500,20 @@ def get_instance_trajectories(
         ]
         if centroids is not None and headings is not None:
             trajectories = [
-                np_io(inverse_rigid_transform)(
-                    x, centroids[key][s], headings[key][s]
-                )
+                np_io(inverse_rigid_transform)(x, centroids[key][s], headings[key][s])
                 for x, (key, s, e) in zip(trajectories, syllable_instances)
             ]
     else:
         trajectories = np.array(
-            [
-                coordinates[key][s - pre : s + post]
-                for key, s, e in syllable_instances
-            ]
+            [coordinates[key][s - pre : s + post] for key, s, e in syllable_instances]
         )
         if centroids is not None and headings is not None:
-            c = np.array(
-                [centroids[key][s] for key, s, e in syllable_instances]
-            )[:, None]
-            h = np.array(
-                [headings[key][s] for key, s, e in syllable_instances]
-            )[:, None]
+            c = np.array([centroids[key][s] for key, s, e in syllable_instances])[
+                :, None
+            ]
+            h = np.array([headings[key][s] for key, s, e in syllable_instances])[
+                :, None
+            ]
             trajectories = np_io(inverse_rigid_transform)(trajectories, c, h)
 
     return trajectories
@@ -608,27 +584,21 @@ def sample_instances(
         sampled_instances = {
             syllable: [
                 instances[i]
-                for i in np.random.choice(
-                    len(instances), num_samples, replace=False
-                )
+                for i in np.random.choice(len(instances), num_samples, replace=False)
             ]
             for syllable, instances in syllable_instances.items()
         }
         return sampled_instances
 
     elif mode == "density":
-        assert not (
-            coordinates is None or headings is None or centroids is None
-        ), fill(
+        assert not (coordinates is None or headings is None or centroids is None), fill(
             "`coordinates`, `headings` and `centroids` are required when "
             '`mode == "density"`'
         )
 
         for key in coordinates.keys():
             outliers = np.isnan(coordinates[key]).any(-1)
-            coordinates[key] = interpolate_keypoints(
-                coordinates[key], outliers
-            )
+            coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
 
         trajectories = {
             syllable: get_instance_trajectories(
@@ -662,9 +632,7 @@ def sample_instances(
             distances, _ = all_nbrs.kneighbors(Xpca)
             global_density = 1 / distances.mean(1)
             exemplar = np.argmax(local_density / global_density)
-            samples = np.random.choice(
-                indices[exemplar], num_samples, replace=False
-            )
+            samples = np.random.choice(indices[exemplar], num_samples, replace=False)
             sampled_instances[syllable] = [
                 syllable_instances[syllable][i] for i in samples
             ]
@@ -696,9 +664,7 @@ def interpolate_along_axis(x, xp, fp, axis=0):
     """
     assert len(xp.shape) == len(x.shape) == 1
     assert fp.shape[axis] == len(xp)
-    assert (
-        len(xp) > 0
-    ), "xp must be non-empty; cannot interpolate without datapoints"
+    assert len(xp) > 0, "xp must be non-empty; cannot interpolate without datapoints"
 
     fp = np.moveaxis(fp, axis, 0)
     shape = fp.shape[1:]
@@ -827,18 +793,12 @@ def _print_colored_table(row_labels, col_labels, values):
             color = plt.get_cmap("Reds")(val * 0.8)
             return f"background-color: rgba({int(color[0]*255)}, {int(color[1]*255)}, {int(color[2]*255)}, {color[3]})"
 
-        colored_df = df.style.applymap(colorize).set_caption(
-            "Proportion of NaNs"
-        )
+        colored_df = df.style.applymap(colorize).set_caption("Proportion of NaNs")
         display(colored_df)
         return colored_df
     else:
         print(title)
-        print(
-            tabulate(
-                df, headers="keys", tablefmt="simple_grid", showindex=True
-            )
-        )
+        print(tabulate(df, headers="keys", tablefmt="simple_grid", showindex=True))
 
 
 def check_nan_proportions(
@@ -872,11 +832,7 @@ def check_nan_proportions(
         all_coords = np.concatenate(list(coordinates.values()))
         nan_props = np.isnan(all_coords).any(-1).mean(0)
         if np.any(nan_props > warning_threshold):
-            bps = [
-                bp
-                for bp, p in zip(bodyparts, nan_props)
-                if p > warning_threshold
-            ]
+            bps = [bp for bp, p in zip(bodyparts, nan_props) if p > warning_threshold]
             warnings.warn(
                 "\nCoordinates for the following bodyparts are missing (set to NaN) in at least "
                 "{}% of frames:\n - {}\n\n".format(
@@ -974,9 +930,7 @@ def format_data(
         keys = sorted(coordinates.keys())
     else:
         bad_keys = set(keys) - set(coordinates.keys())
-        assert len(bad_keys) == 0, fill(
-            f"Keys {bad_keys} not found in coordinates"
-        )
+        assert len(bad_keys) == 0, fill(f"Keys {bad_keys} not found in coordinates")
 
     assert len(keys) > 0, "No recordings found"
 
@@ -1002,24 +956,16 @@ def format_data(
         )
 
     if confidences is None:
-        confidences = {
-            key: np.ones_like(coordinates[key][..., 0]) for key in keys
-        }
+        confidences = {key: np.ones_like(coordinates[key][..., 0]) for key in keys}
 
     if bodyparts is not None and use_bodyparts is not None:
-        coordinates = reindex_by_bodyparts(
-            coordinates, bodyparts, use_bodyparts
-        )
-        confidences = reindex_by_bodyparts(
-            confidences, bodyparts, use_bodyparts
-        )
+        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
+        confidences = reindex_by_bodyparts(confidences, bodyparts, use_bodyparts)
 
     for key in keys:
         outliers = np.isnan(coordinates[key]).any(-1)
         coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
-        confidences[key] = np.where(
-            outliers, 0, np.nan_to_num(confidences[key])
-        )
+        confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
 
     if seg_length is not None:
         max_recording_length = max([coordinates[key].shape[0] for key in keys])
@@ -1028,13 +974,19 @@ def format_data(
     Y, mask, metadata = batch(coordinates, seg_length=seg_length, keys=keys)
     Y = Y.astype(float)
 
+    min_segment_length = np.diff(metadata[1], axis=1).min()
+    assert min_segment_length >= 4, (
+        f"The shortest segment has length  {min_segment_length} which is below the "
+        "minimum of 4. Try increasing `seg_length` in the config (e.g. add "
+        f"{min_segment_length} to its current value) and also make sure that all your "
+        "input recordings are at least 4 frames long."
+    )
+
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
     if np.min(conf) < 0:
         conf = np.maximum(conf, 0)
         warnings.warn(
-            fill(
-                "Negative confidence values are not allowed and will be set to 0."
-            )
+            fill("Negative confidence values are not allowed and will be set to 0.")
         )
     conf = conf + conf_pseudocount
 
@@ -1105,9 +1057,7 @@ def get_typical_trajectories(
         as arrays of shape (pre+pose, n_bodyparts, [2 or 3]).
     """
     if bodyparts is not None and use_bodyparts is not None:
-        coordinates = reindex_by_bodyparts(
-            coordinates, bodyparts, use_bodyparts
-        )
+        coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
 
     syllables = {k: v["syllable"] for k, v in results.items()}
     centroids = {k: v["centroid"] for k, v in results.items()}
@@ -1213,3 +1163,88 @@ def syllable_similarity(
     Xs = np.stack([typical_trajectories[s] for s in syllable_ixs])
     distances = squareform(pdist(Xs.reshape(Xs.shape[0], -1), metric))
     return distances, syllable_ixs
+
+
+def downsample_timepoints(data, downsample_rate):
+    """
+    Downsample timepoints, e.g. of coordinates or confidences.
+
+    Parameters
+    ----------
+    data: ndarray or dict
+        Array of shape (n_frames, ...) or a dictionary with such arrays as values.
+
+    downsample_rate: int
+        The downsampling rate (e.g., `downsample_rate=2` keeps every other frame).
+
+    Returns
+    -------
+    downsampled_data: ndarray or dict
+        Downsampled array or dictionary of arrays.
+
+    indexes: ndarray or dict
+        Downsampled timepoints (in the original numbering)
+    """
+    if isinstance(data, dict):
+        downsampled_data = {}
+        indexes = {}
+        for k, v in data.items():
+            downsampled_data[k], indexes[k] = downsample_timepoints(v, downsample_rate)
+    else:
+        downsampled_data = data[::downsample_rate]
+        indexes = np.arange(len(downsampled_data)) * downsample_rate
+    return downsampled_data, indexes
+
+
+def check_video_paths(video_paths, keys):
+    """
+    Check if video paths are valid and match the keys.
+
+    Parameters
+    ----------
+    video_paths: dict
+        Dictionary mapping keys to video paths.
+
+    keys: list
+        List of keys that require a video path.
+
+    Raises
+    ------
+    ValueError
+        If any of the following are true:
+        - a video path is not provided for a key in `keys`
+        - a video isn't readable.
+        - a video path does not exist.
+    """
+    missing_keys = set(keys) - set(video_paths.keys())
+
+    nonexistent_videos = []
+    unreadable_videos = []
+    for path in video_paths.values():
+        if not os.path.exists(path):
+            nonexistent_videos.append(path)
+        else:
+            try:
+                OpenCVReader(path)[0]
+            except:
+                unreadable_videos.append(path)
+
+    error_messages = []
+
+    if len(missing_keys) > 0:
+        error_messages.append(
+            "The following keys require a video path: {}".format(missing_keys)
+        )
+    if len(nonexistent_videos) > 0:
+        error_messages.append(
+            "The following videos do not exist: {}".format(nonexistent_videos)
+        )
+    if len(unreadable_videos) > 0:
+        error_messages.append(
+            "The following videos are not readable and must be reencoded: {}".format(
+                unreadable_videos
+            )
+        )
+
+    if len(error_messages) > 0:
+        raise ValueError("\n\n".join(error_messages))

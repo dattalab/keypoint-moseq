@@ -13,3 +13,4 @@ dependencies:
   - pip:
     - "keypoint-moseq"
     - jupyterlab
+    - etils==1.5.2

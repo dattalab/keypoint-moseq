@@ -48,11 +48,15 @@ If your keypoint tracking data contains a high proportion of NaNs, you may get t
    <br />
 
 
-- Check if the NaNs are occuring in a specific subset of recordings. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic recordings. For a recording-by-recording breakdown of NaNs, run::
+- Check if the NaNs are occuring in a specific subset of recordings. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic recordings. For a recording-by-recording breakdown of NaNs, run
+
+.. code-block:: python
 
    kpms.check_nan_proportions(coordinates, bodyparts, breakdown=True)
 
-- Rerun keypoint detection with a lower threshold for missing data. In general, keypoint tracking algorithms such as SLEAP and DeepLabCut will mark a keypoint as NaN in a given frame if its confidence is below a certain level. In SLEAP, this level can be adjusted using the argument ``--peak_threshold`` when `running inference from the command line <https://sleap.ai/notebooks/Training_and_inference_on_an_example_dataset.html#inference>`_, e.g.::
+- Rerun keypoint detection with a lower threshold for missing data. In general, keypoint tracking algorithms such as SLEAP and DeepLabCut will mark a keypoint as NaN in a given frame if its confidence is below a certain level. In SLEAP, this level can be adjusted using the argument ``--peak_threshold`` when `running inference from the command line <https://sleap.ai/notebooks/Training_and_inference_on_an_example_dataset.html#inference>`_, e.g.
+
+.. code-block:: python
 
    sleap-track VIDEO [other_args] --peak_threshold 0.05
 
@@ -73,9 +77,11 @@ Keypoint-MoSeq has only been validated on rodents (mice, rats, and anecdotal suc
 
 Loading keypoint tracking data
 ------------------------------
-Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detections. Currently we support SLEAP, DeepLabCut, anipose, and SLEAP-anipose. For methods not on this list, you can write a custom loading function or get in touch and request it as a new feature. 
+Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detections. Currently we support SLEAP, DeepLabCut, anipose, SLEAP-anipose, Neurodata Without Borders (NWB), Facemap, FreiPose and DANNCE. For methods not on this list, you can write a custom loading function or get in touch and request it as a new feature. 
 
-- If using one of the supported formats, data can be loaded as follows, optionally replacing ``'deeplabcut'`` with one of the following: ``'sleap', 'anipose', 'sleap-anipose', 'nwb'``. The file formats expected in each case are described in the docstirng for :py:func:`keypoint_moseq.io.load_keypoints`::
+- If using one of the supported formats, data can be loaded as follows, optionally replacing ``'deeplabcut'`` with one of the following: ``'sleap', 'anipose', 'sleap-anipose', 'nwb', 'facemap', 'freipose', 'DANNCE'``. The file formats expected in each case are described in the docstring for :py:func:`keypoint_moseq.io.load_keypoints`.
+
+.. code-block:: python
 
    coordinates, confidences, bodyparts = kpms.load_keypoints(keypoint_data_path, 'deeplabcut')
 
@@ -136,7 +142,9 @@ It may be necessary to re-run the fitting process a few times to choose a good v
 
 Detecting existing syllables in new data
 ----------------------------------------
-If you already have a trained a MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function::
+If you already have a trained a MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function.
+
+.. code-block:: python
 
    # load the most recent model checkpoint and pca object
    model = kpms.load_checkpoint(project_dir, model_name)[0]
@@ -148,12 +156,19 @@ If you already have a trained a MoSeq model and would like to apply it to new da
    data, metadata = kpms.format_data(coordinates, confidences, **config())
 
    # apply saved model to new data
-   results = kpms.apply_model(model, pca, data, metadata, project_dir, model_name)
+   results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
+
+
+.. note::
+
+   Some users have reported systematic differences in the way syllables are assigned when applying a model to new data. To control for this, we recommend running `apply_model` to both the new and original data and using these new results instead of the original model output. To save the original results, simply rename the original `results.h5` file or save the new results to a different filename using `results_path="new_file_name.h5"`.
 
 
 Continue model fitting but with new data
 ----------------------------------------
-If you already trained keypoint MoSeq model, but would like to improve it using newly collected data (without starting from scratch), then follow the recipe below. Briefly, the code shows how to load model parameters from a saved checkpoint and then use them as the starting point for a new round of model fitting.::
+If you already trained keypoint MoSeq model, but would like to improve it using newly collected data (without starting from scratch), then follow the recipe below. Briefly, the code shows how to load model parameters from a saved checkpoint and then use them as the starting point for a new round of model fitting.
+
+.. code-block:: python
 
    import keypoint_moseq as kpms
 
@@ -192,6 +207,42 @@ The final output of keypoint MoSeq is a results .h5 file (and optionally a direc
 
 - Latent state
    Low-dimensional representation of the animal's pose in each frame. These are similar to PCA scores, are modified to reflect the pose dynamics and noise estimates inferred by the model. 
+
+
+Validating results when applying a model to new data
+----------------------------------------------------
+When applying a model to new data, it may be useful to generate new grid movies and trajectory plots so you can confirm that the meaning of the syllables has been preserved. Let's say you've already applied the model to new data as follows:
+
+   .. code-block:: python
+
+      # load new data (e.g. from deeplabcut)
+      coordinates, confidences, bodyparts = kpms.load_keypoints(new_data_path, 'deeplabcut')
+      data, metadata = kpms.format_data(coordinates, confidences, **config())
+
+      # apply saved model to new data
+      results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
+
+By default, the `results` dictionary above contains results for both the new and old data. To generate grid movies and trajectory plots for the new data only, we can subset the `results` dictionary to include only the new data. We will also need to specify alternative paths for saving the new movies and plots so the original ones aren't overwritten.
+
+   .. code-block:: python
+      
+      import os 
+
+      # only include results for the new data
+      new_results = {k:v for k,v in results.items() if k in coordinates}
+
+      # save trajectory plots for the new data
+      output_dir = os.path.join(project_dir, model_name, "new_trajectory_plots")
+      kpms.generate_trajectory_plots(
+         coordinates, new_results, project_dir,model_name, output_dir=output_dir, **config()
+      )
+
+      # save grid movies for the new data
+      output_dir = os.path.join(project_dir, model_name, "new_grid_movies")
+      kpms.generate_grid_movies(
+         new_results, project_dir, model_name, coordinates=coordinates, output_dir=output_dir, **config()
+      );
+
 
 
 Visualization
@@ -345,8 +396,10 @@ Density sampling is a way of selecting syllable instances that are most represen
 Troubleshooting
 ===============
 
-We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following in a command terminal with the ``keypoint_moseq`` conda environment activated (not inside a jupyter notebook!)::
+We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following in a command terminal with the ``keypoint_moseq`` conda environment activated (not inside a jupyter notebook!).
    
+.. code-block:: python
+
     pip install --U keypoint_moseq 
 
 Note that for any already open notebooks, you will need to restart the kernel to use the updated version. If your problem remains after troubleshooting, please open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_. 
@@ -355,7 +408,7 @@ Note that for any already open notebooks, you will need to restart the kernel to
 Dead kernel
 -----------
 
-On Windows, GPU out of memory (OOM) errors may cause silent kernel failure. To determine whether this is the likely cause, compare keypoint MoSeq's expected memory usage during model fitting (roughly 1MB per 100 frames of data) to the total memory available (VRAM) on your GPU. To check the total available VRAM, use ``nvidia-smi`` for Mac and Linux or the Task Manager in Windows. 
+On Windows, GPU out of memory (OOM) errors may cause silent kernel failure. To determine whether this is the likely cause, try re-fitting the model using a small subset of the data. If the kernel still dies, then it is likely a different issue. If the kernel does not die, then it is likely an OOM error. Some workarounds for OOM errors are described below.
 
 
 Out of memory
@@ -379,14 +432,18 @@ There are two main causes of GPU out of memory (OOM) errors:
     - Larger GPUs can be accessed using colab pro. 
 
 
-  - Disable parallel message passing. This should results in a 2-5x reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fit_model` or :py:func:`keypoint_moseq.apply_model`. For example::
+  - Disable parallel message passing. This should results in a 2-5x reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fit_model` or :py:func:`keypoint_moseq.apply_model`. For example
+
+   .. code-block:: python
 
       kpms.fit_model(
          model, data, metadata, project_dir, 
          model_name, parallel_message_passing=False)
 
 
-  - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted)::
+  - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
+
+   .. code-block:: python
 
       from jax_moseq.utils import set_mixed_map_iters
       set_mixed_map_iters(4)
@@ -394,28 +451,36 @@ There are two main causes of GPU out of memory (OOM) errors:
    This will split the data into 4 batches, which should reduce the memory requirements about 4-fold but also result in a 4-fold slow-down. The number of batches can be adjusted as needed.
 
 
-  - Use multiple GPUs if they are available. To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted)::
+  - Use multiple GPUs if they are available. To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
+
+   .. code-block:: python
 
       from jax_moseq.utils import set_mixed_map_gpus
       set_mixed_map_gpus(2)
 
-    This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
+   This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
 
 
-  - Switch to single-precision computing by running the code below immediarely after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs::
+  - Switch to single-precision computing by running the code below immediarely after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs.
 
+  .. code-block:: python
+   
       import jax
       jax.config.update('jax_enable_x64', False)
 
     
   - Fit to a subset of the data, then apply the model to the rest of the data. 
 
-    - To fit a subset of the data, specify the subset as a list of paths during data loading::
+    - To fit a subset of the data, specify the subset as a list of paths during data loading
+
+      .. code-block:: python
 
         initial_data = ['path/to/file1.h5', 'path/to/file2.h5']
-        coordinates, confidences = kpms.load_keypoints(initial_data, 'deeplabcut')
+        coordinates, confidences, bodyparts = kpms.load_keypoints(initial_data, 'deeplabcut')
 
-    - After model fitting, apply the model serially to new data as follows::
+    - After model fitting, apply the model serially to new data as follows
+
+      .. code-block:: python
 
         model = kpms.load_checkpoint(project_dir, model_name)[0]
         pca = kpms.load_pca(project_dir)
@@ -425,9 +490,9 @@ There are two main causes of GPU out of memory (OOM) errors:
 
         for batch in [initial_data, new_data_batch1, new_data_batch2]:
 
-            coordinates, confidences = coordinates, confidences = kpms.load_keypoints(batch, 'deeplabcut')
-            data = kpms.format_data(coordinates, confidences, **config())
-            results = kpms.apply_model(model, pca, data, metadata, project_dir, model_name)
+            coordinates, confidences, bodyparts = kpms.load_keypoints(batch, 'deeplabcut')
+            data, metadata = kpms.format_data(coordinates, confidences, **config())
+            results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
 
 
 NaNs during fitting
@@ -435,10 +500,13 @@ NaNs during fitting
 
 The following actions may help resolve NaNs during model fitting. If they don't, please contact calebsw@gmail.com and include the data, config file, and code used for fitting, as well as the most recent model checkpoint. 
 
-- Make sure you are using double-precision computing. Check the precision using::
+- Make sure you are using double-precision computing. Check the precision using
+
+.. code-block:: python
 
     import jax
     jax.config.read('jax_enable_x64')
+
 
 - Try increasing adjusting the `jitter` parameter, which controls the amount of regularization used to prevent singular matrices. The default value is 1e-3, but it may be necessary to increase this to 1e-2 or 1e-1 using the `jitter` keyword argument in `fit_model`.
 

@@ -22,7 +22,7 @@ E-mail: otd@harvard.edu
 
 3. **DERIVATIVE WORKS.** End User may create use and distribute Derivative Works, as such term is defined under U.S. copyright laws, provided that any such Derivative Works shall be restricted to non-commercial research and academic use. End User may not distribute Derivative Works to any for-profit third parties for Commercial use.
 
-4. **FEEDBACK.** In order to improve the Software, comments from End Users may be useful. End User agrees to provide Harvard with feedback on the End User’s use of the Software (e.g., any bugs in the Software, the user experience, etc.).  Harvard is permitted to use such information provided by End User in making changes and improvements to the Software without compensation or accounting to End User.
+4. **FEEDBACK.** In order to improve the Software, comments from End Users may be useful. If End User provides Harvard with feedback on the End User’s use of the Software (e.g., any bugs in the Software, the user experience, etc.),  Harvard is permitted to use such information provided by End User in making changes and improvements to the Software without compensation or accounting to End User.
 
 5. **NON ASSERT.** End User acknowledges that Harvard may develop modifications to the Software that may be based on the feedback provided by End User under Section 5 above. Harvard shall not be restricted in any way by End User regarding its use of such information.  End User acknowledges the right of Harvard to prepare, publish, display, reproduce, transmit and or use modifications to the Software that may be substantially similar or functionally equivalent to End User’s modifications and/or improvements if any.  In the event that End User obtains patent protection for any modification or improvement to Software, End User agrees not to allege or enjoin infringement of End User’s patent against Harvard, or any of the researchers, medical or research staff, officers, directors and employees of those institutions.
 
@@ -30,7 +30,7 @@ E-mail: otd@harvard.edu
 
 Wiltschko AB, Johnson MJ, Iurilli G, Peterson RE, Katon JE, Pashkovski SL, Abraira VE, Adams RP and Datta SR. (2015). Mapping sub-second Structure in Behavior. Neuron, 88:1121.
 
-Caleb Weinreb, Mohammed Adbal Monium Osman, Libby Zhang, Sherry Lin, Jonah Pearl, Sidharth Annapragada, Eli Conlin, Winthrop F. Gillis, Maya Jay, Shaokai Ye, Alexander Mathis, Mackenzie Weygandt Mathis, Talmo Pereira, Scott W Linderman, Sandeep Robert Datta. (2023). Keypoint-MoSeq: parsing behavior by linking point tracking to pose dynamics. Bioarxiv, 2023.03.16.532307.
+Weinreb, C., Pearl, J.E., Lin, S. et al. Keypoint-MoSeq: parsing behavior by linking point tracking to pose dynamics. Nat Methods 21, 1329–1339 (2024). https://doi.org/10.1038/s41592-024-02318-2
 
 7.** NO WARRANTIES.** THE SOFTWARE IS PROVIDED "AS IS." TO THE FULLEST EXTENT PERMITTED BY LAW, HARVARD HEREBY DISCLAIMS ALL WARRANTIES OF ANY KIND (EXPRESS, IMPLIED OR OTHERWISE) REGARDING THE SOFTWARE, INCLUDING BUT NOT LIMITED TO ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OWNERSHIP, AND NON-INFRINGEMENT.  HARVARD MAKES NO WARRANTY ABOUT THE ACCURACY, RELIABILITY, COMPLETENESS, TIMELINESS, SUFFICIENCY OR QUALITY OF THE SOFTWARE.  HARVARD DOES NOT WARRANT THAT THE SOFTWARE WILL OPERATE WITHOUT ERROR OR INTERRUPTION.
 

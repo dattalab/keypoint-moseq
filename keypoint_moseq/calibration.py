@@ -57,9 +57,7 @@ def sample_error_frames(
     for low, high in zip(thresholds[:-1], thresholds[1:]):
         samples_in_bin = []
         for key, confs in confidences.items():
-            for t, k in zip(
-                *np.nonzero((confs >= low) * (confs < high) * mask)
-            ):
+            for t, k in zip(*np.nonzero((confs >= low) * (confs < high) * mask)):
                 samples_in_bin.append((key, t, bodyparts[k]))
 
         if len(samples_in_bin) > 0:
@@ -67,13 +65,16 @@ def sample_error_frames(
             for i in np.random.choice(len(samples_in_bin), n, replace=False):
                 sample_keys.append(samples_in_bin[i])
 
-    sample_keys = [
-        sample_keys[i] for i in np.random.permutation(len(sample_keys))
-    ]
+    sample_keys = [sample_keys[i] for i in np.random.permutation(len(sample_keys))]
     return sample_keys
 
 
-def load_sampled_frames(sample_keys, video_dir, video_extension=None):
+def load_sampled_frames(
+    sample_keys,
+    video_dir,
+    video_frame_indexes,
+    video_extension=None,
+):
     """Load sampled frames from a directory of videos.
 
     Parameters
@@ -85,6 +86,12 @@ def load_sampled_frames(sample_keys, video_dir, video_extension=None):
     video_dir: str
         Path to directory containing videos
 
+    video_frame_indexes: dict
+        Dictionary mapping recording names to arrays of video frame indexes.
+        This is useful when the original keypoint coordinates used for modeling
+        corresponded to a subset of frames from each video (i.e. if videos were
+        trimmed or coordinates were downsampled).
+
     video_extension: str, default=None
         Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
 
@@ -95,7 +102,7 @@ def load_sampled_frames(sample_keys, video_dir, video_extension=None):
         corresponding videos frames.
     """
     keys = sorted(set([k[0] for k in sample_keys]))
-    videos = find_matching_videos(keys, video_dir)
+    videos = find_matching_videos(keys, video_dir, video_extension=video_extension)
     key_to_video = dict(zip(keys, videos))
     readers = {key: OpenCVReader(video) for key, video in zip(keys, videos)}
     pbar = tqdm.tqdm(
@@ -105,10 +112,11 @@ def load_sampled_frames(sample_keys, video_dir, video_extension=None):
         leave=True,
         ncols=72,
     )
-    return {
-        (key, frame, bodypart): readers[key][frame]
-        for key, frame, bodypart in pbar
-    }
+    sampled_keys = {}
+    for key, frame, bodypart in pbar:
+        frame_ix = video_frame_indexes[key][frame]
+        sampled_keys[(key, frame, bodypart)] = readers[key][frame_ix]
+    return sampled_keys
 
 
 def load_annotations(project_dir):
@@ -176,18 +184,14 @@ def save_params(project_dir, estimator):
     )
 
 
-def _confs_and_dists_from_annotations(
-    coordinates, confidences, annotations, bodyparts
-):
+def _confs_and_dists_from_annotations(coordinates, confidences, annotations, bodyparts):
     confs, dists = [], []
     for (key, frame, bodypart), xy in annotations.items():
         if key in coordinates and key in confidences:
             k = bodyparts.index(bodypart)
             confs.append(confidences[key][frame][k])
             dists.append(
-                np.sqrt(
-                    ((coordinates[key][frame][k] - np.array(xy)) ** 2).sum()
-                )
+                np.sqrt(((coordinates[key][frame][k] - np.array(xy)) ** 2).sum())
             )
     return confs, dists
 
@@ -211,6 +215,7 @@ def _noise_calibration_widget(
     from holoviews.streams import Tap, Stream
     import holoviews as hv
     import panel as pn
+    from bokeh.models import GlyphRenderer, ImageRGBA, Scatter, GraphRenderer
 
     hv.extension("bokeh")
 
@@ -219,13 +224,9 @@ def _noise_calibration_widget(
 
     edges = np.array(get_edges(bodyparts, skeleton))
     conf_vals = np.hstack([v.flatten() for v in confidences.values()])
-    min_conf, max_conf = np.nanpercentile(conf_vals, 0.01), np.nanmax(
-        conf_vals
-    )
+    min_conf, max_conf = np.nanpercentile(conf_vals, 0.01), np.nanmax(conf_vals)
 
-    annotations_stream = Stream.define(
-        "Annotations", annotations=annotations
-    )()
+    annotations_stream = Stream.define("Annotations", annotations=annotations)()
     current_sample = Stream.define("Current sample", sample_ix=0)()
     estimator = Stream.define(
         "Estimator",
@@ -275,9 +276,9 @@ def _noise_calibration_widget(
             default_tools=[],
         )
 
-        curve = hv.Curve(
-            [(xlim[0], xlim[0] * m + b), (xlim[1], xlim[1] * m + b)]
-        ).opts(xlim=xlim, ylim=ylim, axiswise=True, default_tools=[])
+        curve = hv.Curve([(xlim[0], xlim[0] * m + b), (xlim[1], xlim[1] * m + b)]).opts(
+            xlim=xlim, ylim=ylim, axiswise=True, default_tools=[]
+        )
 
         vline_label = hv.Text(
             x - (xlim[1] - xlim[0]) / 50,
@@ -304,6 +305,19 @@ def _noise_calibration_widget(
             xlabel="log10(confidence)",
             ylabel="log10(error)",
         )
+
+    def enforce_z_order_hook(plot, element):
+        bokeh_figure = plot.state
+        graph, scatter, rgb = None, None, None
+        for r in bokeh_figure.renderers:
+            if isinstance(r, GlyphRenderer):
+                if isinstance(r.glyph, ImageRGBA):
+                    rgb = r
+                if isinstance(r.glyph, Scatter):
+                    scatter = r
+            if isinstance(r, GraphRenderer):
+                graph = r
+        bokeh_figure.renderers = [rgb, graph, scatter]
 
     def update_img(sample_ix, x, y):
         key, frame, bodypart = sample_key = sample_keys[sample_ix]
@@ -358,9 +372,7 @@ def _noise_calibration_widget(
             if len(masked_edges) > 0:
                 edge_data = (*masked_edges.T, colorvals[masked_edges[:, 0]])
 
-        sizes = np.where(np.arange(len(xys)) == keypoint_ix, 10, 6)[
-            masked_nodes
-        ]
+        sizes = np.where(np.arange(len(xys)) == keypoint_ix, 10, 6)[masked_nodes]
         masked_bodyparts = [bodyparts[i] for i in masked_nodes]
         nodes = hv.Nodes(
             (*xys[masked_nodes].T, masked_nodes, masked_bodyparts, sizes),
@@ -376,7 +388,11 @@ def _noise_calibration_widget(
         )
 
         return (rgb * graph * hv_point).opts(
-            data_aspect=1, xlim=xlim, ylim=ylim, toolbar=None
+            data_aspect=1,
+            xlim=xlim,
+            ylim=ylim,
+            toolbar=None,
+            hooks=[enforce_z_order_hook],
         )
 
     def update_estimator_text(*, slope, intercept, conf_threshold):
@@ -442,6 +458,7 @@ def noise_calibration(
     video_dir,
     video_extension=None,
     conf_pseudocount=0.001,
+    video_frame_indexes=None,
     **kwargs,
 ):
     """Perform manual annotation to calibrate the relationship between keypoint
@@ -500,7 +517,27 @@ def noise_calibration(
 
     conf_pseudocount: float, default=0.001
         Pseudocount added to confidence values to avoid log(0) errors.
+
+    video_frame_indexes: dict, default-None
+        Dictionary mapping recording names to arrays of video frame indexes.
+        This is useful when the original keypoint coordinates used for modeling
+        corresponded to a subset of frames from each video (i.e. if videos were
+        trimmed or coordinates were downsampled).
     """
+    if video_frame_indexes is None:
+        video_frame_indexes = {k: np.arange(len(v)) for k, v in coordinates.items()}
+    else:
+        assert set(video_frame_indexes.keys()) == set(
+            coordinates.keys()
+        ), "The keys of `video_frame_indexes` must match the keys of `results`"
+        for k, v in coordinates.items():
+            assert len(v) == len(video_frame_indexes[k]), (
+                "There is a mismatch between the length of `video_frame_indexes` "
+                f"and the length of `coordinates` results for key {k}."
+                f"\n\tLength of video_frame_indexes = {len(video_frame_indexes[k])}"
+                f"\n\tLength of coordinates = {len(v)}"
+            )
+
     dim = list(coordinates.values())[0].shape[-1]
     assert dim == 2, "Calibration is only supported for 2D keypoints."
 
@@ -511,7 +548,10 @@ def noise_calibration(
     sample_keys.extend(annotations.keys())
 
     sample_images = load_sampled_frames(
-        sample_keys, video_dir, video_extension=video_extension
+        sample_keys,
+        video_dir,
+        video_frame_indexes,
+        video_extension,
     )
 
     return _noise_calibration_widget(

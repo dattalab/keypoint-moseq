@@ -1,6 +1,8 @@
 import jax.numpy as jnp
 import jax
 import re
+import commentjson
+import json
 import numpy as np
 import h5py
 import joblib
@@ -16,6 +18,7 @@ from itertools import islice
 
 from keypoint_moseq.util import list_files_with_exts, check_nan_proportions
 from jax_moseq.utils import get_frequencies, unbatch
+from scipy.io import loadmat
 
 
 def _build_yaml(sections, comments):
@@ -31,9 +34,7 @@ def _build_yaml(sections, comments):
     return "\n".join(text_blocks)
 
 
-def _get_path(
-    project_dir, model_name, path, filename, pathname_for_error_msg="path"
-):
+def _get_path(project_dir, model_name, path, filename, pathname_for_error_msg="path"):
     if path is None:
         assert project_dir is not None and model_name is not None, fill(
             f"`model_name` and `project_dir` are required if `{pathname_for_error_msg}` is None."
@@ -258,16 +259,10 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
 
     if build_indexes:
         config["anterior_idxs"] = jnp.array(
-            [
-                config["use_bodyparts"].index(bp)
-                for bp in config["anterior_bodyparts"]
-            ]
+            [config["use_bodyparts"].index(bp) for bp in config["anterior_bodyparts"]]
         )
         config["posterior_idxs"] = jnp.array(
-            [
-                config["use_bodyparts"].index(bp)
-                for bp in config["posterior_bodyparts"]
-            ]
+            [config["use_bodyparts"].index(bp) for bp in config["posterior_bodyparts"]]
         )
 
     if not "skeleton" in config or config["skeleton"] is None:
@@ -297,9 +292,7 @@ def update_config(project_dir, **kwargs):
       >>> print(load_config(project_dir)['trans_hypparams']['kappa'])
       100
     """
-    config = load_config(
-        project_dir, check_if_valid=False, build_indexes=False
-    )
+    config = load_config(project_dir, check_if_valid=False, build_indexes=False)
     config.update(kwargs)
     generate_config(project_dir, **config)
 
@@ -309,6 +302,8 @@ def setup_project(
     deeplabcut_config=None,
     sleap_file=None,
     nwb_file=None,
+    freipose_config=None,
+    dannce_config=None,
     overwrite=False,
     **options,
 ):
@@ -321,22 +316,32 @@ def setup_project(
     Parameters
     ----------
     project_dir: str
-        Path to the project directory (relative or absolute)
+        Path to the project directory (relative or absolute).
 
     deeplabcut_config: str, default=None
         Path to a deeplabcut config file. Will be used to initialize
         `bodyparts`, `skeleton`, `use_bodyparts` and `video_dir` in the
-        keypoint MoSeq config. (overrided by kwargs).
+        keypoint MoSeq config (overrided by kwargs).
 
     sleap_file: str, default=None
         Path to a .hdf5 or .slp file containing predictions for one video. Will
         be used to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in
-        the keypoint MoSeq config. (overrided by kwargs).
+        the keypoint MoSeq config (overrided by kwargs).
 
     nwb_file: str, default=None
         Path to a .nwb file containing predictions for one video. Will be used
         to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in the
         keypoint MoSeq config. (overrided by kwargs).
+
+    freipose_config: str, default=None
+        Path to a freipose skeleton config file. Will be used to initialize
+        `bodyparts`, `skeleton`, and `use_bodyparts` in the keypoint MoSeq config
+        (overrided by kwargs).
+
+    dannce_config: str, default=None
+        Path to a dannce config file. Will be used to initialize `bodyparts`,
+        `skeleton`, and `use_bodyparts` in the keypoint MoSeq config (overrided
+        by kwargs).
 
     overwrite: bool, default=False
         Overwrite any config.yml that already exists at the path
@@ -364,14 +369,9 @@ def setup_project(
                     f"{deeplabcut_config} does not exists or is not a"
                     " valid yaml file"
                 )
-            if (
-                "multianimalproject" in dlc_config
-                and dlc_config["multianimalproject"]
-            ):
+            if "multianimalproject" in dlc_config and dlc_config["multianimalproject"]:
                 dlc_options["bodyparts"] = dlc_config["multianimalbodyparts"]
-                dlc_options["use_bodyparts"] = dlc_config[
-                    "multianimalbodyparts"
-                ]
+                dlc_options["use_bodyparts"] = dlc_config["multianimalbodyparts"]
             else:
                 dlc_options["bodyparts"] = dlc_config["bodyparts"]
                 dlc_options["use_bodyparts"] = dlc_config["bodyparts"]
@@ -392,15 +392,12 @@ def setup_project(
             )
             skeleton = slp_file.skeletons[0]
             node_names = skeleton.node_names
-            edge_names = [
-                [e.source.name, e.destination.name] for e in skeleton.edges
-            ]
+            edge_names = [[e.source.name, e.destination.name] for e in skeleton.edges]
         else:
             with h5py.File(sleap_file, "r") as f:
                 node_names = [n.decode("utf-8") for n in f["node_names"]]
                 edge_names = [
-                    [n.decode("utf-8") for n in edge]
-                    for edge in f["edge_names"]
+                    [n.decode("utf-8") for n in edge] for edge in f["edge_names"]
                 ]
         sleap_options["bodyparts"] = node_names
         sleap_options["use_bodyparts"] = node_names
@@ -419,6 +416,36 @@ def setup_project(
                 skeleton = [[bodyparts[i], bodyparts[j]] for i, j in edges]
                 nwb_options["skeleton"] = skeleton
         options = {**nwb_options, **options}
+
+    elif freipose_config is not None:
+        freipose_options = {}
+        with open(freipose_config, "r") as stream:
+            freipose_config = commentjson.load(stream)
+            bodyparts = [kp for kp, color in freipose_config["keypoints"]]
+            skeleton = []
+            for [bp1, bp2], color in freipose_config["limbs"]:
+                if isinstance(bp1, list):
+                    bp1 = bp1[0]
+                if isinstance(bp2, list):
+                    bp2 = bp2[0]
+                skeleton.append(tuple(sorted([bodyparts[bp1], bodyparts[bp2]])))
+            freipose_options["bodyparts"] = bodyparts
+            freipose_options["use_bodyparts"] = bodyparts
+            freipose_options["skeleton"] = list(map(list, sorted(set(skeleton))))
+        options = {**freipose_options, **options}
+
+    elif dannce_config is not None:
+        dannce_config = loadmat(dannce_config)
+        bodyparts = [n[0][0].item() for n in dannce_config["joint_names"]]
+        skeleton = [
+            [bodyparts[i], bodyparts[j]] for i, j in dannce_config["joints_idx"] - 1
+        ]
+        dannce_options = {
+            "bodyparts": bodyparts,
+            "use_bodyparts": bodyparts,
+            "skeleton": skeleton,
+        }
+        options = {**dannce_options, **options}
 
     if not os.path.exists(project_dir):
         os.makedirs(project_dir)
@@ -457,15 +484,11 @@ def load_pca(project_dir, pca_path=None):
     """
     if pca_path is None:
         pca_path = os.path.join(project_dir, "pca.p")
-        assert os.path.exists(pca_path), fill(
-            f"No PCA model found at {pca_path}"
-        )
+        assert os.path.exists(pca_path), fill(f"No PCA model found at {pca_path}")
     return joblib.load(pca_path)
 
 
-def load_checkpoint(
-    project_dir=None, model_name=None, path=None, iteration=None
-):
+def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None):
     """Load data and model snapshot from a saved checkpoint.
 
     The checkpoint path can be specified directly via `path` or else it is
@@ -500,7 +523,7 @@ def load_checkpoint(
         associated metadata (see :py:func:`keypoint_moseq.util.format_data`).
 
     metadata: tuple (keys, bounds)
-        Recordings and start/end frames for the data (see
+        Recording names and start/end frames for the data (see
         :py:func:`keypoint_moseq.util.format_data`).
 
     iteration: int
@@ -571,9 +594,7 @@ def reindex_syllables_in_checkpoint(
             num_states = f[f"model_snapshots/{last_iter}/params/pi"].shape[0]
             z = f[f"model_snapshots/{last_iter}/states/z"][()]
             mask = f["data/mask"][()]
-        index = np.argsort(get_frequencies(z, mask, num_states, runlength))[
-            ::-1
-        ]
+        index = np.argsort(get_frequencies(z, mask, num_states, runlength))[::-1]
 
     def _reindex(model):
         model["params"]["betas"] = model["params"]["betas"][index]
@@ -608,10 +629,10 @@ def extract_results(
 
         results.h5
         ├──recording_name1
-        │  ├──syllable      # model state sequence (z), shape=(T,)
-        │  ├──latent_state  # model latent state (x), shape=(T,latent_dim)
-        │  ├──centroid      # model centroid (v), shape=(T,dim)
-        │  └──heading       # model heading (h), shape=(T,)
+        │  ├──syllable      # model state sequence (z), shape=(num_timepoints,)
+        │  ├──latent_state  # model latent state (x), shape=(num_timepoints,latent_dim)
+        │  ├──centroid      # model centroid (v), shape=(num_timepoints,keypoint_dim)
+        │  └──heading       # model heading (h), shape=(num_timepoints,)
         ⋮
 
     Parameters
@@ -648,20 +669,16 @@ def extract_results(
         path = _get_path(project_dir, model_name, path, "results.h5")
 
     states = jax.device_get(model["states"])
-    keys, bounds = metadata
 
     # extract syllables; repeat first syllable an extra `nlags` times
     nlags = states["x"].shape[1] - states["z"].shape[1]
-    syllables = unbatch(states["z"], keys, bounds + np.array([nlags, 0]))
-    syllables = {
-        k: np.pad(z[nlags:], (nlags, 0), mode="edge")
-        for k, z in syllables.items()
-    }
+    z = np.pad(states["z"], ((0, 0), (nlags, 0)), mode="edge")
+    syllables = unbatch(z, *metadata)
 
     # extract latent state, centroid, and heading
-    latent_state = unbatch(states["x"], keys, bounds)
-    centroid = unbatch(states["v"], keys, bounds)
-    heading = unbatch(states["h"], keys, bounds)
+    latent_state = unbatch(states["x"], *metadata)
+    centroid = unbatch(states["v"], *metadata)
+    heading = unbatch(states["h"], *metadata)
 
     results_dict = {
         recording_name: {
@@ -728,9 +745,7 @@ def save_results_as_csv(
         If a path separator ("/" or "\") is present in the recording name, it
         will be replaced with `path_sep` when saving the csv file.
     """
-    save_dir = _get_path(
-        project_dir, model_name, save_dir, "results", "save_dir"
-    )
+    save_dir = _get_path(project_dir, model_name, save_dir, "results", "save_dir")
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -753,15 +768,10 @@ def save_results_as_csv(
 
         if "latent_state" in results[key].keys():
             latent_dim = results[key]["latent_state"].shape[1]
-            column_names.append(
-                [f"latent_state {i}" for i in range(latent_dim)]
-            )
+            column_names.append([f"latent_state {i}" for i in range(latent_dim)])
             data.append(results[key]["latent_state"])
 
-        dfs = [
-            pd.DataFrame(arr, columns=cols)
-            for arr, cols in zip(data, column_names)
-        ]
+        dfs = [pd.DataFrame(arr, columns=cols) for arr, cols in zip(data, column_names)]
         df = pd.concat(dfs, axis=1)
 
         for col in df.select_dtypes(include=[np.floating]).columns:
@@ -786,6 +796,81 @@ def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
         return os.path.basename(filepath)
 
 
+def save_keypoints(
+    save_dir, coordinates, confidences=None, bodyparts=None, path_sep="-"
+):
+    """Convenience function for saving keypoint detections to csv files.
+
+    One csv file is saved for each recording in `coordinates`. Each row in the
+    csv corresponds to one frame and the columns are named
+
+        "BODYPART1_x", "BODYPART1_y", "BODYPART1_conf", "BODYPART2_x", ...
+
+    Columns with confidence scores are ommitted if `confidences` is not provided.
+    Besides confidences, there can be 2 or 3 columns for each bodypart, depending
+    on whether the keypoints are 2D or 3D.
+
+    Parameters
+    ----------
+    save_dir: str
+        Directory to save the results. A separate csv file will be saved for
+        each recording in `coordinates`.
+
+    coordinates: dict
+        Dictionary mapping recording names to numpy arrays of shape
+        (n_frames, n_keypoints, 2[or 3]) that contain the x and y (and z)
+        coordinates of the keypoints. If any keys contain a path separator
+        (such as "/"), it will be replaced with `path_sep` when naming the
+        csv file.
+
+    confidences: dict, default=None
+        Dictionary mapping recording names to numpy arrays of shape
+        (n_frames, n_keypoints) with the confidence scores of the keypoints.
+        Must have the same keys as `coordinates`.
+
+    bodyparts: list, default=None
+        List of bodypart names, in the same order as the keypoints in the
+        `coordinates` and `confidences` arrays. If None, the bodypart names
+        will be set to ["bodypart1", "bodypart2", ...].
+
+    path_sep: str, default='-'
+        If a path separator ("/" or "\") is present in the recording name, it
+        will be replaced with `path_sep` when saving the csv file.
+    """
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    if confidences is not None:
+        assert set(coordinates.keys()) == set(confidences.keys()), fill(
+            "The keys in `coordinates` and `confidences` must be the same."
+        )
+
+    # get number of keypoints and dimensions
+    _, num_keypoints, num_dims = next(iter(coordinates.values())).shape
+
+    # generate bodypart names if not provided
+    if bodyparts is None:
+        bodyparts = [f"bodypart{i}" for i in range(num_keypoints)]
+
+    # create column names
+    suffixes = ["x", "y", "z"][:num_keypoints]
+    if confidences is not None:
+        suffixes += ["conf"]
+    columns = [f"{bp}_{suffix}" for bp in bodyparts for suffix in suffixes]
+
+    # save data to csv
+    for recording_name, coords in coordinates.items():
+        if confidences is not None:
+            data = np.concatenate(
+                [coords, confidences[recording_name][..., np.newaxis]], axis=-1
+            ).reshape(-1, (num_dims + 1) * num_keypoints)
+        else:
+            data = coords.reshape(-1, num_dims * num_keypoints)
+        save_name = recording_name.replace(os.path.sep, path_sep)
+        save_path = os.path.join(save_dir, save_name)
+        pd.DataFrame(data, columns=columns).to_csv(f"{save_path}.csv", index=False)
+
+
 def load_keypoints(
     filepath_pattern,
     format,
@@ -794,6 +879,7 @@ def load_keypoints(
     path_sep="-",
     path_in_name=False,
     remove_extension=True,
+    exclude_individuals=["single"],
 ):
     """
     Load keypoint tracking results from one or more files. Several file
@@ -834,6 +920,30 @@ def load_keypoints(
         bodypart. Confidence values are optional and will be set to 1 if not
         present.
 
+    - facemap
+        .h5 files saved by Facemap. See Facemap documentation for details:
+        https://facemap.readthedocs.io/en/latest/outputs.html#keypoints-processing
+        The files should have the format::
+
+            [filename].h5
+            └──Facemap
+                ├──keypoint1
+                │  ├──x
+                │  ├──y
+                │  └──likelihood
+                ⋮
+
+    - freipose
+        .json files saved by FreiPose. Each file should contain a list of dicts
+        that each include a "kp_xyz" key with the 3D coordinates for one frame.
+        Keypoint scores (saved under "kp_score") are not loaded because they are
+        not bounded between 0 and 1, which is required for modeling. Since
+        FreiPose does not save the bodypart names, the `bodyparts` return
+        value is set to None.
+
+    - dannce
+        .mat files saved by Dannce.
+
     Parameters
     ----------
     filepath_pattern: str or list of str
@@ -857,6 +967,10 @@ def load_keypoints(
         - deeplabcut: 'csv' or 'h5'
         - anipose: 'csv'
         - sleap-anipose: 'h5'
+        - nwb: 'nwb'
+        - facemap: 'h5'
+        - freipose: 'json'
+        - dannce: 'mat'
 
     recursive: bool, default=True
         Whether to search recursively for deeplabcut csv or hdf5 files.
@@ -877,6 +991,10 @@ def load_keypoints(
         Whether to remove the file extension when naming the tracking results
         from each file.
 
+    exclude_individuals: list of str, default=["single"]
+        List of individuals to exclude from the results. This is only used for
+        multi-animal tracking with deeplabcut.
+
     Returns
     -------
     coordinates: dict
@@ -891,73 +1009,73 @@ def load_keypoints(
         List of bodypart names. The order of the names matches the order of the
         bodyparts in `coordinates` and `confidences`.
     """
-    formats = ["deeplabcut", "sleap", "anipose", "sleap-anipose", "nwb"]
-    assert format in formats, fill(
-        f"Unrecognized format {format}. Must be one of {formats}"
-    )
+    formats = {
+        "deeplabcut": (_deeplabcut_loader, [".csv", ".h5", ".hdf5"]),
+        "sleap": (_sleap_loader, [".h5", ".hdf5", ".slp"]),
+        "anipose": (_anipose_loader, [".csv"]),
+        "sleap-anipose": (_sleap_anipose_loader, [".h5", ".hdf5"]),
+        "nwb": (_nwb_loader, [".nwb"]),
+        "facemap": (_facemap_loader, [".h5", ".hdf5"]),
+        "freipose": (_freipose_loader, [".json"]),
+        "dannce": (_dannce_loader, [".mat"]),
+    }
 
-    if extension is None:
-        extensions = {
-            "deeplabcut": [".csv", ".h5", ".hdf5"],
-            "sleap": [".h5", ".hdf5", ".slp"],
-            "anipose": [".csv"],
-            "sleap-anipose": [".h5", ".hdf5"],
-            "nwb": [".nwb"],
-        }[format]
-    else:
+    # get format-specific loader and extensions
+    assert format in formats, fill(
+        f"Unrecognized format '{format}'. Must be one of {list(formats.keys())}"
+    )
+    loader, extensions = formats[format]
+
+    # optionally override default extension list
+    if extension is not None:
         extensions = [extension]
 
-    loader = {
-        "deeplabcut": _deeplabcut_loader,
-        "sleap": _sleap_loader,
-        "anipose": _anipose_loader,
-        "sleap-anipose": _sleap_anipose_loader,
-        "nwb": _nwb_loader,
-    }[format]
+    # optionally add format-specific arguments
+    if format == "deeplabcut":
+        additional_args = {"exclude_individuals": exclude_individuals}
+    else:
+        additional_args = {}
 
-    filepaths = list_files_with_exts(
-        filepath_pattern, extensions, recursive=recursive
-    )
+    # get list of filepaths
+    filepaths = list_files_with_exts(filepath_pattern, extensions, recursive=recursive)
     assert len(filepaths) > 0, fill(
         f"No files with extensions {extensions} found for {filepath_pattern}"
     )
 
+    # load keypoints from each file
     coordinates, confidences, bodyparts = {}, {}, None
     for filepath in tqdm.tqdm(filepaths, desc=f"Loading keypoints", ncols=72):
+        name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
+
         try:
-            name = _name_from_path(
-                filepath, path_in_name, path_sep, remove_extension
-            )
             new_coordinates, new_confidences, bodyparts = loader(
-                filepath, name
+                filepath, name, **additional_args
             )
-
-            if set(new_coordinates.keys()) & set(coordinates.keys()):
-                raise ValueError(
-                    f"Duplicate names found in {filepath_pattern}:\n\n"
-                    f"{set(new_coordinates.keys()) & set(coordinates.keys())}"
-                    f"\n\nThis may be caused by repeated filenames with "
-                    "different extensions. If so, please set the extension "
-                    "explicitly via the `extension` argument. Another possible"
-                    " cause is commonly-named files in different directories. "
-                    "if that is the case, then set `path_in_name=True`."
-                )
-
         except Exception as e:
-            print(fill(f"Error loading {filepath}: {e}"))
+            print(fill(f"Error loading {filepath}"))
+            raise e
+
+        if set(new_coordinates.keys()) & set(coordinates.keys()):
+            raise ValueError(
+                f"Duplicate names found in {filepath_pattern}:\n\n"
+                f"{set(new_coordinates.keys()) & set(coordinates.keys())}"
+                f"\n\nThis may be caused by repeated filenames with "
+                "different extensions. If so, please set the extension "
+                "explicitly via the `extension` argument. Another possible"
+                " cause is commonly-named files in different directories. "
+                "if that is the case, then set `path_in_name=True`."
+            )
 
         coordinates.update(new_coordinates)
         confidences.update(new_confidences)
 
-    assert len(coordinates) > 0, fill(
-        f"No valid results found for {filepath_pattern}"
-    )
-
+    # check for valid results
+    assert len(coordinates) > 0, fill(f"No valid results found for {filepath_pattern}")
     check_nan_proportions(coordinates, bodyparts)
     return coordinates, confidences, bodyparts
 
 
-def _deeplabcut_loader(filepath, name):
+def _deeplabcut_loader(filepath, name, exclude_individuals=["single"]):
     """Load tracking results from deeplabcut csv or hdf5 files."""
     ext = os.path.splitext(filepath)[1]
     if ext == ".h5":
@@ -972,14 +1090,30 @@ def _deeplabcut_loader(filepath, name):
         df = pd.read_csv(filepath, header=header, index_col=0)
 
     coordinates, confidences = {}, {}
-    bodyparts = df.columns.get_level_values("bodyparts").unique().tolist()
     if "individuals" in df.columns.names:
+        ind_bodyparts = {}
         for ind in df.columns.get_level_values("individuals").unique():
-            ind_df = df.xs(ind, axis=1, level="individuals")
-            arr = ind_df.to_numpy().reshape(len(ind_df), -1, 3)
-            coordinates[f"{name}_{ind}"] = arr[:, :, :-1]
-            confidences[f"{name}_{ind}"] = arr[:, :, -1]
+            if ind in exclude_individuals:
+                print(
+                    f'Excluding individual: "{ind}". Set `exclude_individuals=[]` to include.'
+                )
+            else:
+                ind_df = df.xs(ind, axis=1, level="individuals")
+                bps = ind_df.columns.get_level_values("bodyparts").unique().tolist()
+                ind_bodyparts[ind] = bps
+
+                arr = ind_df.to_numpy().reshape(len(ind_df), -1, 3)
+                coordinates[f"{name}_{ind}"] = arr[:, :, :-1]
+                confidences[f"{name}_{ind}"] = arr[:, :, -1]
+
+        bodyparts = set(ind_bodyparts[list(ind_bodyparts.keys())[0]])
+        assert all([set(bps) == bodyparts for bps in ind_bodyparts.values()]), (
+            f"Bodyparts are not consistent across individuals. The following bodyparts "
+            f"were found for each individual: {ind_bodyparts}. Use `exclude_individuals`"
+            "to exclude specific individuals."
+        )
     else:
+        bodyparts = df.columns.get_level_values("bodyparts").unique().tolist()
         arr = df.to_numpy().reshape(len(df), -1, 3)
         coordinates[name] = arr[:, :, :-1]
         confidences[name] = arr[:, :, -1]
@@ -1000,24 +1134,20 @@ def _sleap_loader(filepath, name):
 
         bodyparts = slp_file.skeletons[0].node_names
         arr = slp_file.numpy(return_confidence=True)
-        coords = arr[:, :, :-1]
-        confs = arr[:, :, -1]
+        coords = arr[:, :, :, :-1].transpose((1, 0, 2, 3))
+        confs = arr[:, :, :, -1].transpose((1, 0, 2))
     else:
         with h5py.File(filepath, "r") as f:
-            coords = f["tracks"][()]
-            confs = f["point_scores"][()]
+            coords = f["tracks"][()].transpose((0, 3, 2, 1))
+            confs = f["point_scores"][()].transpose((0, 2, 1))
             bodyparts = [name.decode("utf-8") for name in f["node_names"]]
 
     if coords.shape[0] == 1:
-        coordinates = {name: coords[0].T}
-        confidences = {name: confs[0].T}
+        coordinates = {name: coords[0]}
+        confidences = {name: confs[0]}
     else:
-        coordinates = {
-            f"{name}_track{i}": coords[i].T for i in range(coords.shape[0])
-        }
-        confidences = {
-            f"{name}_track{i}": confs[i].T for i in range(coords.shape[0])
-        }
+        coordinates = {f"{name}_track{i}": coords[i] for i in range(coords.shape[0])}
+        confidences = {f"{name}_track{i}": confs[i] for i in range(coords.shape[0])}
     return coordinates, confidences, bodyparts
 
 
@@ -1032,10 +1162,7 @@ def _anipose_loader(filepath, name):
     df = pd.read_csv(filepath)
     coordinates = {
         name: np.stack(
-            [
-                df[[f"{bp}_x", f"{bp}_y", f"{bp}_z"]].to_numpy()
-                for bp in bodyparts
-            ],
+            [df[[f"{bp}_x", f"{bp}_y", f"{bp}_z"]].to_numpy() for bp in bodyparts],
             axis=1,
         )
     }
@@ -1057,8 +1184,7 @@ def _sleap_anipose_loader(filepath, name):
             confidences = {name: confs[:, 0]}
         else:
             coordinates = {
-                f"{name}_track{i}": coords[:, i]
-                for i in range(coords.shape[1])
+                f"{name}_track{i}": coords[:, i] for i in range(coords.shape[1])
             }
             confidences = {
                 f"{name}_track{i}": confs[:, i] for i in range(coords.shape[1])
@@ -1070,9 +1196,7 @@ def _load_nwb_pose_obj(io, filepath):
     """Grab PoseEstimation object from an opened .nwb file."""
     all_objs = io.read().all_children()
     pose_objs = [o for o in all_objs if isinstance(o, PoseEstimation)]
-    assert len(pose_objs) > 0, fill(
-        f"No PoseEstimation objects found in {filepath}"
-    )
+    assert len(pose_objs) > 0, fill(f"No PoseEstimation objects found in {filepath}")
     assert len(pose_objs) == 1, fill(
         f"Found multiple PoseEstimation objects in {filepath}. "
         "This is not currently supported. Please open a github "
@@ -1091,10 +1215,7 @@ def _nwb_loader(filepath, name):
             [pose_obj.pose_estimation_series[bp].data[()] for bp in bodyparts],
             axis=1,
         )
-        if (
-            "confidence"
-            in pose_obj.pose_estimation_series[bodyparts[0]].fields
-        ):
+        if "confidence" in pose_obj.pose_estimation_series[bodyparts[0]].fields:
             confs = np.stack(
                 [
                     pose_obj.pose_estimation_series[bp].confidence[()]
@@ -1107,6 +1228,40 @@ def _nwb_loader(filepath, name):
         coordinates = {name: coords}
         confidences = {name: confs}
     return coordinates, confidences, bodyparts
+
+
+def _facemap_loader(filepath, name):
+    """Load keypoints from facemap h5 files."""
+    with h5py.File(filepath, "r") as h5:
+        dset = h5["Facemap"]
+        bodyparts = sorted(dset.keys())
+        coords, confs = [], []
+        for bp in bodyparts:
+            coords.append(np.stack([dset[bp]["x"], dset[bp]["y"]], axis=1))
+            confs.append(dset[bp]["likelihood"])
+        coordinates = {name: np.stack(coords, axis=1)}
+        confidences = {name: np.stack(confs, axis=1)}
+    return coordinates, confidences, bodyparts
+
+
+def _freipose_loader(filepath, name):
+    """Load keypoints from freipose json files."""
+    with open(filepath, "r") as f:
+        data = json.load(f)
+    coords = np.concatenate([d["kp_xyz"] for d in data], axis=0)
+    coordinates = {name: coords}
+    confidences = {name: np.ones_like(coords[..., 0])}
+    return coordinates, confidences, None
+
+
+def _dannce_loader(filepath, name):
+    """Load keypoints from dannce mat files."""
+    mat = loadmat(filepath)
+    coords = mat["pred"].transpose((0, 2, 1))
+    confs = np.ones_like(coords[..., 0])
+    coordinates = {name: coords}
+    confidences = {name: confs}
+    return coordinates, confidences, None
 
 
 def save_hdf5(filepath, save_dict, datapath=None):

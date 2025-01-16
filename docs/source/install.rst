@@ -1,5 +1,5 @@
 Local installation
-------------------
+==================
 
 - Total installation time is around 10 minutes.
 - The first import of keypoint_moseq after installation can take a few minutes.
@@ -11,9 +11,7 @@ Local installation
 
 
 Install using conda
-~~~~~~~~~~~~~~~~~~~
-
-
+-------------------
 
 Use conda environment files to automatically install the appropriate GPU drivers and other dependencies. Start by cloning the repository::
 
@@ -53,7 +51,7 @@ To run keypoint-moseq in jupyter, either launch jupyterlab directly from the `ke
 
 
 Install using pip
-~~~~~~~~~~~~~~~~~
+-----------------
 
 .. note::
 
@@ -64,19 +62,51 @@ Create a new conda environment with python 3.9::
    conda create -n keypoint_moseq python=3.9
    conda activate keypoint_moseq
 
-Install jax using one of the lines below::
+Next install jax and jax-moseq using one of the options below.
 
-   # MacOS or Linux (CPU)
-   pip install "jax[cpu]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_releases.html
+1. **CPU only**
 
-   # MacOS or Linux (GPU)
-   pip install "jax[cuda11_cudnn82]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+   Install jax for your operating-system::
 
-   # Windows (CPU)
-   pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cpu/jaxlib-0.3.22-cp39-cp39-win_amd64.whl
+      # MacOS or Linux (CPU)
+      pip install "jax[cpu]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_releases.html
 
-   # Windows (GPU)
-   pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl
+      # Windows (CPU)
+      pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cpu/jaxlib-0.3.22-cp39-cp39-win_amd64.whl
+
+   Install jax-moseq::
+
+      pip install jax-moseq
+
+
+2. **GPU with CUDA 11**
+
+   Install jax for your operating-system::
+
+      # MacOS or Linux (GPU with CUDA 11)
+      pip install "jax[cuda11_cudnn82]==0.3.22" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+      
+
+      # Windows (GPU with CUDA 11)
+      pip install jax==0.3.22 https://whls.blob.core.windows.net/unstable/cuda111/jaxlib-0.3.22+cuda11.cudnn82-cp39-cp39-win_amd64.whl
+
+   Install jax-moseq::
+
+      pip install jax-moseq[cuda11]
+
+
+3. **GPU with CUDA 12**
+
+   This option assumes that you already have a working installation of jax that is compatible with CUDA 12. Among other things, the following code should run without error::
+
+      import jax
+      jax.random.PRNGKey(0)
+
+
+   Install jax-moseq::
+
+      pip install jax-moseq[cuda12]
+
 
 Install `keypoint-moseq <https://github.com/dattalab/keypoint-moseq>`_::
 
