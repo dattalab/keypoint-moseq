@@ -173,14 +173,17 @@ def save_params(project_dir, estimator):
     project_dir: str
         Save parameters `{project_dir}/config.yml`
 
-    estimator: :py:func:`holoviews.streams.Stream`
-        Stream object with fields `conf_threshold`, `slope`, `intercept`
+    estimator: dict
+        Dictionary containing calibration parameters with keys:
+        - conf_threshold: float, confidence threshold for outlier detection
+        - slope: float, slope of error vs confidence regression line
+        - intercept: float, intercept of error vs confidence regression line
     """
     update_config(
         project_dir,
-        conf_threshold=float(estimator.conf_threshold),
-        slope=float(estimator.slope),
-        intercept=float(estimator.intercept),
+        conf_threshold=float(estimator['conf_threshold']),
+        slope=float(estimator['slope']),
+        intercept=float(estimator['intercept']),
     )
 
 
@@ -479,7 +482,7 @@ def _noise_calibration_widget(
 
     def onclick(event):
         if event.xdata is not None and event.ydata is not None:
-            # Check for and remove existing annotation
+            # Check for and remove existing annotation marker
             for artist in ax.collections:
                 if isinstance(artist, mpl.collections.PathCollection):
                     artist.remove()
@@ -541,7 +544,7 @@ def _noise_calibration_widget(
         error_estimator['conf_threshold'] = conf_threshold
 
         save_annotations(project_dir, annotations)
-        #save_params(project_dir, error_estimator)
+        save_params(project_dir, error_estimator)
 
     next_button.on_click(next_image)
     prev_button.on_click(prev_image)
