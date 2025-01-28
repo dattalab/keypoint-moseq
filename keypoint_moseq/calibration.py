@@ -194,6 +194,257 @@ def _confs_and_dists_from_annotations(coordinates, confidences, annotations, bod
     return confs, dists
 
 
+# def _noise_calibration_widget(
+#     project_dir,
+#     coordinates,
+#     confidences,
+#     sample_keys,
+#     sample_images,
+#     annotations,
+#     *,
+#     keypoint_colormap,
+#     bodyparts,
+#     skeleton,
+#     error_estimator,
+#     conf_threshold,
+#     **kwargs,
+# ):
+#     from scipy.stats import linregress
+#     from holoviews.streams import Tap, Stream
+#     import holoviews as hv
+#     import panel as pn
+#     from bokeh.models import GlyphRenderer, ImageRGBA, Scatter, GraphRenderer
+
+#     hv.extension("bokeh")
+
+#     max_height = np.max([sample_images[k].shape[0] for k in sample_keys])
+#     max_width = np.max([sample_images[k].shape[1] for k in sample_keys])
+
+#     edges = np.array(get_edges(bodyparts, skeleton))
+#     conf_vals = np.hstack([v.flatten() for v in confidences.values()])
+#     min_conf, max_conf = np.nanpercentile(conf_vals, 0.01), np.nanmax(conf_vals)
+
+#     annotations_stream = Stream.define("Annotations", annotations=annotations)()
+#     current_sample = Stream.define("Current sample", sample_ix=0)()
+#     estimator = Stream.define(
+#         "Estimator",
+#         slope=float(error_estimator["slope"]),
+#         intercept=float(error_estimator["intercept"]),
+#         conf_threshold=float(conf_threshold),
+#     )()
+
+#     img_tap = Tap(transient=True)
+#     vline_tap = Tap(transient=True)
+
+#     def update_scatter(x, y, annotations):
+#         confs, dists = _confs_and_dists_from_annotations(
+#             coordinates, confidences, annotations, bodyparts
+#         )
+
+#         log_dists = np.log10(np.array(dists) + 1)
+#         log_confs = np.log10(np.maximum(confs, min_conf))
+#         max_dist = np.log10(np.sqrt(max_height**2 + max_width**2) + 1)
+
+#         xspan = np.log10(max_conf) - np.log10(min_conf)
+#         xlim = (
+#             np.log10(min_conf) - xspan / 10,
+#             np.log10(max_conf) + xspan / 10,
+#         )
+#         ylim = (-max_dist / 50, max_dist)
+
+#         if len(log_dists) > 1:
+#             m, b = linregress(log_confs, log_dists)[:2]
+#             estimator.event(slope=m, intercept=b)
+#         else:
+#             m, b = estimator.slope, estimator.intercept
+
+#         if x is None:
+#             x = np.log10(conf_threshold)
+#         else:
+#             estimator.event(conf_threshold=10**x)
+#         passing_percent = (conf_vals > 10**x).mean() * 100
+
+#         scatter = hv.Scatter(zip(log_confs, log_dists)).opts(
+#             color="k",
+#             size=6,
+#             xlim=xlim,
+#             ylim=ylim,
+#             axiswise=True,
+#             frame_width=250,
+#             default_tools=[],
+#         )
+
+#         curve = hv.Curve([(xlim[0], xlim[0] * m + b), (xlim[1], xlim[1] * m + b)]).opts(
+#             xlim=xlim, ylim=ylim, axiswise=True, default_tools=[]
+#         )
+
+#         vline_label = hv.Text(
+#             x - (xlim[1] - xlim[0]) / 50,
+#             ylim[1] - (ylim[1] - ylim[0]) / 100,
+#             f"confidence\nthreshold\n{10**x:.5f}\n({passing_percent:.1f}%)",
+#         ).opts(
+#             axiswise=True,
+#             text_align="right",
+#             text_baseline="top",
+#             text_font_size="8pt",
+#             default_tools=[],
+#         )
+
+#         vline = hv.VLine(x).opts(
+#             axiswise=True,
+#             line_dash="dashed",
+#             color="lightgray",
+#             default_tools=[],
+#         )
+
+#         return (scatter * curve * vline * vline_label).opts(
+#             toolbar=None,
+#             default_tools=[],
+#             xlabel="log10(confidence)",
+#             ylabel="log10(error)",
+#         )
+
+#     def enforce_z_order_hook(plot, element):
+#         bokeh_figure = plot.state
+#         graph, scatter, rgb = None, None, None
+#         for r in bokeh_figure.renderers:
+#             if isinstance(r, GlyphRenderer):
+#                 if isinstance(r.glyph, ImageRGBA):
+#                     rgb = r
+#                 if isinstance(r.glyph, Scatter):
+#                     scatter = r
+#             if isinstance(r, GraphRenderer):
+#                 graph = r
+#         bokeh_figure.renderers = [rgb, graph, scatter]
+
+#     def update_img(sample_ix, x, y):
+#         key, frame, bodypart = sample_key = sample_keys[sample_ix]
+#         image = sample_images[sample_key]
+#         h, w = image.shape[:2]
+
+#         keypoint_ix = bodyparts.index(bodypart)
+#         xys = coordinates[key][frame].copy()
+#         crop_size = np.sqrt(((xys - xys[keypoint_ix]) ** 2).sum(1)).max() * 2.5
+#         xys[:, 1] = h - xys[:, 1]
+#         masked_nodes = np.nonzero(~np.isnan(xys).any(1))[0]
+#         confs = confidences[key][frame]
+
+#         if x and y:
+#             annotations_stream.annotations.update({sample_key: (x, h - y)})
+#             annotations_stream.event()
+
+#         if sample_key in annotations_stream.annotations:
+#             point = np.array(annotations_stream.annotations[sample_key])
+#             point[1] = h - point[1]
+#         else:
+#             point = xys[keypoint_ix]
+
+#         colorvals = np.linspace(0, 1, len(bodyparts))
+#         pt_data = np.append(point, colorvals[keypoint_ix])[None]
+#         hv_point = hv.Points(pt_data, vdims=["bodypart"]).opts(
+#             color="bodypart",
+#             cmap="autumn",
+#             size=15,
+#             framewise=True,
+#             marker="x",
+#             line_width=3,
+#         )
+
+#         label = f"{bodypart}, confidence = {confs[keypoint_ix]:.5f}"
+#         rgb = hv.RGB(image, bounds=(0, 0, w, h), label=label).opts(
+#             framewise=True, xaxis="bare", yaxis="bare", frame_width=250
+#         )
+
+#         xlim = (
+#             xys[keypoint_ix, 0] - crop_size / 2,
+#             xys[keypoint_ix, 0] + crop_size / 2,
+#         )
+#         ylim = (
+#             xys[keypoint_ix, 1] - crop_size / 2,
+#             xys[keypoint_ix, 1] + crop_size / 2,
+#         )
+
+#         edge_data = ((), (), ())
+#         if len(edges) > 0:
+#             masked_edges = edges[np.isin(edges, masked_nodes).all(1)]
+#             if len(masked_edges) > 0:
+#                 edge_data = (*masked_edges.T, colorvals[masked_edges[:, 0]])
+
+#         sizes = np.where(np.arange(len(xys)) == keypoint_ix, 10, 6)[masked_nodes]
+#         masked_bodyparts = [bodyparts[i] for i in masked_nodes]
+#         nodes = hv.Nodes(
+#             (*xys[masked_nodes].T, masked_nodes, masked_bodyparts, sizes),
+#             vdims=["name", "size"],
+#         )
+#         graph = hv.Graph((edge_data, nodes), vdims="ecolor").opts(
+#             node_color="name",
+#             node_cmap=keypoint_colormap,
+#             tools=[],
+#             edge_color="ecolor",
+#             edge_cmap=keypoint_colormap,
+#             node_size="size",
+#         )
+
+#         return (rgb * graph * hv_point).opts(
+#             data_aspect=1,
+#             xlim=xlim,
+#             ylim=ylim,
+#             toolbar=None,
+#             hooks=[enforce_z_order_hook],
+#         )
+
+#     def update_estimator_text(*, slope, intercept, conf_threshold):
+#         lines = [
+#             f"slope: {slope:.6f}",
+#             f"intercept: {intercept:.6f}",
+#             f"conf_threshold: {conf_threshold:.6f}",
+#         ]
+#         estimator_textbox.value = "<br>".join(lines)
+
+#     prev_button = pn.widgets.Button(name="\u25c0", width=50, align="center")
+#     next_button = pn.widgets.Button(name="\u25b6", width=50, align="center")
+#     save_button = pn.widgets.Button(name="Save", width=100, align="center")
+#     estimator_textbox = pn.widgets.StaticText(align="center")
+
+#     def next_sample(event):
+#         if current_sample.sample_ix < len(sample_keys) - 1:
+#             current_sample.event(sample_ix=int(current_sample.sample_ix) + 1)
+
+#     def prev_sample(event):
+#         if current_sample.sample_ix > 0:
+#             current_sample.event(sample_ix=int(current_sample.sample_ix) - 1)
+
+#     def save_all(event):
+#         save_annotations(project_dir, annotations_stream.annotations)
+#         save_params(project_dir, estimator)
+
+#     prev_button.on_click(prev_sample)
+#     next_button.on_click(next_sample)
+#     save_button.on_click(save_all)
+#     estimator.add_subscriber(update_estimator_text)
+#     estimator.event()
+
+#     img_dmap = hv.DynamicMap(
+#         update_img,
+#         streams=[current_sample, img_tap],
+#     ).opts(framewise=True)
+
+#     scatter_dmap = hv.DynamicMap(
+#         update_scatter,
+#         streams=[annotations_stream, vline_tap],
+#     ).opts(framewise=True, axiswise=True)
+
+#     controls = pn.Row(
+#         prev_button,
+#         next_button,
+#         pn.Spacer(width=50),
+#         save_button,
+#         pn.Spacer(width=50),
+#         estimator_textbox,
+#     )
+#     plots = pn.Row(img_dmap, scatter_dmap)
+#     return pn.Column(controls, plots)
+
 def _noise_calibration_widget(
     project_dir,
     coordinates,
@@ -209,241 +460,75 @@ def _noise_calibration_widget(
     conf_threshold,
     **kwargs,
 ):
-    from scipy.stats import linregress
-    from holoviews.streams import Tap, Stream
-    import holoviews as hv
-    import panel as pn
-    from bokeh.models import GlyphRenderer, ImageRGBA, Scatter, GraphRenderer
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    from ipywidgets import Button, Output, HBox, VBox
 
-    hv.extension("bokeh")
+    num_images = len(sample_keys)
+    current_img_idx = [0]
+    current_img_key = [sample_keys[current_img_idx[0]]]
 
-    max_height = np.max([sample_images[k].shape[0] for k in sample_keys])
-    max_width = np.max([sample_images[k].shape[1] for k in sample_keys])
+    next_button = Button(description="Next")
+    prev_button = Button(description="Prev")
+    save_button = Button(description="Save")
+    output = Output()
 
-    edges = np.array(get_edges(bodyparts, skeleton))
-    conf_vals = np.hstack([v.flatten() for v in confidences.values()])
-    min_conf, max_conf = np.nanpercentile(conf_vals, 0.01), np.nanmax(conf_vals)
+    fig, ax = plt.subplots(figsize=(5, 5))
+    fig.canvas.header_visible = False
+    fig.canvas.toolbar_visible = False
 
-    annotations_stream = Stream.define("Annotations", annotations=annotations)()
-    current_sample = Stream.define("Current sample", sample_ix=0)()
-    estimator = Stream.define(
-        "Estimator",
-        slope=float(error_estimator["slope"]),
-        intercept=float(error_estimator["intercept"]),
-        conf_threshold=float(conf_threshold),
-    )()
+    def onclick(event):
+        if event.xdata is not None and event.ydata is not None:
+            # Check for and remove existing annotation
+            for artist in ax.collections:
+                if isinstance(artist, mpl.collections.PathCollection):
+                    artist.remove()
 
-    img_tap = Tap(transient=True)
-    vline_tap = Tap(transient=True)
+            annotations[current_img_key[0]] = (event.xdata, event.ydata)
+            ax.scatter(event.xdata, event.ydata, color='red', marker='x')
+            print(f'annotations: {annotations}')
+            fig.canvas.draw()
 
-    def update_scatter(x, y, annotations):
-        confs, dists = _confs_and_dists_from_annotations(
-            coordinates, confidences, annotations, bodyparts
-        )
+    fig.canvas.mpl_connect("button_press_event", onclick)
 
-        log_dists = np.log10(np.array(dists) + 1)
-        log_confs = np.log10(np.maximum(confs, min_conf))
-        max_dist = np.log10(np.sqrt(max_height**2 + max_width**2) + 1)
+    def show_image(image_key):
+        with output:
+            output.clear_output(wait=True)
+            ax.clear()
+            print(f'annotations: {annotations}')
+            ax.imshow(sample_images[image_key])
 
-        xspan = np.log10(max_conf) - np.log10(min_conf)
-        xlim = (
-            np.log10(min_conf) - xspan / 10,
-            np.log10(max_conf) + xspan / 10,
-        )
-        ylim = (-max_dist / 50, max_dist)
+            # If the user has already annotated this keypoint, plot it
+            if image_key in annotations:
+                ax.scatter(annotations[image_key][0], annotations[image_key][1], color='red', marker='x')
 
-        if len(log_dists) > 1:
-            m, b = linregress(log_confs, log_dists)[:2]
-            estimator.event(slope=m, intercept=b)
-        else:
-            m, b = estimator.slope, estimator.intercept
+            ax.set_title(f'image {current_img_idx[0]+1} of {num_images}\nrecording: {image_key[0]}\nframe: {image_key[1]}\nbodypart: {image_key[2]}')
+            fig.canvas.draw()
 
-        if x is None:
-            x = np.log10(conf_threshold)
-        else:
-            estimator.event(conf_threshold=10**x)
-        passing_percent = (conf_vals > 10**x).mean() * 100
+    def next_image(_):
+        if current_img_idx[0] < num_images - 1:
+            current_img_idx[0] += 1
+            current_img_key[0] = sample_keys[current_img_idx[0]]
+            show_image(current_img_key[0])
 
-        scatter = hv.Scatter(zip(log_confs, log_dists)).opts(
-            color="k",
-            size=6,
-            xlim=xlim,
-            ylim=ylim,
-            axiswise=True,
-            frame_width=250,
-            default_tools=[],
-        )
+    def prev_image(_):
+        if current_img_idx[0] > 0:
+            current_img_idx[0] -= 1
+            current_img_key[0] = sample_keys[current_img_idx[0]]
+            show_image(current_img_key[0])
 
-        curve = hv.Curve([(xlim[0], xlim[0] * m + b), (xlim[1], xlim[1] * m + b)]).opts(
-            xlim=xlim, ylim=ylim, axiswise=True, default_tools=[]
-        )
+    def handle_save(_):
+        save_annotations(project_dir, annotations)
 
-        vline_label = hv.Text(
-            x - (xlim[1] - xlim[0]) / 50,
-            ylim[1] - (ylim[1] - ylim[0]) / 100,
-            f"confidence\nthreshold\n{10**x:.5f}\n({passing_percent:.1f}%)",
-        ).opts(
-            axiswise=True,
-            text_align="right",
-            text_baseline="top",
-            text_font_size="8pt",
-            default_tools=[],
-        )
+    next_button.on_click(next_image)
+    prev_button.on_click(prev_image)
+    save_button.on_click(handle_save)
 
-        vline = hv.VLine(x).opts(
-            axiswise=True,
-            line_dash="dashed",
-            color="lightgray",
-            default_tools=[],
-        )
+    show_image(current_img_key[0])
 
-        return (scatter * curve * vline * vline_label).opts(
-            toolbar=None,
-            default_tools=[],
-            xlabel="log10(confidence)",
-            ylabel="log10(error)",
-        )
-
-    def enforce_z_order_hook(plot, element):
-        bokeh_figure = plot.state
-        graph, scatter, rgb = None, None, None
-        for r in bokeh_figure.renderers:
-            if isinstance(r, GlyphRenderer):
-                if isinstance(r.glyph, ImageRGBA):
-                    rgb = r
-                if isinstance(r.glyph, Scatter):
-                    scatter = r
-            if isinstance(r, GraphRenderer):
-                graph = r
-        bokeh_figure.renderers = [rgb, graph, scatter]
-
-    def update_img(sample_ix, x, y):
-        key, frame, bodypart = sample_key = sample_keys[sample_ix]
-        image = sample_images[sample_key]
-        h, w = image.shape[:2]
-
-        keypoint_ix = bodyparts.index(bodypart)
-        xys = coordinates[key][frame].copy()
-        crop_size = np.sqrt(((xys - xys[keypoint_ix]) ** 2).sum(1)).max() * 2.5
-        xys[:, 1] = h - xys[:, 1]
-        masked_nodes = np.nonzero(~np.isnan(xys).any(1))[0]
-        confs = confidences[key][frame]
-
-        if x and y:
-            annotations_stream.annotations.update({sample_key: (x, h - y)})
-            annotations_stream.event()
-
-        if sample_key in annotations_stream.annotations:
-            point = np.array(annotations_stream.annotations[sample_key])
-            point[1] = h - point[1]
-        else:
-            point = xys[keypoint_ix]
-
-        colorvals = np.linspace(0, 1, len(bodyparts))
-        pt_data = np.append(point, colorvals[keypoint_ix])[None]
-        hv_point = hv.Points(pt_data, vdims=["bodypart"]).opts(
-            color="bodypart",
-            cmap="autumn",
-            size=15,
-            framewise=True,
-            marker="x",
-            line_width=3,
-        )
-
-        label = f"{bodypart}, confidence = {confs[keypoint_ix]:.5f}"
-        rgb = hv.RGB(image, bounds=(0, 0, w, h), label=label).opts(
-            framewise=True, xaxis="bare", yaxis="bare", frame_width=250
-        )
-
-        xlim = (
-            xys[keypoint_ix, 0] - crop_size / 2,
-            xys[keypoint_ix, 0] + crop_size / 2,
-        )
-        ylim = (
-            xys[keypoint_ix, 1] - crop_size / 2,
-            xys[keypoint_ix, 1] + crop_size / 2,
-        )
-
-        edge_data = ((), (), ())
-        if len(edges) > 0:
-            masked_edges = edges[np.isin(edges, masked_nodes).all(1)]
-            if len(masked_edges) > 0:
-                edge_data = (*masked_edges.T, colorvals[masked_edges[:, 0]])
-
-        sizes = np.where(np.arange(len(xys)) == keypoint_ix, 10, 6)[masked_nodes]
-        masked_bodyparts = [bodyparts[i] for i in masked_nodes]
-        nodes = hv.Nodes(
-            (*xys[masked_nodes].T, masked_nodes, masked_bodyparts, sizes),
-            vdims=["name", "size"],
-        )
-        graph = hv.Graph((edge_data, nodes), vdims="ecolor").opts(
-            node_color="name",
-            node_cmap=keypoint_colormap,
-            tools=[],
-            edge_color="ecolor",
-            edge_cmap=keypoint_colormap,
-            node_size="size",
-        )
-
-        return (rgb * graph * hv_point).opts(
-            data_aspect=1,
-            xlim=xlim,
-            ylim=ylim,
-            toolbar=None,
-            hooks=[enforce_z_order_hook],
-        )
-
-    def update_estimator_text(*, slope, intercept, conf_threshold):
-        lines = [
-            f"slope: {slope:.6f}",
-            f"intercept: {intercept:.6f}",
-            f"conf_threshold: {conf_threshold:.6f}",
-        ]
-        estimator_textbox.value = "<br>".join(lines)
-
-    prev_button = pn.widgets.Button(name="\u25c0", width=50, align="center")
-    next_button = pn.widgets.Button(name="\u25b6", width=50, align="center")
-    save_button = pn.widgets.Button(name="Save", width=100, align="center")
-    estimator_textbox = pn.widgets.StaticText(align="center")
-
-    def next_sample(event):
-        if current_sample.sample_ix < len(sample_keys) - 1:
-            current_sample.event(sample_ix=int(current_sample.sample_ix) + 1)
-
-    def prev_sample(event):
-        if current_sample.sample_ix > 0:
-            current_sample.event(sample_ix=int(current_sample.sample_ix) - 1)
-
-    def save_all(event):
-        save_annotations(project_dir, annotations_stream.annotations)
-        save_params(project_dir, estimator)
-
-    prev_button.on_click(prev_sample)
-    next_button.on_click(next_sample)
-    save_button.on_click(save_all)
-    estimator.add_subscriber(update_estimator_text)
-    estimator.event()
-
-    img_dmap = hv.DynamicMap(
-        update_img,
-        streams=[current_sample, img_tap],
-    ).opts(framewise=True)
-
-    scatter_dmap = hv.DynamicMap(
-        update_scatter,
-        streams=[annotations_stream, vline_tap],
-    ).opts(framewise=True, axiswise=True)
-
-    controls = pn.Row(
-        prev_button,
-        next_button,
-        pn.Spacer(width=50),
-        save_button,
-        pn.Spacer(width=50),
-        estimator_textbox,
-    )
-    plots = pn.Row(img_dmap, scatter_dmap)
-    return pn.Column(controls, plots)
+    controls = HBox([prev_button, next_button, save_button])
+    ui = VBox([controls, output])
+    return ui
 
 
 def noise_calibration(
