@@ -486,7 +486,6 @@ def _noise_calibration_widget(
 
             annotations[current_img_key[0]] = (event.xdata, event.ydata)
             ax.scatter(event.xdata, event.ydata, color='red', marker='x')
-            print(f'annotations: {annotations}')
             fig.canvas.draw()
 
     fig.canvas.mpl_connect("button_press_event", onclick)
@@ -495,7 +494,6 @@ def _noise_calibration_widget(
         with output:
             output.clear_output(wait=True)
             ax.clear()
-            print(f'annotations: {annotations}')
             ax.imshow(sample_images[image_key])
 
             # If the user has already annotated this keypoint, plot it
@@ -518,7 +516,32 @@ def _noise_calibration_widget(
             show_image(current_img_key[0])
 
     def handle_save(_):
+        # Get error and confidence values only for the coordinates that have been annotated
+        errors = []
+        confidences_annot = []
+
+        for video, frame, bodypart in annotations.keys():
+            bodypart_idx = bodyparts.index(bodypart)
+
+            original_coordinates = coordinates[video][frame, bodypart_idx, :]
+            annotated_coordinates = annotations[(video, frame, bodypart)]
+
+            error = np.log10(np.sum((original_coordinates - annotated_coordinates) ** 2))
+            confidence = np.log10(confidences[video][frame, bodypart_idx])
+
+            errors.append(error)
+            confidences_annot.append(confidence)
+
+
+        # Fit a line to the annotated data with confidence as the x-axis and error as the y-axis
+        # scipy.stats.linregress might be a little more clear but this avoid another import
+        slope, intercept = np.polyfit(confidences_annot, errors, 1)
+        error_estimator['slope'] = slope
+        error_estimator['intercept'] = intercept
+        error_estimator['conf_threshold'] = conf_threshold
+
         save_annotations(project_dir, annotations)
+        #save_params(project_dir, error_estimator)
 
     next_button.on_click(next_image)
     prev_button.on_click(prev_image)
