@@ -321,19 +321,16 @@ def noise_calibration(
     set a prior on the noise level for each keypoint on each frame.
 
     Follow these steps to use the widget:
-        - After executing this function, a widget should appear with a
-          video frame in the center.
-        - Annotate the labeled bodypart in each frame by left-clicking
-          at the correct location. An "X" should appear there.
-        - Use the arrow buttons to annotate additional frames.
-        - Each annotation adds a point to the right-hand scatter plot.
-          Continue until the regression line stabilizes.
-        - At any point, adjust the confidence threshold by clicking on
-          the scatter plot. The confidence threshold is used to define
-          outlier keypoints for PCA and model initialization.
-        - Use the "save" button to store your annotations to disk and
-          save `slope`, `intercept`, and `confidence_threshold`
-          to the config.
+        - Run the cell below. A widget should appear with a video frame. 
+            
+        - Annotate each frame with the correct location of the labeled bodypart
+            - Left click to specify the correct location - an "X" should appear.
+            - Use the prev/next buttons to annotate additional frames.
+            - Click and drag the bottom-right shaded corner of the widget to zoom.
+
+        - It is suggested to annotate at least 50 frames, tracked by the 'annotations' counter. This counter includes saved annotations from previous sessions if you've run this widget on this project before.
+
+        - Use the "save" button to update the config and store your annotations to disk.
 
 
     Parameters
