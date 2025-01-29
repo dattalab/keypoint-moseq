@@ -213,7 +213,7 @@ def _noise_calibration_widget(
 ):
     import matplotlib as mpl
     import matplotlib.pyplot as plt
-    from ipywidgets import Button, Output, HBox, VBox
+    from ipywidgets import Button, Label, Output, HBox, VBox, Layout
 
     num_images = len(sample_keys)
     current_img_idx = [0]
@@ -222,9 +222,10 @@ def _noise_calibration_widget(
     next_button = Button(description="Next")
     prev_button = Button(description="Prev")
     save_button = Button(description="Save")
+    annotation_counter = Label(f'Annotations: {len(annotations)}/50')
     output = Output()
 
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = plt.subplots(figsize=(7, 7))
     fig.canvas.header_visible = False
     fig.canvas.toolbar_visible = False
 
@@ -238,7 +239,8 @@ def _noise_calibration_widget(
             annotations[current_img_key[0]] = (event.xdata, event.ydata)
             ax.scatter(event.xdata, event.ydata, color='red', marker='x')
             fig.canvas.draw()
-
+            annotation_counter.value = f'Annotations: {len(annotations)}/50'
+                
     fig.canvas.mpl_connect("button_press_event", onclick)
 
     def show_image(image_key):
@@ -301,7 +303,8 @@ def _noise_calibration_widget(
     show_image(current_img_key[0])
 
     controls = HBox([prev_button, next_button, save_button])
-    ui = VBox([controls, output])
+    annotation_counter_box = HBox([annotation_counter])
+    ui = VBox([controls, annotation_counter_box, output])
     return ui
 
 
