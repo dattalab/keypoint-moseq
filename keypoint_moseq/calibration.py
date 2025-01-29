@@ -186,16 +186,6 @@ def save_params(project_dir, estimator):
         intercept=float(estimator['intercept']),
     )
 
-
-def _confs_and_dists_from_annotations(coordinates, confidences, annotations, bodyparts):
-    confs, dists = [], []
-    for (key, frame, bodypart), xy in annotations.items():
-        if key in coordinates and key in confidences:
-            k = bodyparts.index(bodypart)
-            confs.append(confidences[key][frame][k])
-            dists.append(np.sqrt(((coordinates[key][frame][k] - np.array(xy)) ** 2).sum()))
-    return confs, dists
-
 def _noise_calibration_widget(
     project_dir,
     coordinates,
