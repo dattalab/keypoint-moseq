@@ -277,7 +277,7 @@ def _noise_calibration_widget(
             original_coordinates = coordinates[video][frame, bodypart_idx, :]
             annotated_coordinates = annotations[(video, frame, bodypart)]
 
-            error = np.log10(np.sum((original_coordinates - annotated_coordinates) ** 2))
+            error = np.log10(np.sqrt(np.sum((original_coordinates - annotated_coordinates) ** 2)) + 1)
             confidence = np.log10(confidences[video][frame, bodypart_idx])
 
             errors.append(error)
