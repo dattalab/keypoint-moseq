@@ -691,23 +691,32 @@ def _grid_movie_tile(
     coordinates,
     plot_options,
     video_frame_indexes,
-    full_coords,
-    full_centroids,
+    use_dims,
 ):
-    scale_factor = scaled_window_size / window_size
-    cs = centroids[key][start - pre : start + post]
-    h, c = headings[key][start], cs[pre]
+    h = headings[key][start]
     r = np.float32([[np.cos(h), np.sin(h)], [-np.sin(h), np.cos(h)]])
 
-    if full_coords and full_centroids:
-        xy_coords = full_coords[key][:, :, :2]
-        xy_centroid = full_centroids[key][start][:2]
-        xy_coords = ((xy_coords - xy_centroid) @ r.T) + xy_centroid
-        coordinates[key][:, :, 0] = xy_coords[:, :, 0]
-        z_coords = full_coords[key][:, :, 2]
-        z_centroid = full_centroids[key][start][2]
-        coordinates[key][:, :, 1] = -(z_coords - z_centroid) + z_centroid
-        r = np.float32([[1, 0], [0, 1]])
+    keypoint_dimension = next(iter(centroids.values())).shape[-1]
+    if keypoint_dimension == 3:
+        ds = np.array(use_dims)
+        xz_dims = np.array([0, 2])
+        if np.all(ds == xz_dims):
+            xy_coords = coordinates[key][:, :, :2]
+            xy_centroid = centroids[key][start][:2]
+            xy_coords = ((xy_coords - xy_centroid) @ r.T) + xy_centroid
+            coordinates[key][:, :, 0] = xy_coords[:, :, 0]
+            z_coords = coordinates[key][:, :, 2]
+            z_centroid = centroids[key][start][2]
+            coordinates[key][:, :, 2] = -(z_coords - z_centroid) + z_centroid
+            r = np.float32([[1, 0], [0, 1]])
+
+        centroids = {k: v[:, ds] for k, v in centroids.items()}
+        if coordinates is not None:
+            coordinates = {k: v[:, :, ds] for k, v in coordinates.items()}
+
+    scale_factor = scaled_window_size / window_size
+    cs = centroids[key][start - pre : start + post]
+    c = cs[pre]
 
     tile = []
 
@@ -769,8 +778,7 @@ def grid_movie(
     overlay_keypoints=False,
     coordinates=None,
     plot_options={},
-    full_coords=None,
-    full_centroids=None,
+    use_dims=None,
 ):
     """Generate a grid movie and return it as an array of frames.
 
@@ -878,8 +886,7 @@ def grid_movie(
                 coordinates,
                 plot_options,
                 video_frame_indexes,
-                full_coords,
-                full_centroids,
+                use_dims,
             )
         )
 
@@ -1252,21 +1259,6 @@ def generate_grid_movies(
         **sampling_options,
     )
 
-    # if the data is 3D, pick 2 dimensions to use for plotting
-    keypoint_dimension = next(iter(centroids.values())).shape[-1]
-    full_coords = None
-    full_centroids = None
-    if keypoint_dimension == 3:
-        ds = np.array(use_dims)
-        xz_dims = np.array([0, 2])
-        if np.all(ds == xz_dims):
-            full_coords = coordinates
-            full_centroids = centroids
-
-        centroids = {k: v[:, ds] for k, v in centroids.items()}
-        if coordinates is not None:
-            coordinates = {k: v[:, :, ds] for k, v in coordinates.items()}
-
     # determine window size for grid movies
     if window_size is None:
         window_size = get_grid_movie_window_size(
@@ -1324,8 +1316,7 @@ def generate_grid_movies(
             overlay_keypoints=overlay_keypoints,
             coordinates=coordinates,
             plot_options=plot_options,
-            full_coords=full_coords,
-            full_centroids=full_centroids,
+            use_dims=use_dims,
         )
 
         path = os.path.join(output_dir, f"syllable{syllable}.mp4")
