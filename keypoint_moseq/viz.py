@@ -698,6 +698,8 @@ def _grid_movie_tile(
 
     keypoint_dimension = next(iter(centroids.values())).shape[-1]
     if keypoint_dimension == 3:
+        coordinates = {k: v.copy() for k, v in coordinates.items()}
+
         ds = np.array(use_dims)
         xz_dims = np.array([0, 2])
         if np.all(ds == xz_dims):
