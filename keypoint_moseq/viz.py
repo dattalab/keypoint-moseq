@@ -693,32 +693,24 @@ def _grid_movie_tile(
     video_frame_indexes,
     use_dims,
 ):
-    h = headings[key][start]
+    scale_factor = scaled_window_size / window_size
+    cs = centroids[key][start - pre : start + post]
+    h, c = headings[key][start], cs[pre]
     r = np.float32([[np.cos(h), np.sin(h)], [-np.sin(h), np.cos(h)]])
+    syllable_coordinates = coordinates[key][start - pre : start + post].copy()
 
     keypoint_dimension = next(iter(centroids.values())).shape[-1]
     if keypoint_dimension == 3:
-        coordinates = {k: v.copy() for k, v in coordinates.items()}
-
         ds = np.array(use_dims)
         xz_dims = np.array([0, 2])
         if np.all(ds == xz_dims):
-            xy_coords = coordinates[key][:, :, :2]
-            xy_centroid = centroids[key][start][:2]
-            xy_coords = ((xy_coords - xy_centroid) @ r.T) + xy_centroid
-            coordinates[key][:, :, 0] = xy_coords[:, :, 0]
-            z_coords = coordinates[key][:, :, 2]
-            z_centroid = centroids[key][start][2]
-            coordinates[key][:, :, 2] = -(z_coords - z_centroid) + z_centroid
+            syllable_coordinates[:, :, :2] = ((syllable_coordinates[:, :, :2] - c[:2]) @ r.T) + c[:2]
+            syllable_coordinates[:, :, 2] = -(syllable_coordinates[:, :, 2] - c[2]) + c[2]
             r = np.float32([[1, 0], [0, 1]])
 
-        centroids = {k: v[:, ds] for k, v in centroids.items()}
-        if coordinates is not None:
-            coordinates = {k: v[:, :, ds] for k, v in coordinates.items()}
-
-    scale_factor = scaled_window_size / window_size
-    cs = centroids[key][start - pre : start + post]
-    c = cs[pre]
+        cs = cs[:, ds]
+        c = c[ds]
+        syllable_coordinates = syllable_coordinates[:, :, ds]
 
     tile = []
 
@@ -732,8 +724,10 @@ def _grid_movie_tile(
 
         for ii, (frame, c) in enumerate(zip(frames, cs)):
             if overlay_keypoints:
-                coords = coordinates[key][start - pre + ii]
-                frame = overlay_keypoints_on_image(frame, coords, edges=edges, **plot_options)
+                coords = syllable_coordinates[ii]
+                frame = overlay_keypoints_on_image(
+                    frame, coords, edges=edges, **plot_options
+                )
 
             frame = cv2.warpAffine(frame, np.float32(M), (window_size, window_size))
             frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
@@ -748,12 +742,13 @@ def _grid_movie_tile(
             "be True. Otherwise there is nothing to show"
         )
         scale_factor = scaled_window_size / window_size
-        coords = coordinates[key][start - pre : start + post]
-        coords = (coords - c) @ r.T * scale_factor + scaled_window_size // 2
+        syllable_coordinates = (syllable_coordinates - c) @ r.T * scale_factor + scaled_window_size // 2
         cs = (cs - c) @ r.T * scale_factor + scaled_window_size // 2
         background = np.zeros((scaled_window_size, scaled_window_size, 3))
-        for ii, (uvs, c) in enumerate(zip(coords, cs)):
-            frame = overlay_keypoints_on_image(background.copy(), uvs, edges=edges, **plot_options)
+        for ii, (uvs, c) in enumerate(zip(syllable_coordinates, cs)):
+            frame = overlay_keypoints_on_image(
+                background.copy(), uvs, edges=edges, **plot_options
+            )
             if 0 <= ii - pre <= end - start and dot_radius > 0:
                 pos = (int(c[0]), int(c[1]))
                 cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
