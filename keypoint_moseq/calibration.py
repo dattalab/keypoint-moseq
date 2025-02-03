@@ -50,7 +50,7 @@ def sample_error_frames(
     confidences = {k: v + conf_pseudocount for k, v in confidences.items()}
     all_confs = np.concatenate([v.flatten() for v in confidences.values()])
     min_conf, max_conf = np.nanmin(all_confs), np.nanmax(all_confs)
-    thresholds = np.logspace(np.log10(min_conf), np.log10(max_conf), num_bins)
+    thresholds = np.logspace(np.log10(min_conf), np.log10(max_conf), num_bins + 1)
     mask = np.array([bp in use_bodyparts for bp in bodyparts])[None, :]
 
     sample_keys = []
