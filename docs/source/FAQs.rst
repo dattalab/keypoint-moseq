@@ -312,14 +312,10 @@ Below we provide two code recipes to get around these issues. The first recipe i
          coordinates=coordinates_2D, 
          centroids=centroids,
          headings=headings,
+         use_dims=[0,1],
          **config());
 
-   You could follow a similar procedure for the side camera, but adding an extra line to zero-out the heading so the video clips aren't rotated.
-
-   .. code-block:: python
-
-      heading = {k: np.zeros_like(v) for k in heading.items()}
-
+   You could follow a similar procedure for the side camera, but using use_dims=[0, 2] instead of [0, 1].
 
 Why are there only trajectory plots for a subset of syllables?
 --------------------------------------------------------------
