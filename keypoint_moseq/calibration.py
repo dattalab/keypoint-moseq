@@ -208,6 +208,7 @@ def _noise_calibration_widget(
     num_images = len(sample_keys)
     current_img_idx = [0]
     current_img_key = [sample_keys[current_img_idx[0]]]
+    current_annotation_marker = [None]
 
     next_button = Button(description="Next")
     prev_button = Button(description="Prev")
@@ -222,12 +223,12 @@ def _noise_calibration_widget(
     def onclick(event):
         if event.xdata is not None and event.ydata is not None:
             # Check for and remove existing annotation marker
-            for artist in ax.collections:
-                if isinstance(artist, mpl.collections.PathCollection):
-                    artist.remove()
+            if current_annotation_marker[0] is not None:
+                current_annotation_marker[0].remove()
+                current_annotation_marker[0] = None
 
             annotations[current_img_key[0]] = (event.xdata, event.ydata)
-            ax.scatter(event.xdata, event.ydata, color='red', marker='x')
+            current_annotation_marker[0] = ax.scatter(event.xdata, event.ydata, color='red', marker='x')
             fig.canvas.draw()
             annotation_counter.value = f'Annotations: {len(annotations)}/50'
                 
@@ -239,11 +240,16 @@ def _noise_calibration_widget(
             ax.clear()
             ax.imshow(sample_images[image_key])
 
+            frame = image_key[1]
+            bodypart_idx = bodyparts.index(image_key[2])
+            video_coordinates = coordinates[image_key[0]]
+            ax.scatter(video_coordinates[frame, bodypart_idx, 0], video_coordinates[frame, bodypart_idx, 1], color='yellow', marker='o')
+
             # If the user has already annotated this keypoint, plot it
             if image_key in annotations:
-                ax.scatter(annotations[image_key][0], annotations[image_key][1], color='red', marker='x')
+                current_annotation_marker[0] = ax.scatter(annotations[image_key][0], annotations[image_key][1], color='red', marker='x')
 
-            ax.set_title(f'image {current_img_idx[0]+1} of {num_images}\nrecording: {image_key[0]}\nframe: {image_key[1]}\nbodypart: {image_key[2]}')
+            ax.set_title(f'image {current_img_idx[0]+1} of {num_images}\nrecording: {image_key[0]}\nbodypart: {image_key[2]}')
             fig.canvas.draw()
 
     def next_image(_):
@@ -321,7 +327,7 @@ def noise_calibration(
     set a prior on the noise level for each keypoint on each frame.
 
     Follow these steps to use the widget:
-        - Run the cell below. A widget should appear with a video frame. 
+        - Run the cell below. A widget should appear with a video frame. The yellow marker denotes the automatically detected location of the bodypart.
             
         - Annotate each frame with the correct location of the labeled bodypart
             - Left click to specify the correct location - an "X" should appear.
