@@ -410,7 +410,7 @@ def noise_calibration(
     sample_keys = sample_error_frames(confidences, bodyparts, use_bodyparts)
 
     annotations = load_annotations(project_dir)
-    sample_keys.extend(annotations.keys())
+    sample_keys = list(annotations.keys()) + sample_keys
 
     sample_images = load_sampled_frames(
         sample_keys,
