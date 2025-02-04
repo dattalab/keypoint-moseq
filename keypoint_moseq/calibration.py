@@ -188,7 +188,7 @@ def _noise_calibration_widget(
 ):
     import matplotlib as mpl
     import matplotlib.pyplot as plt
-    from ipywidgets import Button, Label, Output, HBox, VBox, Layout
+    from ipywidgets import Button, Label, Output, HBox, VBox
 
     num_images = len(sample_keys)
     current_img_idx = [0]
@@ -198,7 +198,7 @@ def _noise_calibration_widget(
     next_button = Button(description="Next")
     prev_button = Button(description="Prev")
     save_button = Button(description="Save")
-    annotation_counter = Label(f'Annotations: 0/50')
+    annotation_counter = Label(f'Annotations Completed: 0')
     output = Output()
 
     fig, ax = plt.subplots(figsize=(7, 7))
@@ -215,7 +215,7 @@ def _noise_calibration_widget(
             annotations[current_img_key[0]] = (event.xdata, event.ydata)
             current_annotation_marker[0] = ax.scatter(event.xdata, event.ydata, color='red', marker='x')
             fig.canvas.draw()
-            annotation_counter.value = f'Annotations: {len(annotations)}/50'
+            annotation_counter.value = f'Annotations Completed: {len(annotations)}'
                 
     fig.canvas.mpl_connect("button_press_event", onclick)
 
@@ -228,7 +228,12 @@ def _noise_calibration_widget(
             frame = image_key[1]
             bodypart_idx = bodyparts.index(image_key[2])
             video_coordinates = coordinates[image_key[0]]
-            ax.scatter(video_coordinates[frame, bodypart_idx, 0], video_coordinates[frame, bodypart_idx, 1], color='yellow', marker='o')
+            ax.scatter(video_coordinates[frame, bodypart_idx, 0],
+                       video_coordinates[frame, bodypart_idx, 1],
+                       color='yellow',
+                       marker='o',
+                       facecolor='none',
+            )
 
             # If the user has already annotated this keypoint, plot it
             if image_key in annotations:
@@ -250,6 +255,10 @@ def _noise_calibration_widget(
             show_image(current_img_key[0])
 
     def handle_save(_):
+        if len(annotations) < 20:
+            print("You must annotate at least 20 frames before saving.")
+            return
+
         # Get error and confidence values only for the coordinates that have been annotated
         errors = []
         confidences_annot = []
@@ -320,6 +329,8 @@ def noise_calibration(
             - Click and drag the bottom-right shaded corner of the widget to zoom.
 
         - It is suggested to annotate at least 50 frames, tracked by the 'annotations' counter. This counter includes saved annotations from previous sessions if you've run this widget on this project before.
+
+        - You will not be able to save your annotations until you have annotated at least 20 frames.
 
         - Use the "save" button to update the config and store your annotations to disk.
 
