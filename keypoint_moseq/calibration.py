@@ -138,13 +138,13 @@ def load_annotations(project_dir):
     annotations_path = os.path.join(project_dir, "error_annotations.csv")
     if os.path.exists(annotations_path):
         for l in open(annotations_path, "r").read().split("\n")[1:]:
-            key, frame, bodypart, x, y = l.split(",")
-            sample_key = (key, int(frame), bodypart)
+            key, trimmed_frame, full_frame, bodypart, x, y = l.split(",")
+            sample_key = (key, int(trimmed_frame), bodypart)
             annotations[sample_key] = (float(x), float(y))
     return annotations
 
 
-def save_annotations(project_dir, annotations):
+def save_annotations(project_dir, annotations, video_frame_indexes):
     """Save calibration annotations to a csv file.
 
     Parameters
@@ -156,10 +156,23 @@ def save_annotations(project_dir, annotations):
         Dictionary mapping sample keys to annotated keypoint
         coordinates. (See :py:func:`keypoint_moseq.calibration.sample_error_frames`
         for format of sample keys)
+
+    video_frame_indexes: dict
+        Dictionary mapping recording names to arrays of video frame indexes.
+        This is useful when the original keypoint coordinates used for modeling
+        corresponded to a subset of frames from each video (i.e. if videos were
+        trimmed or coordinates were downsampled).
     """
-    output = ["key,frame,bodypart,x,y"]
+    # Columns:
+    # key: recording name
+    # trimmed_frame: frame number in the trimmed video (same as full_frame if the full recording was used)
+    # full_frame: frame number in the full video
+    # bodypart: bodypart name
+    # x: annotated x-coordinate
+    # y: annotated y-coordinate
+    output = ["key,trimmed_frame,full_frame,bodypart,x,y"]
     for (key, frame, bodypart), (x, y) in annotations.items():
-        output.append(f"{key},{frame},{bodypart},{x},{y}")
+        output.append(f"{key},{frame},{video_frame_indexes[key][frame]},{bodypart},{x},{y}")
     path = os.path.join(project_dir, "error_annotations.csv")
     open(path, "w").write("\n".join(output))
     print(fill(f"Annotations saved to {path}"))
@@ -194,9 +207,8 @@ def _noise_calibration_widget(
     sample_images,
     annotations,
     *,
-    keypoint_colormap,
     bodyparts,
-    skeleton,
+    video_frame_indexes,
     error_estimator,
     conf_threshold,
     **kwargs,
@@ -289,7 +301,7 @@ def _noise_calibration_widget(
         error_estimator['intercept'] = intercept
         error_estimator['conf_threshold'] = conf_threshold
 
-        save_annotations(project_dir, annotations)
+        save_annotations(project_dir, annotations, video_frame_indexes)
         save_params(project_dir, error_estimator)
 
     next_button.on_click(next_image)
@@ -415,5 +427,6 @@ def noise_calibration(
         sample_images,
         annotations,
         bodyparts=bodyparts,
+        video_frame_indexes=video_frame_indexes,
         **kwargs,
     )
