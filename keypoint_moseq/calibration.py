@@ -149,7 +149,6 @@ def save_annotations(project_dir, annotations, video_frame_indexes):
         output.append(f"{key},{frame},{video_frame_indexes[key][frame]},{bodypart},{x},{y}")
     path = os.path.join(project_dir, "error_annotations.csv")
     open(path, "w").write("\n".join(output))
-    print(fill(f"Annotations saved to {path}"))
 
 
 def save_params(project_dir, estimator):
@@ -195,10 +194,12 @@ def _noise_calibration_widget(
     current_img_key = [sample_keys[current_img_idx[0]]]
     current_annotation_marker = [None]
     annotations = {}
+
     next_button = Button(description="Next")
     prev_button = Button(description="Prev")
     save_button = Button(description="Save")
     annotation_counter = Label(f'Annotations Completed: 0')
+    usr_msg = Label(f'')
     output = Output()
 
     fig, ax = plt.subplots(figsize=(7, 7))
@@ -256,7 +257,7 @@ def _noise_calibration_widget(
 
     def handle_save(_):
         if len(annotations) < 20:
-            print("You must annotate at least 20 frames before saving.")
+            usr_msg.value = "You must annotate at least 20 frames before saving."
             return
 
         # Get error and confidence values only for the coordinates that have been annotated
@@ -284,6 +285,7 @@ def _noise_calibration_widget(
         error_estimator['conf_threshold'] = conf_threshold
 
         save_annotations(project_dir, annotations, video_frame_indexes)
+        usr_msg.value = f'Annotations saved to {project_dir}/error_annotations.csv'
         save_params(project_dir, error_estimator)
 
     next_button.on_click(next_image)
@@ -294,7 +296,7 @@ def _noise_calibration_widget(
 
     controls = HBox([prev_button, next_button, save_button])
     annotation_counter_box = HBox([annotation_counter])
-    ui = VBox([controls, annotation_counter_box, output])
+    ui = VBox([controls, annotation_counter_box, usr_msg, output])
     return ui
 
 
