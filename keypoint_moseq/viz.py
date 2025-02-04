@@ -702,8 +702,8 @@ def _grid_movie_tile(
     keypoint_dimension = next(iter(centroids.values())).shape[-1]
     if keypoint_dimension == 3:
         ds = np.array(use_dims)
-        xz_dims = np.array([0, 2])
-        if np.all(ds == xz_dims):
+
+        if ds[1] == 2:
             syllable_coordinates[:, :, :2] = ((syllable_coordinates[:, :, :2] - c[:2]) @ r.T) + c[:2]
             syllable_coordinates[:, :, 2] = -(syllable_coordinates[:, :, 2] - c[2]) + c[2]
             r = np.float32([[1, 0], [0, 1]])
