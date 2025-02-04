@@ -118,32 +118,6 @@ def load_sampled_frames(
         sampled_keys[(key, frame, bodypart)] = readers[key][frame_ix]
     return sampled_keys
 
-
-def load_annotations(project_dir):
-    """Reload saved calibration annotations.
-
-    Parameters
-    ----------
-    project_dir: str
-        Load annotations from `{project_dir}/error_annotations.csv`
-
-    Returns
-    -------
-    annotations: dict
-        Dictionary mapping sample keys to annotated keypoint
-        coordinates. (See :py:func:`keypoint_moseq.calibration.sample_error_frames`
-        for format of sample keys)
-    """
-    annotations = {}
-    annotations_path = os.path.join(project_dir, "error_annotations.csv")
-    if os.path.exists(annotations_path):
-        for l in open(annotations_path, "r").read().split("\n")[1:]:
-            key, trimmed_frame, full_frame, bodypart, x, y = l.split(",")
-            sample_key = (key, int(trimmed_frame), bodypart)
-            annotations[sample_key] = (float(x), float(y))
-    return annotations
-
-
 def save_annotations(project_dir, annotations, video_frame_indexes):
     """Save calibration annotations to a csv file.
 
@@ -205,7 +179,6 @@ def _noise_calibration_widget(
     confidences,
     sample_keys,
     sample_images,
-    annotations,
     *,
     bodyparts,
     video_frame_indexes,
@@ -221,11 +194,11 @@ def _noise_calibration_widget(
     current_img_idx = [0]
     current_img_key = [sample_keys[current_img_idx[0]]]
     current_annotation_marker = [None]
-
+    annotations = {}
     next_button = Button(description="Next")
     prev_button = Button(description="Prev")
     save_button = Button(description="Save")
-    annotation_counter = Label(f'Annotations: {len(annotations)}/50')
+    annotation_counter = Label(f'Annotations: 0/50')
     output = Output()
 
     fig, ax = plt.subplots(figsize=(7, 7))
@@ -389,6 +362,14 @@ def noise_calibration(
         corresponded to a subset of frames from each video (i.e. if videos were
         trimmed or coordinates were downsampled).
     """
+
+    if os.path.exists(os.path.join(project_dir, "error_annotations.csv")):
+        response = input('error_annotations.csv already exists. Continuing will overwrite the existing file (start noise calibration from scratch). Do you want to continue? (y/n)')
+        if response != 'y':
+            return
+        else:
+            os.remove(os.path.join(project_dir, "error_annotations.csv"))
+
     if video_frame_indexes is None:
         video_frame_indexes = {k: np.arange(len(v)) for k, v in coordinates.items()}
     else:
@@ -409,9 +390,6 @@ def noise_calibration(
     confidences = {k: v + conf_pseudocount for k, v in confidences.items()}
     sample_keys = sample_error_frames(confidences, bodyparts, use_bodyparts)
 
-    annotations = load_annotations(project_dir)
-    sample_keys = list(annotations.keys()) + sample_keys
-
     sample_images = load_sampled_frames(
         sample_keys,
         video_dir,
@@ -425,7 +403,6 @@ def noise_calibration(
         confidences,
         sample_keys,
         sample_images,
-        annotations,
         bodyparts=bodyparts,
         video_frame_indexes=video_frame_indexes,
         **kwargs,
