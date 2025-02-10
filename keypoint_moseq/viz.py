@@ -2899,8 +2899,8 @@ def plot_confusion_matrix(results1, results2, min_frequency=0.005, sort=True, no
     if normalize:
         C = C / np.sum(C, axis=1, keepdims=True)
 
-    ix1 = (get_frequencies(syllables1) > 0.005).nonzero()[0]
-    ix2 = (get_frequencies(syllables2) > 0.005).nonzero()[0]
+    ix1 = (get_frequencies(syllables1) > min_frequency).nonzero()[0]
+    ix2 = (get_frequencies(syllables2) > min_frequency).nonzero()[0]
     C = C[ix1, :][:, ix2]
 
     if sort:
