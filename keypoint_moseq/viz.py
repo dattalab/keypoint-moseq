@@ -685,7 +685,7 @@ def _grid_movie_tile(
     key,
     start,
     end,
-    videos,
+    video_paths,
     centroids,
     headings,
     dot_color,
@@ -707,9 +707,11 @@ def _grid_movie_tile(
 
     tile = []
 
-    if videos is not None:
+    if video_paths is not None:
         frame_ixs = video_frame_indexes[key][start - pre : start + post]
-        frames = [videos[key][ix] for ix in frame_ixs]
+        reader = OpenCVReader(video_paths[key])
+        frames = [reader[ix] for ix in frame_ixs]
+        reader.close()
         c = r @ c - window_size // 2
         M = [[np.cos(h), np.sin(h), -c[0]], [-np.sin(h), np.cos(h), -c[1]]]
 
@@ -753,7 +755,7 @@ def grid_movie(
     instances,
     rows,
     cols,
-    videos,
+    video_paths,
     centroids,
     headings,
     window_size,
@@ -784,9 +786,8 @@ def grid_movie(
     rows: int, cols : int
         Number of rows and columns in the grid movie grid
 
-    videos: dict or None
-        Dictionary mapping video names to video readers. Frames from each reader should
-        be accessible via `__getitem__(int or slice)`. If None, the the grid movie will
+    video_paths: dict or None
+        Dictionary mapping video names to video paths. If None, the the grid movie will
         not include video frames.
 
     centroids: dict
@@ -845,7 +846,7 @@ def grid_movie(
             width = rows * scaled_window_size
             height = cols * scaled_window_size
     """
-    if videos is None:
+    if video_paths is None:
         assert overlay_keypoints, fill(
             "If no videos are provided, then `overlay_keypoints` must "
             "be True. Otherwise there is nothing to show"
@@ -861,7 +862,7 @@ def grid_movie(
                 key,
                 start,
                 end,
-                videos,
+                video_paths,
                 centroids,
                 headings,
                 dot_color,
@@ -1200,10 +1201,11 @@ def generate_grid_movies(
                 video_extension=video_extension,
             )
         check_video_paths(video_paths, results.keys())
-        videos = {k: OpenCVReader(path) for k, path in video_paths.items()}
-
+        # Just create one reader to get fps
+        example_reader = OpenCVReader(next(iter(video_paths.values())))
         if fps is None:
-            fps = list(videos.values())[0].fps
+            fps = example_reader.fps
+        example_reader.close()
 
         if video_frame_indexes is None:
             video_frame_indexes = {k: np.arange(len(v)) for k, v in syllables.items()}
@@ -1219,7 +1221,7 @@ def generate_grid_movies(
                     f"\n\tLength of modeling results = {len(v)}"
                 )
     else:
-        videos = None
+        video_paths = None
 
     # sample instances for each syllable
     syllable_instances = get_syllable_instances(
@@ -1301,7 +1303,7 @@ def generate_grid_movies(
             instances,
             rows,
             cols,
-            videos,
+            video_paths,
             centroids,
             headings,
             window_size,
