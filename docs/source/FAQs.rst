@@ -478,7 +478,7 @@ There are two main causes of GPU out of memory (OOM) errors:
         initial_data = ['path/to/file1.h5', 'path/to/file2.h5']
         coordinates, confidences, bodyparts = kpms.load_keypoints(initial_data, 'deeplabcut')
 
-    - After model fitting, apply the model serially to new data as follows
+    - After model fitting, apply the model serially to the old and new data as follows
 
       .. code-block:: python
 
