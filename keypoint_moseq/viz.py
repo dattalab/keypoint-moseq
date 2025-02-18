@@ -961,8 +961,8 @@ def generate_grid_movies(
     rows=4,
     cols=6,
     filter_size=9,
-    pre=30,
-    post=60,
+    pre=1.0,
+    post=2.0,
     min_frequency=0.005,
     min_duration=3,
     dot_radius=4,
@@ -1077,7 +1077,14 @@ def generate_grid_movies(
         Quality of the grid movies. Higher values result in higher
         quality movies but larger file sizes.
 
-    rows, cols, pre, post, dot_radius, dot_color, window_size
+    rows, cols: int
+        See :py:func:`keypoint_moseq.viz.grid_movie`
+
+    pre, post: float
+        Time in seconds before/after syllable onset to include in the grid movie.
+        These values will be converted to frames using the fps parameter.
+
+    dot_radius, dot_color, window_size
         See :py:func:`keypoint_moseq.viz.grid_movie`
 
     video_extension: str, default=None
@@ -1135,7 +1142,11 @@ def generate_grid_movies(
         grid movie (in row-major order), where each instance is specified as a
         tuple with the video name, start frame and end frame.
     """
+
     # check inputs
+    if fps is None:
+        raise ValueError("Passing None for fps is no longer supported. Make sure to pass 'config' to generate_grid_movies.")
+
     if keypoints_only:
         overlay_keypoints = True
     else:
@@ -1148,6 +1159,9 @@ def generate_grid_movies(
             "`coordinates` must be provided if `window_size` is None "
             "or `overlay_keypoints` is True"
         )
+
+    pre = round(pre * fps)
+    post = round(post * fps)
 
     # prepare output directory
     output_dir = _get_path(
@@ -1201,9 +1215,6 @@ def generate_grid_movies(
             )
         check_video_paths(video_paths, results.keys())
         videos = {k: OpenCVReader(path) for k, path in video_paths.items()}
-
-        if fps is None:
-            fps = list(videos.values())[0].fps
 
         if video_frame_indexes is None:
             video_frame_indexes = {k: np.arange(len(v)) for k, v in syllables.items()}
@@ -1623,8 +1634,8 @@ def generate_trajectory_plots(
     project_dir=None,
     model_name=None,
     output_dir=None,
-    pre=5,
-    post=15,
+    pre=0.167,  # 5 frames at 30 fps
+    post=0.5,   # 15 frames at 30 fps
     min_frequency=0.005,
     min_duration=3,
     skeleton=[],
@@ -1638,7 +1649,7 @@ def generate_trajectory_plots(
     save_individually=True,
     save_gifs=True,
     save_mp4s=False,
-    fps=30,
+    fps=None,
     projection_planes=["xy", "xz"],
     interactive=True,
     density_sample=True,
@@ -1730,6 +1741,13 @@ def generate_trajectory_plots(
         For 3D data, whether to create an visualization that can be
         rotated and zoomed. This argument is ignored for 2D data.
     """
+
+    if fps is None:
+        raise ValueError("Passing None for fps is not supported. Make sure to pass 'config' to generate_trajectory_plots.")
+
+    pre = round(pre * fps)
+    post = round(post * fps)
+
     plot_options.update({"keypoint_colormap": keypoint_colormap})
     edges = [] if len(skeleton) == 0 else get_edges(use_bodyparts, skeleton)
 

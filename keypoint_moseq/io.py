@@ -112,6 +112,7 @@ def generate_config(project_dir, **kwargs):
             "whiten": True,
             "fix_heading": False,
             "seg_length": 10000,
+            "fps": 30,
         },
     )
 
@@ -155,6 +156,7 @@ def generate_config(project_dir, **kwargs):
         "conf_threshold": "used to define outliers for interpolation when the model is initialized",
         "conf_pseudocount": "pseudocount used regularize neural network confidences",
         "fix_heading": "whether to keep the heading angle fixed; this should only be True if the pose is constrained to a narrow range of angles, e.g. a headfixed mouse.",
+        "fps": "frames per second of the video recordings",
     }
 
     sections = [
