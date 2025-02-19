@@ -323,14 +323,17 @@ def noise_calibration(
     set a prior on the noise level for each keypoint on each frame.
 
     Follow these steps to use the widget:
-        - Run the cell below. A widget should appear with a video frame. The yellow marker denotes the automatically detected location of the bodypart.
-            
+        - Run the cell below. A widget should appear with a video frame.
+        The yellow marker denotes the automatically detected location of the bodypart.
+
         - Annotate each frame with the correct location of the labeled bodypart
             - Left click to specify the correct location - an "X" should appear.
             - Use the prev/next buttons to annotate additional frames.
             - Click and drag the bottom-right shaded corner of the widget to zoom.
 
-        - It is suggested to annotate at least 50 frames, tracked by the 'annotations' counter. This counter includes saved annotations from previous sessions if you've run this widget on this project before.
+        - It is suggested to annotate at least 50 frames, tracked by the 'annotations' counter.
+        This counter includes saved annotations from previous sessions if you've run this 
+        widget on this project before.
 
         - You will not be able to save your annotations until you have annotated at least 20 frames.
 
