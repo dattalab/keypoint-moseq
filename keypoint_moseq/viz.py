@@ -974,11 +974,11 @@ def generate_grid_movies(
     video_dir=None,
     video_paths=None,
     video_frame_indexes=None,
+    pre=1.0,
+    post=2.0,
     rows=4,
     cols=6,
     filter_size=9,
-    pre=1.0,
-    post=2.0,
     min_frequency=0.005,
     min_duration=3,
     dot_radius=4,
@@ -1093,14 +1093,15 @@ def generate_grid_movies(
         Quality of the grid movies. Higher values result in higher
         quality movies but larger file sizes.
 
-    rows, cols: int
-        See :py:func:`keypoint_moseq.viz.grid_movie`
+    pre: float, default=1.0
+        Time in seconds before syllable onset to include in the grid movie.
+        This value will be converted to frames using the fps parameter.
 
-    pre, post: float
-        Time in seconds before/after syllable onset to include in the grid movie.
-        These values will be converted to frames using the fps parameter.
+    post: float, default=2.0 
+        Time in seconds after syllable onset to include in the grid movie.
+        This value will be converted to frames using the fps parameter.
 
-    dot_radius, dot_color, window_size
+    rows, cols, dot_radius, dot_color: int
         See :py:func:`keypoint_moseq.viz.grid_movie`
 
     video_extension: str, default=None
@@ -1126,17 +1127,16 @@ def generate_grid_movies(
 
     keypoints_only: bool, default=False
         Whether to only show the keypoints (i.e. no video frames).
-        Overrides `overlay_keypoints`. When this option is used,
-        the framerate should be explicitly specified using `fps`.
+        Overrides `overlay_keypoints`. 
 
     keypoints_scale: float, default=1
         Factor to scale keypoint coordinates before plotting. Only used when
         `keypoints_only=True`. This is useful when the keypoints are 3D and
         encoded in units that are larger than a pixel.
 
-    fps: int, default=30
-        Framerate of the grid movie. If None, the framerate is determined
-        from the videos.
+    fps: int, default=None
+        Framerate of the grid movie. Must be specified, typically using the
+        project config. 
 
     plot_options: dict, default={}
         Dictionary of options to pass to
@@ -1167,8 +1167,7 @@ def generate_grid_movies(
     assert tuple(use_dims) in dimension_pairs, f"use_dims must be one of {[list(d) for d in dimension_pairs]}. Received {use_dims}."
 
     # check inputs
-    if fps is None:
-        raise ValueError("Passing None for fps is no longer supported. Make sure to pass 'config' to generate_grid_movies.")
+    assert fps is not None, "Passing None for fps is no longer supported. Make sure to pass 'config' to generate_grid_movies."
 
     if keypoints_only:
         overlay_keypoints = True
@@ -1707,6 +1706,14 @@ def generate_trajectory_plots(
         Directory where trajectory plots should be saved. If None,
         plots will be saved to `{project_dir}/{model_name}/trajectory_plots`.
 
+    pre: float, default=0.167
+        Time in seconds before syllable onset to include in the trajectory plots.
+        This value will be converted to frames using the fps parameter.
+
+    post: float, default=0.5
+        Time in seconds after syllable onset to include in the trajectory plots.
+        This value will be converted to frames using the fps parameter.
+
     skeleton : list, default=[]
         List of edges that define the skeleton, where each edge is a
         pair of bodypart names or a pair of indexes.
@@ -1743,9 +1750,10 @@ def generate_trajectory_plots(
     save_mp4s: bool, default=False
         Whether to save videos of the trajectory plots as .mp4 files
 
-    fps: int, default=30
+    fps: int, default=None
         Framerate of the videos from which keypoints were derived.
         Used to set the framerate of gifs when `save_gif=True`.
+        Must be specified, typically using the project config.
 
     projection_planes: list (subset of ['xy', 'yz', 'xz']), default=['xy','xz']
         For 3D data, defines the 2D plane(s) on which to project keypoint
@@ -1758,8 +1766,7 @@ def generate_trajectory_plots(
         rotated and zoomed. This argument is ignored for 2D data.
     """
 
-    if fps is None:
-        raise ValueError("Passing None for fps is not supported. Make sure to pass 'config' to generate_trajectory_plots.")
+    assert fps is not None, "Passing None for fps is not supported. Make sure to pass 'config' to generate_trajectory_plots."
 
     pre = round(pre * fps)
     post = round(post * fps)
