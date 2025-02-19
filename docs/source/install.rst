@@ -11,7 +11,7 @@ Local installation
 
 .. note::
 
-   Keypoint moseq supports the same platforms as [jax](https://github.com/jax-ml/jax?tab=readme-ov-file#supported-platforms). That is, it supports CPU and GPU installations on linux systems, and CPU installations on MacOS and Windows systems. GPU on WSL2 is considered 'experimental'.
+   Keypoint moseq supports the same platforms as `jax <https://github.com/jax-ml/jax?tab=readme-ov-file#supported-platforms>`_. That is, it supports CPU and GPU installations on linux systems, and CPU installations on MacOS and Windows systems. GPU on WSL2 is considered 'experimental'.
 
 Create a new conda environment with python 3.10::
 
