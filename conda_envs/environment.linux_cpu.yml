@@ -5,7 +5,7 @@ channels:
   - conda-forge
 
 dependencies:
-  - python=3.9
+  - python=3.10
   - pytables
   - conda-forge::jax=0.3.22
   - conda-forge::jaxlib=0.3.22=*cpu*

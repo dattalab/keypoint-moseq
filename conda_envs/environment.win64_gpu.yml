@@ -6,7 +6,7 @@ channels:
   - nvidia
 
 dependencies:
-  - python=3.9
+  - python=3.10
   - conda-forge::cudatoolkit=11.8.0
   - conda-forge::cudnn=8.8.0.121
   - nvidia::cuda-nvcc

@@ -6,7 +6,7 @@ channels:
   - defaults
 
 dependencies:
-  - python=3.9
+  - python=3.10
   - pytables
   - jaxlib=0.3.22=*cuda*
   - jax=0.3.22
