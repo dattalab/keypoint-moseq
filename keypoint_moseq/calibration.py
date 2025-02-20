@@ -137,14 +137,15 @@ def save_annotations(project_dir, annotations, video_frame_indexes):
         corresponded to a subset of frames from each video (i.e. if videos were
         trimmed or coordinates were downsampled).
     """
-    # Columns:
-    # key: recording name
-    # trimmed_frame: frame number in the trimmed video (same as full_frame if the full recording was used)
-    # full_frame: frame number in the full video
-    # bodypart: bodypart name
-    # x: annotated x-coordinate
-    # y: annotated y-coordinate
-    output = ["key,trimmed_frame,full_frame,bodypart,x,y"]
+    output = [
+        "# key: recording name",
+        "# coordinate_index: index of the keypoint data in coordinates (same as video_frame_index if every frame was used)", 
+        "# video_frame_index: frame number in the video",
+        "# bodypart: name of the bodypart that was annotated",
+        "# x: x-coordinate of the annotated keypoint", 
+        "# y: y-coordinate of the annotated keypoint",
+        "key,coordinate_index,video_frame_index,bodypart,x,y"
+    ]
     for (key, frame, bodypart), (x, y) in annotations.items():
         output.append(f"{key},{frame},{video_frame_indexes[key][frame]},{bodypart},{x},{y}")
     path = os.path.join(project_dir, "error_annotations.csv")
