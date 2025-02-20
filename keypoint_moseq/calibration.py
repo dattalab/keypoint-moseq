@@ -190,9 +190,7 @@ def _confs_and_dists_from_annotations(coordinates, confidences, annotations, bod
         if key in coordinates and key in confidences:
             k = bodyparts.index(bodypart)
             confs.append(confidences[key][frame][k])
-            dists.append(
-                np.sqrt(((coordinates[key][frame][k] - np.array(xy)) ** 2).sum())
-            )
+            dists.append(np.sqrt(((coordinates[key][frame][k] - np.array(xy)) ** 2).sum()))
     return confs, dists
 
 

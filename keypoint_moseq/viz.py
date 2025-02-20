@@ -105,9 +105,7 @@ def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3, 2)):
     plt.tight_layout()
 
     if savefig:
-        assert project_dir is not None, fill(
-            "The `savefig` option requires a `project_dir`"
-        )
+        assert project_dir is not None, fill("The `savefig` option requires a `project_dir`")
         plt.savefig(os.path.join(project_dir, "pca_scree.pdf"))
     plt.show()
     return fig
@@ -262,9 +260,7 @@ def plot_pcs(
         plt.tight_layout()
 
         if savefig:
-            assert project_dir is not None, fill(
-                "The `savefig` option requires a `project_dir`"
-            )
+            assert project_dir is not None, fill("The `savefig` option requires a `project_dir`")
             plt.savefig(os.path.join(project_dir, f"pcs-{name}.pdf"))
         plt.show()
 
@@ -635,9 +631,7 @@ def plot_progress(
         axs[3].set_ylabel("Iterations")
         axs[3].set_title("State sequence history")
 
-        yticks = [
-            int(y) for y in axs[3].get_yticks() if y < len(saved_iterations) and y > 0
-        ]
+        yticks = [int(y) for y in axs[3].get_yticks() if y < len(saved_iterations) and y > 0]
         yticklabels = saved_iterations[yticks]
         axs[3].set_yticks(yticks)
         axs[3].set_yticklabels(yticklabels)
@@ -674,9 +668,7 @@ def write_video_clip(frames, path, fps=30, quality=7):
     quality : int, default=7
         Quality of video encoding.
     """
-    with imageio.get_writer(
-        path, pixelformat="yuv420p", fps=fps, quality=quality
-    ) as writer:
+    with imageio.get_writer(path, pixelformat="yuv420p", fps=fps, quality=quality) as writer:
         for frame in frames:
             writer.append_data(frame)
 
@@ -716,9 +708,7 @@ def _grid_movie_tile(
         for ii, (frame, c) in enumerate(zip(frames, cs)):
             if overlay_keypoints:
                 coords = coordinates[key][start - pre + ii]
-                frame = overlay_keypoints_on_image(
-                    frame, coords, edges=edges, **plot_options
-                )
+                frame = overlay_keypoints_on_image(frame, coords, edges=edges, **plot_options)
 
             frame = cv2.warpAffine(frame, np.float32(M), (window_size, window_size))
             frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
@@ -738,9 +728,7 @@ def _grid_movie_tile(
         cs = (cs - c) @ r.T * scale_factor + scaled_window_size // 2
         background = np.zeros((scaled_window_size, scaled_window_size, 3))
         for ii, (uvs, c) in enumerate(zip(coords, cs)):
-            frame = overlay_keypoints_on_image(
-                background.copy(), uvs, edges=edges, **plot_options
-            )
+            frame = overlay_keypoints_on_image(background.copy(), uvs, edges=edges, **plot_options)
             if 0 <= ii - pre <= end - start and dot_radius > 0:
                 pos = (int(c[0]), int(c[1]))
                 cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
@@ -996,8 +984,8 @@ def generate_grid_movies(
     often (i.e. has at least `rows*cols` instances with duration
     of at least `min_duration` and an overall frequency of at least
     `min_frequency`). The grid movies are saved to `output_dir` if
-    specified, or else to `{project_dir}/{model_name}/grid_movies`. 
-    A subset of parameters are documented below. See 
+    specified, or else to `{project_dir}/{model_name}/grid_movies`.
+    A subset of parameters are documented below. See
     :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
 
     Parameters
@@ -1150,9 +1138,7 @@ def generate_grid_movies(
         )
 
     # prepare output directory
-    output_dir = _get_path(
-        project_dir, model_name, output_dir, "grid_movies", "output_dir"
-    )
+    output_dir = _get_path(project_dir, model_name, output_dir, "grid_movies", "output_dir")
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     print(f"Writing grid movies to {output_dir}")
@@ -1179,9 +1165,7 @@ def generate_grid_movies(
     if headings is None:
         headings = {k: v["heading"] for k, v in results.items()}
 
-    centroids, headings = filter_centroids_headings(
-        centroids, headings, filter_size=filter_size
-    )
+    centroids, headings = filter_centroids_headings(centroids, headings, filter_size=filter_size)
 
     # scale keypoints if necessary
     if keypoints_only:
@@ -1733,9 +1717,7 @@ def generate_trajectory_plots(
     plot_options.update({"keypoint_colormap": keypoint_colormap})
     edges = [] if len(skeleton) == 0 else get_edges(use_bodyparts, skeleton)
 
-    output_dir = _get_path(
-        project_dir, model_name, output_dir, "trajectory_plots", "output_dir"
-    )
+    output_dir = _get_path(project_dir, model_name, output_dir, "trajectory_plots", "output_dir")
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     print(f"Saving trajectory plots to {output_dir}")
@@ -1758,9 +1740,7 @@ def generate_trajectory_plots(
     Xs = np.stack([typical_trajectories[s] for s in syllable_ixs])
 
     if Xs.shape[-1] == 3:
-        projection_planes = [
-            "".join(sorted(plane.lower())) for plane in projection_planes
-        ]
+        projection_planes = ["".join(sorted(plane.lower())) for plane in projection_planes]
         assert set(projection_planes) <= set(["xy", "yz", "xz"]), fill(
             "`projection_planes` must be a subset of `['xy','yz','xz']`"
         )
@@ -1789,9 +1769,7 @@ def generate_trajectory_plots(
         # individual plots
         if save_individually:
             desc = "Generating trajectory plots"
-            for title, X in tqdm.tqdm(
-                zip(titles, Xs_2D), desc=desc, total=len(titles), ncols=72
-            ):
+            for title, X in tqdm.tqdm(zip(titles, Xs_2D), desc=desc, total=len(titles), ncols=72):
                 fig, ax, rasters = plot_trajectories(
                     [title],
                     X[None],
@@ -2011,9 +1989,7 @@ def overlay_keypoints_on_video(
         outliers = np.any(np.isnan(coordinates), axis=2)
         interpolated_coordinates = interpolate_keypoints(coordinates, outliers)
         crop_centroid = np.nanmedian(interpolated_coordinates, axis=1)
-        crop_centroid = gaussian_filter1d(
-            crop_centroid, centroid_smoothing_filter, axis=0
-        )
+        crop_centroid = gaussian_filter1d(crop_centroid, centroid_smoothing_filter, axis=0)
 
     reader = OpenCVReader(video_path)
     fps = reader.fps
@@ -2023,9 +1999,7 @@ def overlay_keypoints_on_video(
     if video_frame_indexes is None:
         video_frame_indexes = np.arange(len(coordinates))
 
-    with imageio.get_writer(
-        output_path, pixelformat="yuv420p", fps=fps, quality=quality
-    ) as writer:
+    with imageio.get_writer(output_path, pixelformat="yuv420p", fps=fps, quality=quality) as writer:
         for frame in tqdm.tqdm(frames, ncols=72):
             image = overlay_keypoints_on_image(
                 reader[frame], coordinates[frame], edges=edges, **plot_options
@@ -2250,9 +2224,7 @@ def plot_pcs_3D(
     )
 
     if savefig:
-        assert project_dir is not None, fill(
-            "The `savefig` option requires a `project_dir`"
-        )
+        assert project_dir is not None, fill("The `savefig` option requires a `project_dir`")
         save_path = os.path.join(project_dir, f"pcs.html")
         fig.write_html(save_path)
         print(f"Saved interactive plot to {save_path}")
@@ -2831,9 +2803,7 @@ def hierarchical_clustering_order(X, dist_metric="euclidean", linkage_method="wa
     return ordering
 
 
-def plot_confusion_matrix(
-    results1, results2, min_frequency=0.005, sort=True, normalize=True
-):
+def plot_confusion_matrix(results1, results2, min_frequency=0.005, sort=True, normalize=True):
     """Plot a confusion matrix that compares syllables across two models.
 
     Parameters
@@ -2863,12 +2833,8 @@ def plot_confusion_matrix(
     ax: matplotlib axis
         Axis containing the confusion matrix.
     """
-    syllables1 = np.concatenate(
-        [results1[k]["syllable"] for k in sorted(results1.keys())]
-    )
-    syllables2 = np.concatenate(
-        [results2[k]["syllable"] for k in sorted(results2.keys())]
-    )
+    syllables1 = np.concatenate([results1[k]["syllable"] for k in sorted(results1.keys())])
+    syllables2 = np.concatenate([results2[k]["syllable"] for k in sorted(results2.keys())])
 
     C = np.zeros((np.max(syllables1) + 1, np.max(syllables2) + 1))
     np.add.at(C, (syllables1, syllables2), 1)
@@ -2938,9 +2904,7 @@ def plot_eml_scores(eml_scores, eml_std_errs, model_names):
     return fig, ax
 
 
-def plot_pose(
-    coordinates, bodyparts, skeleton, cmap="autumn", node_size=6, linewidth=3, ax=None
-):
+def plot_pose(coordinates, bodyparts, skeleton, cmap="autumn", node_size=6, linewidth=3, ax=None):
     """
     Plot a single pose using matplotlib.
 
