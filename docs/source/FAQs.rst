@@ -396,7 +396,7 @@ Density sampling is a way of selecting syllable instances that are most represen
 Troubleshooting
 ===============
 
-We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following in a command terminal with the ``keypoint_moseq`` conda environment activated (not inside a jupyter notebook!).
+We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following in a command terminal in an environment with keypoint-moseq installed (not inside a jupyter notebook!).
    
 .. code-block:: python
 
