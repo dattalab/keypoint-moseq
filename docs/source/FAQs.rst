@@ -418,7 +418,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
 1. **Multiple instances of keypoint MoSeq are running on the same GPU.** 
 
-  This can happen if you're running multiple notebooks or scripts at the same time. Since JAX preallocates 90% of the GPU when it is first initialized (i.e. after running ``import keypoint_moseq``), there is very little memory left for the second notebook/script. To fix this, you can either shutdown the kernels of the other notebooks/scripts or use a different GPU.
+  This can happen if you're running multiple notebooks or scripts at the same time. Since JAX preallocates 75% of the GPU when it is first initialized (i.e. after running ``import keypoint_moseq``), there is very little memory left for the second notebook/script. To fix this, you can either shutdown the kernels of the other notebooks/scripts or use a different GPU.
 
 
 2. **Large datasets.** 
