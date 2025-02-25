@@ -418,81 +418,81 @@ There are two main causes of GPU out of memory (OOM) errors:
 
 1. **Multiple instances of keypoint MoSeq are running on the same GPU.** 
 
-  This can happen if you're running multiple notebooks or scripts at the same time. Since JAX preallocates 75% of the GPU when it is first initialized (i.e. after running ``import keypoint_moseq``), there is very little memory left for the second notebook/script. To fix this, you can either shutdown the kernels of the other notebooks/scripts or use a different GPU.
+   This can happen if you're running multiple notebooks or scripts at the same time. Since JAX preallocates 75% of the GPU when it is first initialized (i.e. after running ``import keypoint_moseq``), there is very little memory left for the second notebook/script. To fix this, you can either shutdown the kernels of the other notebooks/scripts or use a different GPU.
 
 
 2. **Large datasets.** 
 
-  Keypoint MoSeq requires ~1MB GPU memory for each 100 frames of data during model fitting. If your GPU isn't big enough, try one of the following:
+   Keypoint MoSeq requires ~3MB GPU memory for each 100 frames of data during model fitting. If your GPU isn't big enough, try one of the following:
 
-  - Use `Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb>`_. 
+   - Use `Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb>`_. 
 
-    - Colab provides free access to GPUs with 16GB of VRAM.
+     - Colab provides free access to GPUs with 16GB of VRAM.
 
-    - Larger GPUs can be accessed using colab pro. 
-
-
-  - Disable parallel message passing. This should results in a 2-5x reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fit_model` or :py:func:`keypoint_moseq.apply_model`. For example
-
-   .. code-block:: python
-
-      kpms.fit_model(
-         model, data, metadata, project_dir, 
-         model_name, parallel_message_passing=False)
+     - Larger GPUs can be accessed using colab pro. 
 
 
-  - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
+   - Disable parallel message passing. This results in a large reduction in memory usage (~6x on the test dataset available in colab), but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fit_model` or :py:func:`keypoint_moseq.apply_model`. For example
 
-   .. code-block:: python
+     .. code-block:: python
 
-      from jax_moseq.utils import set_mixed_map_iters
-      set_mixed_map_iters(4)
-
-   This will split the data into 4 batches, which should reduce the memory requirements about 4-fold but also result in a 4-fold slow-down. The number of batches can be adjusted as needed.
-
-
-  - Use multiple GPUs if they are available. To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
-
-   .. code-block:: python
-
-      from jax_moseq.utils import set_mixed_map_gpus
-      set_mixed_map_gpus(2)
-
-   This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
+        kpms.fit_model(
+           model, data, metadata, project_dir, 
+           model_name, parallel_message_passing=False)
 
 
-  - Switch to single-precision computing by running the code below immediarely after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs.
+   - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
 
-  .. code-block:: python
-   
-      import jax
-      jax.config.update('jax_enable_x64', False)
+     .. code-block:: python
+
+        from jax_moseq.utils import set_mixed_map_iters
+        set_mixed_map_iters(4)
+
+     This will split the data into 4 batches, which should reduce the memory requirements about 4-fold but also result in a 4-fold slow-down. The number of batches can be adjusted as needed.
+
+
+   - Use multiple GPUs if they are available. To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
+
+     .. code-block:: python
+
+        from jax_moseq.utils import set_mixed_map_gpus
+        set_mixed_map_gpus(2)
+
+     This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
+
+
+   - Switch to single-precision computing by running the code below immediarely after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs.
+
+     .. code-block:: python
+     
+        import jax
+        jax.config.update('jax_enable_x64', False)
 
     
-  - Fit to a subset of the data, then apply the model to the rest of the data. 
+   - Fit to a subset of the data, then apply the model to the rest of the data. 
 
-    - To fit a subset of the data, specify the subset as a list of paths during data loading
+     - To fit a subset of the data, specify the subset as a list of paths during data loading
 
-      .. code-block:: python
+       .. code-block:: python
 
-        initial_data = ['path/to/file1.h5', 'path/to/file2.h5']
-        coordinates, confidences, bodyparts = kpms.load_keypoints(initial_data, 'deeplabcut')
+          initial_data = ['path/to/file1.h5', 'path/to/file2.h5']
+          coordinates, confidences, bodyparts = kpms.load_keypoints(initial_data, 'deeplabcut')
 
-    - After model fitting, apply the model serially to the old and new data as follows
+     - After model fitting, apply the model serially to the old and new data as follows
 
-      .. code-block:: python
+       .. code-block:: python
 
-        model = kpms.load_checkpoint(project_dir, model_name)[0]
-        pca = kpms.load_pca(project_dir)
+          model = kpms.load_checkpoint(project_dir, model_name)[0]
+          pca = kpms.load_pca(project_dir)
 
-        new_data_batch1 = ['path/to/file3.h5', 'path/to/second/file4.h5']
-        new_data_batch2 = ['path/to/file5.h5', 'path/to/second/file6.h5']
+          new_data_batch1 = ['path/to/file3.h5', 'path/to/second/file4.h5']
+          new_data_batch2 = ['path/to/file5.h5', 'path/to/second/file6.h5']
 
-        for batch in [initial_data, new_data_batch1, new_data_batch2]:
+          for batch in [initial_data, new_data_batch1, new_data_batch2]:
 
-            coordinates, confidences, bodyparts = kpms.load_keypoints(batch, 'deeplabcut')
-            data, metadata = kpms.format_data(coordinates, confidences, **config())
-            results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
+              coordinates, confidences, bodyparts = kpms.load_keypoints(batch, 'deeplabcut')
+              data, metadata = kpms.format_data(coordinates, confidences, **config())
+              results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
 
 
 NaNs during fitting
