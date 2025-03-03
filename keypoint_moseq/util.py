@@ -827,16 +827,121 @@ def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdo
                 " for additional information."
             )
 
+def _get_percent_padding(video_frame_counts, seg_length):
+    """
+    Calculate the percentage of padding required when segmenting videos into fixed-length segments.
+
+    This function computes the total amount of padding needed across all videos and expresses it as a
+    percentage of total video length. Padding is required in two cases:
+    1. For videos shorter than the segment length (short videos)
+    2. For the remainder segments of videos longer than the segment length (long videos)
+
+    Parameters
+    ----------
+    video_frame_counts : numpy.ndarray
+        Array of video lengths in frames
+    seg_length : int
+        Segment length in frames to asses for amount of padding required
+
+    Returns
+    -------
+    float
+        Percentage of total padding required relative to total video length.
+        Formula: (total_padding / total_video_length) * 100
+
+    Examples
+    --------
+    >>> video_frame_counts = np.array([8, 15, 4])
+    >>> seg_length = 10
+    >>> _get_percent_padding(video_frame_counts, seg_length)
+    # Returns padding percentage considering:
+    # - Padding needed for 8-frame video (2 frames)
+    # - Padding needed for 15-frame video (5 frames)
+    # - Padding needed for 4-frame video (6 frames)
+    """
+    short_videos_mask = video_frame_counts < seg_length
+    short_videos_padding = np.sum((seg_length - video_frame_counts[short_videos_mask]))
+    long_videos_padding = np.sum(video_frame_counts[~short_videos_mask] % seg_length)
+    padding = short_videos_padding + long_videos_padding
+    return padding / np.sum(video_frame_counts) * 100
+
+def _find_optimal_segment_length(video_lengths, default=10_000, max_percent_padding=50):
+    """Find optimal segment length for video splitting using a top-down approach.
+    
+    This algorithm starts with the longest video length as the initial segment length
+    and iteratively tries shorter lengths until finding one that satisfies the padding
+    constraint. It then ensures all remainders are greater than 3 frames by incrementally
+    adjusting the segment length.
+
+    Parameters
+    ----------
+    video_lengths : array-like
+        Array of video lengths (in frames) to analyze. All lengths must be greater than 3.
+    default : int, default=10_000
+        Maximum allowed segment length. If the algorithm finds a longer optimal length,
+        it will be capped at this value.
+    max_percent_padding : float, default=50
+        Maximum allowed padding as a percentage of total video length. Padding occurs
+        when videos need to be extended to a multiple of the segment length.
+        
+    Returns
+    -------
+    int
+        Optimal segment length that satisfies:
+        1. Padding is less than max_percent_padding
+        2. All non-zero remainders when dividing videos by segment length are > 3 frames
+        3. Segment length does not exceed default value
+        
+    Notes
+    -----
+    The algorithm has two main phases:
+    1. Find a segment length that satisfies the padding constraint by trying progressively
+       shorter video lengths
+    2. Adjust the segment length upward if needed to ensure all remainders are > 3 frames
+    """
+    video_lengths = np.array(video_lengths)
+    assert np.all(video_lengths > 3), "All videos must have at least 4 frames"
+
+    sorted_video_lengths = np.sort(video_lengths)[::-1]
+
+    video_idx = 0
+    seg_length = sorted_video_lengths[video_idx]
+    percent_padding = _get_percent_padding(video_lengths, seg_length)
+    while percent_padding > max_percent_padding:
+        video_idx += 1
+
+        # In some very specific and unlikely pathological cases, we may run out of videos before finding a seg_length that satisfies the padding constraint.
+        # It shouldn't happen in practice, but this is here to avoid an index out of bounds error just in case.
+        if video_idx >= len(sorted_video_lengths):
+            seg_length = default
+            break
+
+        seg_length = sorted_video_lengths[video_idx]
+        percent_padding = _get_percent_padding(video_lengths, seg_length)
+
+    # In the case where all videos are long, avoid using a segment length that won't sufficiently divide them.
+    if seg_length > default:
+        seg_length = default
+
+    remainders = video_lengths % seg_length
+    nonzero_remainders = remainders[remainders != 0]
+    while not np.all(nonzero_remainders > 3):
+        seg_length += nonzero_remainders.max()
+        remainders = video_lengths % seg_length
+        nonzero_remainders = remainders[remainders != 0]
+
+    return seg_length
 
 def format_data(
     coordinates,
     confidences=None,
     keys=None,
-    seg_length=None,
+    default_seg_length=10_000,
     bodyparts=None,
     use_bodyparts=None,
     conf_pseudocount=1e-3,
     added_noise_level=0.1,
+    max_percent_padding=50,
     **kwargs,
 ):
     """Format keypoint coordinates and confidences for inference.
@@ -880,11 +985,17 @@ def format_data(
     conf_pseudocount: float, default=1e-3
         Pseudocount used to augment keypoint confidences.
 
-    seg_length: int, default=None
-        Length of each segment. If `seg_length=None`, a length is chosen so
-        that no time-series are broken into multiple segments. If all
-        time-series are shorter than `seg_length`, then  `seg_length` is set to
-        the length of the shortest time-series.
+    default_seg_length: int, default=10,000
+        Videos are split up into segments for parallelization. This parameter sets the 
+        maximum length of each segment. The actual segment length is automatically 
+        determined to minimize padding while ensuring all segments are at least 4 frames 
+        long.
+
+    max_percent_padding: float, default=50
+        Maximum allowed padding as a percentage of total video length. The algorithm that
+        selects the segment length will find a segment length that requires less than this
+        percentage of padding, ensuring that large amounts of memory aren't wasted on
+        padding.
 
     Returns
     -------
@@ -949,20 +1060,14 @@ def format_data(
         coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
         confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
 
-    if seg_length is not None:
-        max_recording_length = max([coordinates[key].shape[0] for key in keys])
-        seg_length = min(seg_length, max_recording_length)
+    seg_length = _find_optimal_segment_length(
+        [coordinates[key].shape[0] for key in keys],
+        default=default_seg_length,
+        max_percent_padding=max_percent_padding,
+    )
 
     Y, mask, metadata = batch(coordinates, seg_length=seg_length, keys=keys)
     Y = Y.astype(float)
-
-    min_segment_length = np.diff(metadata[1], axis=1).min()
-    assert min_segment_length >= 4, (
-        f"The shortest segment has length  {min_segment_length} which is below the "
-        "minimum of 4. Try increasing `seg_length` in the config (e.g. add "
-        f"{min_segment_length} to its current value) and also make sure that all your "
-        "input recordings are at least 4 frames long."
-    )
 
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
     if np.min(conf) < 0:
