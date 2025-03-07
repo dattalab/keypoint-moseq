@@ -1317,3 +1317,25 @@ def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
             else:
                 new_results[key][k] = np.copy(v)
     return new_results
+
+def reindex_by_frequency(results: dict) -> dict:
+    """
+    Convenience function to reindex syllables by frequency such that index 0 is the most frequent syllable,
+    index 1 is the second most frequent, etc. This is an identical operation to what happens in reindex_syllables_in_checkpoint, 
+    so this function is just a convenience for doing the same thing in-memory. 
+
+    Parameters
+    ----------
+    results: dict
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
+
+    Returns
+    -------
+    reindexed_results: dict
+        A dictionary with the same structure as `results`, but with reindexed syllable indices.
+    """
+    counts = np.bincount(np.concatenate([results[k]['syllable'] for k in results.keys()]))
+    mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(np.argsort(counts)[::-1])}
+    return apply_syllable_mapping(results, mapping)
+    
