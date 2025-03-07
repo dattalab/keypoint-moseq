@@ -347,5 +347,35 @@ After this, the pipeline can be run as usual, except for steps that involve read
     # Overlaying keypoints
     kpms.overlay_keypoints_on_video(..., video_frame_indexes=video_frame_indexes)
 
+.. _merging-syllables:
+Merging similar syllables
+---------------
 
+Sometimes it will be the case that keypoint moseq has identified two syllables that you believe are similar enough that they should be considered the same syllable. Keypoint-moseq provides convenience functions for merging similar syllables. It probably makes the most sense to do this after the visualization steps at the end of the modeling notebook, using the trajecotry plots, grid movies, and dendrogram to determine which syllables you think are similar enough to be merged.
 
+.. code-block:: python
+
+    # Define the syllables to merge as a list of lists. All syllables within
+    # a given inner list will be merged into a single syllable.
+    # In this case, we're merging syllables 1, 2, and 3 into a single syllable, 
+    # and merging syllables 6, 9, and 13 into a single syllable.
+    syllables_to_merge = [
+        [1, 2, 3],
+        [6, 9, 13]
+    ]
+
+    # load the results h5 file from inside the model folder
+    results = kpms.load_hdf5('demo_project/2025_02_19-14_03_54/results.h5')
+
+    # Use the convenience functions make_syllable_mapping and apply_syllable_mapping to merge the syllables
+    syllable_mapping = kpms.make_syllable_mapping(results, syllables_to_merge)
+    new_results = kpms.apply_syllable_mapping(results, syllable_mapping)
+
+    # Which syllable is mapped to which new index is arbitrary, so you may want to reindex by frequency 
+    # again.
+    new_results = kpms.reindex_by_frequency(new_results)
+
+    # Optionally, save the new results to an alternative results file. 
+    # Do NOT save over the original results file, as you will want to have this around for reference.
+    # If you try to save over the original results file, you will get an error.
+    kpms.save_hdf5('demo_project/2025_02_19-14_03_54/results_merged.h5', new_results)
