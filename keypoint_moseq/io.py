@@ -684,7 +684,7 @@ def extract_results(
     }
 
     if save_results:
-        save_hdf5(path, results_dict)
+        save_hdf5(path, results_dict, overwrite_results=True)
         print(fill(f"Saved results to {path}"))
 
     return results_dict
@@ -1242,7 +1242,7 @@ def _dannce_loader(filepath, name):
     return coordinates, confidences, None
 
 
-def save_hdf5(filepath, save_dict, datapath=None):
+def save_hdf5(filepath, save_dict, datapath=None, overwrite_results=False):
     """Save a dict of pytrees to an hdf5 file. The leaves of the pytrees must
     be numpy arrays, scalars, or strings.
 
@@ -1258,7 +1258,15 @@ def save_hdf5(filepath, save_dict, datapath=None):
     datapath: str, default=None
         Path within the hdf5 file to save the data. If None, the data is saved
         at the root of the hdf5 file.
+
+    overwrite_results: bool, default=False
+        If False, will raise an AssertionError when trying to overwrite an
+        existing results.h5 file.
     """
+    if not overwrite_results:
+        assert not (os.path.basename(filepath) == 'results.h5' and os.path.exists(filepath)), \
+            "Overwrite the original auto-generated results.h5 file is not allowed. Pass a different filepath."
+
     with h5py.File(filepath, "a") as f:
         if datapath is not None:
             _savetree_hdf5(jax.device_get(save_dict), f, datapath)
