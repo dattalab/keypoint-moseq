@@ -393,6 +393,12 @@ Users occasionally find that the trajectory plot and grid movie for a given syll
 Density sampling is a way of selecting syllable instances that are most representative relative to the full dataset. Specifically, for each syllable, a syllable-specific density function is computed in trajectory space and compared to the overall density across all syllables. An exemplar instance that maximizes the ratio between these densities is chosen for each syllable, and its nearest neighbors are randomly sampled. When the distribution of trajectories for a syllable is multimodal (i.e., it represents a mixture of distinct behaviors), the examplar syllable may not capture the full range of behaviors, or it may jump from one mode to another when an existing model is applied to new data. In these cases, it may be better to sample syllable instances uniformly by setting turning off density sampling as shown above.
 
 
+Two different syllables look very similar. Is there a way to consider them as one syllable?
+----------------------------------------------------
+
+Yes, see the :ref:`Merging similar syllables <merging-syllables>` section in the Advanced Usage guide for instructions on how to combine syllables that represent the same behavior.
+
+
 Troubleshooting
 ===============
 
