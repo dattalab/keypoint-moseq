@@ -1224,3 +1224,96 @@ def check_video_paths(video_paths, keys):
 
     if len(error_messages) > 0:
         raise ValueError("\n\n".join(error_messages))
+
+def find_all_syllables(results: dict) -> list[int]:
+    """
+    Find all unique syllables in the results.
+
+    Parameters
+    ----------
+    results: dict
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
+
+    Returns
+    -------
+    syllables: list[int]
+        List of all unique syllables in the results.
+    """
+    return np.unique(np.concatenate([np.unique(v['syllable']) for v in results.values()]))
+    
+def make_syllable_mapping(results: dict, syllables_to_group: list[list[int]]) -> dict[int, int]:
+    """
+    Create a mapping that maps each syllable index to a new syllable index in such a way that
+    each group of syllables in `syllables_to_group` is mapped to a single syllable
+    and the mapping is contiguous (i.e. if 4 and 6 both map to syllables, then 5 will also map to a syllable).
+
+    Parameters
+    ----------
+    results: dict
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
+
+    syllables_to_group: list[list[int]]
+        List of lists of syllable indexes. Each sublist represents a set of syllables that will be
+        re-mapped to share a single index (merged into a single syllable).
+
+    Returns
+    -------
+    mapping: dict[int, int]
+        A dictionary mapping each original syllable index to a new syllable index.
+
+    Example
+    -------
+    >>> results_path = "demo_project/2025_02_19-14_03_54/results.h5"
+    >>> results = load_hdf5(results_path)
+    >>> print(find_all_syllables(results))
+    >>> # [0 1 2 3 4 5 6]
+    >>> syllables_to_group = [[0, 1], [2, 5, 6]]
+    >>> mapping = make_syllable_mapping(results, syllables_to_group)
+    >>> print(mapping)
+    >>> # {0: 0, 1: 0, 2: 1, 3: 2, 4: 3, 5: 1, 6: 1}
+    """
+    syllables = find_all_syllables(results)
+    mapping = {}
+    current_syllable = 0
+
+    for group in syllables_to_group:
+        for syllable in group:
+            mapping[syllable] = current_syllable
+        current_syllable += 1
+
+    for syllable in syllables:
+        if syllable not in mapping:
+            mapping[syllable] = current_syllable
+            current_syllable += 1
+
+    return mapping
+    
+def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
+    """
+    Remap syllable indices to new numbers.
+
+    Parameters
+    ----------
+    results: dict
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
+
+    mapping: dict[int, int]
+
+        A dictionary mapping each original syllable index to a new syllable index.
+    Returns
+    -------
+    remapped_results: dict
+        A dictionary with the same structure as `results`, but with remapped syllable indices.
+    """
+    new_results = {}
+    for key, value in results.items():
+        new_results[key] = {}
+        for k, v in value.items():
+            if k == 'syllable':
+                new_results[key][k] = np.array([mapping[s] for s in v])
+            else:
+                new_results[key][k] = np.copy(v)
+    return new_results
