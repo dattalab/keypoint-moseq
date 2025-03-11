@@ -318,7 +318,7 @@ Below we provide two code recipes to get around these issues. The first recipe i
 
    .. code-block:: python
 
-      heading = {k: np.zeros_like(v) for k in heading.items()}
+      heading = {k: np.zeros_like(v) for k,v in heading.items()}
 
 
 Why are there only trajectory plots for a subset of syllables?
