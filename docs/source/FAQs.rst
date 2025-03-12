@@ -418,21 +418,21 @@ There are two main causes of GPU out of memory (OOM) errors:
 
 1. **Multiple instances of keypoint MoSeq are running on the same GPU.** 
 
-  This can happen if you're running multiple notebooks or scripts at the same time. Since JAX preallocates 90% of the GPU when it is first initialized (i.e. after running ``import keypoint_moseq``), there is very little memory left for the second notebook/script. To fix this, you can either shutdown the kernels of the other notebooks/scripts or use a different GPU.
+  This can happen if you're running multiple notebooks or scripts at the same time. Since JAX preallocates 75% of the GPU when it is first initialized (i.e. after running ``import keypoint_moseq``), there is very little memory left for the second notebook/script. To fix this, you can either shutdown the kernels of the other notebooks/scripts or use a different GPU.
 
 
 2. **Large datasets.** 
 
-  Keypoint MoSeq requires ~1MB GPU memory for each 100 frames of data during model fitting. If your GPU isn't big enough, try one of the following:
+  Required GPU memory scales roughly linearly with the size of the dataset and the number of latent dimensions used. For example, a dataset with 4 latent dimensions will require roughly ~3MB GPU memory for each 100 frames of data during model fitting. If your GPU isn't big enough, try one of the following:
 
   - Use `Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb>`_. 
 
     - Colab provides free access to GPUs with 16GB of VRAM.
-
+    
     - Larger GPUs can be accessed using colab pro. 
 
 
-  - Disable parallel message passing. This should results in a 2-5x reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fit_model` or :py:func:`keypoint_moseq.apply_model`. For example
+  - Disable parallel message passing. This results in a large (4-6 fold) reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fit_model` or :py:func:`keypoint_moseq.apply_model`. For example
 
    .. code-block:: python
 
