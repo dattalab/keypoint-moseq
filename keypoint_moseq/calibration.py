@@ -199,13 +199,19 @@ def _noise_calibration_widget(
     next_button = Button(description="Next")
     prev_button = Button(description="Prev")
     save_button = Button(description="Save")
-    annotation_counter = Label(f'Annotations Completed: 0')
-    usr_msg = Label(f'')
-    output = Output()
+    info_label = Label(f'Image 1 of {num_images} | Annotate the {current_img_key[0][2]} bodypart | Annotations: 0', layout={'margin': '0px'})
+    usr_msg = Label(f'', layout={'margin': '0px 0px 0px 10px'})
+    output = Output(layout={'margin': '0px', 'padding': '0px'})
 
-    fig, ax = plt.subplots(figsize=(7, 7))
+    fig, ax = plt.subplots(figsize=(5, 5))
     fig.canvas.header_visible = False
     fig.canvas.toolbar_visible = False
+    plt.subplots_adjust(top=1, bottom=0.01, left=0.07, right=0.99)
+    ax.margins(y=0)
+    
+    def update_info_label():
+        bodypart = current_img_key[0][2]
+        info_label.value = f'Image {current_img_idx[0]+1} of {num_images} | Annotate the {bodypart} bodypart | Annotations Completed: {len(annotations)}'
 
     def onclick(event):
         if event.xdata is not None and event.ydata is not None:
@@ -217,7 +223,7 @@ def _noise_calibration_widget(
             annotations[current_img_key[0]] = (event.xdata, event.ydata)
             current_annotation_marker[0] = ax.scatter(event.xdata, event.ydata, color='red', marker='x')
             fig.canvas.draw()
-            annotation_counter.value = f'Annotations Completed: {len(annotations)}'
+            update_info_label()
                 
     fig.canvas.mpl_connect("button_press_event", onclick)
 
@@ -241,8 +247,15 @@ def _noise_calibration_widget(
             if image_key in annotations:
                 current_annotation_marker[0] = ax.scatter(annotations[image_key][0], annotations[image_key][1], color='red', marker='x')
 
-            ax.set_title(f'image {current_img_idx[0]+1} of {num_images}\nrecording: {image_key[0]}\nbodypart: {image_key[2]}')
+            fig.tight_layout(pad=0)
+            ax.set_frame_on(False)
+            ax.margins(y=0)
+            pos = ax.get_position()
+            ax.set_position([pos.x0, pos.y0, pos.width, pos.height + pos.y0])
+
             fig.canvas.draw()
+            
+            update_info_label()
 
     def next_image(_):
         if current_img_idx[0] < num_images - 1:
@@ -296,8 +309,8 @@ def _noise_calibration_widget(
     show_image(current_img_key[0])
 
     controls = HBox([prev_button, next_button, save_button])
-    annotation_counter_box = HBox([annotation_counter])
-    ui = VBox([controls, annotation_counter_box, usr_msg, output])
+    msg_box = HBox([info_label, usr_msg])
+    ui = VBox([controls, msg_box, output], layout={'margin': '0px', 'padding': '0px'})
     return ui
 
 
