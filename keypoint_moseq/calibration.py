@@ -202,7 +202,7 @@ def _noise_calibration_widget(
     next_button = Button(description="Next")
     prev_button = Button(description="Prev")
     info_label = Label(f'Target bodypart = {current_img_key[0][2]} | Completed annotations = 0', layout={'margin': '0px'})
-    usr_msg = Label(f'Annotations not saved: complete {required_annotations} more annotations to start auto-saving', layout={'margin': '0px 0px 0px 10px'})
+    usr_msg = Label(f'Annotations not saved: complete {required_annotations} more annotations to start auto-saving', layout={'margin': '0px'})
     output = Output(layout={'margin': '0px', 'padding': '0px'})
 
     fig, ax = plt.subplots(figsize=(6, 5))
