@@ -201,7 +201,7 @@ def _noise_calibration_widget(
 
     next_button = Button(description="Next")
     prev_button = Button(description="Prev")
-    info_label = Label(f'Image 1 of {num_images} | Annotate the {current_img_key[0][2]} bodypart | Annotations: 0', layout={'margin': '0px'})
+    info_label = Label(f'Target bodypart = {current_img_key[0][2]} | Completed annotations = 0', layout={'margin': '0px'})
     usr_msg = Label(f'Annotations not saved: complete {required_annotations} more annotations to start auto-saving', layout={'margin': '0px 0px 0px 10px'})
     output = Output(layout={'margin': '0px', 'padding': '0px'})
 
@@ -213,7 +213,7 @@ def _noise_calibration_widget(
     
     def update_info_label():
         bodypart = current_img_key[0][2]
-        info_label.value = f'Image {current_img_idx[0]+1} of {num_images} | Annotate the {bodypart} bodypart | Annotations Completed: {len(annotations)}'
+        info_label.value = f'Target bodypart = {bodypart} | Completed annotations = {len(annotations)}'
 
     def save_annotations_data():
         # Get error and confidence values only for the coordinates that have been annotated
@@ -312,7 +312,7 @@ def _noise_calibration_widget(
     show_image(current_img_key[0])
 
     controls = HBox([prev_button, next_button])
-    msg_box = HBox([info_label, usr_msg])
+    msg_box = VBox([info_label, usr_msg])
     ui = VBox([controls, msg_box, output], layout={'margin': '0px', 'padding': '0px'})
     return ui
 
