@@ -205,9 +205,8 @@ def _noise_calibration_widget(
     usr_msg = Label(f'Annotations not saved: complete {required_annotations} more annotations to start auto-saving', layout={'margin': '0px 0px 0px 10px'})
     output = Output(layout={'margin': '0px', 'padding': '0px'})
 
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = plt.subplots(figsize=(6, 5))
     fig.canvas.header_visible = False
-    fig.canvas.toolbar_visible = False
     plt.subplots_adjust(top=1, bottom=0.01, left=0.07, right=0.99)
     ax.margins(y=0)
     
@@ -284,11 +283,12 @@ def _noise_calibration_widget(
             if image_key in annotations:
                 current_annotation_marker[0] = ax.scatter(annotations[image_key][0], annotations[image_key][1], color='red', marker='x')
 
-            fig.tight_layout(pad=0)
+            # fig.tight_layout(pad=0)
             ax.set_frame_on(False)
             ax.margins(y=0)
             pos = ax.get_position()
-            ax.set_position([pos.x0, pos.y0, pos.width, pos.height + pos.y0])
+            right_shift = 0.1 # Avoids the toolbar overlapping the y-axis tick labels
+            ax.set_position([pos.x0 + right_shift, pos.y0, pos.width - right_shift, pos.height + pos.y0])
 
             fig.canvas.draw()
             
