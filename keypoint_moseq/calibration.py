@@ -346,7 +346,8 @@ def noise_calibration(
         - Annotate each frame with the correct location of the labeled bodypart
             - Left click to specify the correct location - an "X" should appear.
             - Use the prev/next buttons to annotate additional frames.
-            - Click and drag the bottom-right shaded corner of the widget to zoom.
+            - Click and drag the bottom-right shaded corner of the widget to adjust image size.
+            - Use the toolbar to the left of the figure to pan and zoom.
 
         - It is suggested to annotate at least 50 frames, tracked by the 'annotations' counter.
         This counter includes saved annotations from previous sessions if you've run this 
