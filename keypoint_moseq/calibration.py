@@ -190,6 +190,9 @@ def _noise_calibration_widget(
     import matplotlib.pyplot as plt
     from ipywidgets import Button, Label, Output, HBox, VBox
 
+    # Constant for required number of annotations before auto-saving
+    required_annotations = 20
+
     num_images = len(sample_keys)
     current_img_idx = [0]
     current_img_key = [sample_keys[current_img_idx[0]]]
@@ -198,9 +201,8 @@ def _noise_calibration_widget(
 
     next_button = Button(description="Next")
     prev_button = Button(description="Prev")
-    save_button = Button(description="Save")
     info_label = Label(f'Image 1 of {num_images} | Annotate the {current_img_key[0][2]} bodypart | Annotations: 0', layout={'margin': '0px'})
-    usr_msg = Label(f'', layout={'margin': '0px 0px 0px 10px'})
+    usr_msg = Label(f'Annotations not saved: complete {required_annotations} more annotations to start auto-saving', layout={'margin': '0px 0px 0px 10px'})
     output = Output(layout={'margin': '0px', 'padding': '0px'})
 
     fig, ax = plt.subplots(figsize=(5, 5))
@@ -213,6 +215,34 @@ def _noise_calibration_widget(
         bodypart = current_img_key[0][2]
         info_label.value = f'Image {current_img_idx[0]+1} of {num_images} | Annotate the {bodypart} bodypart | Annotations Completed: {len(annotations)}'
 
+    def save_annotations_data():
+        # Get error and confidence values only for the coordinates that have been annotated
+        errors = []
+        confidences_annot = []
+
+        for video, frame, bodypart in annotations.keys():
+            bodypart_idx = bodyparts.index(bodypart)
+
+            original_coordinates = coordinates[video][frame, bodypart_idx, :]
+            annotated_coordinates = annotations[(video, frame, bodypart)]
+
+            error = np.log10(np.sqrt(np.sum((original_coordinates - annotated_coordinates) ** 2)) + 1)
+            confidence = np.log10(confidences[video][frame, bodypart_idx])
+
+            errors.append(error)
+            confidences_annot.append(confidence)
+
+        # Fit a line to the annotated data with confidence as the x-axis and error as the y-axis
+        # scipy.stats.linregress might be a little more clear but this avoid another import
+        slope, intercept = np.polyfit(confidences_annot, errors, 1)
+        error_estimator['slope'] = slope
+        error_estimator['intercept'] = intercept
+        error_estimator['conf_threshold'] = conf_threshold
+
+        save_annotations(project_dir, annotations, video_frame_indexes)
+        usr_msg.value = f'Annotations saved to {project_dir}/error_annotations.csv'
+        save_params(project_dir, error_estimator)
+
     def onclick(event):
         if event.xdata is not None and event.ydata is not None:
             # Check for and remove existing annotation marker
@@ -224,6 +254,13 @@ def _noise_calibration_widget(
             current_annotation_marker[0] = ax.scatter(event.xdata, event.ydata, color='red', marker='x')
             fig.canvas.draw()
             update_info_label()
+            
+            # Check if we have enough annotations to save
+            if len(annotations) >= required_annotations:
+                save_annotations_data()
+            else:
+                remaining = required_annotations - len(annotations)
+                usr_msg.value = f"Annotations not saved: complete {remaining} more annotations to start auto-saving"
                 
     fig.canvas.mpl_connect("button_press_event", onclick)
 
@@ -269,46 +306,12 @@ def _noise_calibration_widget(
             current_img_key[0] = sample_keys[current_img_idx[0]]
             show_image(current_img_key[0])
 
-    def handle_save(_):
-        if len(annotations) < 20:
-            usr_msg.value = "You must annotate at least 20 frames before saving."
-            return
-
-        # Get error and confidence values only for the coordinates that have been annotated
-        errors = []
-        confidences_annot = []
-
-        for video, frame, bodypart in annotations.keys():
-            bodypart_idx = bodyparts.index(bodypart)
-
-            original_coordinates = coordinates[video][frame, bodypart_idx, :]
-            annotated_coordinates = annotations[(video, frame, bodypart)]
-
-            error = np.log10(np.sqrt(np.sum((original_coordinates - annotated_coordinates) ** 2)) + 1)
-            confidence = np.log10(confidences[video][frame, bodypart_idx])
-
-            errors.append(error)
-            confidences_annot.append(confidence)
-
-
-        # Fit a line to the annotated data with confidence as the x-axis and error as the y-axis
-        # scipy.stats.linregress might be a little more clear but this avoid another import
-        slope, intercept = np.polyfit(confidences_annot, errors, 1)
-        error_estimator['slope'] = slope
-        error_estimator['intercept'] = intercept
-        error_estimator['conf_threshold'] = conf_threshold
-
-        save_annotations(project_dir, annotations, video_frame_indexes)
-        usr_msg.value = f'Annotations saved to {project_dir}/error_annotations.csv'
-        save_params(project_dir, error_estimator)
-
     next_button.on_click(next_image)
     prev_button.on_click(prev_image)
-    save_button.on_click(handle_save)
 
     show_image(current_img_key[0])
 
-    controls = HBox([prev_button, next_button, save_button])
+    controls = HBox([prev_button, next_button])
     msg_box = HBox([info_label, usr_msg])
     ui = VBox([controls, msg_box, output], layout={'margin': '0px', 'padding': '0px'})
     return ui
@@ -349,9 +352,9 @@ def noise_calibration(
         This counter includes saved annotations from previous sessions if you've run this 
         widget on this project before.
 
-        - You will not be able to save your annotations until you have annotated at least 20 frames.
-
-        - Use the "save" button to update the config and store your annotations to disk.
+        - Annotations will be automatically saved once you've completed at least 20 annotations.
+        Each new annotation after that will trigger an auto-save of all your work.
+        The message at the top of the widget will indicate when your annotations are being saved.
 
 
     Parameters
