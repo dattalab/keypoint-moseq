@@ -1205,7 +1205,9 @@ def check_video_paths(video_paths, keys):
             nonexistent_videos.append(path)
         else:
             try:
-                OpenCVReader(path)[0]
+                reader = OpenCVReader(path)
+                reader[reader.nframes - 1]
+                reader.close()
             except:
                 unreadable_videos.append(path)
 
