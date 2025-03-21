@@ -1116,6 +1116,7 @@ def plot_syll_stats_with_sem(
 
     # plot each group's stat data separately, computes groupwise SEM, and orders data based on the stat/ordering parameters
     hue = "group" if groups is not None else None
+    linestyles = ['' if not join else 'solid'] * len(groups)
     ax = sns.pointplot(
         data=stats_df,
         x="syllable",
@@ -1126,6 +1127,7 @@ def plot_syll_stats_with_sem(
         ax=ax,
         hue_order=groups,
         palette=colors,
+        linestyles=linestyles
     )
 
     # where some data has already been plotted to ax
