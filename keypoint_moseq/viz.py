@@ -845,6 +845,10 @@ def grid_movie(
         Dictionary of options to pass to `overlay_keypoints_on_image`. Used when
         `overlay_keypoints=True`.
 
+    use_dims: pair of ints, default=[0,1]
+        Dimensions to use for plotting keypoints. Only used when
+        `overlay_keypoints=True` and the keypoints are 3D.
+
     Returns
     -------
     frames: array of shape `(post+pre, width, height, 3)`
