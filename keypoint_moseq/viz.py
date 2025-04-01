@@ -691,11 +691,29 @@ def _grid_movie_tile(
     coordinates,
     plot_options,
     video_frame_indexes,
+    use_dims,
 ):
     scale_factor = scaled_window_size / window_size
     cs = centroids[key][start - pre : start + post]
     h, c = headings[key][start], cs[pre]
     r = np.float32([[np.cos(h), np.sin(h)], [-np.sin(h), np.cos(h)]])
+    syllable_coordinates = coordinates[key][start - pre : start + post].copy()
+
+    keypoint_dimension = next(iter(centroids.values())).shape[-1]
+
+    assert not (keypoint_dimension == 3 and video_paths is not None), "3D keypoints are not supported when video paths are provided"
+
+    if keypoint_dimension == 3:
+        ds = np.array(use_dims)
+
+        if ds[1] == 2:
+            syllable_coordinates[:, :, :2] = ((syllable_coordinates[:, :, :2] - c[:2]) @ r.T) + c[:2]
+            syllable_coordinates[:, :, 2] = -(syllable_coordinates[:, :, 2] - c[2]) + c[2]
+            r = np.float32([[1, 0], [0, 1]])
+
+        cs = cs[:, ds]
+        c = c[ds]
+        syllable_coordinates = syllable_coordinates[:, :, ds]
 
     tile = []
 
@@ -709,8 +727,10 @@ def _grid_movie_tile(
 
         for ii, (frame, c) in enumerate(zip(frames, cs)):
             if overlay_keypoints:
-                coords = coordinates[key][start - pre + ii]
-                frame = overlay_keypoints_on_image(frame, coords, edges=edges, **plot_options)
+                coords = syllable_coordinates[ii]
+                frame = overlay_keypoints_on_image(
+                    frame, coords, edges=edges, **plot_options
+                )
 
             frame = cv2.warpAffine(frame, np.float32(M), (window_size, window_size))
             frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
@@ -725,12 +745,13 @@ def _grid_movie_tile(
             "be True. Otherwise there is nothing to show"
         )
         scale_factor = scaled_window_size / window_size
-        coords = coordinates[key][start - pre : start + post]
-        coords = (coords - c) @ r.T * scale_factor + scaled_window_size // 2
+        syllable_coordinates = (syllable_coordinates - c) @ r.T * scale_factor + scaled_window_size // 2
         cs = (cs - c) @ r.T * scale_factor + scaled_window_size // 2
         background = np.zeros((scaled_window_size, scaled_window_size, 3))
-        for ii, (uvs, c) in enumerate(zip(coords, cs)):
-            frame = overlay_keypoints_on_image(background.copy(), uvs, edges=edges, **plot_options)
+        for ii, (uvs, c) in enumerate(zip(syllable_coordinates, cs)):
+            frame = overlay_keypoints_on_image(
+                background.copy(), uvs, edges=edges, **plot_options
+            )
             if 0 <= ii - pre <= end - start and dot_radius > 0:
                 pos = (int(c[0]), int(c[1]))
                 cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
@@ -757,6 +778,7 @@ def grid_movie(
     overlay_keypoints=False,
     coordinates=None,
     plot_options={},
+    use_dims=None,
 ):
     """Generate a grid movie and return it as an array of frames.
 
@@ -826,6 +848,10 @@ def grid_movie(
         Dictionary of options to pass to `overlay_keypoints_on_image`. Used when
         `overlay_keypoints=True`.
 
+    use_dims: pair of ints, default=[0,1]
+        Dimensions to use for plotting keypoints. Only used when
+        `overlay_keypoints=True` and the keypoints are 3D.
+
     Returns
     -------
     frames: array of shape `(post+pre, width, height, 3)`
@@ -864,6 +890,7 @@ def grid_movie(
                 coordinates,
                 plot_options,
                 video_frame_indexes,
+                use_dims,
             )
         )
 
@@ -1124,6 +1151,14 @@ def generate_grid_movies(
         grid movie (in row-major order), where each instance is specified as a
         tuple with the video name, start frame and end frame.
     """
+    dimension_pairs = [
+        (0, 1),
+        (0, 2),
+        (1, 2),
+    ]
+
+    assert tuple(use_dims) in dimension_pairs, f"use_dims must be one of {[list(d) for d in dimension_pairs]}. Received {use_dims}."
+
     # check inputs
     if keypoints_only:
         overlay_keypoints = True
@@ -1236,14 +1271,6 @@ def generate_grid_movies(
         **sampling_options,
     )
 
-    # if the data is 3D, pick 2 dimensions to use for plotting
-    keypoint_dimension = next(iter(centroids.values())).shape[-1]
-    if keypoint_dimension == 3:
-        ds = np.array(use_dims)
-        centroids = {k: v[:, ds] for k, v in centroids.items()}
-        if coordinates is not None:
-            coordinates = {k: v[:, :, ds] for k, v in coordinates.items()}
-
     # determine window size for grid movies
     if window_size is None:
         window_size = get_grid_movie_window_size(
@@ -1301,6 +1328,7 @@ def generate_grid_movies(
             overlay_keypoints=overlay_keypoints,
             coordinates=coordinates,
             plot_options=plot_options,
+            use_dims=use_dims,
         )
 
         path = os.path.join(output_dir, f"syllable{syllable}.mp4")
