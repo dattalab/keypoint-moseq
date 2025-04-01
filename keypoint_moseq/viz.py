@@ -700,6 +700,9 @@ def _grid_movie_tile(
     syllable_coordinates = coordinates[key][start - pre : start + post].copy()
 
     keypoint_dimension = next(iter(centroids.values())).shape[-1]
+
+    assert not (keypoint_dimension == 3 and video_paths is not None), "3D keypoints are not supported when video paths are provided"
+
     if keypoint_dimension == 3:
         ds = np.array(use_dims)
 
@@ -1148,6 +1151,14 @@ def generate_grid_movies(
         grid movie (in row-major order), where each instance is specified as a
         tuple with the video name, start frame and end frame.
     """
+    dimension_pairs = [
+        (0, 1),
+        (0, 2),
+        (1, 2),
+    ]
+
+    assert tuple(use_dims) in dimension_pairs, f"use_dims must be one of {[list(d) for d in dimension_pairs]}. Received {use_dims}."
+
     # check inputs
     if keypoints_only:
         overlay_keypoints = True
