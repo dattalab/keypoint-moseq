@@ -898,33 +898,30 @@ def _find_optimal_segment_length(sequence_lengths, default=10_000, max_percent_p
     sequence_lengths = np.array(sequence_lengths)
     assert np.all(sequence_lengths > 3), "All sequences must have at least 4 elements"
 
-    sorted_lengths = np.sort(sequence_lengths)[::-1]
+    candidate_seg_lengths = np.sort(np.unique(np.minimum(sequence_lengths, default)))[::-1]
 
-    seq_idx = 0
-    seg_length = sorted_lengths[seq_idx]
-    percent_padding = _get_percent_padding(sequence_lengths, seg_length)
-    while percent_padding > max_percent_padding:
-        seq_idx += 1
-
-        # In some very specific and unlikely pathological cases, we may run out of sequences before finding a seg_length that satisfies the padding constraint.
-        # It shouldn't happen in practice, but this is here to avoid an index out of bounds error just in case.
-        if seq_idx >= len(sorted_lengths):
-            seg_length = default
+    for seg_length in candidate_seg_lengths:
+        percent_padding = _get_percent_padding(sequence_lengths, seg_length)
+        if percent_padding <= max_percent_padding:
             break
 
-        seg_length = sorted_lengths[seq_idx]
-        percent_padding = _get_percent_padding(sequence_lengths, seg_length)
-
-    # In the case where all sequences are long, avoid using a segment length that won't sufficiently divide them.
-    if seg_length > default:
+    if percent_padding > max_percent_padding:
+        warnings.warn(
+            f"No segment length found that satisfies the padding constraint. "
+            f"Using default value of {default}. "
+            f"This may cause modeling to run more slowly than necessary. "
+            f"To fix, try decreasing 'default_seg_length'."
+        )
         seg_length = default
 
-    remainders = sequence_lengths % seg_length
-    nonzero_remainders = remainders[remainders != 0]
-    while not np.all(nonzero_remainders > 3):
-        seg_length += nonzero_remainders.max()
+    while True:
         remainders = sequence_lengths % seg_length
         nonzero_remainders = remainders[remainders != 0]
+
+        if np.all(nonzero_remainders > 3):
+            break
+
+        seg_length += nonzero_remainders.min()
 
     return seg_length
 
