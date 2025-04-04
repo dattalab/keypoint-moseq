@@ -861,7 +861,7 @@ def _get_percent_padding(sequence_lengths, seg_length):
     padding = (-sequence_lengths % seg_length).sum()
     return padding / sequence_lengths.sum() * 100
 
-def _find_optimal_segment_length(sequence_lengths, default=10_000, max_percent_padding=50):
+def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_percent_padding=50):
     """Find optimal segment length for sequence splitting using a top-down approach.
     
     This algorithm starts with the longest sequence length as the initial segment length
@@ -873,7 +873,7 @@ def _find_optimal_segment_length(sequence_lengths, default=10_000, max_percent_p
     ----------
     sequence_lengths : array-like
         Array of sequence lengths to analyze. All lengths must be greater than 3.
-    default : int, default=10_000
+    max_seg_length : int, default=10_000
         Maximum allowed segment length. If the algorithm finds a longer optimal length,
         it will be capped at this value.
     max_percent_padding : float, default=50
@@ -886,7 +886,7 @@ def _find_optimal_segment_length(sequence_lengths, default=10_000, max_percent_p
         Optimal segment length that satisfies:
         1. Padding is less than max_percent_padding
         2. All non-zero remainders when dividing sequences by segment length are > 3 elements
-        3. Segment length does not exceed default value
+        3. Segment length does not exceed max_seg_length value
         
     Notes
     -----
@@ -898,7 +898,7 @@ def _find_optimal_segment_length(sequence_lengths, default=10_000, max_percent_p
     sequence_lengths = np.array(sequence_lengths)
     assert np.all(sequence_lengths > 3), "All sequences must have at least 4 elements"
 
-    candidate_seg_lengths = np.sort(np.unique(np.minimum(sequence_lengths, default)))[::-1]
+    candidate_seg_lengths = np.sort(np.unique(np.minimum(sequence_lengths, max_seg_length)))[::-1]
 
     for seg_length in candidate_seg_lengths:
         percent_padding = _get_percent_padding(sequence_lengths, seg_length)
@@ -908,11 +908,11 @@ def _find_optimal_segment_length(sequence_lengths, default=10_000, max_percent_p
     if percent_padding > max_percent_padding:
         warnings.warn(
             f"No segment length found that satisfies the padding constraint. "
-            f"Using default value of {default}. "
+            f"Using maximum value of {max_seg_length}. "
             f"This may cause modeling to run more slowly than necessary. "
-            f"To fix, try decreasing 'default_seg_length'."
+            f"To fix, try decreasing 'max_seg_length'."
         )
-        seg_length = default
+        seg_length = max_seg_length
 
     while True:
         remainders = sequence_lengths % seg_length
@@ -929,7 +929,7 @@ def format_data(
     coordinates,
     confidences=None,
     keys=None,
-    default_seg_length=10_000,
+    max_seg_length=10_000,
     bodyparts=None,
     use_bodyparts=None,
     conf_pseudocount=1e-3,
@@ -978,7 +978,7 @@ def format_data(
     conf_pseudocount: float, default=1e-3
         Pseudocount used to augment keypoint confidences.
 
-    default_seg_length: int, default=10,000
+    max_seg_length: int, default=10,000
         Videos are split up into segments for parallelization. This parameter sets the 
         maximum length of each segment. The actual segment length is automatically 
         determined to minimize padding while ensuring all segments are at least 4 frames 
@@ -1055,7 +1055,7 @@ def format_data(
 
     seg_length = _find_optimal_segment_length(
         [coordinates[key].shape[0] for key in keys],
-        default=default_seg_length,
+        max_seg_length=max_seg_length,
         max_percent_padding=max_percent_padding,
     )
 
