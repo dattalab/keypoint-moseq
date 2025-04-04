@@ -827,107 +827,103 @@ def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdo
                 " for additional information."
             )
 
-def _get_percent_padding(video_frame_counts, seg_length):
+def _get_percent_padding(sequence_lengths, seg_length):
     """
-    Calculate the percentage of padding required when segmenting videos into fixed-length segments.
+    Calculate the percentage of padding required when segmenting sequences into fixed-length segments.
 
-    This function computes the total amount of padding needed across all videos and expresses it as a
-    percentage of total video length. Padding is required in two cases:
-    1. For videos shorter than the segment length (short videos)
-    2. For the remainder segments of videos longer than the segment length (long videos)
+    This function computes the total amount of padding needed across all sequences and expresses it as a
+    percentage of total sequence length. Padding is required in two cases:
 
     Parameters
     ----------
-    video_frame_counts : numpy.ndarray
-        Array of video lengths in frames
+    sequence_lengths : numpy.ndarray
+        Array of sequence lengths
     seg_length : int
-        Segment length in frames to asses for amount of padding required
+        Segment length in to asses for amount of padding required
 
     Returns
     -------
     float
-        Percentage of total padding required relative to total video length.
-        Formula: (total_padding / total_video_length) * 100
+        Percentage of total padding required relative to total sequence length.
+        Formula: (total_padding / total_sequence_length) * 100
 
     Examples
     --------
-    >>> video_frame_counts = np.array([8, 15, 4])
+    >>> sequence_lengths = np.array([8, 15, 4])
     >>> seg_length = 10
-    >>> _get_percent_padding(video_frame_counts, seg_length)
+    >>> percent_padding = _get_percent_padding(sequence_lengths, seg_length)
     # Returns padding percentage considering:
-    # - Padding needed for 8-frame video (2 frames)
-    # - Padding needed for 15-frame video (5 frames)
-    # - Padding needed for 4-frame video (6 frames)
+    # - Padding needed for 8-element sequence (2 elements)
+    # - Padding needed for 15-element sequence (5 elements)
+    # - Padding needed for 4-element sequence (6 elements)
+    # Result will be 2+5+6 / 8+15+4 * 100 = 48.15%
     """
-    short_videos_mask = video_frame_counts < seg_length
-    short_videos_padding = np.sum((seg_length - video_frame_counts[short_videos_mask]))
-    long_videos_padding = np.sum(video_frame_counts[~short_videos_mask] % seg_length)
-    padding = short_videos_padding + long_videos_padding
-    return padding / np.sum(video_frame_counts) * 100
+    padding = (-sequence_lengths % seg_length).sum()
+    return padding / sequence_lengths.sum() * 100
 
-def _find_optimal_segment_length(video_lengths, default=10_000, max_percent_padding=50):
-    """Find optimal segment length for video splitting using a top-down approach.
+def _find_optimal_segment_length(sequence_lengths, default=10_000, max_percent_padding=50):
+    """Find optimal segment length for sequence splitting using a top-down approach.
     
-    This algorithm starts with the longest video length as the initial segment length
+    This algorithm starts with the longest sequence length as the initial segment length
     and iteratively tries shorter lengths until finding one that satisfies the padding
-    constraint. It then ensures all remainders are greater than 3 frames by incrementally
+    constraint. It then ensures all remainders are greater than 3 elements by incrementally
     adjusting the segment length.
 
     Parameters
     ----------
-    video_lengths : array-like
-        Array of video lengths (in frames) to analyze. All lengths must be greater than 3.
+    sequence_lengths : array-like
+        Array of sequence lengths to analyze. All lengths must be greater than 3.
     default : int, default=10_000
         Maximum allowed segment length. If the algorithm finds a longer optimal length,
         it will be capped at this value.
     max_percent_padding : float, default=50
-        Maximum allowed padding as a percentage of total video length. Padding occurs
-        when videos need to be extended to a multiple of the segment length.
+        Maximum allowed padding as a percentage of total sequence length. Padding occurs
+        when sequences need to be extended to a multiple of the segment length.
         
     Returns
     -------
     int
         Optimal segment length that satisfies:
         1. Padding is less than max_percent_padding
-        2. All non-zero remainders when dividing videos by segment length are > 3 frames
+        2. All non-zero remainders when dividing sequences by segment length are > 3 elements
         3. Segment length does not exceed default value
         
     Notes
     -----
     The algorithm has two main phases:
     1. Find a segment length that satisfies the padding constraint by trying progressively
-       shorter video lengths
-    2. Adjust the segment length upward if needed to ensure all remainders are > 3 frames
+       shorter sequence lengths
+    2. Adjust the segment length upward if needed to ensure all remainders are > 3 elements
     """
-    video_lengths = np.array(video_lengths)
-    assert np.all(video_lengths > 3), "All videos must have at least 4 frames"
+    sequence_lengths = np.array(sequence_lengths)
+    assert np.all(sequence_lengths > 3), "All sequences must have at least 4 elements"
 
-    sorted_video_lengths = np.sort(video_lengths)[::-1]
+    sorted_lengths = np.sort(sequence_lengths)[::-1]
 
-    video_idx = 0
-    seg_length = sorted_video_lengths[video_idx]
-    percent_padding = _get_percent_padding(video_lengths, seg_length)
+    seq_idx = 0
+    seg_length = sorted_lengths[seq_idx]
+    percent_padding = _get_percent_padding(sequence_lengths, seg_length)
     while percent_padding > max_percent_padding:
-        video_idx += 1
+        seq_idx += 1
 
-        # In some very specific and unlikely pathological cases, we may run out of videos before finding a seg_length that satisfies the padding constraint.
+        # In some very specific and unlikely pathological cases, we may run out of sequences before finding a seg_length that satisfies the padding constraint.
         # It shouldn't happen in practice, but this is here to avoid an index out of bounds error just in case.
-        if video_idx >= len(sorted_video_lengths):
+        if seq_idx >= len(sorted_lengths):
             seg_length = default
             break
 
-        seg_length = sorted_video_lengths[video_idx]
-        percent_padding = _get_percent_padding(video_lengths, seg_length)
+        seg_length = sorted_lengths[seq_idx]
+        percent_padding = _get_percent_padding(sequence_lengths, seg_length)
 
-    # In the case where all videos are long, avoid using a segment length that won't sufficiently divide them.
+    # In the case where all sequences are long, avoid using a segment length that won't sufficiently divide them.
     if seg_length > default:
         seg_length = default
 
-    remainders = video_lengths % seg_length
+    remainders = sequence_lengths % seg_length
     nonzero_remainders = remainders[remainders != 0]
     while not np.all(nonzero_remainders > 3):
         seg_length += nonzero_remainders.max()
-        remainders = video_lengths % seg_length
+        remainders = sequence_lengths % seg_length
         nonzero_remainders = remainders[remainders != 0]
 
     return seg_length
