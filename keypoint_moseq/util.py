@@ -832,7 +832,7 @@ def _get_percent_padding(sequence_lengths, seg_length):
     Calculate the percentage of padding required when segmenting sequences into fixed-length segments.
 
     This function computes the total amount of padding needed across all sequences and expresses it as a
-    percentage of total sequence length. Padding is required in two cases:
+    percentage of total sequence length.
 
     Parameters
     ----------
@@ -862,13 +862,8 @@ def _get_percent_padding(sequence_lengths, seg_length):
     return padding / sequence_lengths.sum() * 100
 
 def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_percent_padding=50, min_fragment_length=3):
-    """Find optimal segment length for sequence splitting using a top-down approach.
+    """Find a segment length to use for batching (see :py:func:`keypoint_moseq.util.batch`).
     
-    This algorithm starts with the longest sequence length as the initial segment length
-    and iteratively tries shorter lengths until finding one that satisfies the padding
-    constraint. It then ensures all remainders are greater than min_fragment_length elements 
-    by incrementally adjusting the segment length.
-
     Parameters
     ----------
     sequence_lengths : array-like
@@ -877,20 +872,17 @@ def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_pe
         Maximum allowed segment length. If the algorithm finds a longer optimal length,
         it will be capped at this value.
     max_percent_padding : float, default=50
-        Maximum allowed padding as a percentage of total sequence length. Padding occurs
+        Maximum allowed padding as a percentage of summed sequence lengths. Padding occurs
         when sequences need to be extended to a multiple of the segment length.
     min_fragment_length : int, default=3
-        Minimum allowed length for sequence fragments. All non-zero remainders when dividing
-        sequences by the segment length must be greater than this value.
+        The function will return a segment length that ensures all batches for all sequences are
+        at least min_fragment_length elements long.
         
     Returns
     -------
     int
-        Optimal segment length that satisfies:
-        1. Padding is less than max_percent_padding
-        2. All non-zero remainders when dividing sequences by segment length are > min_fragment_length
-        3. Segment length does not exceed max_seg_length value
-        
+        Optimal segment length
+
     Notes
     -----
     The algorithm has two main phases:
