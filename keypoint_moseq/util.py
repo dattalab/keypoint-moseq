@@ -861,7 +861,7 @@ def _get_percent_padding(sequence_lengths, seg_length):
     padding = (-sequence_lengths % seg_length).sum()
     return padding / sequence_lengths.sum() * 100
 
-def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_percent_padding=50, min_fragment_length=3):
+def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_percent_padding=50, min_fragment_length=4):
     """Find a segment length to use for batching (see :py:func:`keypoint_moseq.util.batch`).
     
     Parameters
@@ -874,7 +874,7 @@ def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_pe
     max_percent_padding : float, default=50
         Maximum allowed padding as a percentage of summed sequence lengths. Padding occurs
         when sequences need to be extended to a multiple of the segment length.
-    min_fragment_length : int, default=3
+    min_fragment_length : int, default=4
         The function will return a segment length that ensures all batches for all sequences are
         at least min_fragment_length elements long.
         
@@ -888,7 +888,7 @@ def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_pe
     The algorithm has two main phases:
     1. Find a segment length that satisfies the padding constraint by trying progressively
        shorter sequence lengths
-    2. Adjust the segment length upward if needed to ensure all remainders are > min_fragment_length
+    2. Adjust the segment length upward if needed to ensure all remainders are >= min_fragment_length
     """
     sequence_lengths = np.array(sequence_lengths)
     assert np.all(sequence_lengths > min_fragment_length), f"All sequences must have at least {min_fragment_length + 1} elements"
@@ -913,7 +913,7 @@ def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_pe
         remainders = sequence_lengths % seg_length
         nonzero_remainders = remainders[remainders != 0]
 
-        if np.all(nonzero_remainders > min_fragment_length):
+        if np.all(nonzero_remainders >= min_fragment_length):
             break
 
         seg_length += nonzero_remainders.min()
@@ -931,7 +931,7 @@ def format_data(
     conf_pseudocount=1e-3,
     added_noise_level=0.1,
     max_percent_padding=50,
-    min_fragment_length=3,
+    min_fragment_length=4,
     **kwargs,
 ):
     """Format keypoint coordinates and confidences for inference.
@@ -994,7 +994,7 @@ def format_data(
 
     min_fragment_length: int, default=4
         Minimum allowed length for sequence fragments. All non-zero remainders when dividing
-        sequences by the segment length must be greater than this value.
+        sequences by the segment length must be greater than or equal to this value.
 
     Returns
     -------
