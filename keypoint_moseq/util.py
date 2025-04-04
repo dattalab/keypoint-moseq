@@ -925,6 +925,7 @@ def format_data(
     confidences=None,
     keys=None,
     max_seg_length=10_000,
+    seg_length=None,
     bodyparts=None,
     use_bodyparts=None,
     conf_pseudocount=1e-3,
@@ -978,15 +979,20 @@ def format_data(
         Videos are split up into segments for parallelization. This parameter sets the 
         maximum length of each segment. The actual segment length is automatically 
         determined to minimize padding while ensuring all segments are greater than min_fragment_length
-        frames long.
+        frames long. Ignored if `seg_length` is provided.
+
+    seg_length: int, default=None
+        Force a specific segment length for batching instead of using the automatic
+        algorithm. If provided, 'max_seg_length', and 'max_percent_padding' are ignored.
+        'min_fragment_length' is still enforced, so set as needed. 
 
     max_percent_padding: float, default=50
         Maximum allowed padding as a percentage of total video length. The algorithm that
         selects the segment length will find a segment length that requires less than this
         percentage of padding, ensuring that large amounts of memory aren't wasted on
-        padding.
+        padding. Ignored if `seg_length` is provided.
 
-    min_fragment_length: int, default=3
+    min_fragment_length: int, default=4
         Minimum allowed length for sequence fragments. All non-zero remainders when dividing
         sequences by the segment length must be greater than this value.
 
@@ -1053,14 +1059,19 @@ def format_data(
         coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
         confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
 
-    seg_length = _find_optimal_segment_length(
-        [coordinates[key].shape[0] for key in keys],
-        max_seg_length=max_seg_length,
-        max_percent_padding=max_percent_padding,
-        min_fragment_length=min_fragment_length,
-    )
+    if not seg_length:
+        seg_length = _find_optimal_segment_length(
+            [coordinates[key].shape[0] for key in keys],
+            max_seg_length=max_seg_length,
+            max_percent_padding=max_percent_padding,
+            min_fragment_length=min_fragment_length,
+        )
 
     Y, mask, metadata = batch(coordinates, seg_length=seg_length, keys=keys)
+    assert np.all(mask.sum(axis=1) >= min_fragment_length), fill(
+        f"All segments must contain at least {min_fragment_length} frames of data, "
+        f"but found segments with as few as {int(mask.sum(axis=1).min())} frames."
+    )
     Y = Y.astype(float)
 
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
