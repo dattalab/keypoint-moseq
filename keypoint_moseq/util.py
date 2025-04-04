@@ -861,31 +861,34 @@ def _get_percent_padding(sequence_lengths, seg_length):
     padding = (-sequence_lengths % seg_length).sum()
     return padding / sequence_lengths.sum() * 100
 
-def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_percent_padding=50):
+def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_percent_padding=50, min_fragment_length=3):
     """Find optimal segment length for sequence splitting using a top-down approach.
     
     This algorithm starts with the longest sequence length as the initial segment length
     and iteratively tries shorter lengths until finding one that satisfies the padding
-    constraint. It then ensures all remainders are greater than 3 elements by incrementally
-    adjusting the segment length.
+    constraint. It then ensures all remainders are greater than min_fragment_length elements 
+    by incrementally adjusting the segment length.
 
     Parameters
     ----------
     sequence_lengths : array-like
-        Array of sequence lengths to analyze. All lengths must be greater than 3.
+        Array of sequence lengths to analyze. All lengths must be greater than min_fragment_length.
     max_seg_length : int, default=10_000
         Maximum allowed segment length. If the algorithm finds a longer optimal length,
         it will be capped at this value.
     max_percent_padding : float, default=50
         Maximum allowed padding as a percentage of total sequence length. Padding occurs
         when sequences need to be extended to a multiple of the segment length.
+    min_fragment_length : int, default=3
+        Minimum allowed length for sequence fragments. All non-zero remainders when dividing
+        sequences by the segment length must be greater than this value.
         
     Returns
     -------
     int
         Optimal segment length that satisfies:
         1. Padding is less than max_percent_padding
-        2. All non-zero remainders when dividing sequences by segment length are > 3 elements
+        2. All non-zero remainders when dividing sequences by segment length are > min_fragment_length
         3. Segment length does not exceed max_seg_length value
         
     Notes
@@ -893,10 +896,10 @@ def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_pe
     The algorithm has two main phases:
     1. Find a segment length that satisfies the padding constraint by trying progressively
        shorter sequence lengths
-    2. Adjust the segment length upward if needed to ensure all remainders are > 3 elements
+    2. Adjust the segment length upward if needed to ensure all remainders are > min_fragment_length
     """
     sequence_lengths = np.array(sequence_lengths)
-    assert np.all(sequence_lengths > 3), "All sequences must have at least 4 elements"
+    assert np.all(sequence_lengths > min_fragment_length), f"All sequences must have at least {min_fragment_length + 1} elements"
 
     candidate_seg_lengths = np.sort(np.unique(np.minimum(sequence_lengths, max_seg_length)))[::-1]
 
@@ -918,7 +921,7 @@ def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_pe
         remainders = sequence_lengths % seg_length
         nonzero_remainders = remainders[remainders != 0]
 
-        if np.all(nonzero_remainders > 3):
+        if np.all(nonzero_remainders > min_fragment_length):
             break
 
         seg_length += nonzero_remainders.min()
@@ -935,6 +938,7 @@ def format_data(
     conf_pseudocount=1e-3,
     added_noise_level=0.1,
     max_percent_padding=50,
+    min_fragment_length=3,
     **kwargs,
 ):
     """Format keypoint coordinates and confidences for inference.
@@ -981,14 +985,18 @@ def format_data(
     max_seg_length: int, default=10,000
         Videos are split up into segments for parallelization. This parameter sets the 
         maximum length of each segment. The actual segment length is automatically 
-        determined to minimize padding while ensuring all segments are at least 4 frames 
-        long.
+        determined to minimize padding while ensuring all segments are greater than min_fragment_length
+        frames long.
 
     max_percent_padding: float, default=50
         Maximum allowed padding as a percentage of total video length. The algorithm that
         selects the segment length will find a segment length that requires less than this
         percentage of padding, ensuring that large amounts of memory aren't wasted on
         padding.
+
+    min_fragment_length: int, default=3
+        Minimum allowed length for sequence fragments. All non-zero remainders when dividing
+        sequences by the segment length must be greater than this value.
 
     Returns
     -------
@@ -1057,6 +1065,7 @@ def format_data(
         [coordinates[key].shape[0] for key in keys],
         max_seg_length=max_seg_length,
         max_percent_padding=max_percent_padding,
+        min_fragment_length=min_fragment_length,
     )
 
     Y, mask, metadata = batch(coordinates, seg_length=seg_length, keys=keys)
