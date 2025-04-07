@@ -829,21 +829,19 @@ def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdo
 
 def _get_percent_padding(sequence_lengths, seg_length):
     """
-    Calculate the percentage of padding required when segmenting sequences into fixed-length segments.
-
-    This function computes the total amount of padding needed across all sequences and expresses it as a
-    percentage of total sequence length.
-
+    Calculate the percentage of padding required when batching sequences of the specified
+    lengths (see :py:func:`keypoint_moseq.util.batch`)
+ 
     Parameters
     ----------
     sequence_lengths : numpy.ndarray
         Array of sequence lengths
     seg_length : int
-        Segment length in to asses for amount of padding required
+        Segment length to use for batching
 
     Returns
     -------
-    float
+    percent_padding: float
         Percentage of total padding required relative to total sequence length.
         Formula: (total_padding / total_sequence_length) * 100
 
@@ -856,7 +854,7 @@ def _get_percent_padding(sequence_lengths, seg_length):
     # - Padding needed for 8-element sequence (2 elements)
     # - Padding needed for 15-element sequence (5 elements)
     # - Padding needed for 4-element sequence (6 elements)
-    # Result will be 2+5+6 / 8+15+4 * 100 = 48.15%
+    # Result will be (2+5+6) / (8+15+4) * 100 = 48.15%
     """
     padding = (-sequence_lengths % seg_length).sum()
     return padding / sequence_lengths.sum() * 100
@@ -867,28 +865,25 @@ def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_pe
     Parameters
     ----------
     sequence_lengths : array-like
-        Array of sequence lengths to analyze. All lengths must be greater than min_fragment_length.
+        Lengths of sequences to be batched. All lengths must be greater than `min_fragment_length`.
     max_seg_length : int, default=10_000
-        Maximum allowed segment length. If the algorithm finds a longer optimal length,
-        it will be capped at this value.
+        Maximum allowed segment length. 
     max_percent_padding : float, default=50
-        Maximum allowed padding as a percentage of summed sequence lengths. Padding occurs
-        when sequences need to be extended to a multiple of the segment length.
+        Maximum allowed padding as a percentage of summed sequence lengths. 
     min_fragment_length : int, default=4
-        The function will return a segment length that ensures all batches for all sequences are
-        at least min_fragment_length elements long.
+        Minimum allowed length sequence length after batching (excluding padding).
         
     Returns
     -------
-    int
-        Optimal segment length
+    segment_length: int
+        Segment length that (approximately) satisfies all constraints.
 
     Notes
     -----
     The algorithm has two main phases:
     1. Find a segment length that satisfies the padding constraint by trying progressively
        shorter sequence lengths
-    2. Adjust the segment length upward if needed to ensure all remainders are >= min_fragment_length
+    2. Increment segment length to ensure all batched sequences are >= min_fragment_length
     """
     sequence_lengths = np.array(sequence_lengths)
     assert np.all(sequence_lengths > min_fragment_length), f"All sequences must have at least {min_fragment_length + 1} elements"
@@ -924,12 +919,12 @@ def format_data(
     coordinates,
     confidences=None,
     keys=None,
-    max_seg_length=10_000,
-    seg_length=None,
     bodyparts=None,
     use_bodyparts=None,
     conf_pseudocount=1e-3,
     added_noise_level=0.1,
+    seg_length=None,
+    max_seg_length=10_000,
     max_percent_padding=50,
     min_fragment_length=4,
     **kwargs,
@@ -975,26 +970,21 @@ def format_data(
     conf_pseudocount: float, default=1e-3
         Pseudocount used to augment keypoint confidences.
 
-    max_seg_length: int, default=10,000
-        Videos are split up into segments for parallelization. This parameter sets the 
-        maximum length of each segment. The actual segment length is automatically 
-        determined to minimize padding while ensuring all segments are greater than min_fragment_length
-        frames long. Ignored if `seg_length` is provided.
-
     seg_length: int, default=None
-        Force a specific segment length for batching instead of using the automatic
-        algorithm. If provided, 'max_seg_length', and 'max_percent_padding' are ignored.
-        'min_fragment_length' is still enforced, so set as needed. 
+        Force a specific segment length for batching instead of determining one algorithmically. 
+        If provided, 'max_seg_length', and 'max_percent_padding' are ignored.
+        'min_fragment_length' is still enforced to prevent downstream runtime errors.
+
+    max_seg_length: int, default=10,000
+        Maximim allowed segment length for batching (see :py:func:`keypoint_moseq.util.batch`).
+        Ignored if `seg_length` is provided.
 
     max_percent_padding: float, default=50
-        Maximum allowed padding as a percentage of total video length. The algorithm that
-        selects the segment length will find a segment length that requires less than this
-        percentage of padding, ensuring that large amounts of memory aren't wasted on
-        padding. Ignored if `seg_length` is provided.
+        Maximum allowed padding as a percentage of the total sequence length when data are batched
+        (see :py:func:`keypoint_moseq.util.batch`). Ignored if `seg_length` is provided.
 
     min_fragment_length: int, default=4
-        Minimum allowed length for sequence fragments. All non-zero remainders when dividing
-        sequences by the segment length must be greater than or equal to this value.
+        Minimum allowed sequence length after batching (see :py:func:`keypoint_moseq.util.batch`).
 
     Returns
     -------
