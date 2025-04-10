@@ -827,16 +827,106 @@ def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdo
                 " for additional information."
             )
 
+def _get_percent_padding(sequence_lengths, seg_length):
+    """
+    Calculate the percentage of padding required when batching sequences of the specified
+    lengths (see :py:func:`keypoint_moseq.util.batch`)
+ 
+    Parameters
+    ----------
+    sequence_lengths : numpy.ndarray
+        Array of sequence lengths
+    seg_length : int
+        Segment length to use for batching
+
+    Returns
+    -------
+    percent_padding: float
+        Percentage of total padding required relative to total sequence length.
+        Formula: (total_padding / total_sequence_length) * 100
+
+    Examples
+    --------
+    >>> sequence_lengths = np.array([8, 15, 4])
+    >>> seg_length = 10
+    >>> percent_padding = _get_percent_padding(sequence_lengths, seg_length)
+    # Returns padding percentage considering:
+    # - Padding needed for 8-element sequence (2 elements)
+    # - Padding needed for 15-element sequence (5 elements)
+    # - Padding needed for 4-element sequence (6 elements)
+    # Result will be (2+5+6) / (8+15+4) * 100 = 48.15%
+    """
+    padding = (-sequence_lengths % seg_length).sum()
+    return padding / sequence_lengths.sum() * 100
+
+def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_percent_padding=50, min_fragment_length=4):
+    """Find a segment length to use for batching (see :py:func:`keypoint_moseq.util.batch`).
+    
+    Parameters
+    ----------
+    sequence_lengths : array-like
+        Lengths of sequences to be batched. All lengths must be greater than `min_fragment_length`.
+    max_seg_length : int, default=10_000
+        Maximum allowed segment length. 
+    max_percent_padding : float, default=50
+        Maximum allowed padding as a percentage of summed sequence lengths. 
+    min_fragment_length : int, default=4
+        Minimum allowed length sequence length after batching (excluding padding).
+        
+    Returns
+    -------
+    segment_length: int
+        Segment length that (approximately) satisfies all constraints.
+
+    Notes
+    -----
+    The algorithm has two main phases:
+    1. Find a segment length that satisfies the padding constraint by trying progressively
+       shorter sequence lengths
+    2. Increment segment length to ensure all batched sequences are >= min_fragment_length
+    """
+    sequence_lengths = np.array(sequence_lengths)
+    assert np.all(sequence_lengths > min_fragment_length), f"All sequences must have at least {min_fragment_length + 1} elements"
+
+    candidate_seg_lengths = np.sort(np.unique(np.minimum(sequence_lengths, max_seg_length)))[::-1]
+
+    for seg_length in candidate_seg_lengths:
+        percent_padding = _get_percent_padding(sequence_lengths, seg_length)
+        if percent_padding <= max_percent_padding:
+            break
+
+    if percent_padding > max_percent_padding:
+        warnings.warn(
+            f"No segment length found that satisfies the padding constraint. "
+            f"Using maximum value of {max_seg_length}. "
+            f"This may cause modeling to run more slowly than necessary. "
+            f"To fix, try decreasing 'max_seg_length'."
+        )
+        seg_length = max_seg_length
+
+    while True:
+        remainders = sequence_lengths % seg_length
+        nonzero_remainders = remainders[remainders != 0]
+
+        if np.all(nonzero_remainders >= min_fragment_length):
+            break
+
+        seg_length += nonzero_remainders.min()
+
+    return seg_length
 
 def format_data(
     coordinates,
     confidences=None,
     keys=None,
-    seg_length=None,
     bodyparts=None,
     use_bodyparts=None,
     conf_pseudocount=1e-3,
     added_noise_level=0.1,
+    seg_length=None,
+    max_seg_length=10_000,
+    max_percent_padding=50,
+    min_fragment_length=4,
     **kwargs,
 ):
     """Format keypoint coordinates and confidences for inference.
@@ -881,10 +971,20 @@ def format_data(
         Pseudocount used to augment keypoint confidences.
 
     seg_length: int, default=None
-        Length of each segment. If `seg_length=None`, a length is chosen so
-        that no time-series are broken into multiple segments. If all
-        time-series are shorter than `seg_length`, then  `seg_length` is set to
-        the length of the shortest time-series.
+        Force a specific segment length for batching instead of determining one algorithmically. 
+        If provided, 'max_seg_length', and 'max_percent_padding' are ignored.
+        'min_fragment_length' is still enforced to prevent downstream runtime errors.
+
+    max_seg_length: int, default=10,000
+        Maximim allowed segment length for batching (see :py:func:`keypoint_moseq.util.batch`).
+        Ignored if `seg_length` is provided.
+
+    max_percent_padding: float, default=50
+        Maximum allowed padding as a percentage of the total sequence length when data are batched
+        (see :py:func:`keypoint_moseq.util.batch`). Ignored if `seg_length` is provided.
+
+    min_fragment_length: int, default=4
+        Minimum allowed sequence length after batching (see :py:func:`keypoint_moseq.util.batch`).
 
     Returns
     -------
@@ -949,20 +1049,20 @@ def format_data(
         coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
         confidences[key] = np.where(outliers, 0, np.nan_to_num(confidences[key]))
 
-    if seg_length is not None:
-        max_recording_length = max([coordinates[key].shape[0] for key in keys])
-        seg_length = min(seg_length, max_recording_length)
+    if not seg_length:
+        seg_length = _find_optimal_segment_length(
+            [coordinates[key].shape[0] for key in keys],
+            max_seg_length=max_seg_length,
+            max_percent_padding=max_percent_padding,
+            min_fragment_length=min_fragment_length,
+        )
 
     Y, mask, metadata = batch(coordinates, seg_length=seg_length, keys=keys)
-    Y = Y.astype(float)
-
-    min_segment_length = np.diff(metadata[1], axis=1).min()
-    assert min_segment_length >= 4, (
-        f"The shortest segment has length  {min_segment_length} which is below the "
-        "minimum of 4. Try increasing `seg_length` in the config (e.g. add "
-        f"{min_segment_length} to its current value) and also make sure that all your "
-        "input recordings are at least 4 frames long."
+    assert np.all(mask.sum(axis=1) >= min_fragment_length), fill(
+        f"All segments must contain at least {min_fragment_length} frames of data, "
+        f"but found segments with as few as {int(mask.sum(axis=1).min())} frames."
     )
+    Y = Y.astype(float)
 
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
     if np.min(conf) < 0:

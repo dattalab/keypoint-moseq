@@ -110,8 +110,7 @@ def generate_config(project_dir, **kwargs):
             "video_dir": "",
             "keypoint_colormap": "autumn",
             "whiten": True,
-            "fix_heading": False,
-            "seg_length": 10000,
+            "fix_heading": False
         },
     )
 
@@ -143,7 +142,6 @@ def generate_config(project_dir, **kwargs):
         "use_bodyparts": "determines the subset of bodyparts to use for modeling and the order in which they are represented",
         "anterior_bodyparts": "used to initialize heading",
         "posterior_bodyparts": "used to initialize heading",
-        "seg_length": "data are broken up into segments to parallelize fitting",
         "trans_hypparams": "transition hyperparameters",
         "ar_hypparams": "autoregressive hyperparameters",
         "obs_hypparams": "keypoint observation hyperparameters",
