@@ -1242,7 +1242,7 @@ def find_all_syllables(results: dict) -> list[int]:
     """
     return np.unique(np.concatenate([np.unique(v['syllable']) for v in results.values()]))
     
-def make_syllable_mapping(results: dict, syllables_to_group: list[list[int]]) -> dict[int, int]:
+def merge_syllables(results: dict, syllables_to_group: list[list[int]]) -> dict[int, int]:
     """
     Create a mapping that maps each syllable index to a new syllable index in such a way that
     each group of syllables in `syllables_to_group` is mapped to a single syllable
@@ -1270,7 +1270,7 @@ def make_syllable_mapping(results: dict, syllables_to_group: list[list[int]]) ->
     >>> print(find_all_syllables(results))
     >>> # [0 1 2 3 4 5 6]
     >>> syllables_to_group = [[0, 1], [2, 5, 6]]
-    >>> mapping = make_syllable_mapping(results, syllables_to_group)
+    >>> mapping = merge_syllables(results, syllables_to_group)
     >>> print(mapping)
     >>> # {0: 0, 1: 0, 2: 1, 3: 2, 4: 3, 5: 1, 6: 1}
     """

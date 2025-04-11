@@ -367,8 +367,8 @@ Sometimes it will be the case that keypoint moseq has identified two syllables t
     # load the results h5 file from inside the model folder
     results = kpms.load_hdf5('demo_project/2025_02_19-14_03_54/results.h5')
 
-    # Use the convenience functions make_syllable_mapping and apply_syllable_mapping to merge the syllables
-    syllable_mapping = kpms.make_syllable_mapping(results, syllables_to_merge)
+    # Use the convenience functions merge_syllables and apply_syllable_mapping to merge the syllables
+    syllable_mapping = kpms.merge_syllables(results, syllables_to_merge)
     new_results = kpms.apply_syllable_mapping(results, syllable_mapping)
 
     # Which syllable is mapped to which new index is arbitrary, so you may want to reindex by frequency 
