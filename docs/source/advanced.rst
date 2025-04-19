@@ -349,9 +349,9 @@ After this, the pipeline can be run as usual, except for steps that involve read
 
 .. _merging-syllables:
 Merging similar syllables
----------------
+-------------------------
 
-Sometimes it will be the case that keypoint moseq has identified two syllables that you believe are similar enough that they should be considered the same syllable. Keypoint-moseq provides convenience functions for merging similar syllables. It probably makes the most sense to do this after the visualization steps at the end of the modeling notebook, using the trajecotry plots, grid movies, and dendrogram to determine which syllables you think are similar enough to be merged.
+In some cases it may be convenient to combine syllables that represent similar behaviors. Keypoint-moseq provides convenience functions for merging syllables into user-defined groups. These groups could be based on inspection of trajecotry plots, grid movies, or syllable dendrograms.
 
 .. code-block:: python
 
@@ -360,22 +360,27 @@ Sometimes it will be the case that keypoint moseq has identified two syllables t
     # In this case, we're merging syllables 1, 2, and 3 into a single syllable, 
     # and merging syllables 6, 9, and 13 into a single syllable.
     syllables_to_merge = [
-        [1, 2, 3],
-        [6, 9, 13]
+        [1, 3],
+        [4, 5]
     ]
 
-    # load the results h5 file from inside the model folder
-    results = kpms.load_hdf5('demo_project/2025_02_19-14_03_54/results.h5')
+    # Load the results you wish to merge (change path as needed)
+    import os
+    results_path = os.path.join(project_dir, model_name, 'results.h5')
+    results = kpms.load_hdf5(results_path)
 
-    # Use the convenience functions merge_syllables and apply_syllable_mapping to merge the syllables
-    syllable_mapping = kpms.merge_syllables(results, syllables_to_merge)
+    # Generate a mapping that specifies how syllables will be relabled.
+    syllable_mapping = kpms.generate_syllable_mapping(results, syllables_to_merge)
     new_results = kpms.apply_syllable_mapping(results, syllable_mapping)
 
-    # Which syllable is mapped to which new index is arbitrary, so you may want to reindex by frequency 
-    # again.
-    new_results = kpms.reindex_by_frequency(new_results)
+    # Save the new results to disk (using a modified path)
+    new_results_path = os.path.join(project_dir, model_name, 'results_merged.h5')
+    kpms.save_hdf5(new_results_path, new_results)
 
-    # Optionally, save the new results to an alternative results file. 
-    # Do NOT save over the original results file, as you will want to have this around for reference.
-    # If you try to save over the original results file, you will get an error.
-    kpms.save_hdf5('demo_project/2025_02_19-14_03_54/results_merged.h5', new_results)
+    # Optionally generate new trajectory plots and grid movies
+    # In each case, specify the output directory to avoid overwriting
+    output_dir = os.path.join(project_dir, model_name, 'grid_movies_merged')
+    kpms.generate_grid_movies(new_results, output_dir=output_dir, coordinates=coordinates, **config())
+
+    output_dir = os.path.join(project_dir, model_name, 'trajectory_plots_merged')
+    kpms.generate_trajectory_plots(coordinates, new_results, output_dir=output_dir, **config())

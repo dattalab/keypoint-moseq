@@ -1242,11 +1242,10 @@ def find_all_syllables(results: dict) -> list[int]:
     """
     return np.unique(np.concatenate([np.unique(v['syllable']) for v in results.values()]))
     
-def merge_syllables(results: dict, syllables_to_group: list[list[int]]) -> dict[int, int]:
+def generate_syllable_mapping(results: dict, syllables_to_group: list[list[int]]) -> dict[int, int]:
     """
-    Create a mapping that maps each syllable index to a new syllable index in such a way that
-    each group of syllables in `syllables_to_group` is mapped to a single syllable
-    and the mapping is contiguous (i.e. if 4 and 6 both map to syllables, then 5 will also map to a syllable).
+    Create a mapping from old syllable indexes to new syllable indexes such that each group of 
+    syllables in `syllables_to_group` is mapped to a single index.
 
     Parameters
     ----------
@@ -1255,8 +1254,8 @@ def merge_syllables(results: dict, syllables_to_group: list[list[int]]) -> dict[
         :py:func:`keypoint_moseq.fitting.extract_results`).
 
     syllables_to_group: list[list[int]]
-        List of lists of syllable indexes. Each sublist represents a set of syllables that will be
-        re-mapped to share a single index (merged into a single syllable).
+        List of lists representing sets of syllables that should be mapped to a single index. All
+        syllables not included in `syllables_to_group` will be treated as singletons. 
 
     Returns
     -------
@@ -1265,12 +1264,11 @@ def merge_syllables(results: dict, syllables_to_group: list[list[int]]) -> dict[
 
     Example
     -------
-    >>> results_path = "demo_project/2025_02_19-14_03_54/results.h5"
     >>> results = load_hdf5(results_path)
     >>> print(find_all_syllables(results))
     >>> # [0 1 2 3 4 5 6]
     >>> syllables_to_group = [[0, 1], [2, 5, 6]]
-    >>> mapping = merge_syllables(results, syllables_to_group)
+    >>> mapping = generate_syllable_mapping(results, syllables_to_group)
     >>> print(mapping)
     >>> # {0: 0, 1: 0, 2: 1, 3: 2, 4: 3, 5: 1, 6: 1}
     """
@@ -1292,7 +1290,7 @@ def merge_syllables(results: dict, syllables_to_group: list[list[int]]) -> dict[
     
 def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
     """
-    Remap syllable indices to new numbers.
+    Relabel syllables based on the provided mapping.
 
     Parameters
     ----------
@@ -1301,12 +1299,12 @@ def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
         :py:func:`keypoint_moseq.fitting.extract_results`).
 
     mapping: dict[int, int]
-
         A dictionary mapping each original syllable index to a new syllable index.
+
     Returns
     -------
     remapped_results: dict
-        A dictionary with the same structure as `results`, but with remapped syllable indices.
+        A dictionary with the same structure as `results`, but with relabled syllables.
     """
     new_results = {}
     for key, value in results.items():
