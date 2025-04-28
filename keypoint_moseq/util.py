@@ -1225,27 +1225,11 @@ def check_video_paths(video_paths, keys):
     if len(error_messages) > 0:
         raise ValueError("\n\n".join(error_messages))
 
-def find_all_syllables(results: dict) -> list[int]:
-    """
-    Find all unique syllables in the results.
-
-    Parameters
-    ----------
-    results: dict
-        Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`).
-
-    Returns
-    -------
-    syllables: list[int]
-        List of all unique syllables in the results.
-    """
-    return np.unique(np.concatenate([np.unique(v['syllable']) for v in results.values()]))
-    
-def generate_syllable_mapping(results: dict, syllables_to_group: list[list[int]]) -> dict[int, int]:
+def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]]) -> dict[int, int]:
     """
     Create a mapping from old syllable indexes to new syllable indexes such that each group of 
-    syllables in `syllables_to_group` is mapped to a single index.
+    syllables in `syllable_grouping` is mapped to a single index. The new indices are assigned
+    based on frequency, with the most frequent groups getting the lowest indices.
 
     Parameters
     ----------
@@ -1253,41 +1237,54 @@ def generate_syllable_mapping(results: dict, syllables_to_group: list[list[int]]
         Dictionary containing modeling results for a dataset (see
         :py:func:`keypoint_moseq.fitting.extract_results`).
 
-    syllables_to_group: list[list[int]]
+    syllable_grouping: list[list[int]]
         List of lists representing sets of syllables that should be mapped to a single index. All
-        syllables not included in `syllables_to_group` will be treated as singletons. 
-
+        syllables not included in `syllable_grouping` will be assigned indices based on their
+        individual frequencies.
     Returns
     -------
     mapping: dict[int, int]
-        A dictionary mapping each original syllable index to a new syllable index.
+        A dictionary mapping each original syllable index to a new syllable index. The new indices
+        are assigned based on frequency, with more frequent syllable groups getting lower indices.
 
     Example
     -------
     >>> results = load_hdf5(results_path)
-    >>> print(find_all_syllables(results))
-    >>> # [0 1 2 3 4 5 6]
-    >>> syllables_to_group = [[0, 1], [2, 5, 6]]
-    >>> mapping = generate_syllable_mapping(results, syllables_to_group)
+    >>> syllable_grouping = [[0, 1], [2, 5, 6]]
+    >>> mapping = generate_syllable_mapping(results, syllable_grouping)
     >>> print(mapping)
+    >>> # If syllables [0,1] are most frequent, then [2,5,6] second most frequent:
     >>> # {0: 0, 1: 0, 2: 1, 3: 2, 4: 3, 5: 1, 6: 1}
     """
-    syllables = find_all_syllables(results)
+    # Count the number of times each syllable is used
+    syllable_counts = np.zeros(max(max(v['syllable']) for v in results.values()) + 1, dtype=int)
+    for v in results.values():
+        unique, counts = np.unique(v['syllable'], return_counts=True)
+        syllable_counts[unique] += counts
+
+    # Get a list of all syllables that are in a group
+    syllables_to_group = [s for group in syllable_grouping for s in group]
+
+    # Count the total number of times a group of syllables is used
+    all_counts = []
+    for group in syllable_grouping:
+        group_count = sum(syllable_counts[s] for s in group)
+        all_counts.append((group_count, group))
+
+    # Count the number of times a single syllable is used
+    for syllable in range(len(syllable_counts)):
+        if syllable not in syllables_to_group:
+            all_counts.append((syllable_counts[syllable], [syllable]))
+
+    all_counts.sort(reverse=True)
+
     mapping = {}
-    current_syllable = 0
-
-    for group in syllables_to_group:
-        for syllable in group:
-            mapping[syllable] = current_syllable
-        current_syllable += 1
-
-    for syllable in syllables:
-        if syllable not in mapping:
-            mapping[syllable] = current_syllable
-            current_syllable += 1
+    for i, (_, syllables) in enumerate(all_counts):
+        for syllable in syllables:
+            mapping[syllable] = i
 
     return mapping
-    
+
 def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
     """
     Relabel syllables based on the provided mapping.
@@ -1315,25 +1312,3 @@ def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
             else:
                 new_results[key][k] = np.copy(v)
     return new_results
-
-def reindex_by_frequency(results: dict) -> dict:
-    """
-    Convenience function to reindex syllables by frequency such that index 0 is the most frequent syllable,
-    index 1 is the second most frequent, etc. This is an identical operation to what happens in reindex_syllables_in_checkpoint, 
-    so this function is just a convenience for doing the same thing in-memory. 
-
-    Parameters
-    ----------
-    results: dict
-        Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`).
-
-    Returns
-    -------
-    reindexed_results: dict
-        A dictionary with the same structure as `results`, but with reindexed syllable indices.
-    """
-    counts = np.bincount(np.concatenate([results[k]['syllable'] for k in results.keys()]))
-    mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(np.argsort(counts)[::-1])}
-    return apply_syllable_mapping(results, mapping)
-    

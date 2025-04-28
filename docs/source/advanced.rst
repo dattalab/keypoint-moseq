@@ -357,8 +357,8 @@ In some cases it may be convenient to combine syllables that represent similar b
 
     # Define the syllables to merge as a list of lists. All syllables within
     # a given inner list will be merged into a single syllable.
-    # In this case, we're merging syllables 1, 2, and 3 into a single syllable, 
-    # and merging syllables 6, 9, and 13 into a single syllable.
+    # In this case, we're merging syllables 1 and 3 into a single syllable, 
+    # and merging syllables 4 and 5 into a single syllable.
     syllables_to_merge = [
         [1, 3],
         [4, 5]
