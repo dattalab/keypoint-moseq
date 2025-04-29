@@ -1228,7 +1228,8 @@ def check_video_paths(video_paths, keys):
 def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]]) -> dict[int, int]:
     """
     Create a mapping from old syllable indexes to new syllable indexes such that each group of 
-    syllables in `syllable_grouping` is mapped to a single index. The new indices are assigned
+    syllables in `syllable_grouping` is mapped to a single index. All syllables not included in 
+    `syllable_grouping` will be treated as single-index groups. New indices are assigned to groups
     based on frequency, with the most frequent groups getting the lowest indices.
 
     Parameters
@@ -1238,14 +1239,12 @@ def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]])
         :py:func:`keypoint_moseq.fitting.extract_results`).
 
     syllable_grouping: list[list[int]]
-        List of lists representing sets of syllables that should be mapped to a single index. All
-        syllables not included in `syllable_grouping` will be assigned indices based on their
-        individual frequencies.
+        List of lists representing groups of syllables that should be mapped to a single index. 
+
     Returns
     -------
     mapping: dict[int, int]
-        A dictionary mapping each original syllable index to a new syllable index. The new indices
-        are assigned based on frequency, with more frequent syllable groups getting lower indices.
+        A dictionary mapping each original syllable index to a new syllable index. 
 
     Example
     -------
@@ -1253,7 +1252,6 @@ def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]])
     >>> syllable_grouping = [[0, 1], [2, 5, 6]]
     >>> mapping = generate_syllable_mapping(results, syllable_grouping)
     >>> print(mapping)
-    >>> # If syllables [0,1] are most frequent, then [2,5,6] second most frequent:
     >>> # {0: 0, 1: 0, 2: 1, 3: 2, 4: 3, 5: 1, 6: 1}
     """
     # Count the number of times each syllable is used
@@ -1284,6 +1282,7 @@ def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]])
             mapping[syllable] = i
 
     return mapping
+
 
 def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
     """

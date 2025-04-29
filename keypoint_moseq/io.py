@@ -1260,13 +1260,14 @@ def save_hdf5(filepath, save_dict, datapath=None, exist_ok=False, overwrite=Fals
         at the root of the hdf5 file.
 
     exist_ok: bool, default=False
-        If False, will raise an AssertionError when trying to overwrite an
-        existing file.
+        If False, will raise an AssertionError when trying to modify an existing file.
 
     overwrite: bool, default=False
-        If True, will overwrite an existing dataset or group.
+        If False, will raise an AssertionError when trying to overwrite an existing dataset or group.
     """
-    assert not (os.path.exists(filepath) and not exist_ok), f'{filepath} already exists. Set exist_ok to True to allow for editing an existing file.'
+    assert not (
+        os.path.exists(filepath) and not exist_ok
+    ), f'{filepath} already exists. Set exist_ok to True to allow for editing an existing file.'
 
     with h5py.File(filepath, "a") as f:
         if datapath is not None:
@@ -1318,7 +1319,9 @@ def _savetree_hdf5(tree, group, name, overwrite=False):
     overwrite: bool, default=False
         If True, will overwrite an existing dataset or group.
     """
-    assert not (not overwrite and name in group), f'{name} already exists in {group}. Set overwrite to True to allow for editing an existing file.'
+    assert not (
+        not overwrite and name in group
+    ), f'{name} already exists in {group}. Set overwrite to True to overwrite data in an existing file.'
 
     if name in group:
         del group[name]
