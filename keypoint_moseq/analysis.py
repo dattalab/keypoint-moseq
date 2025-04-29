@@ -378,11 +378,13 @@ def generate_syll_info(project_dir, model_name, syll_info_path):
         }
     )
 
-    grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
-    assert len(grid_movies) > 0, (
-        "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
-        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
-    )
+    grid_movies_path = os.path.join(project_dir, model_name, "grid_movies", "*.mp4")
+    grid_movies = glob(grid_movies_path)
+    if len(grid_movies) == 0:
+        raise RuntimeError(
+            f"No grid movies found in {grid_movies_path}. Please run `generate_grid_movies` as described in the docs: "
+            "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
+        )
     # make movie paths into a dataframe
     movie_df = pd.DataFrame(
         {
@@ -419,11 +421,13 @@ def label_syllables(project_dir, model_name, moseq_df):
         generate_syll_info(project_dir, model_name, syll_info_path)
 
     # ensure there is grid movies
-    grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
-    assert len(grid_movies) > 0, (
-        "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
-        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
-    )
+    grid_movies_path = os.path.join(project_dir, model_name, "grid_movies", "*.mp4")
+    grid_movies = glob(grid_movies_path)
+    if len(grid_movies) == 0:
+        raise RuntimeError(
+            f"No grid movies found in {grid_movies_path}. Please run `generate_grid_movies` as described in the docs: "
+            "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
+        )
 
     # load syll_info
     syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
@@ -618,9 +622,13 @@ def run_manual_KW_test(
     kr = stats.kruskal(
         *np.array_split(merged_usages_all[perm[p_i, :], s_i], np.cumsum(n_per_group[:-1]))
     )
-    assert (kr.statistic == h_all[p_i, s_i]) & (
-        kr.pvalue == p_vals[p_i, s_i]
-    ), "manual KW is incorrect"
+    if not ((kr.statistic == h_all[p_i, s_i]) & (kr.pvalue == p_vals[p_i, s_i])):
+        raise RuntimeError(
+            f"Manual Kruskal-Wallis calculation does not match scipy.stats.kruskal results.\n"
+            f"Manual calculation: statistic={h_all[p_i, s_i]:.4f}, p-value={p_vals[p_i, s_i]:.4f}\n"
+            f"scipy.stats.kruskal: statistic={kr.statistic:.4f}, p-value={kr.pvalue:.4f}\n"
+            f"For permutation {p_i} and syllable {s_i}"
+        )
 
     return h_all, real_ranks, X_ties
 

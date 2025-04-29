@@ -163,7 +163,8 @@ def find_matching_videos(
             for v in videos_to_paths
             if os.path.basename(key).startswith(v + recording_name_suffix)
         ]
-        assert len(matches) > 0, fill(f"No matching videos found for {key}")
+        if len(matches) == 0:
+            raise RuntimeError(fill(f"No matching videos found for {key}"))
 
         longest_match = sorted(matches, key=lambda v: len(v))[-1]
         video_paths.append(videos_to_paths[longest_match])
@@ -389,10 +390,11 @@ def get_edges(use_bodyparts, skeleton):
         if isinstance(skeleton[0][0], int):
             edges = skeleton
         else:
-            assert use_bodyparts is not None, fill(
-                "If skeleton edges are specified using bodypart names, "
-                "`use_bodyparts` must be specified"
-            )
+            if use_bodyparts is None:
+                raise ValueError(
+                    "If skeleton edges are specified using bodypart names, "
+                    f"`use_bodyparts` must be specified. Got skeleton={skeleton}, use_bodyparts={use_bodyparts}"
+                )
 
             for bp1, bp2 in skeleton:
                 if bp1 in use_bodyparts and bp2 in use_bodyparts:
@@ -566,9 +568,21 @@ def sample_instances(
         Dictionary in the same format as `syllable_instances` mapping each
         syllable to a list of sampled instances.
     """
-    assert mode in ["random", "density"]
-    assert all([len(v) >= num_samples for v in syllable_instances.values()])
-    assert n_neighbors >= num_samples
+    if mode not in ["random", "density"]:
+        raise ValueError(f"mode must be one of ['random', 'density'], got {mode}")
+
+    insufficient_syllables = {k: len(v) for k,v in syllable_instances.items() if len(v) < num_samples}
+    if insufficient_syllables:
+        msg = f"Each syllable must have at least num_samples ({num_samples}) instances.\n"
+        msg += "The following syllables have insufficient instances:\n"
+        for syll, count in insufficient_syllables.items():
+            msg += f"  Syllable {syll}: {count} instances\n"
+        raise ValueError(msg)
+
+    if n_neighbors < num_samples:
+        raise ValueError(
+            f"n_neighbors must be greater than or equal to num_samples. Got: n_neighbors={n_neighbors}, num_samples={num_samples}"
+        )
 
     if mode == "random":
         sampled_instances = {
@@ -580,9 +594,12 @@ def sample_instances(
         return sampled_instances
 
     elif mode == "density":
-        assert not (coordinates is None or headings is None or centroids is None), fill(
-            "`coordinates`, `headings` and `centroids` are required when " '`mode == "density"`'
-        )
+        if coordinates is None or headings is None or centroids is None:
+            raise ValueError(fill(
+                "`coordinates`, `headings` and `centroids` are required when "
+                f'`mode == "density"`\nGot: coordinates={coordinates}, headings={headings}, centroids={centroids}'
+                f'mode={mode}'
+            ))
 
         for key in coordinates.keys():
             outliers = np.isnan(coordinates[key]).any(-1)
@@ -648,9 +665,14 @@ def interpolate_along_axis(x, xp, fp, axis=0):
         The interpolated values, with the same shape as fp except along the
         interpolation axis.
     """
-    assert len(xp.shape) == len(x.shape) == 1
-    assert fp.shape[axis] == len(xp)
-    assert len(xp) > 0, "xp must be non-empty; cannot interpolate without datapoints"
+    if not (len(xp.shape) == len(x.shape) == 1):
+        raise ValueError(f"x and xp must be 1-dimensional arrays, got shapes x: {x.shape}, xp: {xp.shape}")
+
+    if not fp.shape[axis] == len(xp):
+        raise ValueError(f"Length of xp must match fp.shape[axis], got len(xp)={len(xp)}, fp.shape[axis]={fp.shape[axis]}")
+
+    if len(xp) == 0:
+        raise ValueError("xp must be non-empty; cannot interpolate without datapoints, got len(xp)=0")
 
     fp = np.moveaxis(fp, axis, 0)
     shape = fp.shape[1:]
@@ -886,7 +908,14 @@ def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_pe
     2. Increment segment length to ensure all batched sequences are >= min_fragment_length
     """
     sequence_lengths = np.array(sequence_lengths)
-    assert np.all(sequence_lengths > min_fragment_length), f"All sequences must have at least {min_fragment_length + 1} elements"
+
+    invalid_seqs = np.where(sequence_lengths <= min_fragment_length)[0]
+    if len(invalid_seqs) > 0:
+        msg = f"All sequences must have at least {min_fragment_length + 1} elements.\n"
+        msg += "Found invalid sequences at indices:\n"
+        for idx in invalid_seqs:
+            msg += f"  Index {idx}: length {sequence_lengths[idx]}\n"
+        raise RuntimeError(msg)
 
     candidate_seg_lengths = np.sort(np.unique(np.minimum(sequence_lengths, max_seg_length)))[::-1]
 
@@ -1012,22 +1041,25 @@ def format_data(
         keys = sorted(coordinates.keys())
     else:
         bad_keys = set(keys) - set(coordinates.keys())
-        assert len(bad_keys) == 0, fill(f"Keys {bad_keys} not found in coordinates")
+        if len(bad_keys) > 0:
+            raise RuntimeError(fill(f"Keys {bad_keys} not found in coordinates"))
 
-    assert len(keys) > 0, "No recordings found"
+    if len(keys) == 0:
+        raise RuntimeError("No recordings found")
 
     num_keypoints = [coordinates[key].shape[-2] for key in keys]
-    assert len(set(num_keypoints)) == 1, fill(
-        f"All recordings must have the same number of keypoints, but "
-        f"found {set(num_keypoints)} keypoints across recordings."
-    )
+    if len(set(num_keypoints)) != 1:
+        msg = "Inconsistent number of keypoints found across recordings:\n"
+        for key, n in zip(keys, num_keypoints):
+            msg += f"  {key}: {n} keypoints\n"
+        raise RuntimeError(fill(msg))
 
     if bodyparts is not None:
-        assert len(bodyparts) == num_keypoints[0], fill(
-            f"The number of keypoints in `coordinates` ({num_keypoints[0]}) "
-            f"does not match the number of labels in `bodyparts` "
-            f"({len(bodyparts)})"
-        )
+        if len(bodyparts) != num_keypoints[0]:
+            msg = f"The number of keypoints in `coordinates` ({num_keypoints[0]}) "
+            msg += f"does not match the number of labels in `bodyparts` ({len(bodyparts)})\n"
+            msg += f"Bodyparts: {bodyparts}"
+            raise RuntimeError(fill(msg))
 
     if any(["/" in key for key in keys]):
         warnings.warn(
@@ -1058,10 +1090,11 @@ def format_data(
         )
 
     Y, mask, metadata = batch(coordinates, seg_length=seg_length, keys=keys)
-    assert np.all(mask.sum(axis=1) >= min_fragment_length), fill(
-        f"All segments must contain at least {min_fragment_length} frames of data, "
-        f"but found segments with as few as {int(mask.sum(axis=1).min())} frames."
-    )
+    if not np.all(mask.sum(axis=1) >= min_fragment_length):
+        raise RuntimeError(fill(
+            f"All segments must contain at least {min_fragment_length} frames of data, "
+            f"but found segments with as few as {int(mask.sum(axis=1).min())} frames."
+        ))
     Y = Y.astype(float)
 
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]

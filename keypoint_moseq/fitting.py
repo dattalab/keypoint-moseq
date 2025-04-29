@@ -362,10 +362,12 @@ def apply_model(
 
     if save_results:
         if results_path is None:
-            assert project_dir is not None and model_name is not None, fill(
-                "The `save_results` option requires either a `results_path` "
-                "or the `project_dir` and `model_name` arguments"
-            )
+            if project_dir is None or model_name is None:
+                raise ValueError(
+                    "The `save_results` option requires either a `results_path` "
+                    "or the `project_dir` and `model_name` arguments. "
+                    f"Got: results_path={results_path}, project_dir={project_dir}, model_name={model_name}"
+                )
             results_path = os.path.join(project_dir, model_name, "results.h5")
 
     model = init_model(
@@ -556,9 +558,10 @@ def update_hypparams(model_dict, **kwargs):
     model_dict : dict
         Model dictionary with updated hyperparameters.
     """
-    assert "hypparams" in model_dict, fill(
-        "The inputted model/checkpoint does not contain any hyperparams"
-    )
+    if "hypparams" not in model_dict:
+        raise ValueError(fill(
+            f"The inputted model/checkpoint does not contain any hyperparams. Found model keys: {list(model_dict.keys())}"
+        ))
 
     not_updated = list(kwargs.keys())
 
@@ -612,9 +615,11 @@ def expected_marginal_likelihoods(project_dir=None, model_names=None, checkpoint
         Standard error of the expected marginal likelihood score for each model.
     """
     if checkpoint_paths is None:
-        assert project_dir is not None and model_names is not None, fill(
-            "Must provide either `checkpoint_paths` or `project_dir` and `model_names`"
-        )
+        if project_dir is None or model_names is None:
+            raise ValueError(fill(
+                f"Must provide either `checkpoint_paths` or `project_dir` and `model_names`. "
+                f"Got: checkpoint_paths={checkpoint_paths}, project_dir={project_dir}, model_names={model_names}"
+            ))
         checkpoint_paths = [
             os.path.join(project_dir, model_name, "checkpoint.h5") for model_name in model_names
         ]

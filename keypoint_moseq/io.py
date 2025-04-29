@@ -36,9 +36,11 @@ def _build_yaml(sections, comments):
 
 def _get_path(project_dir, model_name, path, filename, pathname_for_error_msg="path"):
     if path is None:
-        assert project_dir is not None and model_name is not None, fill(
-            f"`model_name` and `project_dir` are required if `{pathname_for_error_msg}` is None."
-        )
+        if project_dir is None or model_name is None:
+            raise ValueError(fill(
+                f"`model_name` and `project_dir` are required if `{pathname_for_error_msg}` is None. "
+                f"Got: model_name={model_name}, project_dir={project_dir}"
+            ))
         path = os.path.join(project_dir, model_name, filename)
     return path
 
@@ -380,11 +382,12 @@ def setup_project(
         sleap_options = {}
         if os.path.splitext(sleap_file)[1] == ".slp":
             slp_file = sleap_io.load_slp(sleap_file)
-            assert len(slp_file.skeletons) == 1, fill(
-                f"{sleap_file} contains more than one skeleton. "
-                "This is not currently supported. Please "
-                "open a github issue or email calebsw@gmail.com"
-            )
+            if len(slp_file.skeletons) > 1:
+                raise RuntimeError(fill(
+                    f"{sleap_file} contains {len(slp_file.skeletons)} skeletons. "
+                    "Only one skeleton is currently supported. Please "
+                    "open a github issue or email calebsw@gmail.com"
+                ))
             skeleton = slp_file.skeletons[0]
             node_names = skeleton.node_names
             edge_names = [[e.source.name, e.destination.name] for e in skeleton.edges]
@@ -475,7 +478,8 @@ def load_pca(project_dir, pca_path=None):
     """
     if pca_path is None:
         pca_path = os.path.join(project_dir, "pca.p")
-        assert os.path.exists(pca_path), fill(f"No PCA model found at {pca_path}")
+        if not os.path.exists(pca_path):
+            raise RuntimeError(fill(f"No PCA model found at {pca_path}"))
     return joblib.load(pca_path)
 
 
@@ -528,10 +532,11 @@ def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None
     if iteration is None:
         iteration = saved_iterations[-1]
     else:
-        assert iteration in saved_iterations, fill(
-            f"No snapshot found for iteration {iteration}. "
-            f"Available iterations are {saved_iterations}"
-        )
+        if iteration not in saved_iterations:
+            raise ValueError(fill(
+                f"No snapshot found for iteration {iteration}. "
+                f"Available iterations are {saved_iterations}"
+            ))
 
     model = load_hdf5(path, f"model_snapshots/{iteration}")
     metadata = load_hdf5(path, "metadata")
@@ -828,9 +833,13 @@ def save_keypoints(save_dir, coordinates, confidences=None, bodyparts=None, path
         os.makedirs(save_dir)
 
     if confidences is not None:
-        assert set(coordinates.keys()) == set(confidences.keys()), fill(
-            "The keys in `coordinates` and `confidences` must be the same."
-        )
+        coord_keys = set(coordinates.keys())
+        conf_keys = set(confidences.keys())
+        if coord_keys != conf_keys:
+            raise ValueError(fill(
+                "The keys in `coordinates` and `confidences` must be the same.\n"
+                f"coordinates keys: {coord_keys}\n, confidences keys: {conf_keys}"
+            ))
 
     # get number of keypoints and dimensions
     _, num_keypoints, num_dims = next(iter(coordinates.values())).shape
@@ -1008,9 +1017,10 @@ def load_keypoints(
     }
 
     # get format-specific loader and extensions
-    assert format in formats, fill(
-        f"Unrecognized format '{format}'. Must be one of {list(formats.keys())}"
-    )
+    if format not in formats:
+        raise ValueError(fill(
+            f"Unrecognized format '{format}'. Must be one of {list(formats.keys())}"
+        ))
     loader, extensions = formats[format]
 
     # optionally override default extension list
@@ -1025,9 +1035,10 @@ def load_keypoints(
 
     # get list of filepaths
     filepaths = list_files_with_exts(filepath_pattern, extensions, recursive=recursive)
-    assert len(filepaths) > 0, fill(
-        f"No files with extensions {extensions} found for {filepath_pattern}"
-    )
+    if len(filepaths) == 0:
+        raise ValueError(fill(
+            f"No files with extensions {extensions} found for {filepath_pattern}"
+        ))
 
     # load keypoints from each file
     coordinates, confidences, bodyparts = {}, {}, None
@@ -1055,7 +1066,8 @@ def load_keypoints(
         confidences.update(new_confidences)
 
     # check for valid results
-    assert len(coordinates) > 0, fill(f"No valid results found for {filepath_pattern}")
+    if len(coordinates) == 0:
+        raise RuntimeError(fill(f"No valid results found for {filepath_pattern}"))
     check_nan_proportions(coordinates, bodyparts)
     return coordinates, confidences, bodyparts
 
@@ -1090,11 +1102,13 @@ def _deeplabcut_loader(filepath, name, exclude_individuals=["single"]):
                 confidences[f"{name}_{ind}"] = arr[:, :, -1]
 
         bodyparts = set(ind_bodyparts[list(ind_bodyparts.keys())[0]])
-        assert all([set(bps) == bodyparts for bps in ind_bodyparts.values()]), (
-            f"Bodyparts are not consistent across individuals. The following bodyparts "
-            f"were found for each individual: {ind_bodyparts}. Use `exclude_individuals`"
-            "to exclude specific individuals."
-        )
+        if not all([set(bps) == bodyparts for bps in ind_bodyparts.values()]):
+            msg = "Bodyparts are not consistent across individuals.\n"
+            msg += "Use `exclude_individuals` to exclude specific individuals.\n\n"
+            msg += "Found the following bodyparts for each individual:\n"
+            for ind, bps in ind_bodyparts.items():
+                msg += f"  {ind}: {bps}\n"
+            raise RuntimeError(msg)
     else:
         bodyparts = df.columns.get_level_values("bodyparts").unique().tolist()
         arr = df.to_numpy().reshape(len(df), -1, 3)
@@ -1109,11 +1123,12 @@ def _sleap_loader(filepath, name):
     if os.path.splitext(filepath)[1] == ".slp":
         slp_file = sleap_io.load_slp(filepath)
 
-        assert len(slp_file.skeletons) == 1, fill(
-            f"{filepath} contains more than one skeleton. "
-            "This is not currently supported. Please "
-            "open a github issue or email calebsw@gmail.com"
-        )
+        if len(slp_file.skeletons) > 1:
+            raise RuntimeError(fill(
+                f"{slp_file} contains {len(slp_file.skeletons)} skeletons. "
+                "Only one skeleton is currently supported. Please "
+                "open a github issue or email calebsw@gmail.com"
+            ))
 
         bodyparts = slp_file.skeletons[0].node_names
         arr = slp_file.numpy(return_confidence=True)
@@ -1175,12 +1190,16 @@ def _load_nwb_pose_obj(io, filepath):
     """Grab PoseEstimation object from an opened .nwb file."""
     all_objs = io.read().all_children()
     pose_objs = [o for o in all_objs if isinstance(o, PoseEstimation)]
-    assert len(pose_objs) > 0, fill(f"No PoseEstimation objects found in {filepath}")
-    assert len(pose_objs) == 1, fill(
-        f"Found multiple PoseEstimation objects in {filepath}. "
-        "This is not currently supported. Please open a github "
-        "issue to request this feature."
-    )
+
+    if len(pose_objs) == 0:
+        raise RuntimeError(fill(f"No PoseEstimation objects found in {filepath}"))
+
+    if len(pose_objs) > 1:
+        raise RuntimeError(fill(
+            f"Found {len(pose_objs)} PoseEstimation objects in {filepath}. "
+            "More than one is not currently supported. Please open a github "
+            "issue to request this feature."
+        ))
     pose_obj = pose_objs[0]
     return pose_obj
 
@@ -1263,9 +1282,8 @@ def save_hdf5(filepath, save_dict, datapath=None, exist_ok=False, overwrite=Fals
     overwrite: bool, default=False
         If False, will raise an AssertionError when trying to overwrite an existing dataset or group.
     """
-    assert not (
-        os.path.exists(filepath) and not exist_ok
-    ), f'{filepath} already exists. Set exist_ok to True to allow for editing an existing file.'
+    if os.path.exists(filepath) and not exist_ok:
+        raise ValueError(f'{filepath} already exists. Set exist_ok to True to allow for editing an existing file.')
 
     with h5py.File(filepath, "a") as f:
         if datapath is not None:
@@ -1317,9 +1335,8 @@ def _savetree_hdf5(tree, group, name, overwrite=False):
     overwrite: bool, default=False
         If True, will overwrite an existing dataset or group.
     """
-    assert not (
-        not overwrite and name in group
-    ), f'{name} already exists in {group}. Set overwrite to True to overwrite data in an existing file.'
+    if not overwrite and name in group:
+        raise ValueError(f'{name} already exists in {group}. Set overwrite to True to overwrite data in an existing file.')
 
     if name in group:
         del group[name]

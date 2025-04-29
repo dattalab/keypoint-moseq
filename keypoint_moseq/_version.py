@@ -72,7 +72,8 @@ def register_vcs_handler(vcs, method):  # decorator
 
 def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False, env=None):
     """Call the given command(s)."""
-    assert isinstance(commands, list)
+    if not isinstance(commands, list):
+        raise ValueError(f"commands argument must be a list. Received a {type(commands)}.")
     process = None
 
     popen_kwargs = {}

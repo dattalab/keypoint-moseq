@@ -105,7 +105,8 @@ def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3, 2)):
     plt.tight_layout()
 
     if savefig:
-        assert project_dir is not None, fill("The `savefig` option requires a `project_dir`")
+        if project_dir is None:
+            raise ValueError(fill("The `savefig` option requires a `project_dir`. Got: savefig=True, project_dir=None"))
         plt.savefig(os.path.join(project_dir, "pca_scree.pdf"))
     plt.show()
     return fig
@@ -260,7 +261,8 @@ def plot_pcs(
         plt.tight_layout()
 
         if savefig:
-            assert project_dir is not None, fill("The `savefig` option requires a `project_dir`")
+            if project_dir is None:
+                raise ValueError(fill("The `savefig` option requires a `project_dir`. Got: savefig=True, project_dir=None"))
             plt.savefig(os.path.join(project_dir, f"pcs-{name}.pdf"))
         plt.show()
 
@@ -701,7 +703,8 @@ def _grid_movie_tile(
 
     keypoint_dimension = next(iter(centroids.values())).shape[-1]
 
-    assert not (keypoint_dimension == 3 and video_paths is not None), "3D keypoints are not supported when video paths are provided"
+    if keypoint_dimension == 3 and video_paths is not None:
+        raise ValueError("3D keypoints are not supported when video paths are provided")
 
     if keypoint_dimension == 3:
         ds = np.array(use_dims)
@@ -740,10 +743,11 @@ def _grid_movie_tile(
             tile.append(frame)
 
     else:  # first transform keypoints, then overlay on black background
-        assert overlay_keypoints, fill(
-            "If no videos are provided, then `overlay_keypoints` must "
-            "be True. Otherwise there is nothing to show"
-        )
+        if not overlay_keypoints:
+            raise ValueError(
+                "If no videos are provided, then `overlay_keypoints` must "
+                "be True. Otherwise there is nothing to show"
+            )
         scale_factor = scaled_window_size / window_size
         syllable_coordinates = (syllable_coordinates - c) @ r.T * scale_factor + scaled_window_size // 2
         cs = (cs - c) @ r.T * scale_factor + scaled_window_size // 2
@@ -861,10 +865,11 @@ def grid_movie(
             height = cols * scaled_window_size
     """
     if video_paths is None:
-        assert overlay_keypoints, fill(
-            "If no videos are provided, then `overlay_keypoints` must "
-            "be True. Otherwise there is nothing to show"
-        )
+        if not overlay_keypoints:
+            raise ValueError(fill(
+                "If no videos are provided, then `overlay_keypoints` must "
+                "be True. Otherwise there is nothing to show"
+            ))
 
     if scaled_window_size is None:
         scaled_window_size = window_size
@@ -1157,21 +1162,24 @@ def generate_grid_movies(
         (1, 2),
     ]
 
-    assert tuple(use_dims) in dimension_pairs, f"use_dims must be one of {[list(d) for d in dimension_pairs]}. Received {use_dims}."
+    if tuple(use_dims) not in dimension_pairs:
+        raise ValueError(f"use_dims must be one of {[list(d) for d in dimension_pairs]}. Received {use_dims}.")
 
     # check inputs
     if keypoints_only:
         overlay_keypoints = True
     else:
-        assert (video_dir is not None) or (video_paths is not None), fill(
-            "Either `video_dir` or `video_paths` is required unless `keypoints_only=True`"
-        )
+        if not ((video_dir is not None) or (video_paths is not None)):
+            raise ValueError(fill(
+                "Either `video_dir` or `video_paths` is required unless `keypoints_only=True`"
+            ))
 
     if window_size is None or overlay_keypoints:
-        assert coordinates is not None, fill(
-            "`coordinates` must be provided if `window_size` is None "
-            "or `overlay_keypoints` is True"
-        )
+        if coordinates is None:
+            raise ValueError(fill(
+                "`coordinates` must be provided if `window_size` is None "
+                "or `overlay_keypoints` is True"
+            ))
 
     # prepare output directory
     output_dir = _get_path(project_dir, model_name, output_dir, "grid_movies", "output_dir")
@@ -1229,16 +1237,20 @@ def generate_grid_movies(
         if video_frame_indexes is None:
             video_frame_indexes = {k: np.arange(len(v)) for k, v in syllables.items()}
         else:
-            assert set(video_frame_indexes.keys()) == set(
-                syllables.keys()
-            ), "The keys of `video_frame_indexes` must match the keys of `results`"
-            for k, v in syllables.items():
-                assert len(v) == len(video_frame_indexes[k]), (
-                    "There is a mismatch between the length of `video_frame_indexes` "
-                    f"and the length of modeling results for key {k}."
-                    f"\n\tLength of `video_frame_indexes` = {len(video_frame_indexes[k])}"
-                    f"\n\tLength of modeling results = {len(v)}"
+            if set(video_frame_indexes.keys()) != set(syllables.keys()):
+                raise RuntimeError(
+                    "The video frame indexes and results must contain the same set of keys, but they differ. "
+                    f"\n\tKeys in video_frame_indexes: {set(video_frame_indexes.keys())}"
+                    f"\n\tKeys in results: {set(syllables.keys())}"
                 )
+            for k, v in syllables.items():
+                if len(v) != len(video_frame_indexes[k]):
+                    raise RuntimeError(
+                        "There is a mismatch between the length of `video_frame_indexes` "
+                        f"and the length of modeling results for key {k}."
+                        f"\n\tLength of `video_frame_indexes` = {len(video_frame_indexes[k])}"
+                        f"\n\tLength of modeling results = {len(v)}"
+                    )
     else:
         video_paths = None
 
@@ -1771,13 +1783,15 @@ def generate_trajectory_plots(
 
     if Xs.shape[-1] == 3:
         projection_planes = ["".join(sorted(plane.lower())) for plane in projection_planes]
-        assert set(projection_planes) <= set(["xy", "yz", "xz"]), fill(
-            "`projection_planes` must be a subset of `['xy','yz','xz']`"
-        )
+        if not set(projection_planes) <= set(["xy", "yz", "xz"]):
+            raise RuntimeError(fill(
+                f"`projection_planes` must be a subset of `['xy','yz','xz']`. Got: {projection_planes}"
+            ))
         if lims is not None:
-            assert lims.shape == (2, 3), fill(
-                "`lims` must be None or an ndarray of shape (2,3) when plotting 3D data"
-            )
+            if lims.shape != (2, 3):
+                raise RuntimeError(fill(
+                    "`lims` must be None or an ndarray of shape (2,3) when plotting 3D data"
+                ))
         all_Xs, all_lims, suffixes = [], [], []
         for plane in projection_planes:
             use_dims = {"xy": [0, 1], "yz": [1, 2], "xz": [0, 2]}[plane]
@@ -2254,7 +2268,8 @@ def plot_pcs_3D(
     )
 
     if savefig:
-        assert project_dir is not None, fill("The `savefig` option requires a `project_dir`")
+        if project_dir is None:
+            raise ValueError(fill("The `savefig` option requires a `project_dir`. Got: savefig=True, project_dir=None"))
         save_path = os.path.join(project_dir, f"pcs.html")
         fig.write_html(save_path)
         print(f"Saved interactive plot to {save_path}")

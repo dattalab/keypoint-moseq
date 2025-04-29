@@ -407,19 +407,31 @@ def noise_calibration(
     if video_frame_indexes is None:
         video_frame_indexes = {k: np.arange(len(v)) for k, v in coordinates.items()}
     else:
-        assert set(video_frame_indexes.keys()) == set(
-            coordinates.keys()
-        ), "The keys of `video_frame_indexes` must match the keys of `results`"
-        for k, v in coordinates.items():
-            assert len(v) == len(video_frame_indexes[k]), (
-                "There is a mismatch between the length of `video_frame_indexes` "
-                f"and the length of `coordinates` results for key {k}."
-                f"\n\tLength of video_frame_indexes = {len(video_frame_indexes[k])}"
-                f"\n\tLength of coordinates = {len(v)}"
+        video_frame_keys = set(video_frame_indexes.keys())
+        coordinate_keys = set(coordinates.keys())
+
+        if video_frame_keys != coordinate_keys:
+            raise RuntimeError(
+                "The keys of `video_frame_indexes` must match the keys of `results`.\n"
+                f"video_frame_indexes keys: {video_frame_keys}\n"
+                f"coordinates keys: {coordinate_keys}"
             )
 
+        for k, v in coordinates.items():
+            if len(v) != len(video_frame_indexes[k]):
+                raise RuntimeError(
+                    "There is a mismatch between the length of `video_frame_indexes` "
+                    f"and the length of `coordinates` results for key {k}."
+                    f"\n\tLength of video_frame_indexes = {len(video_frame_indexes[k])}"
+                    f"\n\tLength of coordinates = {len(v)}"
+                )
+
     dim = list(coordinates.values())[0].shape[-1]
-    assert dim == 2, "Calibration is only supported for 2D keypoints."
+    if dim != 2:
+        raise RuntimeError(
+            "Calibration is only supported for 2D keypoints. "
+            f"Received keypoints with dimension {dim}"
+        )
 
     confidences = {k: v + conf_pseudocount for k, v in confidences.items()}
     sample_keys = sample_error_frames(confidences, bodyparts, use_bodyparts)

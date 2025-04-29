@@ -434,7 +434,8 @@ def register_vcs_handler(vcs, method):  # decorator
 
 def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False, env=None):
     """Call the given command(s)."""
-    assert isinstance(commands, list)
+    if not isinstance(commands, list):
+        raise ValueError(f"commands argument must be a list. Received a {type(commands)}.")
     process = None
 
     popen_kwargs = {}
@@ -555,7 +556,8 @@ def register_vcs_handler(vcs, method):  # decorator
 def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False,
                 env=None):
     """Call the given command(s)."""
-    assert isinstance(commands, list)
+    if not isinstance(commands, list):
+        raise ValueError(f"commands argument must be a list. Received a {type(commands)}.")
     process = None
 
     popen_kwargs = {}
@@ -1773,12 +1775,16 @@ def get_versions(verbose=False):
     root = get_root()
     cfg = get_config_from_root(root)
 
-    assert cfg.VCS is not None, "please set [versioneer]VCS= in setup.cfg"
+    if cfg.VCS is None:
+        raise ValueError("VCS is currently set to None - please set [versioneer]VCS= in setup.cfg")
     handlers = HANDLERS.get(cfg.VCS)
-    assert handlers, "unrecognized VCS '%s'" % cfg.VCS
+    if not handlers:
+        raise ValueError("unrecognized VCS '%s' - must be one of: %s" % (cfg.VCS, ", ".join(HANDLERS.keys())))
     verbose = verbose or cfg.verbose
-    assert cfg.versionfile_source is not None, "please set versioneer.versionfile_source"
-    assert cfg.tag_prefix is not None, "please set versioneer.tag_prefix"
+    if cfg.versionfile_source is None:
+        raise ValueError("versionfile_source is currently set to None - please set versioneer.versionfile_source")
+    if cfg.tag_prefix is None:
+        raise ValueError("tag_prefix is currently set to None - please set versioneer.tag_prefix")
 
     versionfile_abs = os.path.join(root, cfg.versionfile_source)
 
