@@ -347,5 +347,40 @@ After this, the pipeline can be run as usual, except for steps that involve read
     # Overlaying keypoints
     kpms.overlay_keypoints_on_video(..., video_frame_indexes=video_frame_indexes)
 
+.. _merging-syllables:
+Merging similar syllables
+-------------------------
 
+In some cases it may be convenient to combine syllables that represent similar behaviors. Keypoint-moseq provides convenience functions for merging syllables into user-defined groups. These groups could be based on inspection of trajecotry plots, grid movies, or syllable dendrograms.
 
+.. code-block:: python
+
+    # Define the syllables to merge as a list of lists. All syllables within
+    # a given inner list will be merged into a single syllable.
+    # In this case, we're merging syllables 1 and 3 into a single syllable, 
+    # and merging syllables 4 and 5 into a single syllable.
+    syllables_to_merge = [
+        [1, 3],
+        [4, 5]
+    ]
+
+    # Load the results you wish to merge (change path as needed)
+    import os
+    results_path = os.path.join(project_dir, model_name, 'results.h5')
+    results = kpms.load_hdf5(results_path)
+
+    # Generate a mapping that specifies how syllables will be relabled.
+    syllable_mapping = kpms.generate_syllable_mapping(results, syllables_to_merge)
+    new_results = kpms.apply_syllable_mapping(results, syllable_mapping)
+
+    # Save the new results to disk (using a modified path)
+    new_results_path = os.path.join(project_dir, model_name, 'results_merged.h5')
+    kpms.save_hdf5(new_results_path, new_results)
+
+    # Optionally generate new trajectory plots and grid movies
+    # In each case, specify the output directory to avoid overwriting
+    output_dir = os.path.join(project_dir, model_name, 'grid_movies_merged')
+    kpms.generate_grid_movies(new_results, output_dir=output_dir, coordinates=coordinates, **config())
+
+    output_dir = os.path.join(project_dir, model_name, 'trajectory_plots_merged')
+    kpms.generate_trajectory_plots(coordinates, new_results, output_dir=output_dir, **config())

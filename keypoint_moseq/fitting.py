@@ -263,7 +263,7 @@ def fit_model(
                 if iteration == num_iters or (
                     save_every_n_iters > 0 and iteration % save_every_n_iters == 0
                 ):
-                    save_hdf5(checkpoint_path, model, f"model_snapshots/{iteration}")
+                    save_hdf5(checkpoint_path, model, f"model_snapshots/{iteration}", exist_ok=True)
                     if generate_progress_plots:
                         plot_progress(
                             model,
