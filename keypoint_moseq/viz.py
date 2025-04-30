@@ -1233,11 +1233,6 @@ def generate_grid_movies(
             )
         check_video_paths(video_paths, results.keys())
 
-        if fps is None:
-            example_reader = OpenCVReader(next(iter(video_paths.values())))
-            fps = example_reader.fps
-            example_reader.close()
-
         if video_frame_indexes is None:
             video_frame_indexes = {k: np.arange(len(v)) for k, v in syllables.items()}
         else:
