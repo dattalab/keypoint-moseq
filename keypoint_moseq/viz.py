@@ -974,11 +974,11 @@ def generate_grid_movies(
     video_dir=None,
     video_paths=None,
     video_frame_indexes=None,
+    pre=1.0,
+    post=2.0,
     rows=4,
     cols=6,
     filter_size=9,
-    pre=30,
-    post=60,
     min_frequency=0.005,
     min_duration=3,
     dot_radius=4,
@@ -1093,7 +1093,15 @@ def generate_grid_movies(
         Quality of the grid movies. Higher values result in higher
         quality movies but larger file sizes.
 
-    rows, cols, pre, post, dot_radius, dot_color, window_size
+    pre: float, default=1.0
+        Time in seconds before syllable onset to include in the grid movie.
+        This value will be converted to frames using the fps parameter.
+
+    post: float, default=2.0 
+        Time in seconds after syllable onset to include in the grid movie.
+        This value will be converted to frames using the fps parameter.
+
+    rows, cols, dot_radius, dot_color: int
         See :py:func:`keypoint_moseq.viz.grid_movie`
 
     video_extension: str, default=None
@@ -1119,17 +1127,15 @@ def generate_grid_movies(
 
     keypoints_only: bool, default=False
         Whether to only show the keypoints (i.e. no video frames).
-        Overrides `overlay_keypoints`. When this option is used,
-        the framerate should be explicitly specified using `fps`.
+        Overrides `overlay_keypoints`. 
 
     keypoints_scale: float, default=1
         Factor to scale keypoint coordinates before plotting. Only used when
         `keypoints_only=True`. This is useful when the keypoints are 3D and
         encoded in units that are larger than a pixel.
 
-    fps: int, default=30
-        Framerate of the grid movie. If None, the framerate is determined
-        from the videos.
+    fps: int, default=None
+        Framerate of the videos from which keypoints were derived (required).
 
     plot_options: dict, default={}
         Dictionary of options to pass to
@@ -1160,6 +1166,8 @@ def generate_grid_movies(
     assert tuple(use_dims) in dimension_pairs, f"use_dims must be one of {[list(d) for d in dimension_pairs]}. Received {use_dims}."
 
     # check inputs
+    assert fps is not None, "Passing None for fps is not supported."
+
     if keypoints_only:
         overlay_keypoints = True
     else:
@@ -1172,6 +1180,9 @@ def generate_grid_movies(
             "`coordinates` must be provided if `window_size` is None "
             "or `overlay_keypoints` is True"
         )
+
+    pre = round(pre * fps)
+    post = round(post * fps)
 
     # prepare output directory
     output_dir = _get_path(project_dir, model_name, output_dir, "grid_movies", "output_dir")
@@ -1220,11 +1231,6 @@ def generate_grid_movies(
                 video_extension=video_extension,
             )
         check_video_paths(video_paths, results.keys())
-
-        if fps is None:
-            example_reader = OpenCVReader(next(iter(video_paths.values())))
-            fps = example_reader.fps
-            example_reader.close()
 
         if video_frame_indexes is None:
             video_frame_indexes = {k: np.arange(len(v)) for k, v in syllables.items()}
@@ -1637,8 +1643,8 @@ def generate_trajectory_plots(
     project_dir=None,
     model_name=None,
     output_dir=None,
-    pre=5,
-    post=15,
+    pre=0.167,  # 5 frames at 30 fps
+    post=0.5,   # 15 frames at 30 fps
     min_frequency=0.005,
     min_duration=3,
     skeleton=[],
@@ -1652,7 +1658,7 @@ def generate_trajectory_plots(
     save_individually=True,
     save_gifs=True,
     save_mp4s=False,
-    fps=30,
+    fps=None,
     projection_planes=["xy", "xz"],
     interactive=True,
     density_sample=True,
@@ -1694,6 +1700,14 @@ def generate_trajectory_plots(
         Directory where trajectory plots should be saved. If None,
         plots will be saved to `{project_dir}/{model_name}/trajectory_plots`.
 
+    pre: float, default=0.167
+        Time in seconds before syllable onset to include in the trajectory plots.
+        This value will be converted to frames using the fps parameter.
+
+    post: float, default=0.5
+        Time in seconds after syllable onset to include in the trajectory plots.
+        This value will be converted to frames using the fps parameter.
+
     skeleton : list, default=[]
         List of edges that define the skeleton, where each edge is a
         pair of bodypart names or a pair of indexes.
@@ -1730,9 +1744,8 @@ def generate_trajectory_plots(
     save_mp4s: bool, default=False
         Whether to save videos of the trajectory plots as .mp4 files
 
-    fps: int, default=30
-        Framerate of the videos from which keypoints were derived.
-        Used to set the framerate of gifs when `save_gif=True`.
+    fps: int, default=None
+        Framerate of the videos from which keypoints were derived (required).
 
     projection_planes: list (subset of ['xy', 'yz', 'xz']), default=['xy','xz']
         For 3D data, defines the 2D plane(s) on which to project keypoint
@@ -1744,6 +1757,12 @@ def generate_trajectory_plots(
         For 3D data, whether to create an visualization that can be
         rotated and zoomed. This argument is ignored for 2D data.
     """
+
+    assert fps is not None, "Passing None for fps is not supported."
+
+    pre = round(pre * fps)
+    post = round(post * fps)
+
     plot_options.update({"keypoint_colormap": keypoint_colormap})
     edges = [] if len(skeleton) == 0 else get_edges(use_bodyparts, skeleton)
 
@@ -2378,8 +2397,8 @@ def plot_similarity_dendrogram(
     model_name=None,
     save_path=None,
     metric="cosine",
-    pre=5,
-    post=15,
+    pre=0.167,
+    post=0.5,
     min_frequency=0.005,
     min_duration=3,
     bodyparts=None,
@@ -2387,6 +2406,7 @@ def plot_similarity_dendrogram(
     density_sample=False,
     sampling_options={"n_neighbors": 50},
     figsize=(6, 3),
+    fps=None,
     **kwargs,
 ):
     """Plot a dendrogram showing the similarity between syllable trajectories.
@@ -2422,7 +2442,14 @@ def plot_similarity_dendrogram(
 
     figsize: tuple of float, default=(10,5)
         Size of the dendrogram plot.
+
+    fps: int, default=None
+        Framerate of the videos from which keypoints were derived.
+        Must be specified, typically using the project config.
     """
+    pre = round(pre * fps)
+    post = round(post * fps)
+
     save_path = _get_path(project_dir, model_name, save_path, "similarity_dendrogram")
 
     distances, syllable_ixs = syllable_similarity(
