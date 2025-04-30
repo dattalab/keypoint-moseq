@@ -1071,7 +1071,8 @@ def format_data(
     conf = conf + conf_pseudocount
 
     if added_noise_level > 0:
-        Y += np.random.uniform(-added_noise_level, added_noise_level, Y.shape)
+        rng = np.random.default_rng(42)
+        Y += rng.uniform(-added_noise_level, added_noise_level, Y.shape)
 
     data = jax.device_put({"mask": mask, "Y": Y, "conf": conf})
     return data, metadata
