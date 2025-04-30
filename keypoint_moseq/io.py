@@ -110,7 +110,7 @@ def generate_config(project_dir, **kwargs):
             "video_dir": "",
             "keypoint_colormap": "autumn",
             "whiten": True,
-            "fix_heading": False
+            "fix_heading": False,
             "fps": 30,
         },
     )

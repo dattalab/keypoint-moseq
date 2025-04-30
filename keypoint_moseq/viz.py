@@ -2400,8 +2400,8 @@ def plot_similarity_dendrogram(
     model_name=None,
     save_path=None,
     metric="cosine",
-    pre=5,
-    post=15,
+    pre=0.167,
+    post=0.5,
     min_frequency=0.005,
     min_duration=3,
     bodyparts=None,
@@ -2409,6 +2409,7 @@ def plot_similarity_dendrogram(
     density_sample=False,
     sampling_options={"n_neighbors": 50},
     figsize=(6, 3),
+    fps=None,
     **kwargs,
 ):
     """Plot a dendrogram showing the similarity between syllable trajectories.
@@ -2444,7 +2445,14 @@ def plot_similarity_dendrogram(
 
     figsize: tuple of float, default=(10,5)
         Size of the dendrogram plot.
+
+    fps: int, default=None
+        Framerate of the videos from which keypoints were derived.
+        Must be specified, typically using the project config.
     """
+    pre = round(pre * fps)
+    post = round(post * fps)
+
     save_path = _get_path(project_dir, model_name, save_path, "similarity_dendrogram")
 
     distances, syllable_ixs = syllable_similarity(
