@@ -1135,8 +1135,7 @@ def generate_grid_movies(
         encoded in units that are larger than a pixel.
 
     fps: int, default=None
-        Framerate of the grid movie. Must be specified, typically using the
-        project config. 
+        Framerate of the videos from which keypoints were derived (required).
 
     plot_options: dict, default={}
         Dictionary of options to pass to
@@ -1167,7 +1166,7 @@ def generate_grid_movies(
     assert tuple(use_dims) in dimension_pairs, f"use_dims must be one of {[list(d) for d in dimension_pairs]}. Received {use_dims}."
 
     # check inputs
-    assert fps is not None, "Passing None for fps is no longer supported. Make sure to pass 'config' to generate_grid_movies."
+    assert fps is not None, "Passing None for fps is not supported."
 
     if keypoints_only:
         overlay_keypoints = True
@@ -1746,9 +1745,7 @@ def generate_trajectory_plots(
         Whether to save videos of the trajectory plots as .mp4 files
 
     fps: int, default=None
-        Framerate of the videos from which keypoints were derived.
-        Used to set the framerate of gifs when `save_gif=True`.
-        Must be specified, typically using the project config.
+        Framerate of the videos from which keypoints were derived (required).
 
     projection_planes: list (subset of ['xy', 'yz', 'xz']), default=['xy','xz']
         For 3D data, defines the 2D plane(s) on which to project keypoint
@@ -1761,7 +1758,7 @@ def generate_trajectory_plots(
         rotated and zoomed. This argument is ignored for 2D data.
     """
 
-    assert fps is not None, "Passing None for fps is not supported. Make sure to pass 'config' to generate_trajectory_plots."
+    assert fps is not None, "Passing None for fps is not supported."
 
     pre = round(pre * fps)
     post = round(post * fps)
