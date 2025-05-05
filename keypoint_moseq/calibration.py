@@ -118,6 +118,7 @@ def load_sampled_frames(
         sampled_keys[(key, frame, bodypart)] = readers[key][frame_ix]
     return sampled_keys
 
+
 def save_annotations(project_dir, annotations, video_frame_indexes):
     """Save calibration annotations to a csv file.
 
@@ -139,15 +140,17 @@ def save_annotations(project_dir, annotations, video_frame_indexes):
     """
     output = [
         "# key: recording name",
-        "# coordinate_index: index of the keypoint data in coordinates (same as video_frame_index if every frame was used)", 
+        "# coordinate_index: index of the keypoint data in coordinates (same as video_frame_index if every frame was used)",
         "# video_frame_index: frame number in the video",
         "# bodypart: name of the bodypart that was annotated",
-        "# x: x-coordinate of the annotated keypoint", 
+        "# x: x-coordinate of the annotated keypoint",
         "# y: y-coordinate of the annotated keypoint",
-        "key,coordinate_index,video_frame_index,bodypart,x,y"
+        "key,coordinate_index,video_frame_index,bodypart,x,y",
     ]
     for (key, frame, bodypart), (x, y) in annotations.items():
-        output.append(f"{key},{frame},{video_frame_indexes[key][frame]},{bodypart},{x},{y}")
+        output.append(
+            f"{key},{frame},{video_frame_indexes[key][frame]},{bodypart},{x},{y}"
+        )
     path = os.path.join(project_dir, "error_annotations.csv")
     open(path, "w").write("\n".join(output))
 
@@ -168,10 +171,11 @@ def save_params(project_dir, estimator):
     """
     update_config(
         project_dir,
-        conf_threshold=float(estimator['conf_threshold']),
-        slope=float(estimator['slope']),
-        intercept=float(estimator['intercept']),
+        conf_threshold=float(estimator["conf_threshold"]),
+        slope=float(estimator["slope"]),
+        intercept=float(estimator["intercept"]),
     )
+
 
 def _noise_calibration_widget(
     project_dir,
@@ -201,9 +205,15 @@ def _noise_calibration_widget(
 
     next_button = Button(description="Next")
     prev_button = Button(description="Prev")
-    info_label = Label(f'Target bodypart = {current_img_key[0][2]} | Completed annotations = 0', layout={'margin': '0px'})
-    usr_msg = Label(f'Annotations not saved: complete {required_annotations} more annotations to start auto-saving', layout={'margin': '0px'})
-    output = Output(layout={'margin': '0px', 'padding': '0px'})
+    info_label = Label(
+        f"Target bodypart = {current_img_key[0][2]} | Completed annotations = 0",
+        layout={"margin": "0px"},
+    )
+    usr_msg = Label(
+        f"Annotations not saved: complete {required_annotations} more annotations to start auto-saving",
+        layout={"margin": "0px"},
+    )
+    output = Output(layout={"margin": "0px", "padding": "0px"})
 
     fig, ax = plt.subplots(figsize=(6, 5))
     fig.canvas.header_visible = False
@@ -212,12 +222,16 @@ def _noise_calibration_widget(
     ax.set_frame_on(False)
     ax.margins(y=0)
     pos = ax.get_position()
-    right_shift = 0.1 # Avoids the toolbar overlapping the y-axis tick labels
-    ax.set_position([pos.x0 + right_shift, pos.y0, pos.width - right_shift, pos.height + pos.y0])
-    
+    right_shift = 0.1  # Avoids the toolbar overlapping the y-axis tick labels
+    ax.set_position(
+        [pos.x0 + right_shift, pos.y0, pos.width - right_shift, pos.height + pos.y0]
+    )
+
     def update_info_label():
         bodypart = current_img_key[0][2]
-        info_label.value = f'Target bodypart = {bodypart} | Completed annotations = {len(annotations)}'
+        info_label.value = (
+            f"Target bodypart = {bodypart} | Completed annotations = {len(annotations)}"
+        )
 
     def save_annotations_data():
         # Get error and confidence values only for the coordinates that have been annotated
@@ -230,7 +244,9 @@ def _noise_calibration_widget(
             original_coordinates = coordinates[video][frame, bodypart_idx, :]
             annotated_coordinates = annotations[(video, frame, bodypart)]
 
-            error = np.log10(np.sqrt(np.sum((original_coordinates - annotated_coordinates) ** 2)) + 1)
+            error = np.log10(
+                np.sqrt(np.sum((original_coordinates - annotated_coordinates) ** 2)) + 1
+            )
             confidence = np.log10(confidences[video][frame, bodypart_idx])
 
             errors.append(error)
@@ -239,12 +255,12 @@ def _noise_calibration_widget(
         # Fit a line to the annotated data with confidence as the x-axis and error as the y-axis
         # scipy.stats.linregress might be a little more clear but this avoid another import
         slope, intercept = np.polyfit(confidences_annot, errors, 1)
-        error_estimator['slope'] = slope
-        error_estimator['intercept'] = intercept
-        error_estimator['conf_threshold'] = conf_threshold
+        error_estimator["slope"] = slope
+        error_estimator["intercept"] = intercept
+        error_estimator["conf_threshold"] = conf_threshold
 
         save_annotations(project_dir, annotations, video_frame_indexes)
-        usr_msg.value = f'Annotations saved to {project_dir}/error_annotations.csv'
+        usr_msg.value = f"Annotations saved to {project_dir}/error_annotations.csv"
         save_params(project_dir, error_estimator)
 
     def onclick(event):
@@ -255,17 +271,19 @@ def _noise_calibration_widget(
                 current_annotation_marker[0] = None
 
             annotations[current_img_key[0]] = (event.xdata, event.ydata)
-            current_annotation_marker[0] = ax.scatter(event.xdata, event.ydata, color='red', marker='x')
+            current_annotation_marker[0] = ax.scatter(
+                event.xdata, event.ydata, color="red", marker="x"
+            )
             fig.canvas.draw()
             update_info_label()
-            
+
             # Check if we have enough annotations to save
             if len(annotations) >= required_annotations:
                 save_annotations_data()
             else:
                 remaining = required_annotations - len(annotations)
                 usr_msg.value = f"Annotations not saved: complete {remaining} more annotations to start auto-saving"
-                
+
     fig.canvas.mpl_connect("button_press_event", onclick)
 
     def show_image(image_key):
@@ -277,19 +295,25 @@ def _noise_calibration_widget(
             frame = image_key[1]
             bodypart_idx = bodyparts.index(image_key[2])
             video_coordinates = coordinates[image_key[0]]
-            ax.scatter(video_coordinates[frame, bodypart_idx, 0],
-                       video_coordinates[frame, bodypart_idx, 1],
-                       color='yellow',
-                       marker='o',
-                       facecolor='none',
+            ax.scatter(
+                video_coordinates[frame, bodypart_idx, 0],
+                video_coordinates[frame, bodypart_idx, 1],
+                color="yellow",
+                marker="o",
+                facecolor="none",
             )
 
             # If the user has already annotated this keypoint, plot it
             if image_key in annotations:
-                current_annotation_marker[0] = ax.scatter(annotations[image_key][0], annotations[image_key][1], color='red', marker='x')
+                current_annotation_marker[0] = ax.scatter(
+                    annotations[image_key][0],
+                    annotations[image_key][1],
+                    color="red",
+                    marker="x",
+                )
 
             fig.canvas.draw()
-            
+
             update_info_label()
 
     def next_image(_):
@@ -311,7 +335,7 @@ def _noise_calibration_widget(
 
     controls = HBox([prev_button, next_button])
     msg_box = VBox([info_label, usr_msg])
-    ui = VBox([controls, msg_box, output], layout={'margin': '0px', 'padding': '0px'})
+    ui = VBox([controls, msg_box, output], layout={"margin": "0px", "padding": "0px"})
     return ui
 
 
@@ -348,7 +372,7 @@ def noise_calibration(
             - Use the toolbar to the left of the figure to pan and zoom.
 
         - It is suggested to annotate at least 50 frames, tracked by the 'annotations' counter.
-        This counter includes saved annotations from previous sessions if you've run this 
+        This counter includes saved annotations from previous sessions if you've run this
         widget on this project before.
 
         - Annotations will be automatically saved once you've completed at least 20 annotations.
@@ -396,8 +420,10 @@ def noise_calibration(
     """
 
     if os.path.exists(os.path.join(project_dir, "error_annotations.csv")):
-        response = input('error_annotations.csv already exists. Continuing will overwrite the existing file (start noise calibration from scratch). Do you want to continue? (y/n)')
-        if response != 'y':
+        response = input(
+            "error_annotations.csv already exists. Continuing will overwrite the existing file (start noise calibration from scratch). Do you want to continue? (y/n)"
+        )
+        if response != "y":
             return
         else:
             os.remove(os.path.join(project_dir, "error_annotations.csv"))

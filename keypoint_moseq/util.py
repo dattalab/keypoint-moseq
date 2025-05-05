@@ -39,7 +39,9 @@ def print_dims_to_explain_variance(pca, f):
     if cs[-1] < f:
         print(f"All components together only explain {cs[-1]*100}% of variance.")
     else:
-        print(f">={f*100}% of variance exlained by {(cs>f).nonzero()[0].min()+1} components.")
+        print(
+            f">={f*100}% of variance exlained by {(cs>f).nonzero()[0].min()+1} components."
+        )
 
 
 def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
@@ -84,7 +86,9 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
                 matches += glob.glob(os.path.join(match, "**"), recursive=True)
 
         # filter matches by extension
-        matches = [match for match in matches if os.path.splitext(match)[1].lower() in ext_list]
+        matches = [
+            match for match in matches if os.path.splitext(match)[1].lower() in ext_list
+        ]
         return matches
 
 
@@ -491,7 +495,9 @@ def get_instance_trajectories(
         )
 
     if post is None:
-        trajectories = [coordinates[key][s - pre : e] for key, s, e in syllable_instances]
+        trajectories = [
+            coordinates[key][s - pre : e] for key, s, e in syllable_instances
+        ]
         if centroids is not None and headings is not None:
             trajectories = [
                 np_io(inverse_rigid_transform)(x, centroids[key][s], headings[key][s])
@@ -502,8 +508,12 @@ def get_instance_trajectories(
             [coordinates[key][s - pre : s + post] for key, s, e in syllable_instances]
         )
         if centroids is not None and headings is not None:
-            c = np.array([centroids[key][s] for key, s, e in syllable_instances])[:, None]
-            h = np.array([headings[key][s] for key, s, e in syllable_instances])[:, None]
+            c = np.array([centroids[key][s] for key, s, e in syllable_instances])[
+                :, None
+            ]
+            h = np.array([headings[key][s] for key, s, e in syllable_instances])[
+                :, None
+            ]
             trajectories = np_io(inverse_rigid_transform)(trajectories, c, h)
 
     return trajectories
@@ -573,7 +583,8 @@ def sample_instances(
     if mode == "random":
         sampled_instances = {
             syllable: [
-                instances[i] for i in np.random.choice(len(instances), num_samples, replace=False)
+                instances[i]
+                for i in np.random.choice(len(instances), num_samples, replace=False)
             ]
             for syllable, instances in syllable_instances.items()
         }
@@ -581,7 +592,8 @@ def sample_instances(
 
     elif mode == "density":
         assert not (coordinates is None or headings is None or centroids is None), fill(
-            "`coordinates`, `headings` and `centroids` are required when " '`mode == "density"`'
+            "`coordinates`, `headings` and `centroids` are required when "
+            '`mode == "density"`'
         )
 
         for key in coordinates.keys():
@@ -621,7 +633,9 @@ def sample_instances(
             global_density = 1 / distances.mean(1)
             exemplar = np.argmax(local_density / global_density)
             samples = np.random.choice(indices[exemplar], num_samples, replace=False)
-            sampled_instances[syllable] = [syllable_instances[syllable][i] for i in samples]
+            sampled_instances[syllable] = [
+                syllable_instances[syllable][i] for i in samples
+            ]
 
         return sampled_instances
 
@@ -787,7 +801,9 @@ def _print_colored_table(row_labels, col_labels, values):
         print(tabulate(df, headers="keys", tablefmt="simple_grid", showindex=True))
 
 
-def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdown=False, **kwargs):
+def check_nan_proportions(
+    coordinates, bodyparts, warning_threshold=0.5, breakdown=False, **kwargs
+):
     """Check if any bodyparts have a high proportion of NaNs.
 
     Parameters
@@ -819,7 +835,9 @@ def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdo
             bps = [bp for bp, p in zip(bodyparts, nan_props) if p > warning_threshold]
             warnings.warn(
                 "\nCoordinates for the following bodyparts are missing (set to NaN) in at least "
-                "{}% of frames:\n - {}\n\n".format(warning_threshold * 100, "\n - ".join(bps))
+                "{}% of frames:\n - {}\n\n".format(
+                    warning_threshold * 100, "\n - ".join(bps)
+                )
             )
             warnings.warn(
                 "This may cause problems during modeling. See "
@@ -827,11 +845,12 @@ def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdo
                 " for additional information."
             )
 
+
 def _get_percent_padding(sequence_lengths, seg_length):
     """
     Calculate the percentage of padding required when batching sequences of the specified
     lengths (see :py:func:`keypoint_moseq.util.batch`)
- 
+
     Parameters
     ----------
     sequence_lengths : numpy.ndarray
@@ -859,20 +878,26 @@ def _get_percent_padding(sequence_lengths, seg_length):
     padding = (-sequence_lengths % seg_length).sum()
     return padding / sequence_lengths.sum() * 100
 
-def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_percent_padding=50, min_fragment_length=4):
+
+def _find_optimal_segment_length(
+    sequence_lengths,
+    max_seg_length=10_000,
+    max_percent_padding=50,
+    min_fragment_length=4,
+):
     """Find a segment length to use for batching (see :py:func:`keypoint_moseq.util.batch`).
-    
+
     Parameters
     ----------
     sequence_lengths : array-like
         Lengths of sequences to be batched. All lengths must be greater than `min_fragment_length`.
     max_seg_length : int, default=10_000
-        Maximum allowed segment length. 
+        Maximum allowed segment length.
     max_percent_padding : float, default=50
-        Maximum allowed padding as a percentage of summed sequence lengths. 
+        Maximum allowed padding as a percentage of summed sequence lengths.
     min_fragment_length : int, default=4
         Minimum allowed length sequence length after batching (excluding padding).
-        
+
     Returns
     -------
     segment_length: int
@@ -886,9 +911,13 @@ def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_pe
     2. Increment segment length to ensure all batched sequences are >= min_fragment_length
     """
     sequence_lengths = np.array(sequence_lengths)
-    assert np.all(sequence_lengths > min_fragment_length), f"All sequences must have at least {min_fragment_length + 1} elements"
+    assert np.all(
+        sequence_lengths > min_fragment_length
+    ), f"All sequences must have at least {min_fragment_length + 1} elements"
 
-    candidate_seg_lengths = np.sort(np.unique(np.minimum(sequence_lengths, max_seg_length)))[::-1]
+    candidate_seg_lengths = np.sort(
+        np.unique(np.minimum(sequence_lengths, max_seg_length))
+    )[::-1]
 
     for seg_length in candidate_seg_lengths:
         percent_padding = _get_percent_padding(sequence_lengths, seg_length)
@@ -914,6 +943,7 @@ def _find_optimal_segment_length(sequence_lengths, max_seg_length=10_000, max_pe
         seg_length += nonzero_remainders.min()
 
     return seg_length
+
 
 def format_data(
     coordinates,
@@ -971,7 +1001,7 @@ def format_data(
         Pseudocount used to augment keypoint confidences.
 
     seg_length: int, default=None
-        Force a specific segment length for batching instead of determining one algorithmically. 
+        Force a specific segment length for batching instead of determining one algorithmically.
         If provided, 'max_seg_length', and 'max_percent_padding' are ignored.
         'min_fragment_length' is still enforced to prevent downstream runtime errors.
 
@@ -1067,7 +1097,9 @@ def format_data(
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
     if np.min(conf) < 0:
         conf = np.maximum(conf, 0)
-        warnings.warn(fill("Negative confidence values are not allowed and will be set to 0."))
+        warnings.warn(
+            fill("Negative confidence values are not allowed and will be set to 0.")
+        )
     conf = conf + conf_pseudocount
 
     if added_noise_level > 0:
@@ -1315,9 +1347,13 @@ def check_video_paths(video_paths, keys):
     error_messages = []
 
     if len(missing_keys) > 0:
-        error_messages.append("The following keys require a video path: {}".format(missing_keys))
+        error_messages.append(
+            "The following keys require a video path: {}".format(missing_keys)
+        )
     if len(nonexistent_videos) > 0:
-        error_messages.append("The following videos do not exist: {}".format(nonexistent_videos))
+        error_messages.append(
+            "The following videos do not exist: {}".format(nonexistent_videos)
+        )
     if len(unreadable_videos) > 0:
         error_messages.append(
             "The following videos are not readable and must be reencoded: {}".format(
@@ -1328,10 +1364,13 @@ def check_video_paths(video_paths, keys):
     if len(error_messages) > 0:
         raise ValueError("\n\n".join(error_messages))
 
-def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]]) -> dict[int, int]:
+
+def generate_syllable_mapping(
+    results: dict, syllable_grouping: list[list[int]]
+) -> dict[int, int]:
     """
-    Create a mapping from old syllable indexes to new syllable indexes such that each group of 
-    syllables in `syllable_grouping` is mapped to a single index. All syllables not included in 
+    Create a mapping from old syllable indexes to new syllable indexes such that each group of
+    syllables in `syllable_grouping` is mapped to a single index. All syllables not included in
     `syllable_grouping` will be treated as single-index groups. New indices are assigned to groups
     based on frequency, with the most frequent groups getting the lowest indices.
 
@@ -1342,12 +1381,12 @@ def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]])
         :py:func:`keypoint_moseq.fitting.extract_results`).
 
     syllable_grouping: list[list[int]]
-        List of lists representing groups of syllables that should be mapped to a single index. 
+        List of lists representing groups of syllables that should be mapped to a single index.
 
     Returns
     -------
     mapping: dict[int, int]
-        A dictionary mapping each original syllable index to a new syllable index. 
+        A dictionary mapping each original syllable index to a new syllable index.
 
     Example
     -------
@@ -1358,9 +1397,11 @@ def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]])
     >>> # {0: 0, 1: 0, 2: 1, 3: 2, 4: 3, 5: 1, 6: 1}
     """
     # Count the number of times each syllable is used
-    syllable_counts = np.zeros(max(max(v['syllable']) for v in results.values()) + 1, dtype=int)
+    syllable_counts = np.zeros(
+        max(max(v["syllable"]) for v in results.values()) + 1, dtype=int
+    )
     for v in results.values():
-        unique, counts = np.unique(v['syllable'], return_counts=True)
+        unique, counts = np.unique(v["syllable"], return_counts=True)
         syllable_counts[unique] += counts
 
     # Get a list of all syllables that are in a group
@@ -1409,7 +1450,7 @@ def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
     for key, value in results.items():
         new_results[key] = {}
         for k, v in value.items():
-            if k == 'syllable':
+            if k == "syllable":
                 new_results[key][k] = np.array([mapping[s] for s in v])
             else:
                 new_results[key][k] = np.copy(v)

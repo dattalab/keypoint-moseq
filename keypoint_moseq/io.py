@@ -366,7 +366,8 @@ def setup_project(
             dlc_config = yaml.safe_load(stream)
             if dlc_config is None:
                 raise RuntimeError(
-                    f"{deeplabcut_config} does not exists or is not a" " valid yaml file"
+                    f"{deeplabcut_config} does not exists or is not a"
+                    " valid yaml file"
                 )
             if "multianimalproject" in dlc_config and dlc_config["multianimalproject"]:
                 dlc_options["bodyparts"] = dlc_config["multianimalbodyparts"]
@@ -375,7 +376,9 @@ def setup_project(
                 dlc_options["bodyparts"] = dlc_config["bodyparts"]
                 dlc_options["use_bodyparts"] = dlc_config["bodyparts"]
             dlc_options["skeleton"] = dlc_config["skeleton"]
-            dlc_options["video_dir"] = os.path.join(dlc_config["project_path"], "videos")
+            dlc_options["video_dir"] = os.path.join(
+                dlc_config["project_path"], "videos"
+            )
         options = {**dlc_options, **options}
 
     elif sleap_file is not None:
@@ -393,7 +396,9 @@ def setup_project(
         else:
             with h5py.File(sleap_file, "r") as f:
                 node_names = [n.decode("utf-8") for n in f["node_names"]]
-                edge_names = [[n.decode("utf-8") for n in edge] for edge in f["edge_names"]]
+                edge_names = [
+                    [n.decode("utf-8") for n in edge] for edge in f["edge_names"]
+                ]
         sleap_options["bodyparts"] = node_names
         sleap_options["use_bodyparts"] = node_names
         sleap_options["skeleton"] = edge_names
@@ -432,7 +437,9 @@ def setup_project(
     elif dannce_config is not None:
         dannce_config = loadmat(dannce_config)
         bodyparts = [n[0][0].item() for n in dannce_config["joint_names"]]
-        skeleton = [[bodyparts[i], bodyparts[j]] for i, j in dannce_config["joints_idx"] - 1]
+        skeleton = [
+            [bodyparts[i], bodyparts[j]] for i, j in dannce_config["joints_idx"] - 1
+        ]
         dannce_options = {
             "bodyparts": bodyparts,
             "use_bodyparts": bodyparts,
@@ -601,7 +608,13 @@ def reindex_syllables_in_checkpoint(
         saved_iterations, desc="Reindexing", unit="model snapshot", ncols=72
     ):
         model = load_hdf5(path, f"model_snapshots/{iteration}")
-        save_hdf5(path, _reindex(model), f"model_snapshots/{iteration}", exist_ok=True, overwrite=True)
+        save_hdf5(
+            path,
+            _reindex(model),
+            f"model_snapshots/{iteration}",
+            exist_ok=True,
+            overwrite=True,
+        )
     return index
 
 
@@ -711,7 +724,9 @@ def load_results(project_dir=None, model_name=None, path=None):
     return load_hdf5(path)
 
 
-def save_results_as_csv(results, project_dir=None, model_name=None, save_dir=None, path_sep="-"):
+def save_results_as_csv(
+    results, project_dir=None, model_name=None, save_dir=None, path_sep="-"
+):
     """Save modeling results to csv format.
 
     This function creates a directory and then saves a separate csv file for
@@ -787,7 +802,9 @@ def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
         return os.path.basename(filepath)
 
 
-def save_keypoints(save_dir, coordinates, confidences=None, bodyparts=None, path_sep="-"):
+def save_keypoints(
+    save_dir, coordinates, confidences=None, bodyparts=None, path_sep="-"
+):
     """Convenience function for saving keypoint detections to csv files.
 
     One csv file is saved for each recording in `coordinates`. Each row in the
@@ -1037,7 +1054,9 @@ def load_keypoints(
         name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
 
         try:
-            new_coordinates, new_confidences, bodyparts = loader(filepath, name, **additional_args)
+            new_coordinates, new_confidences, bodyparts = loader(
+                filepath, name, **additional_args
+            )
         except Exception as e:
             print(fill(f"Error loading {filepath}"))
             raise e
@@ -1081,7 +1100,9 @@ def _deeplabcut_loader(filepath, name, exclude_individuals=["single"]):
         ind_bodyparts = {}
         for ind in df.columns.get_level_values("individuals").unique():
             if ind in exclude_individuals:
-                print(f'Excluding individual: "{ind}". Set `exclude_individuals=[]` to include.')
+                print(
+                    f'Excluding individual: "{ind}". Set `exclude_individuals=[]` to include.'
+                )
             else:
                 ind_df = df.xs(ind, axis=1, level="individuals")
                 bps = ind_df.columns.get_level_values("bodyparts").unique().tolist()
@@ -1168,8 +1189,12 @@ def _sleap_anipose_loader(filepath, name):
             coordinates = {name: coords[:, 0]}
             confidences = {name: confs[:, 0]}
         else:
-            coordinates = {f"{name}_track{i}": coords[:, i] for i in range(coords.shape[1])}
-            confidences = {f"{name}_track{i}": confs[:, i] for i in range(coords.shape[1])}
+            coordinates = {
+                f"{name}_track{i}": coords[:, i] for i in range(coords.shape[1])
+            }
+            confidences = {
+                f"{name}_track{i}": confs[:, i] for i in range(coords.shape[1])
+            }
     return coordinates, confidences, bodyparts
 
 
@@ -1198,7 +1223,10 @@ def _nwb_loader(filepath, name):
         )
         if "confidence" in pose_obj.pose_estimation_series[bodyparts[0]].fields:
             confs = np.stack(
-                [pose_obj.pose_estimation_series[bp].confidence[()] for bp in bodyparts],
+                [
+                    pose_obj.pose_estimation_series[bp].confidence[()]
+                    for bp in bodyparts
+                ],
                 axis=1,
             )
         else:
@@ -1267,7 +1295,7 @@ def save_hdf5(filepath, save_dict, datapath=None, exist_ok=False, overwrite=Fals
     """
     assert not (
         os.path.exists(filepath) and not exist_ok
-    ), f'{filepath} already exists. Set exist_ok to True to allow for editing an existing file.'
+    ), f"{filepath} already exists. Set exist_ok to True to allow for editing an existing file."
 
     with h5py.File(filepath, "a") as f:
         if datapath is not None:
@@ -1321,7 +1349,7 @@ def _savetree_hdf5(tree, group, name, overwrite=False):
     """
     assert not (
         not overwrite and name in group
-    ), f'{name} already exists in {group}. Set overwrite to True to overwrite data in an existing file.'
+    ), f"{name} already exists in {group}. Set overwrite to True to overwrite data in an existing file."
 
     if name in group:
         del group[name]
