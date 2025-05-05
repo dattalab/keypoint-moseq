@@ -1777,7 +1777,9 @@ def get_versions(verbose=False):
     handlers = HANDLERS.get(cfg.VCS)
     assert handlers, "unrecognized VCS '%s'" % cfg.VCS
     verbose = verbose or cfg.verbose
-    assert cfg.versionfile_source is not None, "please set versioneer.versionfile_source"
+    assert (
+        cfg.versionfile_source is not None
+    ), "please set versioneer.versionfile_source"
     assert cfg.tag_prefix is not None, "please set versioneer.tag_prefix"
 
     versionfile_abs = os.path.join(root, cfg.versionfile_source)
@@ -2069,7 +2071,8 @@ def get_cmdclass(cmdclass=None):
             from setuptools import unicode_utils
 
             normalized = [
-                unicode_utils.filesys_decode(f).replace(os.sep, "/") for f in self.filelist.files
+                unicode_utils.filesys_decode(f).replace(os.sep, "/")
+                for f in self.filelist.files
             ]
 
             manifest_filename = os.path.join(self.egg_info, "SOURCES.txt")
@@ -2102,7 +2105,9 @@ def get_cmdclass(cmdclass=None):
             # updated value
             target_versionfile = os.path.join(base_dir, cfg.versionfile_source)
             print("UPDATING %s" % target_versionfile)
-            write_to_version_file(target_versionfile, self._versioneer_generated_versions)
+            write_to_version_file(
+                target_versionfile, self._versioneer_generated_versions
+            )
 
     cmds["sdist"] = cmd_sdist
 

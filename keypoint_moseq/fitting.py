@@ -60,7 +60,9 @@ def _set_parallel_flag(parallel_message_passing):
     return parallel_message_passing
 
 
-def init_model(*args, location_aware=False, allo_hypparams=None, trans_hypparams=None, **kwargs):
+def init_model(
+    *args, location_aware=False, allo_hypparams=None, trans_hypparams=None, **kwargs
+):
     """Initialize a model. Wrapper for `jax_moseq.models.keypoint_slds.init_model`
     and `jax_moseq.models.allo_keypoint_slds.init_model`.
 
@@ -99,7 +101,9 @@ def init_model(*args, location_aware=False, allo_hypparams=None, trans_hypparams
             **kwargs,
         )
     else:
-        return keypoint_slds.init_model(*args, trans_hypparams=trans_hypparams, **kwargs)
+        return keypoint_slds.init_model(
+            *args, trans_hypparams=trans_hypparams, **kwargs
+        )
 
 
 def fit_model(
@@ -263,7 +267,12 @@ def fit_model(
                 if iteration == num_iters or (
                     save_every_n_iters > 0 and iteration % save_every_n_iters == 0
                 ):
-                    save_hdf5(checkpoint_path, model, f"model_snapshots/{iteration}")
+                    save_hdf5(
+                        checkpoint_path,
+                        model,
+                        f"model_snapshots/{iteration}",
+                        exist_ok=True,
+                    )
                     if generate_progress_plots:
                         plot_progress(
                             model,
@@ -398,7 +407,9 @@ def apply_model(
             except StopResampling:
                 break
 
-    results = extract_results(model, metadata, project_dir, model_name, save_results, results_path)
+    results = extract_results(
+        model, metadata, project_dir, model_name, save_results, results_path
+    )
 
     if return_model:
         return results, model
@@ -509,9 +520,14 @@ def estimate_syllable_marginals(
             except StopResampling:
                 break
 
-            if iteration >= burn_in_iters and (iteration - burn_in_iters) % steps_per_sample == 0:
+            if (
+                iteration >= burn_in_iters
+                and (iteration - burn_in_iters) % steps_per_sample == 0
+            ):
                 marginal_estimates += np.array(
-                    stateseq_marginals(model["states"]["x"], data["mask"], **model["params"])
+                    stateseq_marginals(
+                        model["states"]["x"], data["mask"], **model["params"]
+                    )
                 )
                 if return_samples:
                     samples.append(np.array(model["states"]["z"]))
@@ -527,7 +543,8 @@ def estimate_syllable_marginals(
     if return_samples:
         samples = unbatch(np.moveaxis(samples, 0, 2), keys, bounds)
         samples = {
-            k: np.pad(v[nlags:], ((nlags, 0), (0, 0)), mode="edge") for k, v in samples.items()
+            k: np.pad(v[nlags:], ((nlags, 0), (0, 0)), mode="edge")
+            for k, v in samples.items()
         }
         return marginal_estimates, samples
     else:
@@ -567,10 +584,16 @@ def update_hypparams(model_dict, **kwargs):
             if k in model_dict["hypparams"][hypparms_group]:
                 old_value = model_dict["hypparams"][hypparms_group][k]
                 if not np.isscalar(old_value):
-                    print(fill(f"{k} cannot be updated since it is not a scalar hyperparam"))
+                    print(
+                        fill(
+                            f"{k} cannot be updated since it is not a scalar hyperparam"
+                        )
+                    )
                 else:
                     if not isinstance(v, type(old_value)):
-                        warnings.warn(f"'{k}' with {type(v)} will be cast to {type(old_value)}")
+                        warnings.warn(
+                            f"'{k}' with {type(v)} will be cast to {type(old_value)}"
+                        )
 
                     model_dict["hypparams"][hypparms_group][k] = type(old_value)(v)
                     not_updated.remove(k)
@@ -581,7 +604,9 @@ def update_hypparams(model_dict, **kwargs):
     return model_dict
 
 
-def expected_marginal_likelihoods(project_dir=None, model_names=None, checkpoint_paths=None):
+def expected_marginal_likelihoods(
+    project_dir=None, model_names=None, checkpoint_paths=None
+):
     """Calculate the expected marginal likelihood score for each model.
 
     The score is calculated as follows, where theta^i denotes the
@@ -616,7 +641,8 @@ def expected_marginal_likelihoods(project_dir=None, model_names=None, checkpoint
             "Must provide either `checkpoint_paths` or `project_dir` and `model_names`"
         )
         checkpoint_paths = [
-            os.path.join(project_dir, model_name, "checkpoint.h5") for model_name in model_names
+            os.path.join(project_dir, model_name, "checkpoint.h5")
+            for model_name in model_names
         ]
 
     xs, params = [], []
