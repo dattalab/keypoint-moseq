@@ -209,6 +209,11 @@ def _noise_calibration_widget(
     fig.canvas.header_visible = False
     plt.subplots_adjust(top=1, bottom=0.01, left=0.07, right=0.99)
     ax.margins(y=0)
+    ax.set_frame_on(False)
+    ax.margins(y=0)
+    pos = ax.get_position()
+    right_shift = 0.1 # Avoids the toolbar overlapping the y-axis tick labels
+    ax.set_position([pos.x0 + right_shift, pos.y0, pos.width - right_shift, pos.height + pos.y0])
     
     def update_info_label():
         bodypart = current_img_key[0][2]
@@ -282,13 +287,6 @@ def _noise_calibration_widget(
             # If the user has already annotated this keypoint, plot it
             if image_key in annotations:
                 current_annotation_marker[0] = ax.scatter(annotations[image_key][0], annotations[image_key][1], color='red', marker='x')
-
-            # fig.tight_layout(pad=0)
-            ax.set_frame_on(False)
-            ax.margins(y=0)
-            pos = ax.get_position()
-            right_shift = 0.1 # Avoids the toolbar overlapping the y-axis tick labels
-            ax.set_position([pos.x0 + right_shift, pos.y0, pos.width - right_shift, pos.height + pos.y0])
 
             fig.canvas.draw()
             
