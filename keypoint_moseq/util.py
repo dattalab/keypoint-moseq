@@ -1205,6 +1205,8 @@ def get_typical_trajectories(
             coordinates=coordinates,
             centroids=centroids,
             headings=headings,
+            pre=pre,
+            post=post,
             **sampling_options,
         )
     else:
