@@ -45,6 +45,7 @@ pip-delete-this-directory.txt
 htmlcov/
 .tox/
 .nox/
+selenium_screenshots/
 .coverage
 .coverage.*
 .cache

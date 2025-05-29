@@ -1,11 +1,15 @@
+import os
 import tqdm
 import polars as pl
 import keypoint_moseq as kpms
 import numpy as np
+import pandas as pd
 from textwrap import fill
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
 from keypoint_moseq.io import _deeplabcut_loader, _sleap_loader, _anipose_loader, _sleap_anipose_loader, _nwb_loader, _facemap_loader, _freipose_loader, _dannce_loader, _name_from_path
 from keypoint_moseq.project.kpms_project import KPMSProject
-from keypoint_moseq.display.jupyter_display import JupyterDisplay
+from keypoint_moseq.view.jupyter_display import JupyterDisplay
 
 class Controller:
     def __init__(self, project: KPMSProject, display: JupyterDisplay):

@@ -15,7 +15,7 @@ from .fitting import *
 from .analysis import *
 from .calibration import noise_calibration
 from .project.kpms_project import *
-from .display.jupyter_display import *
+from .view.jupyter_display import *
 from .controller.controller import *
 
 from jax_moseq.models.keypoint_slds import fit_pca
