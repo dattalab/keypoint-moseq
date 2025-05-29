@@ -88,7 +88,7 @@ def _set_group_labels_widget(initial_group_labels: Mapping[str, str], save_group
         }
 
         save_group_labels(group_labels)
-        return "Labels saved succesfully."
+        return 'Labels saved successfully.'
     
     widget = Dash('Set Group Labels Widget',
                   external_stylesheets=[dbc.themes.BOOTSTRAP])
