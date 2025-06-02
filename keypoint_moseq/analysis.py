@@ -163,7 +163,7 @@ def interactive_group_setting(project_dir, model_name):
     return pn.Row(summary_table, pn.Column(button))
 
 
-def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
+def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smooth_heading=True):
     """Compute moseq dataframe from results dict that contains all kinematic
     values by frame.
 
@@ -175,8 +175,8 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
         the name of the model directory
     results_dict : dict
         dictionary of results from model fitting
-    use_bodyparts : bool
-        boolean flag whether to include data for bodyparts
+    fps: int, optional
+        The fps of the recordings
     smooth_heading : bool, optional
         boolean flag whether smooth the computed heading, by default True
 
@@ -186,8 +186,8 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
         the dataframe that contains kinematic data for each frame
     """
 
-    # load model results
-    results_dict = load_results(project_dir, model_name)
+    if results_dict is None:
+        results_dict = load_results(project_dir, model_name)
 
     # load index file
     index_filepath = os.path.join(project_dir, "index.csv")
