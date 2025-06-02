@@ -12,7 +12,7 @@ def pytest_setup_options():
 
 @pytest.fixture(scope='function')
 def deeplabcut_2d_zenodo_dir():
-    return TEST_DATA_ROOT / 'kpms-test-data/open_field_2d'
+    return TEST_DATA_ROOT / 'kpms-test-data/open_field_2D'
 
 @pytest.fixture(scope='function')
 def demo_project_dir(tmp_path):

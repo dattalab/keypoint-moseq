@@ -83,7 +83,7 @@ def _set_group_labels_widget(initial_group_labels: Mapping[str, str], save_group
             return default_user_message
 
         group_labels = {
-            row['recording-name']: row.get('group-label', '')
+            row['recording-name']: row.get('group-label', '') or ''
             for row in table_data if row['recording-name']
         }
 

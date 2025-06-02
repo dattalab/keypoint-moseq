@@ -54,7 +54,6 @@ class Controller:
             'name': list(group_labels.keys()),
             'group': list(group_labels.values())
         })
-
         self.project.update_recordings(recordings)
 
     def load_keypoints(

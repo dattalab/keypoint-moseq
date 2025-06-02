@@ -28,14 +28,14 @@ def test_save_group_labels_typical_data(project, display):
     }
     c._save_group_labels(group_labels)
     project.update_recordings.assert_called_once()
-    call_args = project.update_recordings.call_args[0][0]
-    assert 'name' in call_args.columns
-    assert 'group' in call_args.columns
-    assert len(call_args) == 3
+    recordings_updates_df: pl.DataFrame = project.update_recordings.call_args[0][0]
+    assert 'name' in recordings_updates_df.columns
+    assert 'group' in recordings_updates_df.columns
+    assert len(recordings_updates_df) == 3
     for name, group in group_labels.items():
-        row = call_args[call_args['name'] == name]
+        row = recordings_updates_df.filter(pl.col('name') == name)
         assert len(row) == 1
-        assert row['group'].iloc[0] == group
+        assert row.get_column('group').item() == group
 
 def test_save_group_labels_empty_data(project, display):
     c = Controller(project, display)
