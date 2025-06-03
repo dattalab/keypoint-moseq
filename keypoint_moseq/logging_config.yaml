@@ -1,0 +1,25 @@
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  default:
+    format: "%(asctime)s.%(msecs)03d | %(levelname)-8s | %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+    level: INFO
+    formatter: default
+
+  file:
+    class: logging.handlers.RotatingFileHandler
+    maxBytes: 100_000_000 # 100MB
+    backupCount: 20
+    level: DEBUG
+    formatter: default
+
+root:
+  level: DEBUG
+  handlers: [console, file]

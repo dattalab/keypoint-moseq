@@ -1,4 +1,5 @@
 import dash_bootstrap_components as dbc
+import logging
 from dash.dash_table import DataTable
 from dash import Dash, html, callback, Input, Output, State
 from typing import Callable, Mapping
@@ -21,6 +22,7 @@ def _set_group_labels_widget(initial_group_labels: Mapping[str, str], save_group
     Dash
         The configured Dash widget instance
     """
+    logging.debug(f'Starting group labels widget with initial group labels: {initial_group_labels}')
     records = [
         {'recording-name': name, 'group-label': group} 
         for name, group in initial_group_labels.items()
@@ -87,6 +89,7 @@ def _set_group_labels_widget(initial_group_labels: Mapping[str, str], save_group
             for row in table_data if row['recording-name']
         }
 
+        logging.debug(f'Saving group labels {group_labels}.')
         save_group_labels(group_labels)
         return 'Labels saved successfully.'
     

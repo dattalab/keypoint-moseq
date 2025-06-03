@@ -1,4 +1,5 @@
 import polars as pl
+import logging
 import numpy as np
 from pathlib import Path
 from os import PathLike
@@ -20,6 +21,7 @@ def _check_id_column_integrity(dataframe: pl.DataFrame, id_column: str):
     ValueError
         Raised when dataframe has duplicates in the id_column
     """
+    logging.debug(f'Checking the integrity of the ID column {id_column}.')
     if id_column not in dataframe.columns:
         raise ValueError(f'Dataframe must have column id_column "{id_column}". Got columns: {dataframe.columns}')
 
@@ -96,6 +98,10 @@ class KPMSProject:
         """
         self.project_dir_path: Path = Path(project_dir_path)
         self.recordings_csv_path: Path = self.project_dir_path / 'recordings.csv'
+        self.log_dir_path: Path = self.project_dir_path / 'logs'
+
+        self.log_dir_path.mkdir(parents=True, exist_ok=True)
+        logging.debug(f'KPMS Project initialized at {self.project_dir_path}')
 
     def get_recordings(self) -> pl.DataFrame:
         """Retrieve all recordings in the project. 
@@ -109,12 +115,14 @@ class KPMSProject:
         RuntimeError
             Raised when the recordings CSV does not exist.
         """
+        logging.debug('Getting recordings.')
         if not self.recordings_csv_path.exists():
             raise RuntimeError(f'{self.recordings_csv_path} does not exist.')
 
         return pl.read_csv(self.recordings_csv_path)
 
     def add_recordings(self, new_recordings: pl.DataFrame):
+        logging.debug(f'Adding new recordings: {new_recordings}')
         _check_id_column_integrity(new_recordings, 'name')
 
         if not self.recordings_csv_path.exists():
@@ -125,6 +133,7 @@ class KPMSProject:
         recordings = pl.concat([recordings, new_recordings], how='diagonal_relaxed')
 
         recordings.write_csv(self.recordings_csv_path)
+        logging.debug(f'Wrote these recordings to recordings CSV: {recordings}')
 
     def update_recordings(self, new_recordings: pl.DataFrame):
         """Update the project recordings CSV with new or updated features of each recording.
@@ -147,6 +156,7 @@ class KPMSProject:
         if not self.recordings_csv_path.exists():
             raise RuntimeError(f'{self.recordings_csv_path} does not exist.')
 
+        logging.debug(f'Updating recordings CSV with updates: {new_recordings}')
         updated_recordings = _update_dataframe(
             self.get_recordings(),
             new_recordings,
@@ -154,3 +164,4 @@ class KPMSProject:
         )
 
         updated_recordings.write_csv(self.recordings_csv_path)
+        logging.debug(f'Updated recordings CSV to {updated_recordings}')
