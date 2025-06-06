@@ -255,14 +255,6 @@ Because keypoint-MoSeq uses centered and aligned pose estimates to define syllab
 - :py:func:`keypoint_moseq.fitting.apply_model`
 - :py:func:`keypoint_moseq.fitting.estimate_syllable_marginals`
 
-Hyperparameters for the location-aware model are contained in the usual keypoint-moseq config file. These parameters can be adjusted to control the relative weight of keypoints, location, and heading dynamics in defining syllables. Higher values of the "alpha" hyperparameters and lower values of the "beta" hyperparameters will increase the relative weight of location and heading dynamics respectively. The code below shows how to update the config file before calling ``init_model``.
-
-.. code-block:: python
-
-    keypoint_moseq.update_config(
-        project_dir, alpha0_v=10, beta0_v=0.1, alpha0_h=10, beta0_h=0.1
-    )
-
 Note that the location-aware model was not tested in the keypoint-MoSeq paper remains experimental. We welcome feedback and suggestions for improvement.
 
 
