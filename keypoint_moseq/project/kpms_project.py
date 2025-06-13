@@ -97,7 +97,7 @@ class KPMSProject:
             The root path of the kpms project.
         """
         self.project_dir_path: Path = Path(project_dir_path)
-        self.recordings_csv_path: Path = self.project_dir_path / 'recordings.csv'
+        self.recordings_table_path: Path = self.project_dir_path / 'recordings.csv'
         self.log_dir_path: Path = self.project_dir_path / 'logs'
 
         self.log_dir_path.mkdir(parents=True, exist_ok=True)
@@ -113,30 +113,30 @@ class KPMSProject:
         Raises
         ------
         RuntimeError
-            Raised when the recordings CSV does not exist.
+            Raised when the recordings table does not exist.
         """
         logging.debug('Getting recordings.')
-        if not self.recordings_csv_path.exists():
-            raise RuntimeError(f'{self.recordings_csv_path} does not exist.')
+        if not self.recordings_table_path.exists():
+            raise RuntimeError(f'{self.recordings_table_path} does not exist.')
 
-        return pl.read_csv(self.recordings_csv_path)
+        return pl.read_csv(self.recordings_table_path)
 
     def add_recordings(self, new_recordings: pl.DataFrame):
         logging.debug(f'Adding new recordings: {new_recordings}')
         _check_id_column_integrity(new_recordings, 'name')
 
-        if not self.recordings_csv_path.exists():
-            new_recordings.write_csv(self.recordings_csv_path)
+        if not self.recordings_table_path.exists():
+            new_recordings.write_csv(self.recordings_table_path)
             return
 
-        recordings = pl.read_csv(self.recordings_csv_path)
+        recordings = pl.read_csv(self.recordings_table_path)
         recordings = pl.concat([recordings, new_recordings], how='diagonal_relaxed')
 
-        recordings.write_csv(self.recordings_csv_path)
-        logging.debug(f'Wrote these recordings to recordings CSV: {recordings}')
+        recordings.write_csv(self.recordings_table_path)
+        logging.debug(f'Wrote these recordings to recordings table: {recordings}')
 
     def update_recordings(self, new_recordings: pl.DataFrame):
-        """Update the project recordings CSV with new or updated features of each recording.
+        """Update the project recordings table with new or updated features of each recording.
 
         Only the subset of recording names and features passed will be updated.
 
@@ -149,19 +149,19 @@ class KPMSProject:
         Raises
         ------
         RuntimeError
-            Raised when the recordings CSV does not exist.
+            Raised when the recordings table does not exist.
         ValueError
             Raised when new_recordings has invalid data (see update_dataframe)
         """
-        if not self.recordings_csv_path.exists():
-            raise RuntimeError(f'{self.recordings_csv_path} does not exist.')
+        if not self.recordings_table_path.exists():
+            raise RuntimeError(f'{self.recordings_table_path} does not exist.')
 
-        logging.debug(f'Updating recordings CSV with updates: {new_recordings}')
+        logging.debug(f'Updating recordings table with updates: {new_recordings}')
         updated_recordings = _update_dataframe(
             self.get_recordings(),
             new_recordings,
             'name'
         )
 
-        updated_recordings.write_csv(self.recordings_csv_path)
-        logging.debug(f'Updated recordings CSV to {updated_recordings}')
+        updated_recordings.write_csv(self.recordings_table_path)
+        logging.debug(f'Updated recordings table to {updated_recordings}')
