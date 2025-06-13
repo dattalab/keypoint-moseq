@@ -33,9 +33,6 @@ def _set_group_labels_widget(initial_group_labels: Mapping[str, str], save_group
         {'name': 'Group Label', 'id': 'group-label', 'clearable': True}
     ]
 
-    default_user_message = "Click to save group assignments"
-
-    user_message = html.Div(id='user-message', children=default_user_message)
     table = DataTable(
         id='group-labels-table',
         data=records,
@@ -69,7 +66,11 @@ def _set_group_labels_widget(initial_group_labels: Mapping[str, str], save_group
             'borderRadius': '8px'
         }
     )
+
     save_button = dbc.Button('Save Group Assignments', id='save-button')
+
+    default_user_message = "Click to save group assignments"
+    user_message = html.Div(id='user-message', children=default_user_message)
 
     layout = dbc.Row(
         [dbc.Col(table), dbc.Col([user_message, save_button])],
@@ -78,12 +79,10 @@ def _set_group_labels_widget(initial_group_labels: Mapping[str, str], save_group
     @callback(
         Output('user-message', 'children'),
         Input('save-button', 'n_clicks'),
-        State('group-labels-table', 'data')
+        State('group-labels-table', 'data'),
+        prevent_initial_call=True
     )
-    def _save_group_labels(n_clicks, table_data):
-        if not n_clicks:
-            return default_user_message
-
+    def _save_group_labels(_, table_data):
         group_labels = {
             row['recording-name']: row.get('group-label', '') or ''
             for row in table_data if row['recording-name']
