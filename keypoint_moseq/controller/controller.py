@@ -80,3 +80,5 @@ class Controller:
             'group': list(group_labels.values())
         })
         self.project.update_recordings(recordings)
+
+    def prepare_for_analysis(self, video_dir: PathLike):
