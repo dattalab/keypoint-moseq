@@ -279,7 +279,7 @@ def get_centroids_headings(
         centroids[key] = np.median(coords, axis=1)
         anterior_loc = coords[:, posterior_idxs].mean(1)
         posterior_loc = coords[:, anterior_idxs].mean(1)
-        heading_vec = anterior_loc - posterior_loc
+        heading_vec = (anterior_loc - posterior_loc)[:,:2]
         headings[key] = np.arctan2(*heading_vec.T[::-1]) + np.pi
 
     return centroids, headings
