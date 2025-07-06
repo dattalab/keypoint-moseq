@@ -1,7 +1,9 @@
 Exporting pose estimates
 ------------------------
 
-During fitting, keypoint-MoSeq tries to estimate the "true" pose trajectory of the animal, discounting anomolous or low-confidence keypoints. The pose trajectory is stored in the model as a variable "x" that encodes a low-dimensional representation of the keypoints (similar to PCA). The code below shows how to project the pose trajectory back into the original coordinate space. This is useful for visualizing the estimated pose trajectory.::
+During fitting, keypoint-MoSeq tries to estimate the "true" pose trajectory of the animal, discounting anomolous or low-confidence keypoints. The pose trajectory is stored in the model as a variable "x" that encodes a low-dimensional representation of the keypoints (similar to PCA). The code below shows how to project the pose trajectory back into the original coordinate space. This is useful for visualizing the estimated pose trajectory.
+
+.. code-block:: python
 
     import os
     import h5py
@@ -27,7 +29,9 @@ During fitting, keypoint-MoSeq tries to estimate the "true" pose trajectory of t
     coordinates_est = unbatch(Y_est, *metadata)
 
 
-The following code generates a video showing frames 0-3600 from one recording with the reconstructed keypoints overlaid.::
+The following code generates a video showing frames 0-3600 from one recording with the reconstructed keypoints overlaid.
+
+.. code-block:: python
 
     config = lambda: kpms.load_config(project_dir)
     keypoint_data_path = 'dlc_project/videos' # can be a file, a directory, or a list of files
@@ -53,7 +57,14 @@ The following code generates a video showing frames 0-3600 from one recording wi
 Automatic kappa scan
 --------------------
 
-Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the rate of transitions between syllables. Higher values of kappa lead to longer syllables and smaller values lead to shorter syllables. Users should choose a value of kappa based their desired distribution of syllable durations. The code below shows how to automatically scan over a range of kappa values and choose te optimal value.::
+Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the rate of transitions between syllables. Higher values of kappa lead to longer syllables and smaller values lead to shorter syllables. Users should choose a value of kappa based their desired distribution of syllable durations. The code below shows how to automatically scan over a range of kappa values and choose the optimal value.
+
+.. note::
+
+    The following code reduces ``kappa`` by a factor of 10 (``decrease_kappa_factor``) before fitting the full model. You will need to recapitulate this step when fitting your own final model.
+    
+
+.. code-block:: python
 
     import numpy as np
 
@@ -116,7 +127,9 @@ Keypoint-MoSeq uses a stochastic fitting procedure, and thus produces slightly d
 Fitting multiple models
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-The code below shows how to fit multiple models with different random seeds.::
+The code below shows how to fit multiple models with different random seeds.
+
+.. code-block:: python
 
     import jax
 
@@ -171,7 +184,9 @@ The code below shows how to fit multiple models with different random seeds.::
 Comparing syllables
 ~~~~~~~~~~~~~~~~~~~
 
-To get a sense of the variability across model runs, it may be useful to compare syllables produced by each model. The code below shows how to load results from two models runs (e.g., produced by the code above) and plot a confusion matrix showing the overlap between syllable labels.::
+To get a sense of the variability across model runs, it may be useful to compare syllables produced by each model. The code below shows how to load results from two models runs (e.g., produced by the code above) and plot a confusion matrix showing the overlap between syllable labels.
+
+.. code-block:: python
 
     model_name_1 = 'my_models-0'
     model_name_2 = 'my_models-1'
@@ -188,8 +203,9 @@ To get a sense of the variability across model runs, it may be useful to compare
 Selecting a model
 ~~~~~~~~~~~~~~~~~
 
-We developed a matric called the expected marginal likelihood (EML) score that can be used to rank models. To calculate EML scores, you must first fit an ensemble of models to a given dataset, as shown in :ref:`Fitting multiple models <fitting-multiple-models>`. The code below loads this ensemble and then calculates the EML score for each model. The model with the highest EML score can then be selected for further analysis.::
+We developed a matric called the expected marginal likelihood (EML) score that can be used to rank models. To calculate EML scores, you must first fit an ensemble of models to a given dataset, as shown in :ref:`Fitting multiple models <fitting-multiple-models>`. The code below loads this ensemble and then calculates the EML score for each model. The model with the highest EML score can then be selected for further analysis.
 
+.. code-block:: python
 
     # change the following line as needed
     model_names = ['my_models-{}'.format(i) for i in range(20)]
@@ -207,9 +223,11 @@ We developed a matric called the expected marginal likelihood (EML) score that c
 Model averaging
 ~~~~~~~~~~~~~~~
 
-Keypoint-MoSeq is probabilistic. So even once fitting is complete and the syllable parameters are fixed, there is still a distribution of possible syllable sequences given the observed data. In the default pipeline, one such sequence is sampled from this distribution and used for downstream analyses. Alternatively, one can estimate the marginal probability distribution over syllable labels at each timepoint. The code below shows how to do this. It can be applied to new data or the same data that was used for fitting (or a combination of the two).::
+Keypoint-MoSeq is probabilistic. So even once fitting is complete and the syllable parameters are fixed, there is still a distribution of possible syllable sequences given the observed data. In the default pipeline, one such sequence is sampled from this distribution and used for downstream analyses. Alternatively, one can estimate the marginal probability distribution over syllable labels at each timepoint. The code below shows how to do this. It can be applied to new data or the same data that was used for fitting (or a combination of the two).
 
-    burnin_iters = 50
+.. code-block:: python
+
+    burnin_iters = 200
     num_samples = 100
     steps_per_sample = 5
 
@@ -266,3 +284,103 @@ where :math:`R(h)` is a rotation matrix that rotates a vector by angle :math:`h`
     \sigma^2_{v,i} & \sim \text{InverseGamma}(\alpha_v, \beta_v), \ \ \ \  \Delta v_i \sim \mathcal{N}(0, \sigma^2_{v,i} I_2 / \lambda_v) \\
     \sigma^2_{h,i} & \sim \text{InverseGamma}(\alpha_h, \beta_h), \ \ \ \  \Delta h_i \sim \mathcal{N}(0, \sigma^2_{h,i} / \lambda_h)
 
+
+Temporal downsampling
+---------------------
+
+Sometimes it's useful to downsample a dataset, e.g. if the original recording has a much higher framerate than is needed for modeling. To downsample, run the following lines right after loading the keypoints.
+
+.. code-block:: python
+
+    downsample_rate = 2 # keep every 2nd frame
+    coordinates, video_frame_indexes = kpms.downsample_timepoints(
+        coordinates, downsample_rate
+    )
+    confidences, video_frame_indexes = kpms.downsample_timepoints(
+        confidences, downsample_rate
+    ) # skip if `confidences=None`
+
+After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case ``video_frame_indexes`` should be passed as an additional argument.
+
+.. code-block:: python
+
+    # Calibration step
+    kpms.noise_calibration(..., video_frame_indexes=video_frame_indexes)
+
+    # Making grid movies
+    kpms.generate_grid_movies(..., video_frame_indexes=video_frame_indexes)
+
+    # Overlaying keypoints
+    kpms.overlay_keypoints_on_video(..., video_frame_indexes=video_frame_indexes)
+
+
+Trimming inputs
+---------------
+
+In some datasets, the animal is missing at the beginning and/or end of each video. In these cases, the easiest solution is to trim the videos before running keypoint detection. However, it's also possible to directly trim the inputs to keypoint-MoSeq. Let's assume that you already have a dictionary called ``bounds`` that has the same keys as ``coordinates`` and contains the desired start/end times for each recording. The next step would be to trim ``coordinates`` and ``confindences``
+
+.. code-block:: python
+
+    coordinates = {k: coords[bounds[k][0]:bounds[k][1]] for k,coords in coordinates.items()}
+    confidences = {k: confs[bounds[k][0]:bounds[k][1]] for k,confs in confidences.items()}
+ 
+    
+
+You'll also need to generate a dictionary called ``video_frame_indexes`` that maps the timepoints of ``coordinates`` and ``confindences`` to frame indexes from the original videos.
+
+.. code-block:: python
+
+    import numpy as np
+    video_frame_indexes = {k : np.arange(bounds[k][0], bounds[k][1]) for k in bounds}
+
+
+After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case ``video_frame_indexes`` should be passed as an additional argument.
+
+.. code-block:: python
+
+    # Calibration step
+    kpms.noise_calibration(..., video_frame_indexes=video_frame_indexes)
+
+    # Making grid movies
+    kpms.generate_grid_movies(..., video_frame_indexes=video_frame_indexes)
+
+    # Overlaying keypoints
+    kpms.overlay_keypoints_on_video(..., video_frame_indexes=video_frame_indexes)
+
+.. _merging-syllables:
+Merging similar syllables
+-------------------------
+
+In some cases it may be convenient to combine syllables that represent similar behaviors. Keypoint-moseq provides convenience functions for merging syllables into user-defined groups. These groups could be based on inspection of trajecotry plots, grid movies, or syllable dendrograms.
+
+.. code-block:: python
+
+    # Define the syllables to merge as a list of lists. All syllables within
+    # a given inner list will be merged into a single syllable.
+    # In this case, we're merging syllables 1 and 3 into a single syllable, 
+    # and merging syllables 4 and 5 into a single syllable.
+    syllables_to_merge = [
+        [1, 3],
+        [4, 5]
+    ]
+
+    # Load the results you wish to merge (change path as needed)
+    import os
+    results_path = os.path.join(project_dir, model_name, 'results.h5')
+    results = kpms.load_hdf5(results_path)
+
+    # Generate a mapping that specifies how syllables will be relabled.
+    syllable_mapping = kpms.generate_syllable_mapping(results, syllables_to_merge)
+    new_results = kpms.apply_syllable_mapping(results, syllable_mapping)
+
+    # Save the new results to disk (using a modified path)
+    new_results_path = os.path.join(project_dir, model_name, 'results_merged.h5')
+    kpms.save_hdf5(new_results_path, new_results)
+
+    # Optionally generate new trajectory plots and grid movies
+    # In each case, specify the output directory to avoid overwriting
+    output_dir = os.path.join(project_dir, model_name, 'grid_movies_merged')
+    kpms.generate_grid_movies(new_results, output_dir=output_dir, coordinates=coordinates, **config())
+
+    output_dir = os.path.join(project_dir, model_name, 'trajectory_plots_merged')
+    kpms.generate_trajectory_plots(coordinates, new_results, output_dir=output_dir, **config())

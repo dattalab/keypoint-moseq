@@ -432,9 +432,7 @@ def register_vcs_handler(vcs, method):  # decorator
     return decorate
 
 
-def run_command(
-    commands, args, cwd=None, verbose=False, hide_stderr=False, env=None
-):
+def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False, env=None):
     """Call the given command(s)."""
     assert isinstance(commands, list)
     process = None
@@ -1261,9 +1259,7 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
     env.pop("GIT_DIR", None)
     runner = functools.partial(runner, env=env)
 
-    _, rc = runner(
-        GITS, ["rev-parse", "--git-dir"], cwd=root, hide_stderr=not verbose
-    )
+    _, rc = runner(GITS, ["rev-parse", "--git-dir"], cwd=root, hide_stderr=not verbose)
     if rc != 0:
         if verbose:
             print("Directory %s not under git control" % root)
@@ -1298,9 +1294,7 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
     pieces["short"] = full_out[:7]  # maybe improved later
     pieces["error"] = None
 
-    branch_name, rc = runner(
-        GITS, ["rev-parse", "--abbrev-ref", "HEAD"], cwd=root
-    )
+    branch_name, rc = runner(GITS, ["rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
     # --abbrev-ref was added in git-1.6.3
     if rc != 0 or branch_name is None:
         raise NotThisMethod("'git rev-parse --abbrev-ref' returned error")
@@ -1349,9 +1343,7 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
         mo = re.search(r"^(.+)-(\d+)-g([0-9a-f]+)$", git_describe)
         if not mo:
             # unparsable. Maybe git-describe is misbehaving?
-            pieces["error"] = (
-                "unable to parse git-describe output: '%s'" % describe_out
-            )
+            pieces["error"] = "unable to parse git-describe output: '%s'" % describe_out
             return pieces
 
         # tag
@@ -1380,9 +1372,7 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
         pieces["distance"] = len(out.split())  # total number of commits
 
     # commit date: see ISO-8601 comment in git_versions_from_keywords()
-    date = runner(GITS, ["show", "-s", "--format=%ci", "HEAD"], cwd=root)[
-        0
-    ].strip()
+    date = runner(GITS, ["show", "-s", "--format=%ci", "HEAD"], cwd=root)[0].strip()
     # Use only the last line.  Previous lines may contain GPG signature
     # information.
     date = date.splitlines()[-1]
@@ -1503,9 +1493,7 @@ def versions_from_file(filename):
 def write_to_version_file(filename, versions):
     """Write the given version number to the given _version.py file."""
     os.unlink(filename)
-    contents = json.dumps(
-        versions, sort_keys=True, indent=1, separators=(",", ": ")
-    )
+    contents = json.dumps(versions, sort_keys=True, indent=1, separators=(",", ": "))
     with open(filename, "w") as f:
         f.write(SHORT_VERSION_PY % contents)
 
@@ -1591,9 +1579,7 @@ def render_pep440_pre(pieces):
     if pieces["closest-tag"]:
         if pieces["distance"]:
             # update the post release segment
-            tag_version, post_version = pep440_split_post(
-                pieces["closest-tag"]
-            )
+            tag_version, post_version = pep440_split_post(pieces["closest-tag"])
             rendered = tag_version
             if post_version is not None:
                 rendered += ".post%d.dev%d" % (
@@ -1946,9 +1932,7 @@ def get_cmdclass(cmdclass=None):
             # now locate _version.py in the new build/ directory and replace
             # it with an updated value
             if cfg.versionfile_build:
-                target_versionfile = os.path.join(
-                    self.build_lib, cfg.versionfile_build
-                )
+                target_versionfile = os.path.join(self.build_lib, cfg.versionfile_build)
                 print("UPDATING %s" % target_versionfile)
                 write_to_version_file(target_versionfile, versions)
 
@@ -1975,9 +1959,7 @@ def get_cmdclass(cmdclass=None):
             # it with an updated value
             if not cfg.versionfile_build:
                 return
-            target_versionfile = os.path.join(
-                self.build_lib, cfg.versionfile_build
-            )
+            target_versionfile = os.path.join(self.build_lib, cfg.versionfile_build)
             if not os.path.exists(target_versionfile):
                 print(
                     f"Warning: {target_versionfile} does not exist, skipping "
@@ -2192,9 +2174,7 @@ def do_setup():
         configparser.NoOptionError,
     ) as e:
         if isinstance(e, (OSError, configparser.NoSectionError)):
-            print(
-                "Adding sample versioneer config to setup.cfg", file=sys.stderr
-            )
+            print("Adding sample versioneer config to setup.cfg", file=sys.stderr)
             with open(os.path.join(root, "setup.cfg"), "a") as f:
                 f.write(SAMPLE_CONFIG)
         print(CONFIG_ERROR, file=sys.stderr)

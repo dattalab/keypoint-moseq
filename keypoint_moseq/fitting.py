@@ -267,7 +267,12 @@ def fit_model(
                 if iteration == num_iters or (
                     save_every_n_iters > 0 and iteration % save_every_n_iters == 0
                 ):
-                    save_hdf5(checkpoint_path, model, f"model_snapshots/{iteration}")
+                    save_hdf5(
+                        checkpoint_path,
+                        model,
+                        f"model_snapshots/{iteration}",
+                        exist_ok=True,
+                    )
                     if generate_progress_plots:
                         plot_progress(
                             model,
@@ -288,7 +293,7 @@ def apply_model(
     metadata,
     project_dir=None,
     model_name=None,
-    num_iters=50,
+    num_iters=500,
     ar_only=False,
     save_results=True,
     verbose=False,
@@ -321,7 +326,7 @@ def apply_model(
         Name of the model. Required if `save_results=True` and
         `results_path=None`.
 
-    num_iters : int, default=50
+    num_iters : int, default=500
         Number of iterations to run the model.
 
     ar_only : bool, default=False
@@ -416,7 +421,7 @@ def estimate_syllable_marginals(
     model,
     data,
     metadata,
-    burn_in_iters=50,
+    burn_in_iters=200,
     num_samples=100,
     steps_per_sample=10,
     return_samples=False,
@@ -440,7 +445,7 @@ def estimate_syllable_marginals(
         Recordings and start/end frames for the data (see
         :py:func:`keypoint_moseq.io.format_data`).
 
-    burn_in_iters : int, default=50
+    burn_in_iters : int, default=200
         Number of resampling iterations to run before collecting samples.
 
     num_samples : int, default=100
@@ -604,13 +609,12 @@ def expected_marginal_likelihoods(
 ):
     """Calculate the expected marginal likelihood score for each model.
 
-    The score is calculated as follows, where $\theta^{(i)}$ denotes the
+    The score is calculated as follows, where theta^i denotes the
     autoregressive parameters and transition matrix for the i'th model,
-    $x^{(i)}$ denotes the latent trajectories for the i'th model, and the
-    number of models iss $N$
+    x^i denotes the latent trajectories for the i'th model, and the
+    number of models is N:
 
-    .. math::
-        \text{score}(\theta^{(i)}) = \frac{1}{(N-1)} \sum_{j \neq i} P(x^{(j)} | \theta^{(i)})$
+    score(theta^i) = 1/(N-1) sum_{j ≠ i} P(x^j | theta^i)
 
     Parameters
     ----------

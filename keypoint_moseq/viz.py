@@ -685,7 +685,7 @@ def _grid_movie_tile(
     key,
     start,
     end,
-    videos,
+    video_paths,
     centroids,
     headings,
     dot_color,
@@ -698,22 +698,50 @@ def _grid_movie_tile(
     edges,
     coordinates,
     plot_options,
+    video_frame_indexes,
+    use_dims,
 ):
     scale_factor = scaled_window_size / window_size
     cs = centroids[key][start - pre : start + post]
     h, c = headings[key][start], cs[pre]
     r = np.float32([[np.cos(h), np.sin(h)], [-np.sin(h), np.cos(h)]])
+    syllable_coordinates = coordinates[key][start - pre : start + post].copy()
+
+    keypoint_dimension = next(iter(centroids.values())).shape[-1]
+
+    assert not (
+        keypoint_dimension == 3 and video_paths is not None
+    ), "3D keypoints are not supported when video paths are provided"
+
+    if keypoint_dimension == 3:
+        ds = np.array(use_dims)
+
+        if ds[1] == 2:
+            syllable_coordinates[:, :, :2] = (
+                (syllable_coordinates[:, :, :2] - c[:2]) @ r.T
+            ) + c[:2]
+            syllable_coordinates[:, :, 2] = (
+                -(syllable_coordinates[:, :, 2] - c[2]) + c[2]
+            )
+            r = np.float32([[1, 0], [0, 1]])
+
+        cs = cs[:, ds]
+        c = c[ds]
+        syllable_coordinates = syllable_coordinates[:, :, ds]
 
     tile = []
 
-    if videos is not None:
-        frames = videos[key][start - pre : start + post]
+    if video_paths is not None:
+        frame_ixs = video_frame_indexes[key][start - pre : start + post]
+        reader = OpenCVReader(video_paths[key])
+        frames = [reader[ix] for ix in frame_ixs]
+        reader.close()
         c = r @ c - window_size // 2
         M = [[np.cos(h), np.sin(h), -c[0]], [-np.sin(h), np.cos(h), -c[1]]]
 
         for ii, (frame, c) in enumerate(zip(frames, cs)):
             if overlay_keypoints:
-                coords = coordinates[key][start - pre + ii]
+                coords = syllable_coordinates[ii]
                 frame = overlay_keypoints_on_image(
                     frame, coords, edges=edges, **plot_options
                 )
@@ -731,11 +759,12 @@ def _grid_movie_tile(
             "be True. Otherwise there is nothing to show"
         )
         scale_factor = scaled_window_size / window_size
-        coords = coordinates[key][start - pre : start + post]
-        coords = (coords - c) @ r.T * scale_factor + scaled_window_size // 2
+        syllable_coordinates = (
+            syllable_coordinates - c
+        ) @ r.T * scale_factor + scaled_window_size // 2
         cs = (cs - c) @ r.T * scale_factor + scaled_window_size // 2
         background = np.zeros((scaled_window_size, scaled_window_size, 3))
-        for ii, (uvs, c) in enumerate(zip(coords, cs)):
+        for ii, (uvs, c) in enumerate(zip(syllable_coordinates, cs)):
             frame = overlay_keypoints_on_image(
                 background.copy(), uvs, edges=edges, **plot_options
             )
@@ -751,10 +780,11 @@ def grid_movie(
     instances,
     rows,
     cols,
-    videos,
+    video_paths,
     centroids,
     headings,
     window_size,
+    video_frame_indexes,
     dot_color=(255, 255, 255),
     dot_radius=4,
     pre=30,
@@ -764,41 +794,45 @@ def grid_movie(
     overlay_keypoints=False,
     coordinates=None,
     plot_options={},
+    use_dims=None,
 ):
     """Generate a grid movie and return it as an array of frames.
 
-    Grid movies show many instances of  a syllable. Each instance contains a
-    snippet of video (and/or keypoint-overlay) centered on the animal and
-    synchronized to the onset of the syllable. A dot appears at syllable onset
-    and disappears at syllable offset.
+    Grid movies show many instances of  a syllable. Each instance contains a snippet of
+    video (and/or keypoint-overlay) centered on the animal and synchronized to the onset
+    of the syllable. A dot appears at syllable onset and disappears at syllable offset.
 
     Parameters
     ----------
     instances: list of tuples `(key, start, end)`
-        List of syllable instances to include in the grid movie, where each
-        instance is specified as a tuple with the video name, start frame and
-        end frame. The list must have length `rows*cols`. The video names must
-        also be keys in `videos`.
+        List of syllable instances to include in the grid movie, where each instance is
+        specified as a tuple with the video name, start frame and end frame. The list
+        must have length `rows*cols`. The video names must also be keys in `videos`.
 
     rows: int, cols : int
         Number of rows and columns in the grid movie grid
 
-    videos: dict or None
-        Dictionary mapping video names to video readers. Frames from
-        each reader should be accessible via `__getitem__(int or slice)`. If
-        None, the the grid movie will not include video frames.
+    video_paths: dict or None
+        Dictionary mapping video names to video paths. If None, the the grid movie will
+        not include video frames.
 
     centroids: dict
-        Dictionary mapping video names to arrays of shape `(n_frames, 2)` with
-        the x,y coordinates of animal centroid on each frame
+        Dictionary mapping video names to arrays of shape `(n_frames, 2)` with the x,y
+        coordinates of animal centroid on each frame
 
     headings: dict
-        Dictionary mapping video names to arrays of shape `(n_frames,)` with
-        the heading of the animal on each frame (in radians)
+        Dictionary mapping video names to arrays of shape `(n_frames,)` with the heading
+        of the animal on each frame (in radians)
 
     window_size: int
-        Size of the window around the animal. This should be a multiple of 16
-        or imageio will complain.
+        Size of the window around the animal. This should be a multiple of 16 or imageio
+        will complain.
+
+    video_frame_indexes: dict
+        Dictionary mapping recording names to arrays of video frame indexes.
+        This is useful when the original keypoint coordinates used for modeling
+        corresponded to a subset of frames from each video (i.e. if videos were
+        trimmed or coordinates were downsampled).
 
     dot_color: tuple of ints, default=(255,255,255)
         RGB color of the dot indicating syllable onset and offset
@@ -813,23 +847,26 @@ def grid_movie(
         Number of frames after syllable onset to include in the movie
 
     scaled_window_size: int, default=None
-        Window size after scaling the video. If None, the no scaling is
-        performed (i.e. `scaled_window_size = window_size`)
+        Window size after scaling the video. If None, the no scaling is performed (i.e.
+        `scaled_window_size = window_size`)
 
     overlay_keypoints: bool, default=False
         If True, overlay the pose skeleton on the video frames.
 
     edges: list of tuples, default=[]
-        List of edges defining pose skeleton. Used when
-        `overlay_keypoints=True`.
+        List of edges defining pose skeleton. Used when `overlay_keypoints=True`.
 
     coordinates: dict, default=None
-        Dictionary mapping video names to arrays of shape `(n_frames, 2)`.
-        Used when `overlay_keypoints=True`.
+        Dictionary mapping video names to arrays of shape `(n_frames, 2)`. Used when
+        `overlay_keypoints=True`.
 
     plot_options: dict, default={}
-        Dictionary of options to pass to `overlay_keypoints_on_image`.
-        Used when `overlay_keypoints=True`.
+        Dictionary of options to pass to `overlay_keypoints_on_image`. Used when
+        `overlay_keypoints=True`.
+
+    use_dims: pair of ints, default=[0,1]
+        Dimensions to use for plotting keypoints. Only used when
+        `overlay_keypoints=True` and the keypoints are 3D.
 
     Returns
     -------
@@ -839,7 +876,7 @@ def grid_movie(
             width = rows * scaled_window_size
             height = cols * scaled_window_size
     """
-    if videos is None:
+    if video_paths is None:
         assert overlay_keypoints, fill(
             "If no videos are provided, then `overlay_keypoints` must "
             "be True. Otherwise there is nothing to show"
@@ -855,7 +892,7 @@ def grid_movie(
                 key,
                 start,
                 end,
-                videos,
+                video_paths,
                 centroids,
                 headings,
                 dot_color,
@@ -868,6 +905,8 @@ def grid_movie(
                 edges,
                 coordinates,
                 plot_options,
+                video_frame_indexes,
+                use_dims,
             )
         )
 
@@ -950,11 +989,12 @@ def generate_grid_movies(
     output_dir=None,
     video_dir=None,
     video_paths=None,
+    video_frame_indexes=None,
+    pre=1.0,
+    post=2.0,
     rows=4,
     cols=6,
     filter_size=9,
-    pre=30,
-    post=60,
     min_frequency=0.005,
     min_duration=3,
     dot_radius=4,
@@ -989,6 +1029,8 @@ def generate_grid_movies(
     of at least `min_duration` and an overall frequency of at least
     `min_frequency`). The grid movies are saved to `output_dir` if
     specified, or else to `{project_dir}/{model_name}/grid_movies`.
+    A subset of parameters are documented below. See
+    :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
 
     Parameters
     ----------
@@ -1018,6 +1060,12 @@ def generate_grid_movies(
         names must correspond to keys in the results dictionary. Either
         `video_dir` or `video_paths` must be provided unless
         `keypoints_only=True`.
+
+    video_frame_indexes: dict, default=None
+        Dictionary mapping recording names to arrays of video frame indexes.
+        This is useful when the original keypoint coordinates used for modeling
+        corresponded to a subset of frames from each video (i.e. if videos were
+        trimmed or coordinates were downsampled).
 
     filter_size: int, default=9
         Size of the median filter applied to centroids and headings
@@ -1061,7 +1109,15 @@ def generate_grid_movies(
         Quality of the grid movies. Higher values result in higher
         quality movies but larger file sizes.
 
-    rows, cols, pre, post, dot_radius, dot_color, window_size
+    pre: float, default=1.0
+        Time in seconds before syllable onset to include in the grid movie.
+        This value will be converted to frames using the fps parameter.
+
+    post: float, default=2.0
+        Time in seconds after syllable onset to include in the grid movie.
+        This value will be converted to frames using the fps parameter.
+
+    rows, cols, dot_radius, dot_color: int
         See :py:func:`keypoint_moseq.viz.grid_movie`
 
     video_extension: str, default=None
@@ -1087,17 +1143,15 @@ def generate_grid_movies(
 
     keypoints_only: bool, default=False
         Whether to only show the keypoints (i.e. no video frames).
-        Overrides `overlay_keypoints`. When this option is used,
-        the framerate should be explicitly specified using `fps`.
+        Overrides `overlay_keypoints`.
 
     keypoints_scale: float, default=1
         Factor to scale keypoint coordinates before plotting. Only used when
         `keypoints_only=True`. This is useful when the keypoints are 3D and
         encoded in units that are larger than a pixel.
 
-    fps: int, default=30
-        Framerate of the grid movie. If None, the framerate is determined
-        from the videos.
+    fps: int, default=None
+        Framerate of the videos from which keypoints were derived (required).
 
     plot_options: dict, default={}
         Dictionary of options to pass to
@@ -1112,8 +1166,6 @@ def generate_grid_movies(
         `overlay_keypoints=True`.
 
 
-    See :py:func:`keypoint_moseq.viz.grid_movie` for the remaining parameters.
-
     Returns
     -------
     sampled_instances: dict
@@ -1121,7 +1173,19 @@ def generate_grid_movies(
         grid movie (in row-major order), where each instance is specified as a
         tuple with the video name, start frame and end frame.
     """
+    dimension_pairs = [
+        (0, 1),
+        (0, 2),
+        (1, 2),
+    ]
+
+    assert (
+        tuple(use_dims) in dimension_pairs
+    ), f"use_dims must be one of {[list(d) for d in dimension_pairs]}. Received {use_dims}."
+
     # check inputs
+    assert fps is not None, "Passing None for fps is not supported."
+
     if keypoints_only:
         overlay_keypoints = True
     else:
@@ -1134,6 +1198,9 @@ def generate_grid_movies(
             "`coordinates` must be provided if `window_size` is None "
             "or `overlay_keypoints` is True"
         )
+
+    pre = round(pre * fps)
+    post = round(post * fps)
 
     # prepare output directory
     output_dir = _get_path(
@@ -1185,12 +1252,23 @@ def generate_grid_movies(
                 as_dict=True,
                 video_extension=video_extension,
             )
-        videos = {k: OpenCVReader(path) for k, path in video_paths.items()}
+        check_video_paths(video_paths, results.keys())
 
-        if fps is None:
-            fps = list(videos.values())[0].fps
+        if video_frame_indexes is None:
+            video_frame_indexes = {k: np.arange(len(v)) for k, v in syllables.items()}
+        else:
+            assert set(video_frame_indexes.keys()) == set(
+                syllables.keys()
+            ), "The keys of `video_frame_indexes` must match the keys of `results`"
+            for k, v in syllables.items():
+                assert len(v) == len(video_frame_indexes[k]), (
+                    "There is a mismatch between the length of `video_frame_indexes` "
+                    f"and the length of modeling results for key {k}."
+                    f"\n\tLength of `video_frame_indexes` = {len(video_frame_indexes[k])}"
+                    f"\n\tLength of modeling results = {len(v)}"
+                )
     else:
-        videos = None
+        video_paths = None
 
     # sample instances for each syllable
     syllable_instances = get_syllable_instances(
@@ -1220,14 +1298,6 @@ def generate_grid_movies(
         headings=headings,
         **sampling_options,
     )
-
-    # if the data is 3D, pick 2 dimensions to use for plotting
-    keypoint_dimension = next(iter(centroids.values())).shape[-1]
-    if keypoint_dimension == 3:
-        ds = np.array(use_dims)
-        centroids = {k: v[:, ds] for k, v in centroids.items()}
-        if coordinates is not None:
-            coordinates = {k: v[:, :, ds] for k, v in coordinates.items()}
 
     # determine window size for grid movies
     if window_size is None:
@@ -1272,11 +1342,12 @@ def generate_grid_movies(
             instances,
             rows,
             cols,
-            videos,
+            video_paths,
             centroids,
             headings,
+            window_size,
+            video_frame_indexes,
             edges=edges,
-            window_size=window_size,
             scaled_window_size=scaled_window_size,
             dot_color=dot_color,
             pre=pre,
@@ -1285,6 +1356,7 @@ def generate_grid_movies(
             overlay_keypoints=overlay_keypoints,
             coordinates=coordinates,
             plot_options=plot_options,
+            use_dims=use_dims,
         )
 
         path = os.path.join(output_dir, f"syllable{syllable}.mp4")
@@ -1593,8 +1665,8 @@ def generate_trajectory_plots(
     project_dir=None,
     model_name=None,
     output_dir=None,
-    pre=5,
-    post=15,
+    pre=0.167,  # 5 frames at 30 fps
+    post=0.5,  # 15 frames at 30 fps
     min_frequency=0.005,
     min_duration=3,
     skeleton=[],
@@ -1608,7 +1680,7 @@ def generate_trajectory_plots(
     save_individually=True,
     save_gifs=True,
     save_mp4s=False,
-    fps=30,
+    fps=None,
     projection_planes=["xy", "xz"],
     interactive=True,
     density_sample=True,
@@ -1650,6 +1722,14 @@ def generate_trajectory_plots(
         Directory where trajectory plots should be saved. If None,
         plots will be saved to `{project_dir}/{model_name}/trajectory_plots`.
 
+    pre: float, default=0.167
+        Time in seconds before syllable onset to include in the trajectory plots.
+        This value will be converted to frames using the fps parameter.
+
+    post: float, default=0.5
+        Time in seconds after syllable onset to include in the trajectory plots.
+        This value will be converted to frames using the fps parameter.
+
     skeleton : list, default=[]
         List of edges that define the skeleton, where each edge is a
         pair of bodypart names or a pair of indexes.
@@ -1686,9 +1766,8 @@ def generate_trajectory_plots(
     save_mp4s: bool, default=False
         Whether to save videos of the trajectory plots as .mp4 files
 
-    fps: int, default=30
-        Framerate of the videos from which keypoints were derived.
-        Used to set the framerate of gifs when `save_gif=True`.
+    fps: int, default=None
+        Framerate of the videos from which keypoints were derived (required).
 
     projection_planes: list (subset of ['xy', 'yz', 'xz']), default=['xy','xz']
         For 3D data, defines the 2D plane(s) on which to project keypoint
@@ -1700,6 +1779,12 @@ def generate_trajectory_plots(
         For 3D data, whether to create an visualization that can be
         rotated and zoomed. This argument is ignored for 2D data.
     """
+
+    assert fps is not None, "Passing None for fps is not supported."
+
+    pre = round(pre * fps)
+    post = round(post * fps)
+
     plot_options.update({"keypoint_colormap": keypoint_colormap})
     edges = [] if len(skeleton) == 0 else get_edges(use_bodyparts, skeleton)
 
@@ -1907,6 +1992,7 @@ def overlay_keypoints_on_video(
     quality=7,
     centroid_smoothing_filter=10,
     plot_options={},
+    video_frame_indexes=None,
 ):
     """Overlay keypoints on a video.
 
@@ -1919,19 +2005,19 @@ def overlay_keypoints_on_video(
         Array of keypoint coordinates.
 
     skeleton: list of tuples, default=[]
-        List of edges that define the skeleton, where each edge is a
-        pair of bodypart names or a pair of indexes.
+        List of edges that define the skeleton, where each edge is a pair of bodypart
+        names or a pair of indexes.
 
     bodyparts: list of str, default=None
-        List of bodypart names in `coordinates`. Required if
-        `skeleton` is defined using bodypart names.
+        List of bodypart names in `coordinates`. Required if `skeleton` is defined using
+        bodypart names.
 
     use_bodyparts: list of str, default=None
         Subset of bodyparts to plot. If None, all bodyparts are plotted.
 
     output_path: str, default=None
-        Path to save the video. If None, the video is saved to
-        `video_path` with the suffix `_keypoints`.
+        Path to save the video. If None, the video is saved to `video_path` with the
+        suffix `_keypoints`.
 
     show_frame_numbers: bool, default=True
         Whether to overlay the frame number in the video.
@@ -1940,11 +2026,14 @@ def overlay_keypoints_on_video(
         Color for the frame number overlay.
 
     crop_size: int, default=None
-        Size of the crop around the keypoints to overlay on the video.
-        If None, the entire video is used.
+        Size of the crop around the keypoints to overlay on the video. If None, the
+        entire video is used.
 
     frames: iterable of int, default=None
-        Frames to overlay keypoints on. If None, all frames are used.
+        Frames to overlay keypoints on (in the numbering of `coordinates`). If None,
+        all of `coordinates` is used. This option can be used in conjunction with
+        `video_frame_indexes` when the entries of `coordinates` do not correspond
+        one-to-one with frames of the video.
 
     quality: int, default=7
         Quality of the output video.
@@ -1955,6 +2044,10 @@ def overlay_keypoints_on_video(
     plot_options: dict, default={}
         Additional keyword arguments to pass to
         :py:func:`keypoint_moseq.viz.overlay_keypoints`.
+
+    video_frame_indexes: array, default=None
+        Video frames corresponding to the entries of `coordinates`. If None, it is
+        assumed that the i'th entry of `coordinate` corresponds to the i'th video frame.
     """
     if output_path is None:
         output_path = os.path.splitext(video_path)[0] + "_keypoints.mp4"
@@ -1981,6 +2074,9 @@ def overlay_keypoints_on_video(
     fps = reader.fps
     if frames is None:
         frames = np.arange(len(reader))
+
+    if video_frame_indexes is None:
+        video_frame_indexes = np.arange(len(coordinates))
 
     with imageio.get_writer(
         output_path, pixelformat="yuv420p", fps=fps, quality=quality
@@ -2335,8 +2431,8 @@ def plot_similarity_dendrogram(
     model_name=None,
     save_path=None,
     metric="cosine",
-    pre=5,
-    post=15,
+    pre=0.167,
+    post=0.5,
     min_frequency=0.005,
     min_duration=3,
     bodyparts=None,
@@ -2344,6 +2440,7 @@ def plot_similarity_dendrogram(
     density_sample=False,
     sampling_options={"n_neighbors": 50},
     figsize=(6, 3),
+    fps=None,
     **kwargs,
 ):
     """Plot a dendrogram showing the similarity between syllable trajectories.
@@ -2379,7 +2476,14 @@ def plot_similarity_dendrogram(
 
     figsize: tuple of float, default=(10,5)
         Size of the dendrogram plot.
+
+    fps: int, default=None
+        Framerate of the videos from which keypoints were derived.
+        Must be specified, typically using the project config.
     """
+    pre = round(pre * fps)
+    post = round(post * fps)
+
     save_path = _get_path(project_dir, model_name, save_path, "similarity_dendrogram")
 
     distances, syllable_ixs = syllable_similarity(
@@ -2835,8 +2939,8 @@ def plot_confusion_matrix(
     if normalize:
         C = C / np.sum(C, axis=1, keepdims=True)
 
-    ix1 = (get_frequencies(syllables1) > 0.005).nonzero()[0]
-    ix2 = (get_frequencies(syllables2) > 0.005).nonzero()[0]
+    ix1 = (get_frequencies(syllables1) > min_frequency).nonzero()[0]
+    ix2 = (get_frequencies(syllables2) > min_frequency).nonzero()[0]
     C = C[ix1, :][:, ix2]
 
     if sort:
@@ -2895,3 +2999,56 @@ def plot_eml_scores(eml_scores, eml_std_errs, model_names):
     ax.set_ylabel("EML score")
     plt.tight_layout()
     return fig, ax
+
+
+def plot_pose(
+    coordinates, bodyparts, skeleton, cmap="autumn", node_size=6, linewidth=3, ax=None
+):
+    """
+    Plot a single pose using matplotlib.
+
+    Parameters
+    ----------
+    coordinates: ndarray of shape (num_bodyparts, 2)
+        2D coordinates of the pose.
+
+    bodyparts: list of str
+        Bodypart names.
+
+    skeleton: list of tuples
+        Skeleton edges as pairs of bodypart names.
+
+    cmap: str, default='autumn'
+        Colormap to use for coloring keypoints.
+
+    node_size: float, default=6
+        Size of keypoints.
+
+    linewidth: float, default=3
+        Width of skeleton edges.
+
+    ax: matplotlib axis, default=None
+        Axis to plot on. If None, a new axis is created.
+
+    Returns
+    -------
+    ax: matplotlib axis
+        Axis containing the plot.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+
+    cmap = plt.get_cmap(cmap)
+    colors = cmap(np.linspace(0, 1, len(bodyparts)))
+    edges = get_edges(bodyparts, skeleton)
+
+    for i, (x, y) in enumerate(coordinates):
+        ax.scatter(x, y, s=node_size, c=[colors[i]])
+
+    for i, j in edges:
+        x = [coordinates[i, 0], coordinates[j, 0]]
+        y = [coordinates[i, 1], coordinates[j, 1]]
+        ax.plot(x, y, c=colors[i], linewidth=linewidth)
+
+    ax.set_aspect("equal")
+    return ax

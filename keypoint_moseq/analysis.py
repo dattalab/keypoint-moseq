@@ -44,11 +44,11 @@ def get_syllable_names(project_dir, model_name, syllable_ixs):
     if os.path.exists(syll_info_path):
         syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
 
-    for ix in syllable_ixs:
-        if len(syll_info_df[syll_info_df.syllable == ix].label.values[0]) > 0:
-            labels[
-                ix
-            ] = f"{ix} ({syll_info_df[syll_info_df.syllable == ix].label.values[0]})"
+        for ix in syllable_ixs:
+            if len(syll_info_df[syll_info_df.syllable == ix].label.values[0]) > 0:
+                labels[ix] = (
+                    f"{ix} ({syll_info_df[syll_info_df.syllable == ix].label.values[0]})"
+                )
     names = [labels[ix] for ix in syllable_ixs]
     return names
 
@@ -163,7 +163,7 @@ def interactive_group_setting(project_dir, model_name):
     return pn.Row(summary_table, pn.Column(button))
 
 
-def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
+def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smooth_heading=True):
     """Compute moseq dataframe from results dict that contains all kinematic
     values by frame.
 
@@ -175,8 +175,8 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
         the name of the model directory
     results_dict : dict
         dictionary of results from model fitting
-    use_bodyparts : bool
-        boolean flag whether to include data for bodyparts
+    fps: int, optional
+        The fps of the recordings
     smooth_heading : bool, optional
         boolean flag whether smooth the computed heading, by default True
 
@@ -186,8 +186,8 @@ def compute_moseq_df(project_dir, model_name, *, fps=30, smooth_heading=True):
         the dataframe that contains kinematic data for each frame
     """
 
-    # load model results
-    results_dict = load_results(project_dir, model_name)
+    if results_dict is None:
+        results_dict = load_results(project_dir, model_name)
 
     # load index file
     index_filepath = os.path.join(project_dir, "index.csv")
@@ -826,7 +826,6 @@ def run_kruskal(
     syllable_data = grouped_data.drop(["group", "name"], axis=1).values
 
     N_m, N_s = syllable_data.shape
-
     # Run KW and return H-stats
     h_all, real_ranks, X_ties = run_manual_KW_test(
         df_usage=df_only_stats,
@@ -880,7 +879,10 @@ def run_kruskal(
     # combine Dunn's test results into single DataFrame
     df_z = pd.DataFrame(real_zs_within_group)
     df_z.index = df_z.index.set_names("syllable")
-    dunn_results_df = df_z.reset_index().melt(id_vars="syllable")
+    dunn_results_df = df_z.reset_index().melt(id_vars=[("syllable", "")])
+    dunn_results_df.rename(
+        columns={"variable_0": "group1", "variable_1": "group2"}, inplace=True
+    )
 
     # Get intersecting significant syllables between
     intersect_sig_syllables = {}
@@ -1036,7 +1038,7 @@ def _validate_and_order_syll_stats_params(
     if len(colors) == 0 or len(colors) != len(groups):
         colors = sns.color_palette(n_colors=len(groups))
 
-    return ordering, groups, colors, figsize
+    return np.array(ordering), groups, colors, figsize
 
 
 def save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir):
@@ -1088,7 +1090,7 @@ def plot_syll_stats_with_sem(
         the threshold for significance, by default 0.05
     stat : str, optional
         the statistic to plot, by default 'frequency'
-    ordering : str, optional
+    order : str, optional
         the ordering of the syllables, by default 'stat'
     groups : list, optional
         the list of groups to plot, by default None
@@ -1113,12 +1115,14 @@ def plot_syll_stats_with_sem(
 
     # get significant syllables
     sig_sylls = None
+    if groups is None:
+        groups = stats_df["group"].unique()
 
     if plot_sig and len(stats_df["group"].unique()) > 1:
         # run kruskal wallis and dunn's test
         _, _, sig_pairs = run_kruskal(stats_df, statistic=stat, thresh=thresh)
-        # plot significant syllables for control and experimental group
-        if ctrl_group is not None and exp_group is not None:
+        # plot significant syllables for control and experimental group when user specify something
+        if ctrl_group in groups and exp_group in groups:
             # check if the group pair is in the sig pairs dict
             if (ctrl_group, exp_group) in sig_pairs.keys():
                 sig_sylls = sig_pairs.get((ctrl_group, exp_group))
@@ -1126,9 +1130,8 @@ def plot_syll_stats_with_sem(
             else:
                 sig_sylls = sig_pairs.get((exp_group, ctrl_group))
         else:
-            print(
-                "No control or experimental group specified. Not plotting significant syllables."
-            )
+            # plot everything if no group pair is specified
+            sig_sylls = sig_pairs
 
     xlabel = f"Syllables sorted by {stat}"
     if order == "diff":
@@ -1169,10 +1172,38 @@ def plot_syll_stats_with_sem(
 
     # if a list of significant syllables is given, mark the syllables above the x-axis
     if sig_sylls is not None:
-        markings = []
-        for s in sig_sylls:
-            markings.append(ordering.index(s))
-        plt.scatter(markings, [-0.005] * len(markings), color="r", marker="*")
+        init_y = -0.05
+        # plot all sig syllables when no reasonable control and experimental group is specified
+        if isinstance(sig_sylls, dict):
+            for key in sig_sylls.keys():
+                markings = []
+                for s in sig_sylls[key]:
+                    markings.append(np.where(ordering == s)[0])
+                if len(markings) > 0:
+                    markings = np.concatenate(markings)
+                    plt.scatter(
+                        markings, [init_y] * len(markings), color="r", marker="*"
+                    )
+                    plt.text(
+                        plt.xlim()[1],
+                        init_y,
+                        f"{key[0]} vs. {key[1]} - Total {len(sig_sylls[key])} S.S.",
+                    )
+                    init_y += -0.05
+                else:
+                    print("No significant syllables found.")
+        else:
+            markings = []
+            for s in sig_sylls:
+                if s in ordering:
+                    markings.append(np.where(ordering == s)[0])
+                else:
+                    continue
+            if len(markings) > 0:
+                markings = np.concatenate(markings)
+                plt.scatter(markings, [-0.05] * len(markings), color="r", marker="*")
+            else:
+                print("No significant syllables found.")
 
         # manually define a new patch
         patch = Line2D(
@@ -1416,10 +1447,15 @@ def visualize_transition_bigram(
         whether to show just syllable indexes (False) or syllable indexes and
         names (True)
     """
+
+    # syllable info path
+    syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
+    # initialize syllable names
+    syll_names = [f"{ix}" for ix in syll_include]
+
     if show_syllable_names:
-        syll_names = get_syllable_names(project_dir, model_name, syll_include)
-    else:
-        syll_names = [f"{ix}" for ix in syll_include]
+        if os.path.exists(syll_info_path):
+            syll_names = get_syllable_names(project_dir, model_name, syll_include)
 
     # infer max_syllables
     max_syllables = trans_mats[0].shape[0]

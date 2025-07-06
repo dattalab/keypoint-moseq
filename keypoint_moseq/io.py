@@ -1,6 +1,8 @@
 import jax.numpy as jnp
 import jax
 import re
+import commentjson
+import json
 import numpy as np
 import h5py
 import joblib
@@ -16,6 +18,7 @@ from itertools import islice
 
 from keypoint_moseq.util import list_files_with_exts, check_nan_proportions
 from jax_moseq.utils import get_frequencies, unbatch
+from scipy.io import loadmat
 
 
 def _build_yaml(sections, comments):
@@ -108,7 +111,7 @@ def generate_config(project_dir, **kwargs):
             "keypoint_colormap": "autumn",
             "whiten": True,
             "fix_heading": False,
-            "seg_length": 10000,
+            "fps": 30,
         },
     )
 
@@ -140,7 +143,6 @@ def generate_config(project_dir, **kwargs):
         "use_bodyparts": "determines the subset of bodyparts to use for modeling and the order in which they are represented",
         "anterior_bodyparts": "used to initialize heading",
         "posterior_bodyparts": "used to initialize heading",
-        "seg_length": "data are broken up into segments to parallelize fitting",
         "trans_hypparams": "transition hyperparameters",
         "ar_hypparams": "autoregressive hyperparameters",
         "obs_hypparams": "keypoint observation hyperparameters",
@@ -152,6 +154,7 @@ def generate_config(project_dir, **kwargs):
         "conf_threshold": "used to define outliers for interpolation when the model is initialized",
         "conf_pseudocount": "pseudocount used regularize neural network confidences",
         "fix_heading": "whether to keep the heading angle fixed; this should only be True if the pose is constrained to a narrow range of angles, e.g. a headfixed mouse.",
+        "fps": "frames per second of the video recordings",
     }
 
     sections = [
@@ -299,6 +302,8 @@ def setup_project(
     deeplabcut_config=None,
     sleap_file=None,
     nwb_file=None,
+    freipose_config=None,
+    dannce_config=None,
     overwrite=False,
     **options,
 ):
@@ -311,22 +316,32 @@ def setup_project(
     Parameters
     ----------
     project_dir: str
-        Path to the project directory (relative or absolute)
+        Path to the project directory (relative or absolute).
 
     deeplabcut_config: str, default=None
         Path to a deeplabcut config file. Will be used to initialize
         `bodyparts`, `skeleton`, `use_bodyparts` and `video_dir` in the
-        keypoint MoSeq config. (overrided by kwargs).
+        keypoint MoSeq config (overrided by kwargs).
 
     sleap_file: str, default=None
         Path to a .hdf5 or .slp file containing predictions for one video. Will
         be used to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in
-        the keypoint MoSeq config. (overrided by kwargs).
+        the keypoint MoSeq config (overrided by kwargs).
 
     nwb_file: str, default=None
         Path to a .nwb file containing predictions for one video. Will be used
         to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in the
         keypoint MoSeq config. (overrided by kwargs).
+
+    freipose_config: str, default=None
+        Path to a freipose skeleton config file. Will be used to initialize
+        `bodyparts`, `skeleton`, and `use_bodyparts` in the keypoint MoSeq config
+        (overrided by kwargs).
+
+    dannce_config: str, default=None
+        Path to a dannce config file. Will be used to initialize `bodyparts`,
+        `skeleton`, and `use_bodyparts` in the keypoint MoSeq config (overrided
+        by kwargs).
 
     overwrite: bool, default=False
         Overwrite any config.yml that already exists at the path
@@ -401,6 +416,36 @@ def setup_project(
                 skeleton = [[bodyparts[i], bodyparts[j]] for i, j in edges]
                 nwb_options["skeleton"] = skeleton
         options = {**nwb_options, **options}
+
+    elif freipose_config is not None:
+        freipose_options = {}
+        with open(freipose_config, "r") as stream:
+            freipose_config = commentjson.load(stream)
+            bodyparts = [kp for kp, color in freipose_config["keypoints"]]
+            skeleton = []
+            for [bp1, bp2], color in freipose_config["limbs"]:
+                if isinstance(bp1, list):
+                    bp1 = bp1[0]
+                if isinstance(bp2, list):
+                    bp2 = bp2[0]
+                skeleton.append(tuple(sorted([bodyparts[bp1], bodyparts[bp2]])))
+            freipose_options["bodyparts"] = bodyparts
+            freipose_options["use_bodyparts"] = bodyparts
+            freipose_options["skeleton"] = list(map(list, sorted(set(skeleton))))
+        options = {**freipose_options, **options}
+
+    elif dannce_config is not None:
+        dannce_config = loadmat(dannce_config)
+        bodyparts = [n[0][0].item() for n in dannce_config["joint_names"]]
+        skeleton = [
+            [bodyparts[i], bodyparts[j]] for i, j in dannce_config["joints_idx"] - 1
+        ]
+        dannce_options = {
+            "bodyparts": bodyparts,
+            "use_bodyparts": bodyparts,
+            "skeleton": skeleton,
+        }
+        options = {**dannce_options, **options}
 
     if not os.path.exists(project_dir):
         os.makedirs(project_dir)
@@ -478,7 +523,7 @@ def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None
         associated metadata (see :py:func:`keypoint_moseq.util.format_data`).
 
     metadata: tuple (keys, bounds)
-        Recordings and start/end frames for the data (see
+        Recording names and start/end frames for the data (see
         :py:func:`keypoint_moseq.util.format_data`).
 
     iteration: int
@@ -563,7 +608,13 @@ def reindex_syllables_in_checkpoint(
         saved_iterations, desc="Reindexing", unit="model snapshot", ncols=72
     ):
         model = load_hdf5(path, f"model_snapshots/{iteration}")
-        save_hdf5(path, _reindex(model), f"model_snapshots/{iteration}")
+        save_hdf5(
+            path,
+            _reindex(model),
+            f"model_snapshots/{iteration}",
+            exist_ok=True,
+            overwrite=True,
+        )
     return index
 
 
@@ -646,7 +697,7 @@ def extract_results(
     }
 
     if save_results:
-        save_hdf5(path, results_dict)
+        save_hdf5(path, results_dict, exist_ok=True)
         print(fill(f"Saved results to {path}"))
 
     return results_dict
@@ -751,6 +802,81 @@ def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
         return os.path.basename(filepath)
 
 
+def save_keypoints(
+    save_dir, coordinates, confidences=None, bodyparts=None, path_sep="-"
+):
+    """Convenience function for saving keypoint detections to csv files.
+
+    One csv file is saved for each recording in `coordinates`. Each row in the
+    csv corresponds to one frame and the columns are named
+
+        "BODYPART1_x", "BODYPART1_y", "BODYPART1_conf", "BODYPART2_x", ...
+
+    Columns with confidence scores are ommitted if `confidences` is not provided.
+    Besides confidences, there can be 2 or 3 columns for each bodypart, depending
+    on whether the keypoints are 2D or 3D.
+
+    Parameters
+    ----------
+    save_dir: str
+        Directory to save the results. A separate csv file will be saved for
+        each recording in `coordinates`.
+
+    coordinates: dict
+        Dictionary mapping recording names to numpy arrays of shape
+        (n_frames, n_keypoints, 2[or 3]) that contain the x and y (and z)
+        coordinates of the keypoints. If any keys contain a path separator
+        (such as "/"), it will be replaced with `path_sep` when naming the
+        csv file.
+
+    confidences: dict, default=None
+        Dictionary mapping recording names to numpy arrays of shape
+        (n_frames, n_keypoints) with the confidence scores of the keypoints.
+        Must have the same keys as `coordinates`.
+
+    bodyparts: list, default=None
+        List of bodypart names, in the same order as the keypoints in the
+        `coordinates` and `confidences` arrays. If None, the bodypart names
+        will be set to ["bodypart1", "bodypart2", ...].
+
+    path_sep: str, default='-'
+        If a path separator ("/" or "\") is present in the recording name, it
+        will be replaced with `path_sep` when saving the csv file.
+    """
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    if confidences is not None:
+        assert set(coordinates.keys()) == set(confidences.keys()), fill(
+            "The keys in `coordinates` and `confidences` must be the same."
+        )
+
+    # get number of keypoints and dimensions
+    _, num_keypoints, num_dims = next(iter(coordinates.values())).shape
+
+    # generate bodypart names if not provided
+    if bodyparts is None:
+        bodyparts = [f"bodypart{i}" for i in range(num_keypoints)]
+
+    # create column names
+    suffixes = ["x", "y", "z"][:num_keypoints]
+    if confidences is not None:
+        suffixes += ["conf"]
+    columns = [f"{bp}_{suffix}" for bp in bodyparts for suffix in suffixes]
+
+    # save data to csv
+    for recording_name, coords in coordinates.items():
+        if confidences is not None:
+            data = np.concatenate(
+                [coords, confidences[recording_name][..., np.newaxis]], axis=-1
+            ).reshape(-1, (num_dims + 1) * num_keypoints)
+        else:
+            data = coords.reshape(-1, num_dims * num_keypoints)
+        save_name = recording_name.replace(os.path.sep, path_sep)
+        save_path = os.path.join(save_dir, save_name)
+        pd.DataFrame(data, columns=columns).to_csv(f"{save_path}.csv", index=False)
+
+
 def load_keypoints(
     filepath_pattern,
     format,
@@ -813,6 +939,17 @@ def load_keypoints(
                 │  └──likelihood
                 ⋮
 
+    - freipose
+        .json files saved by FreiPose. Each file should contain a list of dicts
+        that each include a "kp_xyz" key with the 3D coordinates for one frame.
+        Keypoint scores (saved under "kp_score") are not loaded because they are
+        not bounded between 0 and 1, which is required for modeling. Since
+        FreiPose does not save the bodypart names, the `bodyparts` return
+        value is set to None.
+
+    - dannce
+        .mat files saved by Dannce.
+
     Parameters
     ----------
     filepath_pattern: str or list of str
@@ -836,6 +973,10 @@ def load_keypoints(
         - deeplabcut: 'csv' or 'h5'
         - anipose: 'csv'
         - sleap-anipose: 'h5'
+        - nwb: 'nwb'
+        - facemap: 'h5'
+        - freipose: 'json'
+        - dannce: 'mat'
 
     recursive: bool, default=True
         Whether to search recursively for deeplabcut csv or hdf5 files.
@@ -874,76 +1015,68 @@ def load_keypoints(
         List of bodypart names. The order of the names matches the order of the
         bodyparts in `coordinates` and `confidences`.
     """
-    formats = [
-        "deeplabcut",
-        "sleap",
-        "anipose",
-        "sleap-anipose",
-        "nwb",
-        "facemap",
-    ]
-    assert format in formats, fill(
-        f"Unrecognized format {format}. Must be one of {formats}"
-    )
+    formats = {
+        "deeplabcut": (_deeplabcut_loader, [".csv", ".h5", ".hdf5"]),
+        "sleap": (_sleap_loader, [".h5", ".hdf5", ".slp"]),
+        "anipose": (_anipose_loader, [".csv"]),
+        "sleap-anipose": (_sleap_anipose_loader, [".h5", ".hdf5"]),
+        "nwb": (_nwb_loader, [".nwb"]),
+        "facemap": (_facemap_loader, [".h5", ".hdf5"]),
+        "freipose": (_freipose_loader, [".json"]),
+        "dannce": (_dannce_loader, [".mat"]),
+    }
 
-    if extension is None:
-        extensions = {
-            "deeplabcut": [".csv", ".h5", ".hdf5"],
-            "sleap": [".h5", ".hdf5", ".slp"],
-            "anipose": [".csv"],
-            "sleap-anipose": [".h5", ".hdf5"],
-            "nwb": [".nwb"],
-            "facemap": [".h5", ".hdf5"],
-        }[format]
-    else:
+    # get format-specific loader and extensions
+    assert format in formats, fill(
+        f"Unrecognized format '{format}'. Must be one of {list(formats.keys())}"
+    )
+    loader, extensions = formats[format]
+
+    # optionally override default extension list
+    if extension is not None:
         extensions = [extension]
 
-    loader = {
-        "deeplabcut": _deeplabcut_loader,
-        "sleap": _sleap_loader,
-        "anipose": _anipose_loader,
-        "sleap-anipose": _sleap_anipose_loader,
-        "nwb": _nwb_loader,
-        "facemap": _facemap_loader,
-    }[format]
-
+    # optionally add format-specific arguments
     if format == "deeplabcut":
         additional_args = {"exclude_individuals": exclude_individuals}
     else:
         additional_args = {}
 
+    # get list of filepaths
     filepaths = list_files_with_exts(filepath_pattern, extensions, recursive=recursive)
     assert len(filepaths) > 0, fill(
         f"No files with extensions {extensions} found for {filepath_pattern}"
     )
 
+    # load keypoints from each file
     coordinates, confidences, bodyparts = {}, {}, None
     for filepath in tqdm.tqdm(filepaths, desc=f"Loading keypoints", ncols=72):
+        name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
+
         try:
-            name = _name_from_path(filepath, path_in_name, path_sep, remove_extension)
             new_coordinates, new_confidences, bodyparts = loader(
                 filepath, name, **additional_args
             )
-
-            if set(new_coordinates.keys()) & set(coordinates.keys()):
-                raise ValueError(
-                    f"Duplicate names found in {filepath_pattern}:\n\n"
-                    f"{set(new_coordinates.keys()) & set(coordinates.keys())}"
-                    f"\n\nThis may be caused by repeated filenames with "
-                    "different extensions. If so, please set the extension "
-                    "explicitly via the `extension` argument. Another possible"
-                    " cause is commonly-named files in different directories. "
-                    "if that is the case, then set `path_in_name=True`."
-                )
-
         except Exception as e:
-            print(fill(f"Error loading {filepath}: {e}"))
+            print(fill(f"Error loading {filepath}"))
+            raise e
+
+        if set(new_coordinates.keys()) & set(coordinates.keys()):
+            raise ValueError(
+                f"Duplicate names found in {filepath_pattern}:\n\n"
+                f"{set(new_coordinates.keys()) & set(coordinates.keys())}"
+                f"\n\nThis may be caused by repeated filenames with "
+                "different extensions. If so, please set the extension "
+                "explicitly via the `extension` argument. Another possible"
+                " cause is commonly-named files in different directories. "
+                "if that is the case, then set `path_in_name=True`."
+            )
 
         coordinates.update(new_coordinates)
         confidences.update(new_confidences)
 
+    # check for valid results
     assert len(coordinates) > 0, fill(f"No valid results found for {filepath_pattern}")
-
     check_nan_proportions(coordinates, bodyparts)
     return coordinates, confidences, bodyparts
 
@@ -1007,20 +1140,20 @@ def _sleap_loader(filepath, name):
 
         bodyparts = slp_file.skeletons[0].node_names
         arr = slp_file.numpy(return_confidence=True)
-        coords = arr[:, :, :-1]
-        confs = arr[:, :, -1]
+        coords = arr[:, :, :, :-1].transpose((1, 0, 2, 3))
+        confs = arr[:, :, :, -1].transpose((1, 0, 2))
     else:
         with h5py.File(filepath, "r") as f:
-            coords = f["tracks"][()]
-            confs = f["point_scores"][()]
+            coords = f["tracks"][()].transpose((0, 3, 2, 1))
+            confs = f["point_scores"][()].transpose((0, 2, 1))
             bodyparts = [name.decode("utf-8") for name in f["node_names"]]
 
     if coords.shape[0] == 1:
-        coordinates = {name: coords[0].T}
-        confidences = {name: confs[0].T}
+        coordinates = {name: coords[0]}
+        confidences = {name: confs[0]}
     else:
-        coordinates = {f"{name}_track{i}": coords[i].T for i in range(coords.shape[0])}
-        confidences = {f"{name}_track{i}": confs[i].T for i in range(coords.shape[0])}
+        coordinates = {f"{name}_track{i}": coords[i] for i in range(coords.shape[0])}
+        confidences = {f"{name}_track{i}": confs[i] for i in range(coords.shape[0])}
     return coordinates, confidences, bodyparts
 
 
@@ -1117,7 +1250,27 @@ def _facemap_loader(filepath, name):
     return coordinates, confidences, bodyparts
 
 
-def save_hdf5(filepath, save_dict, datapath=None):
+def _freipose_loader(filepath, name):
+    """Load keypoints from freipose json files."""
+    with open(filepath, "r") as f:
+        data = json.load(f)
+    coords = np.concatenate([d["kp_xyz"] for d in data], axis=0)
+    coordinates = {name: coords}
+    confidences = {name: np.ones_like(coords[..., 0])}
+    return coordinates, confidences, None
+
+
+def _dannce_loader(filepath, name):
+    """Load keypoints from dannce mat files."""
+    mat = loadmat(filepath)
+    coords = mat["pred"].transpose((0, 2, 1))
+    confs = np.ones_like(coords[..., 0])
+    coordinates = {name: coords}
+    confidences = {name: confs}
+    return coordinates, confidences, None
+
+
+def save_hdf5(filepath, save_dict, datapath=None, exist_ok=False, overwrite=False):
     """Save a dict of pytrees to an hdf5 file. The leaves of the pytrees must
     be numpy arrays, scalars, or strings.
 
@@ -1133,13 +1286,23 @@ def save_hdf5(filepath, save_dict, datapath=None):
     datapath: str, default=None
         Path within the hdf5 file to save the data. If None, the data is saved
         at the root of the hdf5 file.
+
+    exist_ok: bool, default=False
+        If False, will raise an AssertionError when trying to modify an existing file.
+
+    overwrite: bool, default=False
+        If False, will raise an AssertionError when trying to overwrite an existing dataset or group.
     """
+    assert not (
+        os.path.exists(filepath) and not exist_ok
+    ), f"{filepath} already exists. Set exist_ok to True to allow for editing an existing file."
+
     with h5py.File(filepath, "a") as f:
         if datapath is not None:
-            _savetree_hdf5(jax.device_get(save_dict), f, datapath)
+            _savetree_hdf5(jax.device_get(save_dict), f, datapath, overwrite=overwrite)
         else:
             for k, tree in save_dict.items():
-                _savetree_hdf5(jax.device_get(tree), f, k)
+                _savetree_hdf5(jax.device_get(tree), f, k, overwrite=overwrite)
 
 
 def load_hdf5(filepath, datapath=None):
@@ -1167,10 +1330,30 @@ def load_hdf5(filepath, datapath=None):
             return _loadtree_hdf5(f[datapath])
 
 
-def _savetree_hdf5(tree, group, name):
-    """Recursively save a pytree to an h5 file group."""
+def _savetree_hdf5(tree, group, name, overwrite=False):
+    """Recursively save a pytree to an h5 file group.
+
+    Parameters
+    ----------
+    tree: pytree
+        The pytree to save.
+
+    group: h5py.Group
+        The h5 file group to save the pytree to.
+
+    name: str
+        The key in 'group' where the pytree will be saved.
+
+    overwrite: bool, default=False
+        If True, will overwrite an existing dataset or group.
+    """
+    assert not (
+        not overwrite and name in group
+    ), f"{name} already exists in {group}. Set overwrite to True to overwrite data in an existing file."
+
     if name in group:
         del group[name]
+
     if isinstance(tree, np.ndarray):
         if tree.dtype.kind == "U":
             dt = h5py.special_dtype(vlen=str)
@@ -1185,10 +1368,10 @@ def _savetree_hdf5(tree, group, name):
 
         if isinstance(tree, (tuple, list)):
             for k, subtree in enumerate(tree):
-                _savetree_hdf5(subtree, subgroup, f"arr{k}")
+                _savetree_hdf5(subtree, subgroup, f"arr{k}", overwrite=overwrite)
         elif isinstance(tree, dict):
             for k, subtree in tree.items():
-                _savetree_hdf5(subtree, subgroup, k)
+                _savetree_hdf5(subtree, subgroup, k, overwrite=overwrite)
         else:
             raise ValueError(f"Unrecognized type {type(tree)}")
 

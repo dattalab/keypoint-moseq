@@ -30,7 +30,7 @@ E-mail: otd@harvard.edu
 
 Wiltschko AB, Johnson MJ, Iurilli G, Peterson RE, Katon JE, Pashkovski SL, Abraira VE, Adams RP and Datta SR. (2015). Mapping sub-second Structure in Behavior. Neuron, 88:1121.
 
-Caleb Weinreb, Mohammed Adbal Monium Osman, Libby Zhang, Sherry Lin, Jonah Pearl, Sidharth Annapragada, Eli Conlin, Winthrop F. Gillis, Maya Jay, Shaokai Ye, Alexander Mathis, Mackenzie Weygandt Mathis, Talmo Pereira, Scott W Linderman, Sandeep Robert Datta. (2023). Keypoint-MoSeq: parsing behavior by linking point tracking to pose dynamics. Bioarxiv, 2023.03.16.532307.
+Weinreb, C., Pearl, J.E., Lin, S. et al. Keypoint-MoSeq: parsing behavior by linking point tracking to pose dynamics. Nat Methods 21, 1329–1339 (2024). https://doi.org/10.1038/s41592-024-02318-2
 
 7.** NO WARRANTIES.** THE SOFTWARE IS PROVIDED "AS IS." TO THE FULLEST EXTENT PERMITTED BY LAW, HARVARD HEREBY DISCLAIMS ALL WARRANTIES OF ANY KIND (EXPRESS, IMPLIED OR OTHERWISE) REGARDING THE SOFTWARE, INCLUDING BUT NOT LIMITED TO ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OWNERSHIP, AND NON-INFRINGEMENT.  HARVARD MAKES NO WARRANTY ABOUT THE ACCURACY, RELIABILITY, COMPLETENESS, TIMELINESS, SUFFICIENCY OR QUALITY OF THE SOFTWARE.  HARVARD DOES NOT WARRANT THAT THE SOFTWARE WILL OPERATE WITHOUT ERROR OR INTERRUPTION.
 
