@@ -5,6 +5,8 @@ import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.figure import Figure
 from textwrap import fill
 import jax, jax.numpy as jnp
 from scipy.ndimage import median_filter, convolve1d, gaussian_filter1d
@@ -14,6 +16,7 @@ from scipy.spatial.distance import pdist, squareform
 from jax_moseq.models.keypoint_slds import inverse_rigid_transform
 from jax_moseq.utils import get_frequencies, batch
 from vidio.read import OpenCVReader
+from typing import Optional
 
 na = jnp.newaxis
 
@@ -1457,3 +1460,31 @@ def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
             else:
                 new_results[key][k] = np.copy(v)
     return new_results
+
+def keypoint_distances_to_centroid(coordinates: np.ndarray) -> np.ndarray:
+    # coordinates is (n_frames, n_keypoints, keypoint_dim)
+    centroids = coordinates[:, :, :2].mean(axis=1) # centroids: (n_frames, 2)
+    distances = coordinates[:, :, :2] - centroids[:, None, :] # distances: (n_frames, n_keypoints, 2)
+    return (distances[..., 0]**2 + distances[..., 1]**2)**0.5
+
+def plot_distances_to_centroid(
+        distances: np.ndarray, # distances is (n_frames, n_keypoints)
+        recording_name: Optional[str] = None,
+        bodyparts: Optional[list[str]] = None) -> Figure:
+
+    fig, ax = plt.subplots(figsize=(16, 5))
+    sns.lineplot(distances, ax=ax)
+    ax.set_xlabel('Frame')
+    ax.set_ylabel('Distance to Centroid')
+
+    if recording_name is not None:
+        ax.set_title(f'Keypoint distances for {recording_name}')
+
+    if bodyparts is not None:
+        if len(bodyparts) != distances.shape[1]:
+            raise ValueError(f'Length of bodyparts list ({len(bodyparts)}) does not match '
+                             f'number of keypoints in distances ({distances.shape[1]})')
+
+        ax.legend(bodyparts, bbox_to_anchor=(1.00, 1), loc='upper left') 
+
+    return fig
