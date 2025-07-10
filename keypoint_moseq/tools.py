@@ -15,6 +15,7 @@ def find_arena(
     coordinates,
     arena_shape="auto",
     num_samples=10000,
+    remove_outliers=True,
     k=20,
     distance_threshold=2,
     tolerance=1e-5,
@@ -46,14 +47,19 @@ def find_arena(
     num_samples : int
         Number of samples from `coordinates` to use for arena detection.
 
+    remove_outliers : bool, default=True
+        Whether to remove outliers from the coordinates before finding the convex hull.
+
     k : int, default=20
-        Number of neighbors to use for outlier detection (see `remove_outliers`).
+        Number of neighbors to use for outlier detection (see `remove_outliers`). Ignored if 
+        `remove_outliers` is False.
 
     distance_threshold : float, default=2
-        Threshold used for outlier detection (see `remove_outliers` for details).
+        Threshold used for outlier detection (see `remove_outliers` for details). Ignored if
+        `remove_outliers` is False.
 
     tolerance : float, default=1e-5
-        Tolerance for the iterative closest point algorithm.
+        Tolerance for the iterative closest point algorithm. 
 
     max_iterations : int, default=100
         Maximum number of iterations for the iterative closest point algorithm.
