@@ -15,7 +15,7 @@ def find_arena(
     coordinates,
     arena_shape="auto",
     num_samples=10000,
-    remove_outliers=True,
+    remove_outliers=False,
     k=20,
     distance_threshold=2,
     tolerance=1e-5,
