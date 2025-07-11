@@ -112,6 +112,7 @@ def generate_config(project_dir, **kwargs):
             "whiten": True,
             "fix_heading": False,
             "fps": 30,
+            "outlier_scale_factor": 6.0
         },
     )
 
