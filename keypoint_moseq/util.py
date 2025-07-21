@@ -1520,7 +1520,7 @@ def plot_keypoint_traces(
         line_labels: Optional[list[str]] = None,
         thresholds: Optional[np.ndarray] = None,
         shading_mask: Optional[np.ndarray] = None) -> plt.Figure:
-    """Create a multi-panel plot showing keypoint traces over time.
+    """Create a multi-panel plot showing keypoint traces over time (used to visualize outliers).
 
     Creates a figure with one subplot per keypoint, where each subplot shows multiple
     trace lines over time. Optional features include threshold lines, shaded regions,
@@ -1617,7 +1617,7 @@ def plot_keypoint_distance_outliers(project_dir: str,
                                     outlier_mask, outlier_thresholds,
                                     bodyparts: list[str],
                                     **kwargs):
-    """Create and save a plot comparing original vs interpolated keypoint distances.
+    """Create and save a plot comparing distance-to-medoid for original vs. interpolated keypoints.
 
     Generates a multi-panel plot showing the distance from each keypoint to the medoid
     position for both original and interpolated coordinates. The plot includes threshold
