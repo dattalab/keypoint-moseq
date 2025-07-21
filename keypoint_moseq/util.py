@@ -1457,3 +1457,42 @@ def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
             else:
                 new_results[key][k] = np.copy(v)
     return new_results
+
+def abs_deltas(array: np.ndarray, smoothing_window_size: int = 1) -> np.ndarray:
+    """
+    Compute absolute element-by-element differences of an array, optionally after median filtering.
+
+    Parameters
+    ----------
+    array : np.ndarray
+        Input array
+    smoothing_window_size : int, default=1
+        Window size for median filtering along the first axis.
+        No median filtering is performed by default.
+
+    Returns
+    -------
+    np.ndarray
+        Absolute differences along the first axis.
+    """
+    return np.abs(np.diff(median_filter(array, size=smoothing_window_size, axes=(0,)), axis=0))
+
+def estimate_sigmasq_loc(y: np.ndarray, fps: int):
+    """
+    Estimate the expected amount that the centroid moves each frame.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Array with dimensions (batch, frames, keypoints, dimensions), keypoint coordinates.
+    fps : int
+        Smoothing window size, typically frames per second.
+
+    Returns
+    -------
+    float
+        Sum of squared mean absolute centroid displacements for x and y.
+    """
+    centroids = np.median(y, axis=2)  # (batch, time, 2)
+    mean_abs_delta = abs_deltas(np.swapaxes(centroids, 0, 1), fps).mean(axis=(0, 1)) # (2,)
+    return mean_abs_delta[0]**2 + mean_abs_delta[1]**2
