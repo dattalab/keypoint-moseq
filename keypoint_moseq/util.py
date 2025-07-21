@@ -1459,26 +1459,24 @@ def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
                 new_results[key][k] = np.copy(v)
     return new_results
 
-def keypoint_distances_to_medoid(coordinates: np.ndarray) -> np.ndarray:
+def get_distance_to_medoid(coordinates: np.ndarray) -> np.ndarray:
     """Compute the Euclidean distance from each keypoint to the medoid (median position)
     of all keypoints at each frame.
 
     Parameters
     -------
     coordinates: ndarray of shape (n_frames, n_keypoints, keypoint_dim)
-        Keypoint coordinates where keypoint_dim is 2 or 3. Only the first two dimensions
-        (x, y) are used for distance calculations.
+        Keypoint coordinates where keypoint_dim is 2 or 3. 
 
     Returns
     -------
     distances: ndarray of shape (n_frames, n_keypoints)
         Euclidean distances from each keypoint to the medoid position at each frame.
     """
-    medoids = np.median(coordinates[:, :, :2], axis=1)  # (n_frames, 2)
-    distances = coordinates[:, :, :2] - medoids[:, None, :]  # (n_frames, n_keypoints, 2)
-    return (distances[..., 0]**2 + distances[..., 1]**2)**0.5  # (n_frames, n_keypoints)
+    medoids = np.median(coordinates, axis=1)  # (n_frames, keypoint_dim)
+    return np.linalg.norm(coordinates - medoids[:, None, :], axis=-1)  # (n_frames, n_keypoints)
 
-def find_keypoint_distance_outliers(coordinates: np.ndarray, outlier_scale_factor: float = 6.0, **kwargs) -> dict[str, np.ndarray]:
+def find_medoid_distance_outliers(coordinates: np.ndarray, outlier_scale_factor: float = 6.0, **kwargs) -> dict[str, np.ndarray]:
     """Identify keypoint distance outliers using Median Absolute Deviation (MAD).
 
     For each keypoint, computes the distance to the medoid position across all frames
@@ -1508,7 +1506,7 @@ def find_keypoint_distance_outliers(coordinates: np.ndarray, outlier_scale_facto
         thresholds: ndarray of shape (n_keypoints,)
             Distance thresholds for each keypoint above which points are considered outliers.
     """
-    distances = keypoint_distances_to_medoid(coordinates) # (n_frames, n_keypoints)
+    distances = get_distance_to_medoid(coordinates) # (n_frames, n_keypoints)
     medians = np.median(distances, axis=0)  # (n_keypoints,)
     MADs = np.median(np.abs(distances - medians[None, :]), axis=0)  # (n_keypoints,)
     outlier_thresholds = MADs * outlier_scale_factor + medians  # (n_keypoints,)
@@ -1612,7 +1610,7 @@ def plot_keypoint_traces(
         fig.suptitle(plot_title, fontsize=16)
     return fig
 
-def plot_keypoint_distance_outliers(project_dir: str,
+def plot_medoid_distance_outliers(project_dir: str,
                                     recording_name: str,
                                     original_coordinates: np.ndarray, 
                                     interpolated_coordinates: np.ndarray,
@@ -1659,11 +1657,11 @@ def plot_keypoint_distance_outliers(project_dir: str,
         The plot is saved to 'QA/plots/keypoint_distance_outliers/{recording_name}.png'.
     """
 
-    plot_path = os.path.join(project_dir, 'QA/plots/keypoint_distance_outliers', f'{recording_name}.png')
+    plot_path = os.path.join(project_dir, 'quality_assurance', 'plots', 'keypoint_distance_outliers', f'{recording_name}.png')
     os.makedirs(os.path.dirname(plot_path), exist_ok=True)
 
-    original_distances = keypoint_distances_to_medoid(original_coordinates) # (n_frames, n_keypoints)
-    interpolated_distances = keypoint_distances_to_medoid(interpolated_coordinates) # (n_frames, n_keypoints)
+    original_distances = get_distance_to_medoid(original_coordinates) # (n_frames, n_keypoints)
+    interpolated_distances = get_distance_to_medoid(interpolated_coordinates) # (n_frames, n_keypoints)
 
     fig = plot_keypoint_traces(
         traces=[original_distances, interpolated_distances],
