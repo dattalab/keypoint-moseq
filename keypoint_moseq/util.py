@@ -1595,7 +1595,7 @@ def plot_keypoint_traces(
         fig.suptitle(plot_title, fontsize=16)
     return fig
 
-def plot_keypoint_distance_outliers(project_dir: str,
+def plot_medoid_distance_outliers(project_dir: str,
                                     recording_name: str,
                                     original_coordinates: np.ndarray, 
                                     interpolated_coordinates: np.ndarray,
