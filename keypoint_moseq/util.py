@@ -1675,26 +1675,6 @@ def plot_medoid_distance_outliers(
     print(f"Saved keypoint distance outlier plot for {recording_name} to {plot_path}.")
 
 
-def abs_deltas(array: np.ndarray, smoothing_window_size: int = 1) -> np.ndarray:
-    """
-    Compute absolute element-by-element differences of an array, optionally after median filtering.
-
-    Parameters
-    ----------
-    array : np.ndarray
-        Input array
-    smoothing_window_size : int, default=1
-        Window size for median filtering along the first axis.
-        No median filtering is performed by default.
-
-    Returns
-    -------
-    np.ndarray
-        Absolute differences along the first axis.
-    """
-    return np.abs(np.diff(median_filter(array, size=smoothing_window_size, axes=(0,)), axis=0))
-
-
 def estimate_sigmasq_loc(Y: jnp.ndarray, mask: jnp.ndarray, filter_size: int = 30) -> float:
     """
     Automatically estimate `sigmasq_loc` (prior controlling the centroid movement across frames).
