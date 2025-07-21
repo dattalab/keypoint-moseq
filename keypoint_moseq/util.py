@@ -40,9 +40,7 @@ def print_dims_to_explain_variance(pca, f):
     if cs[-1] < f:
         print(f"All components together only explain {cs[-1]*100}% of variance.")
     else:
-        print(
-            f">={f*100}% of variance exlained by {(cs>f).nonzero()[0].min()+1} components."
-        )
+        print(f">={f*100}% of variance exlained by {(cs>f).nonzero()[0].min()+1} components.")
 
 
 def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
@@ -87,9 +85,7 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
                 matches += glob.glob(os.path.join(match, "**"), recursive=True)
 
         # filter matches by extension
-        matches = [
-            match for match in matches if os.path.splitext(match)[1].lower() in ext_list
-        ]
+        matches = [match for match in matches if os.path.splitext(match)[1].lower() in ext_list]
         return matches
 
 
@@ -496,9 +492,7 @@ def get_instance_trajectories(
         )
 
     if post is None:
-        trajectories = [
-            coordinates[key][s - pre : e] for key, s, e in syllable_instances
-        ]
+        trajectories = [coordinates[key][s - pre : e] for key, s, e in syllable_instances]
         if centroids is not None and headings is not None:
             trajectories = [
                 np_io(inverse_rigid_transform)(x, centroids[key][s], headings[key][s])
@@ -509,12 +503,8 @@ def get_instance_trajectories(
             [coordinates[key][s - pre : s + post] for key, s, e in syllable_instances]
         )
         if centroids is not None and headings is not None:
-            c = np.array([centroids[key][s] for key, s, e in syllable_instances])[
-                :, None
-            ]
-            h = np.array([headings[key][s] for key, s, e in syllable_instances])[
-                :, None
-            ]
+            c = np.array([centroids[key][s] for key, s, e in syllable_instances])[:, None]
+            h = np.array([headings[key][s] for key, s, e in syllable_instances])[:, None]
             trajectories = np_io(inverse_rigid_transform)(trajectories, c, h)
 
     return trajectories
@@ -584,8 +574,7 @@ def sample_instances(
     if mode == "random":
         sampled_instances = {
             syllable: [
-                instances[i]
-                for i in np.random.choice(len(instances), num_samples, replace=False)
+                instances[i] for i in np.random.choice(len(instances), num_samples, replace=False)
             ]
             for syllable, instances in syllable_instances.items()
         }
@@ -593,8 +582,7 @@ def sample_instances(
 
     elif mode == "density":
         assert not (coordinates is None or headings is None or centroids is None), fill(
-            "`coordinates`, `headings` and `centroids` are required when "
-            '`mode == "density"`'
+            "`coordinates`, `headings` and `centroids` are required when " '`mode == "density"`'
         )
 
         for key in coordinates.keys():
@@ -634,9 +622,7 @@ def sample_instances(
             global_density = 1 / distances.mean(1)
             exemplar = np.argmax(local_density / global_density)
             samples = np.random.choice(indices[exemplar], num_samples, replace=False)
-            sampled_instances[syllable] = [
-                syllable_instances[syllable][i] for i in samples
-            ]
+            sampled_instances[syllable] = [syllable_instances[syllable][i] for i in samples]
 
         return sampled_instances
 
@@ -802,9 +788,7 @@ def _print_colored_table(row_labels, col_labels, values):
         print(tabulate(df, headers="keys", tablefmt="simple_grid", showindex=True))
 
 
-def check_nan_proportions(
-    coordinates, bodyparts, warning_threshold=0.5, breakdown=False, **kwargs
-):
+def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdown=False, **kwargs):
     """Check if any bodyparts have a high proportion of NaNs.
 
     Parameters
@@ -836,9 +820,7 @@ def check_nan_proportions(
             bps = [bp for bp, p in zip(bodyparts, nan_props) if p > warning_threshold]
             warnings.warn(
                 "\nCoordinates for the following bodyparts are missing (set to NaN) in at least "
-                "{}% of frames:\n - {}\n\n".format(
-                    warning_threshold * 100, "\n - ".join(bps)
-                )
+                "{}% of frames:\n - {}\n\n".format(warning_threshold * 100, "\n - ".join(bps))
             )
             warnings.warn(
                 "This may cause problems during modeling. See "
@@ -916,9 +898,7 @@ def _find_optimal_segment_length(
         sequence_lengths > min_fragment_length
     ), f"All sequences must have at least {min_fragment_length + 1} elements"
 
-    candidate_seg_lengths = np.sort(
-        np.unique(np.minimum(sequence_lengths, max_seg_length))
-    )[::-1]
+    candidate_seg_lengths = np.sort(np.unique(np.minimum(sequence_lengths, max_seg_length)))[::-1]
 
     for seg_length in candidate_seg_lengths:
         percent_padding = _get_percent_padding(sequence_lengths, seg_length)
@@ -1098,9 +1078,7 @@ def format_data(
     conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
     if np.min(conf) < 0:
         conf = np.maximum(conf, 0)
-        warnings.warn(
-            fill("Negative confidence values are not allowed and will be set to 0.")
-        )
+        warnings.warn(fill("Negative confidence values are not allowed and will be set to 0."))
     conf = conf + conf_pseudocount
 
     if added_noise_level > 0:
@@ -1350,13 +1328,9 @@ def check_video_paths(video_paths, keys):
     error_messages = []
 
     if len(missing_keys) > 0:
-        error_messages.append(
-            "The following keys require a video path: {}".format(missing_keys)
-        )
+        error_messages.append("The following keys require a video path: {}".format(missing_keys))
     if len(nonexistent_videos) > 0:
-        error_messages.append(
-            "The following videos do not exist: {}".format(nonexistent_videos)
-        )
+        error_messages.append("The following videos do not exist: {}".format(nonexistent_videos))
     if len(unreadable_videos) > 0:
         error_messages.append(
             "The following videos are not readable and must be reencoded: {}".format(
@@ -1368,9 +1342,7 @@ def check_video_paths(video_paths, keys):
         raise ValueError("\n\n".join(error_messages))
 
 
-def generate_syllable_mapping(
-    results: dict, syllable_grouping: list[list[int]]
-) -> dict[int, int]:
+def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]]) -> dict[int, int]:
     """
     Create a mapping from old syllable indexes to new syllable indexes such that each group of
     syllables in `syllable_grouping` is mapped to a single index. All syllables not included in
@@ -1400,9 +1372,7 @@ def generate_syllable_mapping(
     >>> # {0: 0, 1: 0, 2: 1, 3: 2, 4: 3, 5: 1, 6: 1}
     """
     # Count the number of times each syllable is used
-    syllable_counts = np.zeros(
-        max(max(v["syllable"]) for v in results.values()) + 1, dtype=int
-    )
+    syllable_counts = np.zeros(max(max(v["syllable"]) for v in results.values()) + 1, dtype=int)
     for v in results.values():
         unique, counts = np.unique(v["syllable"], return_counts=True)
         syllable_counts[unique] += counts
@@ -1459,6 +1429,7 @@ def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
                 new_results[key][k] = np.copy(v)
     return new_results
 
+
 def get_distance_to_medoid(coordinates: np.ndarray) -> np.ndarray:
     """Compute the Euclidean distance from each keypoint to the medoid (median position)
     of all keypoints at each frame.
@@ -1466,7 +1437,7 @@ def get_distance_to_medoid(coordinates: np.ndarray) -> np.ndarray:
     Parameters
     -------
     coordinates: ndarray of shape (n_frames, n_keypoints, keypoint_dim)
-        Keypoint coordinates where keypoint_dim is 2 or 3. 
+        Keypoint coordinates where keypoint_dim is 2 or 3.
 
     Returns
     -------
@@ -1476,7 +1447,10 @@ def get_distance_to_medoid(coordinates: np.ndarray) -> np.ndarray:
     medoids = np.median(coordinates, axis=1)  # (n_frames, keypoint_dim)
     return np.linalg.norm(coordinates - medoids[:, None, :], axis=-1)  # (n_frames, n_keypoints)
 
-def find_medoid_distance_outliers(coordinates: np.ndarray, outlier_scale_factor: float = 6.0, **kwargs) -> dict[str, np.ndarray]:
+
+def find_medoid_distance_outliers(
+    coordinates: np.ndarray, outlier_scale_factor: float = 6.0, **kwargs
+) -> dict[str, np.ndarray]:
     """Identify keypoint distance outliers using Median Absolute Deviation (MAD).
 
     For each keypoint, computes the distance to the medoid position across all frames
@@ -1506,20 +1480,22 @@ def find_medoid_distance_outliers(coordinates: np.ndarray, outlier_scale_factor:
         thresholds: ndarray of shape (n_keypoints,)
             Distance thresholds for each keypoint above which points are considered outliers.
     """
-    distances = get_distance_to_medoid(coordinates) # (n_frames, n_keypoints)
+    distances = get_distance_to_medoid(coordinates)  # (n_frames, n_keypoints)
     medians = np.median(distances, axis=0)  # (n_keypoints,)
     MADs = np.median(np.abs(distances - medians[None, :]), axis=0)  # (n_keypoints,)
     outlier_thresholds = MADs * outlier_scale_factor + medians  # (n_keypoints,)
     outlier_mask = distances > outlier_thresholds[None, :]  # (n_frames, n_keypoints)
-    return {'mask': outlier_mask, 'thresholds': outlier_thresholds}
+    return {"mask": outlier_mask, "thresholds": outlier_thresholds}
+
 
 def plot_keypoint_traces(
-        traces: list[np.ndarray],
-        plot_title: Optional[str] = None,
-        bodyparts: Optional[list[str]] = None,
-        line_labels: Optional[list[str]] = None,
-        thresholds: Optional[np.ndarray] = None,
-        shading_mask: Optional[np.ndarray] = None) -> plt.Figure:
+    traces: list[np.ndarray],
+    plot_title: Optional[str] = None,
+    bodyparts: Optional[list[str]] = None,
+    line_labels: Optional[list[str]] = None,
+    thresholds: Optional[np.ndarray] = None,
+    shading_mask: Optional[np.ndarray] = None,
+) -> plt.Figure:
     """Create a multi-panel plot showing keypoint traces over time.
 
     Creates a figure with one subplot per keypoint, where each subplot shows multiple
@@ -1558,65 +1534,81 @@ def plot_keypoint_traces(
 
     if not traces:
         raise ValueError("traces cannot be empty")
-    
+
     n_keypoints = traces[0].shape[1]
-    
+
     for i, trace_array in enumerate(traces):
         if trace_array.shape[1] != n_keypoints:
-            raise ValueError(f"All trace arrays must have same number of keypoints. "
-                           f"Array {i} has {trace_array.shape[1]} keypoints, expected {n_keypoints}")
-    
+            raise ValueError(
+                f"All trace arrays must have same number of keypoints. "
+                f"Array {i} has {trace_array.shape[1]} keypoints, expected {n_keypoints}"
+            )
+
     if bodyparts is not None and len(bodyparts) != n_keypoints:
-        raise ValueError(f'Length of bodyparts list ({len(bodyparts)}) does not match '
-                         f'number of keypoints in traces ({n_keypoints})')
-    
+        raise ValueError(
+            f"Length of bodyparts list ({len(bodyparts)}) does not match "
+            f"number of keypoints in traces ({n_keypoints})"
+        )
+
     if shading_mask is not None:
         if shading_mask.shape != traces[0].shape:
-            raise ValueError(f'Shading mask shape {shading_mask.shape} must match traces shape {traces[0].shape}')
-    
+            raise ValueError(
+                f"Shading mask shape {shading_mask.shape} must match traces shape {traces[0].shape}"
+            )
+
     fig, axes = plt.subplots(n_keypoints, 1, figsize=(16, 3 * n_keypoints), constrained_layout=True)
     if n_keypoints == 1:
         axes = [axes]  # Ensure axes is always a list
-    
+
     for keypoint_idx in range(n_keypoints):
         ax = axes[keypoint_idx]
-        
+
         if shading_mask is not None:
             shaded_frames = np.where(shading_mask[:, keypoint_idx])[0]
             if len(shaded_frames) > 0:
                 for frame in shaded_frames:
-                    ax.axvspan(frame - 0.5, frame + 0.5, alpha=0.1, color='grey')
-        
+                    ax.axvspan(frame - 0.5, frame + 0.5, alpha=0.1, color="grey")
+
         for line_idx, trace_array in enumerate(traces):
-            label = line_labels[line_idx] if line_labels else f'Line {line_idx}'
+            label = line_labels[line_idx] if line_labels else f"Line {line_idx}"
             ax.plot(trace_array[:, keypoint_idx], label=label)
-        
+
         if thresholds is not None:
             threshold_value = thresholds[keypoint_idx]
-            ax.axhline(y=threshold_value, color='black', linestyle='--', alpha=0.7, label=f'Threshold ({threshold_value:.2f})')
-        
-        ax.set_xlabel('Frame')
-        ax.set_ylabel('Trace Value')
-        
+            ax.axhline(
+                y=threshold_value,
+                color="black",
+                linestyle="--",
+                alpha=0.7,
+                label=f"Threshold ({threshold_value:.2f})",
+            )
+
+        ax.set_xlabel("Frame")
+        ax.set_ylabel("Trace Value")
+
         if bodyparts is not None:
-            ax.set_title(f'{bodyparts[keypoint_idx]}')
+            ax.set_title(f"{bodyparts[keypoint_idx]}")
         else:
-            ax.set_title(f'Keypoint {keypoint_idx}')
-        
-        ax.legend(loc='upper right')
+            ax.set_title(f"Keypoint {keypoint_idx}")
+
+        ax.legend(loc="upper right")
         ax.grid(True, alpha=0.3)
-    
+
     if plot_title is not None:
         fig.suptitle(plot_title, fontsize=16)
     return fig
 
-def plot_medoid_distance_outliers(project_dir: str,
-                                    recording_name: str,
-                                    original_coordinates: np.ndarray, 
-                                    interpolated_coordinates: np.ndarray,
-                                    outlier_mask, outlier_thresholds,
-                                    bodyparts: list[str],
-                                    **kwargs):
+
+def plot_medoid_distance_outliers(
+    project_dir: str,
+    recording_name: str,
+    original_coordinates: np.ndarray,
+    interpolated_coordinates: np.ndarray,
+    outlier_mask,
+    outlier_thresholds,
+    bodyparts: list[str],
+    **kwargs,
+):
     """Create and save a plot comparing original vs interpolated keypoint distances.
 
     Generates a multi-panel plot showing the distance from each keypoint to the medoid
@@ -1657,21 +1649,29 @@ def plot_medoid_distance_outliers(project_dir: str,
         The plot is saved to 'QA/plots/keypoint_distance_outliers/{recording_name}.png'.
     """
 
-    plot_path = os.path.join(project_dir, 'quality_assurance', 'plots', 'keypoint_distance_outliers', f'{recording_name}.png')
+    plot_path = os.path.join(
+        project_dir,
+        "quality_assurance",
+        "plots",
+        "keypoint_distance_outliers",
+        f"{recording_name}.png",
+    )
     os.makedirs(os.path.dirname(plot_path), exist_ok=True)
 
-    original_distances = get_distance_to_medoid(original_coordinates) # (n_frames, n_keypoints)
-    interpolated_distances = get_distance_to_medoid(interpolated_coordinates) # (n_frames, n_keypoints)
+    original_distances = get_distance_to_medoid(original_coordinates)  # (n_frames, n_keypoints)
+    interpolated_distances = get_distance_to_medoid(
+        interpolated_coordinates
+    )  # (n_frames, n_keypoints)
 
     fig = plot_keypoint_traces(
         traces=[original_distances, interpolated_distances],
         plot_title=recording_name,
         bodyparts=bodyparts,
-        line_labels=['Original', 'Interpolated'],
+        line_labels=["Original", "Interpolated"],
         thresholds=outlier_thresholds,
-        shading_mask=outlier_mask
+        shading_mask=outlier_mask,
     )
 
     fig.savefig(plot_path, dpi=300)
     plt.close()
-    print(f'Saved keypoint distance outlier plot for {recording_name} to {plot_path}.')
+    print(f"Saved keypoint distance outlier plot for {recording_name} to {plot_path}.")
