@@ -1695,7 +1695,7 @@ def abs_deltas(array: np.ndarray, smoothing_window_size: int = 1) -> np.ndarray:
     return np.abs(np.diff(median_filter(array, size=smoothing_window_size, axes=(0,)), axis=0))
 
 
-def estimate_sigmasq_loc(Y: jax.ndarray, mask: jax.ndarray, filter_size: int = 30) -> float:
+def estimate_sigmasq_loc(Y: jnp.ndarray, mask: jnp.ndarray, filter_size: int = 30) -> float:
     """
     Automatically estimate `sigmasq_loc` (prior controlling the centroid movement across frames).
 
@@ -1713,7 +1713,7 @@ def estimate_sigmasq_loc(Y: jax.ndarray, mask: jax.ndarray, filter_size: int = 3
     float
         Mean of the squared distances between consecutive smoothed centroids.
     """
-    masked_centroids = np.where(mask[:, :, None], np.median(y, axis=2), np.nan)
+    masked_centroids = np.where(mask[:, :, None], np.median(Y, axis=2), np.nan)
     smoothed_centroids = median_filter(masked_centroids, (1, filter_size, 1))
     distances = np.linalg.norm(np.diff(smoothed_centroids, axis=1), axis=-1)  # (batch, frames)
-    return np.nanmean(distances ** 2)
+    return float(np.nanmean(distances)**2)
