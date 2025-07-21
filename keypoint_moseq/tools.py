@@ -78,8 +78,11 @@ def find_arena(
         coordinates = coordinates[idx]
 
     # Remove outliers
-    inlier_mask = detect_outliers(coordinates, k, distance_threshold)
-    denoised_coords = coordinates[inlier_mask]
+    if remove_outliers:
+        inlier_mask = detect_outliers(coordinates, k, distance_threshold)
+        denoised_coords = coordinates[inlier_mask]
+    else:
+        denoised_coords = coordinates
 
     # Find convex hull
     hull = denoised_coords[ConvexHull(denoised_coords).vertices]
@@ -102,12 +105,42 @@ def find_arena(
             raise ValueError(
                 "Invalid arena_shape. Must be 'auto', 'circle', 'square', an array of points."
             )
+            
+        if len(target_polygon) < 50:
+            points_per_segment = 100 // len(target_polygon)
+            target_polygon = resample_polygon(target_polygon, points_per_segment)
 
         arena = find_optimal_transformation(
             target_polygon, hull, tolerance, max_iterations
         )
 
     return arena
+
+
+def resample_polygon(polygon, points_per_segment=10):
+    """
+    Resample a polygon to have a fixed number of points per segment.
+
+    Parameters
+    ----------
+    polygon : np.ndarray
+        Array of shape (N, 2) representing the polygon vertices.
+
+    points_per_segment : int, default=10
+        Number of points to sample per segment of the polygon.
+
+    Returns
+    -------
+    resampled_polygon : np.ndarray
+        Array of shape (M, 2) representing the resampled polygon.
+    """    
+    resampled = []
+    for i in range(len(polygon)):
+        start = polygon[i]
+        end = polygon[(i + 1) % len(polygon)]
+        segment = np.linspace(0, 1, points_per_segment)[:-1][:, None] * (end - start) + start
+        resampled.append(segment)
+    return np.vstack(resampled)
 
 
 def detect_outliers(coordinates, k=20, distance_threshold=2):
