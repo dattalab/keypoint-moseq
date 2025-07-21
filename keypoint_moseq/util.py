@@ -1453,19 +1453,17 @@ def find_medoid_distance_outliers(
 ) -> dict[str, np.ndarray]:
     """Identify keypoint distance outliers using Median Absolute Deviation (MAD).
 
-    For each keypoint, computes the distance to the medoid position across all frames
-    and identifies outliers as points that exceed a threshold based on the median
-    absolute deviation.
+    Keypoints are considered outliers when their distance to the medoid at a given timepoint differs
+    from its median value by a multiple of the median absolute deviation (MAD) for that keypoint.
 
     Parameters
     -------
     coordinates: ndarray of shape (n_frames, n_keypoints, keypoint_dim)
-        Keypoint coordinates where keypoint_dim is 2 or 3. Only the first two dimensions
-        (x, y) are used for distance calculations.
+        Keypoint coordinates where keypoint_dim is 2 or 3. Only the first two dimensions (x, y) are
+        used for distance calculations.
 
     outlier_scale_factor: float, default=6.0
-        Multiplier for the MAD to set the outlier threshold. Higher values result
-        in fewer outliers being detected.
+        Multiplier used to set the outlier threshold. Higher values result in fewer outliers.
 
     **kwargs
         Additional keyword arguments (ignored), usually overflow from **config().
@@ -1478,7 +1476,7 @@ def find_medoid_distance_outliers(
             Boolean array where True indicates outlier keypoints.
 
         thresholds: ndarray of shape (n_keypoints,)
-            Distance thresholds for each keypoint above which points are considered outliers.
+            Distance thresholds used to classify outlier timepoints for each keypoint.
     """
     distances = get_distance_to_medoid(coordinates)  # (n_frames, n_keypoints)
     medians = np.median(distances, axis=0)  # (n_keypoints,)
@@ -1489,14 +1487,13 @@ def find_medoid_distance_outliers(
 
 
 def plot_keypoint_traces(
-    traces: list[np.ndarray],
-    plot_title: Optional[str] = None,
-    bodyparts: Optional[list[str]] = None,
-    line_labels: Optional[list[str]] = None,
-    thresholds: Optional[np.ndarray] = None,
-    shading_mask: Optional[np.ndarray] = None,
-) -> plt.Figure:
-    """Create a multi-panel plot showing keypoint traces over time.
+        traces: list[np.ndarray],
+        plot_title: Optional[str] = None,
+        bodyparts: Optional[list[str]] = None,
+        line_labels: Optional[list[str]] = None,
+        thresholds: Optional[np.ndarray] = None,
+        shading_mask: Optional[np.ndarray] = None) -> plt.Figure:
+    """Create a multi-panel plot showing keypoint traces over time (used to visualize outliers).
 
     Creates a figure with one subplot per keypoint, where each subplot shows multiple
     trace lines over time. Optional features include threshold lines, shaded regions,
@@ -1598,18 +1595,14 @@ def plot_keypoint_traces(
         fig.suptitle(plot_title, fontsize=16)
     return fig
 
-
-def plot_medoid_distance_outliers(
-    project_dir: str,
-    recording_name: str,
-    original_coordinates: np.ndarray,
-    interpolated_coordinates: np.ndarray,
-    outlier_mask,
-    outlier_thresholds,
-    bodyparts: list[str],
-    **kwargs,
-):
-    """Create and save a plot comparing original vs interpolated keypoint distances.
+def plot_keypoint_distance_outliers(project_dir: str,
+                                    recording_name: str,
+                                    original_coordinates: np.ndarray, 
+                                    interpolated_coordinates: np.ndarray,
+                                    outlier_mask, outlier_thresholds,
+                                    bodyparts: list[str],
+                                    **kwargs):
+    """Create and save a plot comparing distance-to-medoid for original vs. interpolated keypoints.
 
     Generates a multi-panel plot showing the distance from each keypoint to the medoid
     position for both original and interpolated coordinates. The plot includes threshold
