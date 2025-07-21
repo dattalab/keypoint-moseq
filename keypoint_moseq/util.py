@@ -276,7 +276,7 @@ def get_centroids_headings(
         centroids[key] = np.median(coords, axis=1)
         anterior_loc = coords[:, posterior_idxs].mean(1)
         posterior_loc = coords[:, anterior_idxs].mean(1)
-        heading_vec = (anterior_loc - posterior_loc)[:,:2]
+        heading_vec = (anterior_loc - posterior_loc)[:, :2]
         headings[key] = np.arctan2(*heading_vec.T[::-1]) + np.pi
 
     return centroids, headings
@@ -1487,12 +1487,13 @@ def find_medoid_distance_outliers(
 
 
 def plot_keypoint_traces(
-        traces: list[np.ndarray],
-        plot_title: Optional[str] = None,
-        bodyparts: Optional[list[str]] = None,
-        line_labels: Optional[list[str]] = None,
-        thresholds: Optional[np.ndarray] = None,
-        shading_mask: Optional[np.ndarray] = None) -> plt.Figure:
+    traces: list[np.ndarray],
+    plot_title: Optional[str] = None,
+    bodyparts: Optional[list[str]] = None,
+    line_labels: Optional[list[str]] = None,
+    thresholds: Optional[np.ndarray] = None,
+    shading_mask: Optional[np.ndarray] = None,
+) -> plt.Figure:
     """Create a multi-panel plot showing keypoint traces over time (used to visualize outliers).
 
     Creates a figure with one subplot per keypoint, where each subplot shows multiple
@@ -1595,13 +1596,17 @@ def plot_keypoint_traces(
         fig.suptitle(plot_title, fontsize=16)
     return fig
 
-def plot_medoid_distance_outliers(project_dir: str,
-                                    recording_name: str,
-                                    original_coordinates: np.ndarray, 
-                                    interpolated_coordinates: np.ndarray,
-                                    outlier_mask, outlier_thresholds,
-                                    bodyparts: list[str],
-                                    **kwargs):
+
+def plot_medoid_distance_outliers(
+    project_dir: str,
+    recording_name: str,
+    original_coordinates: np.ndarray,
+    interpolated_coordinates: np.ndarray,
+    outlier_mask,
+    outlier_thresholds,
+    bodyparts: list[str],
+    **kwargs,
+):
     """Create and save a plot comparing distance-to-medoid for original vs. interpolated keypoints.
 
     Generates a multi-panel plot showing the distance from each keypoint to the medoid
@@ -1727,12 +1732,13 @@ def find_medoid_distance_outliers(
 
 
 def plot_keypoint_traces(
-        traces: list[np.ndarray],
-        plot_title: Optional[str] = None,
-        bodyparts: Optional[list[str]] = None,
-        line_labels: Optional[list[str]] = None,
-        thresholds: Optional[np.ndarray] = None,
-        shading_mask: Optional[np.ndarray] = None) -> plt.Figure:
+    traces: list[np.ndarray],
+    plot_title: Optional[str] = None,
+    bodyparts: Optional[list[str]] = None,
+    line_labels: Optional[list[str]] = None,
+    thresholds: Optional[np.ndarray] = None,
+    shading_mask: Optional[np.ndarray] = None,
+) -> plt.Figure:
     """Create a multi-panel plot showing keypoint traces over time (used to visualize outliers).
 
     Creates a figure with one subplot per keypoint, where each subplot shows multiple
@@ -1835,13 +1841,17 @@ def plot_keypoint_traces(
         fig.suptitle(plot_title, fontsize=16)
     return fig
 
-def plot_medoid_distance_outliers(project_dir: str,
-                                    recording_name: str,
-                                    original_coordinates: np.ndarray, 
-                                    interpolated_coordinates: np.ndarray,
-                                    outlier_mask, outlier_thresholds,
-                                    bodyparts: list[str],
-                                    **kwargs):
+
+def plot_medoid_distance_outliers(
+    project_dir: str,
+    recording_name: str,
+    original_coordinates: np.ndarray,
+    interpolated_coordinates: np.ndarray,
+    outlier_mask,
+    outlier_thresholds,
+    bodyparts: list[str],
+    **kwargs,
+):
     """Create and save a plot comparing distance-to-medoid for original vs. interpolated keypoints.
 
     Generates a multi-panel plot showing the distance from each keypoint to the medoid
@@ -1909,6 +1919,7 @@ def plot_medoid_distance_outliers(project_dir: str,
     plt.close()
     print(f"Saved keypoint distance outlier plot for {recording_name} to {plot_path}.")
 
+
 def abs_deltas(array: np.ndarray, smoothing_window_size: int = 1) -> np.ndarray:
     """
     Compute absolute element-by-element differences of an array, optionally after median filtering.
@@ -1928,6 +1939,7 @@ def abs_deltas(array: np.ndarray, smoothing_window_size: int = 1) -> np.ndarray:
     """
     return np.abs(np.diff(median_filter(array, size=smoothing_window_size, axes=(0,)), axis=0))
 
+
 def estimate_sigmasq_loc(y: np.ndarray, fps: int):
     """
     Estimate the expected amount that the centroid moves each frame.
@@ -1945,5 +1957,5 @@ def estimate_sigmasq_loc(y: np.ndarray, fps: int):
         Sum of squared mean absolute centroid displacements for x and y.
     """
     centroids = np.median(y, axis=2)  # (batch, time, 2)
-    mean_abs_delta = abs_deltas(np.swapaxes(centroids, 0, 1), fps).mean(axis=(0, 1)) # (2,)
-    return mean_abs_delta[0]**2 + mean_abs_delta[1]**2
+    mean_abs_delta = abs_deltas(np.swapaxes(centroids, 0, 1), fps).mean(axis=(0, 1))  # (2,)
+    return mean_abs_delta[0] ** 2 + mean_abs_delta[1] ** 2
