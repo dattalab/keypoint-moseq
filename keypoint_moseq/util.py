@@ -1479,21 +1479,19 @@ def keypoint_distances_to_medoid(coordinates: np.ndarray) -> np.ndarray:
     return (distances[..., 0]**2 + distances[..., 1]**2)**0.5  # (n_frames, n_keypoints)
 
 def find_keypoint_distance_outliers(coordinates: np.ndarray, outlier_scale_factor: float = 6.0, **kwargs) -> dict[str, np.ndarray]:
-    """Identify keypoint distance outliers using Median Absolute Deviation (MAD).
+    """Identify outlier keypoints based on their distance to animal's medoid.
 
-    For each keypoint, computes the distance to the medoid position across all frames
-    and identifies outliers as points that exceed a threshold based on the median
-    absolute deviation.
+    Keypoints are considered outliers when their distance to the medoid at a given timepoint differs
+    from its median value by a multiple of the median absolute deviation (MAD) for that keypoint.
 
     Parameters
     -------
     coordinates: ndarray of shape (n_frames, n_keypoints, keypoint_dim)
-        Keypoint coordinates where keypoint_dim is 2 or 3. Only the first two dimensions
-        (x, y) are used for distance calculations.
+        Keypoint coordinates where keypoint_dim is 2 or 3. Only the first two dimensions (x, y) are
+        used for distance calculations.
 
     outlier_scale_factor: float, default=6.0
-        Multiplier for the MAD to set the outlier threshold. Higher values result
-        in fewer outliers being detected.
+        Multiplier used to set the outlier threshold. Higher values result in fewer outliers.
 
     **kwargs
         Additional keyword arguments (ignored), usually overflow from **config().
@@ -1506,11 +1504,11 @@ def find_keypoint_distance_outliers(coordinates: np.ndarray, outlier_scale_facto
             Boolean array where True indicates outlier keypoints.
 
         thresholds: ndarray of shape (n_keypoints,)
-            Distance thresholds for each keypoint above which points are considered outliers.
+            Distance thresholds used to classify outlier timepoints for each keypoint.
     """
     distances = keypoint_distances_to_medoid(coordinates) # (n_frames, n_keypoints)
-    medians = np.median(distances, axis=0)  # (n_keypoints,)
-    MADs = np.median(np.abs(distances - medians[None, :]), axis=0)  # (n_keypoints,)
+    median_distances = np.median(distances, axis=0)  # (n_keypoints,)
+    MADs = np.median(np.abs(distances - median_distances[None, :]), axis=0)  # (n_keypoints,)
     outlier_thresholds = MADs * outlier_scale_factor + medians  # (n_keypoints,)
     outlier_mask = distances > outlier_thresholds[None, :]  # (n_frames, n_keypoints)
     return {'mask': outlier_mask, 'thresholds': outlier_thresholds}
