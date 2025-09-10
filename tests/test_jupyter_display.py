@@ -4,6 +4,7 @@ import keypoint_moseq as kpms
 import polars as pl
 from unittest.mock import Mock
 from keypoint_moseq.view.jupyter_display import _set_group_labels_widget
+from keypoint_moseq.controller.controller import prepare_for_analysis
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
@@ -110,32 +111,21 @@ def test_save_group_labels_callback(initial_labels, dash_duo):
 
     save_group_labels_mock.assert_called_with({})
 
-def test_set_group_labels_tutorial_data_e2e(demo_project_dir, deeplabcut_2d_zenodo_dir, dash_duo):
+def test_set_group_labels_tutorial_data_e2e(test_results_2D, deeplabcut_2d_zenodo_dir, dash_duo):
     dash_duo.driver.set_window_size(1920, 1080)
 
-    config = lambda: kpms.load_config(demo_project_dir)
     dlc_config = str(deeplabcut_2d_zenodo_dir / 'dlc_project/config.yaml')
     video_dir = str(deeplabcut_2d_zenodo_dir / 'dlc_project/videos/')
-    recordings_csv_path = demo_project_dir / 'recordings.csv'
+    recordings_csv_path = test_results_2D / 'recordings.csv'
 
-    project = kpms.KPMSProject(demo_project_dir)
+    project = kpms.KPMSProject(test_results_2D)
     disp = kpms.JupyterDisplay()
     c = kpms.Controller(project, disp)
+    assert not recordings_csv_path.exists()
 
-    kpms.setup_project(demo_project_dir, deeplabcut_config=dlc_config)
-    kpms.update_config(
-        demo_project_dir,
-        video_dir=video_dir,
-        anterior_bodyparts=['nose'],
-        posterior_bodyparts=['spine4'],
-        use_bodyparts=['spine4', 'spine3', 'spine2', 'spine1', 'head',
-                    'nose', 'right ear', 'left ear'],
-        fps=30
-    )
+    prepare_for_analysis(test_results_2D)
 
-    _ = c.load_keypoints(video_dir, 'deeplabcut')
-
-    # The new load_keypoints should create this file
+    # prepare_for_analysis should create this file
     assert recordings_csv_path.exists()
     recordings_df = pl.read_csv(recordings_csv_path)
 

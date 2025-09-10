@@ -128,7 +128,7 @@ def project(temp_project_dir):
 def test_kpms_project_init(temp_project_dir):
     project = KPMSProject(temp_project_dir)
     assert project.project_dir_path == temp_project_dir
-    assert project.recordings_csv_path == temp_project_dir / 'recordings.csv'
+    assert project.recordings_table_path == temp_project_dir / 'recordings.csv'
 
 def test_get_recordings_not_exists(project):
     with pytest.raises(RuntimeError, match='does not exist'):
@@ -142,8 +142,8 @@ def test_add_recordings_new_file(project):
     project.add_recordings(new_recordings)
     
     # Verify file was created and contains correct data
-    assert project.recordings_csv_path.exists()
-    stored_recordings = pl.read_csv(project.recordings_csv_path)
+    assert project.recordings_table_path.exists()
+    stored_recordings = pl.read_csv(project.recordings_table_path)
     assert stored_recordings.shape == (2, 2)
     assert stored_recordings['name'].to_list() == ['rec1', 'rec2']
 
@@ -153,7 +153,7 @@ def test_add_recordings_existing_file(project):
         'name': ['rec1'],
         'value': ['val1']
     })
-    initial_recordings.write_csv(project.recordings_csv_path)
+    initial_recordings.write_csv(project.recordings_table_path)
     
     # Add new recordings
     new_recordings = pl.DataFrame({
@@ -163,7 +163,7 @@ def test_add_recordings_existing_file(project):
     project.add_recordings(new_recordings)
     
     # Verify combined data
-    stored_recordings = pl.read_csv(project.recordings_csv_path)
+    stored_recordings = pl.read_csv(project.recordings_table_path)
     assert stored_recordings.shape == (2, 2)
     assert stored_recordings['name'].to_list() == ['rec1', 'rec2']
 
@@ -173,7 +173,7 @@ def test_update_recordings(project):
         'name': ['rec1', 'rec2'],
         'value': ['val1', 'val2']
     })
-    initial_recordings.write_csv(project.recordings_csv_path)
+    initial_recordings.write_csv(project.recordings_table_path)
     
     # Update one recording
     updates = pl.DataFrame({
@@ -183,7 +183,7 @@ def test_update_recordings(project):
     project.update_recordings(updates)
     
     # Verify updates
-    stored_recordings = pl.read_csv(project.recordings_csv_path)
+    stored_recordings = pl.read_csv(project.recordings_table_path)
     assert stored_recordings.shape == (2, 2)
     assert stored_recordings.filter(pl.col('name') == 'rec1')['value'].item() == 'val1_updated'
     assert stored_recordings.filter(pl.col('name') == 'rec2')['value'].item() == 'val2'

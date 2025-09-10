@@ -1,8 +1,11 @@
 import dash_bootstrap_components as dbc
+import socket
 import logging
 from dash.dash_table import DataTable
 from dash import Dash, html, callback, Input, Output, State
 from typing import Callable, Mapping
+from IPython.display import IFrame, display
+import ipywidgets as widgets
 
 def _set_group_labels_widget(initial_group_labels: Mapping[str, str], save_group_labels: Callable[[dict[str, str]], None]) -> Dash:
     """Creates a widget for labeling each recording session with an experimental group label.
@@ -111,5 +114,16 @@ class JupyterDisplay:
             The input parameter has the same structure as initial_group_labels:
             keys are recording session names and values are experimental group names.
         """
+        port = 8050
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+
         widget = _set_group_labels_widget(initial_group_labels, save_group_labels)
-        widget.run(jupyter_mode='inline')
+        widget.run(
+            host=ip,
+            port=port,
+            debug=False,
+            use_reloader=False,
+            dev_tools_ui=False,
+            jupyter_mode='external'
+        )

@@ -1,14 +1,17 @@
 import pytest
+import keypoint_moseq as kpms
+import polars as pl
+from pathlib import Path
 from unittest.mock import Mock
 from keypoint_moseq.project.kpms_project import KPMSProject
-import keypoint_moseq as kpms
 from keypoint_moseq.view.jupyter_display import JupyterDisplay
 from keypoint_moseq.controller.controller import Controller
-import polars as pl
 
 @pytest.fixture
 def project():
-    return Mock(spec=KPMSProject)
+    mock_project = Mock(spec=KPMSProject)
+    mock_project.log_dir_path = Path('/tmp/logs')
+    return mock_project
 
 @pytest.fixture 
 def display():
