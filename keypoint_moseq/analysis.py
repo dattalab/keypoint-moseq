@@ -410,134 +410,134 @@ def generate_syll_info(project_dir, model_name, syll_info_path):
     )
 
 
-def label_syllables(project_dir, model_name, moseq_df):
-    """Label syllables in the syllable grid movie.
+# def label_syllables(project_dir, model_name, moseq_df):
+#     """Label syllables in the syllable grid movie.
 
-    Parameters
-    ----------
-    project_dir : str
-        the path to the project directory
-    model_name : str
-        the name of the model directory
-    """
+#     Parameters
+#     ----------
+#     project_dir : str
+#         the path to the project directory
+#     model_name : str
+#         the name of the model directory
+#     """
 
-    # construct the syllable info path
-    syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
+#     # construct the syllable info path
+#     syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
 
-    # generate a new syll_info csv file
-    if not os.path.exists(syll_info_path):
-        # generate the syllable info csv file
-        generate_syll_info(project_dir, model_name, syll_info_path)
+#     # generate a new syll_info csv file
+#     if not os.path.exists(syll_info_path):
+#         # generate the syllable info csv file
+#         generate_syll_info(project_dir, model_name, syll_info_path)
 
-    # ensure there is grid movies
-    grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
-    assert len(grid_movies) > 0, (
-        "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
-        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
-    )
+#     # ensure there is grid movies
+#     grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
+#     assert len(grid_movies) > 0, (
+#         "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
+#         "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
+#     )
 
-    # load syll_info
-    syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
-    # split into with movie and without movie
-    syll_info_df_with_movie = syll_info_df[
-        syll_info_df.movie_path.str.contains(".mp4")
-    ].copy()
-    syll_info_df_without_movie = syll_info_df[
-        ~syll_info_df.movie_path.str.contains(".mp4")
-    ].copy()
+#     # load syll_info
+#     syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
+#     # split into with movie and without movie
+#     syll_info_df_with_movie = syll_info_df[
+#         syll_info_df.movie_path.str.contains(".mp4")
+#     ].copy()
+#     syll_info_df_without_movie = syll_info_df[
+#         ~syll_info_df.movie_path.str.contains(".mp4")
+#     ].copy()
 
-    # create select widget only include the ones with a movie
-    select = pn.widgets.Select(
-        name="Select", options=sorted(list(syll_info_df_with_movie.syllable))
-    )
+#     # create select widget only include the ones with a movie
+#     select = pn.widgets.Select(
+#         name="Select", options=sorted(list(syll_info_df_with_movie.syllable))
+#     )
 
-    # call back function to create video displayer
-    def show_movie(syllable):
-        movie_path = syll_info_df_with_movie[
-            syll_info_df_with_movie.syllable == select.value
-        ].movie_path.values[0]
-        return pn.pane.Video(movie_path, width=500, loop=False)
+#     # call back function to create video displayer
+#     def show_movie(syllable):
+#         movie_path = syll_info_df_with_movie[
+#             syll_info_df_with_movie.syllable == select.value
+#         ].movie_path.values[0]
+#         return pn.pane.Video(movie_path, width=500, loop=False)
 
-    # dynamic video displayer
-    ivideo = pn.bind(show_movie, syllable=select)
+#     # dynamic video displayer
+#     ivideo = pn.bind(show_movie, syllable=select)
 
-    # create the labeler dataframe
-    # only include the syllable that have grid movies
-    include = syll_info_df_with_movie.syllable.values
-    syll_df = moseq_df[["syllable"]].groupby("syllable").mean().reset_index().copy()
-    syll_df = syll_df[syll_df.syllable.isin(include)]
+#     # create the labeler dataframe
+#     # only include the syllable that have grid movies
+#     include = syll_info_df_with_movie.syllable.values
+#     syll_df = moseq_df[["syllable"]].groupby("syllable").mean().reset_index().copy()
+#     syll_df = syll_df[syll_df.syllable.isin(include)]
 
-    # get labels and description from syll info
-    syll_df = syll_df.merge(
-        syll_info_df_with_movie[["syllable", "label", "short_description"]]
-    ).copy()
+#     # get labels and description from syll info
+#     syll_df = syll_df.merge(
+#         syll_info_df_with_movie[["syllable", "label", "short_description"]]
+#     ).copy()
 
-    # set up interactive table
-    titles = {
-        "syllable": "syllable",
-        "label": "label",
-        "short_description": "short description",
-    }
-    editors = {
-        "name": None,
-        "label": {
-            "type": "textarea",
-            "elementAttributes": {
-                "maxlength": "100",
-                "onkeydown": "if(event.keyCode == 13 && !event.shiftKey){this.blur();}",
-            },
-            "selectContents": True,
-            "verticalNavigation": "editor",
-            "shiftEnterSubmit": True,
-        },
-        "short description": {
-            "type": "textarea",
-            "elementAttributes": {"maxlength": "200"},
-            "selectContents": True,
-            "verticalNavigation": "editor",
-            "shiftEnterSubmit": True,
-        },
-    }
+#     # set up interactive table
+#     titles = {
+#         "syllable": "syllable",
+#         "label": "label",
+#         "short_description": "short description",
+#     }
+#     editors = {
+#         "name": None,
+#         "label": {
+#             "type": "textarea",
+#             "elementAttributes": {
+#                 "maxlength": "100",
+#                 "onkeydown": "if(event.keyCode == 13 && !event.shiftKey){this.blur();}",
+#             },
+#             "selectContents": True,
+#             "verticalNavigation": "editor",
+#             "shiftEnterSubmit": True,
+#         },
+#         "short description": {
+#             "type": "textarea",
+#             "elementAttributes": {"maxlength": "200"},
+#             "selectContents": True,
+#             "verticalNavigation": "editor",
+#             "shiftEnterSubmit": True,
+#         },
+#     }
 
-    base_configuration = {"clipboard": "copy"}
+#     base_configuration = {"clipboard": "copy"}
 
-    widths = {"syllable": 100}
-    summary_table = pn.widgets.Tabulator(
-        syll_df,
-        titles=titles,
-        editors=editors,
-        layout="fit_data_table",
-        selectable=1,
-        show_index=False,
-        widths=widths,
-        configuration=base_configuration,
-    )
+#     widths = {"syllable": 100}
+#     summary_table = pn.widgets.Tabulator(
+#         syll_df,
+#         titles=titles,
+#         editors=editors,
+#         layout="fit_data_table",
+#         selectable=1,
+#         show_index=False,
+#         widths=widths,
+#         configuration=base_configuration,
+#     )
 
-    button = pn.widgets.Button(name="Save syllable info", button_type="primary")
+#     button = pn.widgets.Button(name="Save syllable info", button_type="primary")
 
-    # call back function to save the index file
-    def save_index(syll_df):
-        # create index file from csv
-        temp_df = syll_df.copy()
-        temp_df["label"] = temp_df["label"].str.strip()
-        temp_df["short_description"] = temp_df["short_description"].str.strip()
-        temp_df = temp_df.merge(
-            syll_info_df_with_movie[["syllable", "movie_path"]], on="syllable"
-        ).copy()
-        pd.concat([temp_df, syll_info_df_without_movie]).fillna("").to_csv(
-            syll_info_path, index=False
-        )
+#     # call back function to save the index file
+#     def save_index(syll_df):
+#         # create index file from csv
+#         temp_df = syll_df.copy()
+#         temp_df["label"] = temp_df["label"].str.strip()
+#         temp_df["short_description"] = temp_df["short_description"].str.strip()
+#         temp_df = temp_df.merge(
+#             syll_info_df_with_movie[["syllable", "movie_path"]], on="syllable"
+#         ).copy()
+#         pd.concat([temp_df, syll_info_df_without_movie]).fillna("").to_csv(
+#             syll_info_path, index=False
+#         )
 
-    # button click action
-    def b(event, save=True):
-        save_index(syll_df)
+#     # button click action
+#     def b(event, save=True):
+#         save_index(syll_df)
 
-    button.on_click(b)
+#     button.on_click(b)
 
-    # bind everything together
-    return pn.Row(
-        pn.Column(select, ivideo), pn.Column(summary_table, pn.Column(button))
-    )
+#     # bind everything together
+#     return pn.Row(
+#         pn.Column(select, ivideo), pn.Column(summary_table, pn.Column(button))
+#     )
 
 
 def get_tie_correction(x, N_m):

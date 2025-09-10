@@ -96,10 +96,13 @@ class KPMSProject:
         project_dir_path: PathLike
             The root path of the kpms project.
         """
-        self.project_dir_path: Path = Path(project_dir_path)
-        self.recordings_table_path: Path = self.project_dir_path / 'recordings.csv'
+        self.project_dir_path: Path = Path(project_dir_path).absolute()
+        self.tables_dir_path: Path = self.project_dir_path / 'tables'
+        self.recordings_table_path: Path = self.tables_dir_path / 'recordings.csv'
+        self.syllables_table_path: Path = self.tables_dir_path / 'syllables.csv'
         self.log_dir_path: Path = self.project_dir_path / 'logs'
 
+        self.tables_dir_path.mkdir(parents=True, exist_ok=True)
         self.log_dir_path.mkdir(parents=True, exist_ok=True)
         logging.debug(f'KPMS Project initialized at {self.project_dir_path}')
 
@@ -165,3 +168,52 @@ class KPMSProject:
 
         updated_recordings.write_csv(self.recordings_table_path)
         logging.debug(f'Updated recordings table to {updated_recordings}')
+
+    def get_syllables(self) -> pl.DataFrame:
+        """Retrieve all syllables in the project. 
+
+        Returns
+        -------
+        pl.DataFrame: Each row is a syllable in the project.
+
+        Raises
+        ------
+        RuntimeError
+            Raised when the syllables table does not exist.
+        """
+        logging.debug('Getting syllables.')
+        if not self.syllables_table_path.exists():
+            raise RuntimeError(f'{self.syllables_table_path} does not exist.')
+
+        return pl.read_csv(self.syllables_table_path)
+
+    def update_syllables(self, syllable_updates: pl.DataFrame):
+        """Update the project syllables table with new or updated features of syllables.
+
+        Only the subset of syllables and features passed will be updated.
+
+        Parameters
+        ----------
+        syllable_updates: pl.DataFrame
+            The updated syllable information. Each row is a syllable, and each column is a feature
+            of the syllables. Must contain 'syllable_id' column.
+
+        Raises
+        ------
+        RuntimeError
+            Raised when the syllables table does not exist.
+        ValueError
+            Raised when syllable_updates has invalid data (see _update_dataframe)
+        """
+        if not self.syllables_table_path.exists():
+            raise RuntimeError(f'{self.syllables_table_path} does not exist.')
+
+        logging.debug(f'Updating syllables table with updates: {syllable_updates}')
+        updated_syllables = _update_dataframe(
+            self.get_syllables(),
+            syllable_updates,
+            'syllable_id'
+        )
+
+        updated_syllables.write_csv(self.syllables_table_path)
+        logging.debug(f'Updated syllables table')
