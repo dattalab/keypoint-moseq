@@ -122,9 +122,11 @@ def _group_syllable_differences_plot(
     ax.set_xticks(x_base)
     ax.set_xticklabels(syllables)
     ax.set_ylabel(y_axis_label)
+    ax.set_xlim(-0.45, len(syllables) - 0.55)
     
     # Main legend for groups
-    main_legend = ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    legend_spacing = max(0.01, 0.2 / len(syllables))
+    main_legend = ax.legend(bbox_to_anchor=(1 + legend_spacing, 1), loc='upper left')
     
     # Create second legend for significance lanes if there are any
     if used_group_pairs:
@@ -154,7 +156,7 @@ def _group_syllable_differences_plot(
         
         # Add second legend below the first one
         significance_legend = ax.legend(significance_handles, significance_labels, 
-                                      bbox_to_anchor=(1.05, 1-0.05*(len(group_labels)+1)), 
+                                      bbox_to_anchor=(1 + legend_spacing, 1-0.05*(len(group_labels)+1)), 
                                       loc='upper left', title='Significance')
         
         # Add the main legend back (matplotlib removes it when creating a new one)
