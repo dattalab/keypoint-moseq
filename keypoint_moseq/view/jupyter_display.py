@@ -6,6 +6,9 @@ import dash_player as dp
 import flask
 import os
 import matplotlib.pyplot as plt
+import urllib.parse
+from matplotlib.lines import Line2D
+from flask import Response
 from IPython.display import display
 from dash.dash_table import DataTable
 from dash import Dash, html, dcc, callback, Input, Output, State
@@ -130,8 +133,6 @@ def _group_syllable_differences_plot(
     
     # Create second legend for significance lanes if there are any
     if used_group_pairs:
-        from matplotlib.lines import Line2D
-        
         # Create custom legend elements for significance lanes
         significance_handles = []
         significance_labels = []
@@ -164,7 +165,7 @@ def _group_syllable_differences_plot(
     
     return fig
 
-def get_video_dimensions(video_path):
+def _get_video_dimensions(video_path):
     """Get video dimensions using OpenCV or fallback methods"""
     try:
         import cv2
@@ -327,7 +328,7 @@ def _label_syllables_widget(syllables: list[dict[str, Any]], save_syllable_info:
         url='',
         controls=True,
         playing=False,
-        width='800px',  # Will be updated dynamically based on video
+        width='800px',  # width and height will be updated dynamically based on video
         height='600px'
     )
     
@@ -414,18 +415,14 @@ def _label_syllables_widget(syllables: list[dict[str, Any]], save_syllable_info:
         if selected_syllable is None:
             return '', '800px', '600px'
         
-        # Find the syllable with matching ID and return its video path
         for syllable in syllables_with_videos:
             if syllable['syllable'] == selected_syllable:
                 video_path = syllable['grid_movie_path']
                 
-                # Check if file exists
                 if os.path.exists(video_path):
-                    # Get video dimensions
-                    width, height = get_video_dimensions(video_path)
+                    width, height = _get_video_dimensions(video_path)
                     
                     # Convert absolute path to URL using query parameter approach
-                    import urllib.parse
                     encoded_path = urllib.parse.quote(video_path, safe='')
                     video_url = f"/video?path={encoded_path}"
                     
@@ -456,13 +453,10 @@ def _label_syllables_widget(syllables: list[dict[str, Any]], save_syllable_info:
             return "No path parameter", 400
         
         # Decode the filepath (it comes URL-encoded)
-        import urllib.parse
         decoded_path = urllib.parse.unquote(filepath)
         
         if os.path.exists(decoded_path) and decoded_path.endswith('.mp4'):
             try:
-                from flask import Response
-                
                 def generate():
                     with open(decoded_path, 'rb') as f:
                         data = f.read(1024)

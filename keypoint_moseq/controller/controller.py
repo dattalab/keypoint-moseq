@@ -62,11 +62,18 @@ class Controller:
 
         frames = frames.filter(pl.col('model').eq(model_name))
         df = frames.join(recordings, left_on='session_name', right_on='name', how='full')
-        usages = df.group_by('syllable', 'session_name', 'group').agg(
-            (pl.len() / pl.len().sum().over('session_name')).alias('usage')
-        ).collect().to_numpy().T
+        usages = (
+            df
+            .with_columns(
+                pl.len().over('session_name').alias('instances_in_session'))
+            .group_by('syllable', 'session_name', 'group', 'instances_in_session')
+            .agg(pl.len().alias('syllable_instances_in_session'))
+            .with_columns(pl.col('syllable_instances_in_session') / pl.col('instances_in_session'))
+            .collect()
+            .to_numpy().T
+        )
 
-        stats = _group_syllable_comparison(usages[0], usages[2], usages[3])
+        stats = _group_syllable_comparison(usages[0], usages[2], usages[4])
         
         self.display.display_group_syllable_differences_plot(
             stats['centers'],
@@ -225,7 +232,7 @@ def _group_syllable_comparison(syllables: np.ndarray, groups: np.ndarray, values
     groups : np.ndarray  
         Array of group labels for each data point
     values : np.ndarray
-        Array of usage values for each data point
+        Array of values for each data point
         
     Returns
     -------
@@ -234,8 +241,8 @@ def _group_syllable_comparison(syllables: np.ndarray, groups: np.ndarray, values
         - 'centers': means with shape (n_syllables, n_groups)
         - 'errors': SEMs with shape (n_syllables, n_groups) 
         - 'significant_comparisons': list of lists of significant group pair tuples
-        - 'group_labels': array of unique group labels
-        - 'syllables': array of unique syllables
+        - 'group_labels': array of unique group labels, ordered to the columns of centers
+        - 'syllables': array of unique syllables, ordered to the rows of centers
     """
     # Get unique syllables and groups
     unique_syllables = np.unique(syllables)
@@ -340,9 +347,6 @@ def prepare_for_analysis(project_dir: PathLike):
     for h5_path in all_h5_files:
         if _is_results_h5_file(h5_path):
             results_h5s.append(h5_path)
-            print(f"  ✓ Valid results file: {h5_path.relative_to(project_dir)}")
-        else:
-            print(f"  ✗ Skipping non-results H5 file: {h5_path.relative_to(project_dir)}")
     
     if not results_h5s:
         print("No valid results H5 files found - nothing to prepare")
@@ -353,12 +357,8 @@ def prepare_for_analysis(project_dir: PathLike):
     # Extract all current session names from H5 files
     current_session_names = set()
     for h5_path in results_h5s:
-        try:
-            with h5py.File(h5_path, 'r') as f:
-                current_session_names.update(f.keys())
-        except Exception as e:
-            print(f"Warning: Could not read {h5_path}: {e}")
-            continue
+        with h5py.File(h5_path, 'r') as f:
+            current_session_names.update(f.keys())
     
     print(f"Found {len(current_session_names)} total sessions across all models")
     
@@ -374,10 +374,7 @@ def prepare_for_analysis(project_dir: PathLike):
         if new_sessions:
             print(f"Found {len(new_sessions)} new sessions: {sorted(new_sessions)}")
             needs_regeneration = True
-        else:
-            print("No new sessions found")
     else:
-        print("No existing recordings.csv found")
         needs_regeneration = True
     
     # Check if other tables are missing
@@ -395,10 +392,10 @@ def prepare_for_analysis(project_dir: PathLike):
     
     # If no changes needed, exit early
     if not needs_regeneration:
-        print("All tables are up to date - nothing to regenerate")
+        print("All tables are up to date - nothing to initialize")
         return
         
-    print("Regenerating analysis tables...")
+    print("Initializing analysis tables...")
     
     # Process all H5 files to extract data
     session_data = []
@@ -423,7 +420,7 @@ def prepare_for_analysis(project_dir: PathLike):
                     'num_frames': num_frames
                 })
                 
-                # Extract all frame-level data efficiently
+                # Extract all frame-level data
                 centroid = session_group['centroid'][:]
                 heading = session_group['heading'][:]
                 latent_state = session_group['latent_state'][:]
@@ -448,21 +445,24 @@ def prepare_for_analysis(project_dir: PathLike):
                 instance_id_offset = instance_id[-1]
                 
                 # Create DataFrame for this session's frames
-                session_frames = pl.DataFrame({
+                frame_data = {
                     'model': [model_name] * num_frames,
                     'session_name': [session_name] * num_frames,
                     'frame_num': range(num_frames),
                     'centroid_x': centroid[:, 0],
                     'centroid_y': centroid[:, 1], 
                     'heading': heading,
-                    'latent_state_1': latent_state[:, 0],
-                    'latent_state_2': latent_state[:, 1],
-                    'latent_state_3': latent_state[:, 2],
-                    'latent_state_4': latent_state[:, 3],
                     'syllable': syllable,
-                    'is_onset': is_onset,  # Original is_onset (syllable changes only)
+                    'is_onset': is_onset, 
                     'instance_id': instance_id
-                })
+                }
+                
+                # Add latent state dimensions
+                n_latent_dims = latent_state.shape[1]
+                for dim in range(n_latent_dims):
+                    frame_data[f'latent_state_{dim + 1}'] = latent_state[:, dim]
+                
+                session_frames = pl.DataFrame(frame_data)
                 
                 # Write this session to a temporary parquet file
                 temp_file = frames_path.with_suffix(f'.temp_{len(temp_files)}.parquet')
@@ -507,26 +507,6 @@ def prepare_for_analysis(project_dir: PathLike):
             combined_recordings = pl.concat([existing_recordings, new_recordings_only]).sort('name')
             combined_recordings.write_csv(recordings_path)
             print(f"Updated recordings.csv: added {len(new_sessions)} new recordings")
-        else:
-            # Update existing recordings with any changed data (e.g., frame counts)
-            # Keep existing data but update any columns that might have changed
-            updated_recordings = existing_recordings.clone()
-            
-            # Update frame counts for existing sessions (in case they changed)
-            for session in existing_session_names:
-                if session in new_recordings_df['name'].to_list():
-                    new_data = new_recordings_df.filter(pl.col('name') == session).select(['name', 'num_frames'])
-                    if len(new_data) > 0:
-                        new_frame_count = new_data['num_frames'][0]
-                        updated_recordings = updated_recordings.with_columns(
-                            pl.when(pl.col('name') == session)
-                            .then(new_frame_count)
-                            .otherwise(pl.col('num_frames'))
-                            .alias('num_frames')
-                        )
-            
-            updated_recordings.write_csv(recordings_path)
-            print("Updated recordings.csv: refreshed existing data")
     else:
         # No existing recordings, create new file
         new_recordings_df.write_csv(recordings_path)
@@ -540,7 +520,7 @@ def prepare_for_analysis(project_dir: PathLike):
     syllables.write_csv(syllables_path)
     print(f"Created syllables.csv with {len(syllables)} syllables across all models")
     
-    # Concatenate all temporary files using lazy evaluation
+    # Concatenate all temporary files
     lazy_frames = [pl.scan_parquet(temp_file) for temp_file in temp_files]
     combined_lazy = pl.concat(lazy_frames)
     combined_lazy.sink_parquet(frames_path)
@@ -551,28 +531,32 @@ def prepare_for_analysis(project_dir: PathLike):
         temp_file.unlink()
     
     # Create instance-level summary table
+    sample_frame = pl.scan_parquet(frames_path).select(pl.col("*")).head(1).collect()
+    latent_cols = [col for col in sample_frame.columns if col.startswith('latent_state_')]
+    
+    agg_exprs = [
+        pl.col('model').first(),
+        pl.col('session_name').first(),
+        pl.col('frame_num').min().alias('starting_frame_num'),
+        pl.col('frame_num').count().alias('duration_frames'),
+        pl.col('centroid_x').mean(),
+        pl.col('centroid_y').mean(),
+        pl.col('heading').mean(),
+        pl.col('syllable').first(),
+    ]
+    
+    for col in latent_cols:
+        agg_exprs.append(pl.col(col).mean())
+    
     instances_lazy = (
         pl.scan_parquet(frames_path)
         .group_by('instance_id')
-        .agg([
-            pl.col('model').first(),
-            pl.col('session_name').first(),
-            pl.col('frame_num').min().alias('starting_frame_num'),
-            pl.col('frame_num').count().alias('duration_frames'),
-            pl.col('centroid_x').mean(),
-            pl.col('centroid_y').mean(),
-            pl.col('heading').mean(),
-            pl.col('latent_state_1').mean(),
-            pl.col('latent_state_2').mean(),
-            pl.col('latent_state_3').mean(),
-            pl.col('latent_state_4').mean(),
-            pl.col('syllable').first(),
-        ])
+        .agg(agg_exprs)
     )
     instances_lazy.sink_parquet(instances_path)
     print(f"Created instances.parquet with syllable instance summaries")
     
-    print("Analysis tables regeneration complete!")
+    print("Analysis tables initialization complete!")
 
 _CONTROLLER: Optional[Controller] = None
 
@@ -605,3 +589,6 @@ def set_group_labels():
 
 def label_syllables(model_name: str):
     _CONTROLLER.label_syllables(model_name)
+
+def plot_syllable_usage(model_name: str):
+    _CONTROLLER.plot_syllable_usage(model_name)
