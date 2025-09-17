@@ -7,14 +7,7 @@ Usage:
 """
 
 import numpy as np
-import sys
-from pathlib import Path
-
-# Add the keypoint_moseq package to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from keypoint_moseq.view.jupyter_display import _group_syllable_differences_plot
-
 
 def test_simple_2group():
     """Test case 1: Simple 2-group comparison with 3 syllables"""
@@ -279,6 +272,34 @@ def test_minimal_spacing():
     print("Saved: test_minimal_spacing.png")
 
 
+def test_single_group():
+    """Test case 10: Single group - no comparisons possible"""
+    
+    # Test data: 4 syllables, 1 group only
+    centers = np.array([
+        [1.2],  # syllable 0
+        [0.8],  # syllable 1
+        [1.5],  # syllable 2
+        [0.9]   # syllable 3
+    ])
+    errors = np.array([
+        [0.15],
+        [0.12],
+        [0.18],
+        [0.10]
+    ])
+    significant = [[], [], [], []]  # No significance possible with 1 group
+    group_labels = ['Single Group']
+    syllables = ['0', '1', '2', '3']
+    y_axis_label = 'Activity Level'
+    
+    fig = _group_syllable_differences_plot(
+        centers, errors, significant, group_labels, syllables, y_axis_label
+    )
+    fig.savefig('test_single_group.png', dpi=150, bbox_inches='tight')
+    print("Saved: test_single_group.png")
+
+
 def run_all_visual_tests():
     """Run all visual test cases and generate plots for inspection."""
     print("Running all visual tests for group syllable differences plotting...")
@@ -293,6 +314,7 @@ def run_all_visual_tests():
     test_large_error_bars()
     test_many_stacked_bars()
     test_minimal_spacing()
+    test_single_group()
     
     print()
     print("All visual tests completed! Check the generated PNG files for visual inspection.")

@@ -6,6 +6,10 @@ import yaml
 import logging
 import sys
 import h5py
+from scipy import stats
+from scipy.stats import kruskal
+import scikit_posthocs as sp
+import pandas as pd
 from typing import Optional
 from os import PathLike
 from pathlib import Path
@@ -51,6 +55,27 @@ class Controller:
 
         logging.info('Launching set group labels widget.')
         self.display.start_set_group_labels(initial_group_labels, self._save_group_labels)
+
+    def plot_syllable_usage(self, model_name: str):
+        frames: pl.LazyFrame = self.project.get_frames()
+        recordings: pl.LazyFrame = self.project.get_recordings().lazy()
+
+        frames = frames.filter(pl.col('model').eq(model_name))
+        df = frames.join(recordings, left_on='session_name', right_on='name', how='full')
+        usages = df.group_by('syllable', 'session_name', 'group').agg(
+            (pl.len() / pl.len().sum().over('session_name')).alias('usage')
+        ).collect().to_numpy().T
+
+        stats = _group_syllable_comparison(usages[0], usages[2], usages[3])
+        
+        self.display.display_group_syllable_differences_plot(
+            stats['centers'],
+            stats['errors'],
+            stats['significant_comparisons'],
+            stats['group_labels'],
+            stats['syllables'],
+            r'Usage (% frames)'
+        )
 
     def _save_group_labels(self, group_labels: dict[str, str]):
         """Save the new expermental group labels for each recording in the project.
@@ -186,6 +211,115 @@ def _is_results_h5_file(h5_path: Path) -> bool:
             
     except Exception:
         return False
+
+def _group_syllable_comparison(syllables: np.ndarray, groups: np.ndarray, values: np.ndarray):
+    """Compare syllable usage between groups using Kruskal-Wallis and Dunn's post-hoc tests.
+    
+    For each syllable, performs Kruskal-Wallis test across groups. If significant, 
+    runs Dunn's post-hoc test with Bonferroni correction for pairwise comparisons.
+    
+    Parameters
+    ----------
+    syllables : np.ndarray
+        Array of syllable IDs for each data point
+    groups : np.ndarray  
+        Array of group labels for each data point
+    values : np.ndarray
+        Array of usage values for each data point
+        
+    Returns
+    -------
+    dict
+        Dictionary containing:
+        - 'centers': means with shape (n_syllables, n_groups)
+        - 'errors': SEMs with shape (n_syllables, n_groups) 
+        - 'significant_comparisons': list of lists of significant group pair tuples
+        - 'group_labels': array of unique group labels
+        - 'syllables': array of unique syllables
+    """
+    # Get unique syllables and groups
+    unique_syllables = np.unique(syllables)
+    unique_groups = np.unique(groups)
+    
+    n_syllables = len(unique_syllables)
+    n_groups = len(unique_groups)
+    
+    # Initialize output arrays
+    centers = np.full((n_syllables, n_groups), np.nan)
+    errors = np.full((n_syllables, n_groups), np.nan)
+    significant_comparisons = []
+    
+    # For each syllable, perform statistical tests
+    for syll_idx, syllable in enumerate(unique_syllables):
+        syllable_mask = syllables == syllable
+        syllable_values = values[syllable_mask]
+        syllable_groups = groups[syllable_mask]
+        
+        # Calculate means and SEMs for each group
+        group_data = []
+        for group_idx, group in enumerate(unique_groups):
+            group_mask = syllable_groups == group
+            group_values = syllable_values[group_mask]
+            
+            if len(group_values) > 0:
+                centers[syll_idx, group_idx] = np.mean(group_values)
+                errors[syll_idx, group_idx] = stats.sem(group_values)
+                group_data.append(group_values)
+            else:
+                group_data.append(np.array([]))
+        
+        # Only test if we have data for at least 2 groups with non-empty data
+        valid_groups = [i for i, data in enumerate(group_data) if len(data) > 0]
+        syllable_comparisons = []
+        
+        if len(valid_groups) >= 2:
+            # Run Kruskal-Wallis test
+            valid_group_data = [group_data[i] for i in valid_groups]
+            kw_stat, kw_pval = kruskal(*valid_group_data)
+            
+            # If Kruskal-Wallis is significant, run Dunn's post-hoc test
+            if kw_pval < 0.05:
+                # Prepare data for Dunn's test
+                dunn_data = []
+                dunn_groups = []
+                
+                for i, group_idx in enumerate(valid_groups):
+                    group_values = valid_group_data[i]
+                    dunn_data.extend(group_values)
+                    dunn_groups.extend([unique_groups[group_idx]] * len(group_values))
+                
+                # Create DataFrame for scikit-posthocs
+                dunn_df = pd.DataFrame({
+                    'value': dunn_data,
+                    'group': dunn_groups
+                })
+                
+                # Run Dunn's test with Bonferroni correction
+                dunn_results = sp.posthoc_dunn(
+                    dunn_df, val_col='value', group_col='group', p_adjust='bonferroni'
+                )
+                
+                # Extract significant comparisons
+                for i in range(len(valid_groups)):
+                    for j in range(i + 1, len(valid_groups)):
+                        group1_name = unique_groups[valid_groups[i]]
+                        group2_name = unique_groups[valid_groups[j]]
+                        
+                        if (group1_name in dunn_results.index and 
+                            group2_name in dunn_results.columns and
+                            dunn_results.loc[group1_name, group2_name] < 0.05):
+                            syllable_comparisons.append((valid_groups[i], valid_groups[j]))
+        
+        significant_comparisons.append(syllable_comparisons)
+    
+    return {
+        'centers': centers,
+        'errors': errors, 
+        'significant_comparisons': significant_comparisons,
+        'group_labels': unique_groups,
+        'syllables': unique_syllables
+    }
+
 
 def prepare_for_analysis(project_dir: PathLike):
     project_dir = Path(project_dir)

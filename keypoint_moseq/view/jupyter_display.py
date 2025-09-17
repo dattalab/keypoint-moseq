@@ -14,7 +14,7 @@ from typing import Callable, Mapping, Any
 def _group_syllable_differences_plot(
     centers: np.ndarray,
     errors: np.ndarray,
-    significant: list[list[tuple[int, int]]],
+    significant_comparisons: list[list[tuple[int, int]]],
     group_labels: list[str],
     syllables: list[str | int],
     y_axis_label: str
@@ -29,11 +29,11 @@ def _group_syllable_differences_plot(
     if centers.shape[1] != len(group_labels):
         raise ValueError(f"Number of columns in centers ({centers.shape[1]}) must match length of group_labels ({len(group_labels)})")
     
-    if len(significant) != len(syllables):
-        raise ValueError(f"Length of significant ({len(significant)}) must match length of syllables ({len(syllables)})")
+    if len(significant_comparisons) != len(syllables):
+        raise ValueError(f"Length of significant ({len(significant_comparisons)}) must match length of syllables ({len(syllables)})")
     
     # Validate group indices in significance tuples
-    for syllable_idx, comparisons in enumerate(significant):
+    for syllable_idx, comparisons in enumerate(significant_comparisons):
         for group1_idx, group2_idx in comparisons:
             if not (0 <= group1_idx < len(group_labels)):
                 raise ValueError(f"Invalid group index {group1_idx} in syllable {syllable_idx} significance. Must be 0-{len(group_labels)-1}")
@@ -65,7 +65,7 @@ def _group_syllable_differences_plot(
     # Add significance asterisks with dedicated lanes for each group pair
     # First, find all unique group pairs that have significance
     used_group_pairs = set()
-    for comparisons in significant:
+    for comparisons in significant_comparisons:
         for group1_idx, group2_idx in comparisons:
             # Ensure consistent ordering (smaller index first)
             pair = (min(group1_idx, group2_idx), max(group1_idx, group2_idx))
@@ -86,7 +86,7 @@ def _group_syllable_differences_plot(
         lane_spacing = 0.04 * y_range
         
         # Place asterisks for each significant comparison
-        for syllable_idx, comparisons in enumerate(significant):
+        for syllable_idx, comparisons in enumerate(significant_comparisons):
             if not comparisons:  # Skip syllables with no significant comparisons
                 continue
             
@@ -544,12 +544,12 @@ class JupyterDisplay:
         self,
         centers: np.ndarray,
         errors: np.ndarray,
-        significant: list[list[tuple[int, int]]],
+        significant_comparisons: list[list[tuple[int, int]]],
         group_labels: list[str],
         syllables: list[str | int],
         y_axis_label: str
     ):
         fig = _group_syllable_differences_plot(
-            centers, errors, significant, group_labels, syllables, y_axis_label
+            centers, errors, significant_comparisons, group_labels, syllables, y_axis_label
         )
         display(fig)

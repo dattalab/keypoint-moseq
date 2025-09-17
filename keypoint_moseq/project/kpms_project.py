@@ -100,6 +100,7 @@ class KPMSProject:
         self.tables_dir_path: Path = self.project_dir_path / 'tables'
         self.recordings_table_path: Path = self.tables_dir_path / 'recordings.csv'
         self.syllables_table_path: Path = self.tables_dir_path / 'syllables.csv'
+        self.frames_table_path: Path = self.tables_dir_path / 'frames.parquet'
         self.log_dir_path: Path = self.project_dir_path / 'logs'
 
         self.tables_dir_path.mkdir(parents=True, exist_ok=True)
@@ -217,3 +218,21 @@ class KPMSProject:
 
         updated_syllables.write_csv(self.syllables_table_path)
         logging.debug(f'Updated syllables table')
+
+    def get_frames(self) -> pl.LazyFrame:
+        """Retrieve all frames in the project.
+
+        Returns
+        -------
+        pl.LazyFrame: Each row is a frame from a recording session in the project.
+
+        Raises
+        ------
+        RuntimeError
+            Raised when the frames table does not exist.
+        """
+        logging.debug('Getting frames.')
+        if not self.frames_table_path.exists():
+            raise RuntimeError(f'{self.frames_table_path} does not exist.')
+
+        return pl.scan_parquet(self.frames_table_path)
