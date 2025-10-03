@@ -1449,7 +1449,7 @@ def get_distance_to_medoid(coordinates: np.ndarray) -> np.ndarray:
 
 
 def find_medoid_distance_outliers(
-    coordinates: np.ndarray, outlier_scale_factor: float = 6.0, **kwargs
+    coordinates: np.ndarray, outlier_scale_factor: float = 6.0
 ) -> dict[str, np.ndarray]:
     """Identify keypoint distance outliers using Median Absolute Deviation (MAD).
 
@@ -1605,6 +1605,7 @@ def plot_medoid_distance_outliers(
     outlier_mask,
     outlier_thresholds,
     bodyparts: list[str],
+    overwrite=False,
     **kwargs,
 ):
     """Create and save a plot comparing distance-to-medoid for original vs. interpolated keypoints.
@@ -1638,6 +1639,9 @@ def plot_medoid_distance_outliers(
         Names of bodyparts corresponding to each keypoint. Must have length equal to
         n_keypoints.
 
+    overwrite: bool, default False
+        Whether or not to overwrite outlier interpolation QA plots
+
     **kwargs
         Additional keyword arguments (ignored), usually overflow from **config().
 
@@ -1649,12 +1653,15 @@ def plot_medoid_distance_outliers(
 
     plot_path = os.path.join(
         project_dir,
-        "quality_assurance",
+        "QA",
         "plots",
         "keypoint_distance_outliers",
         f"{recording_name}.png",
     )
     os.makedirs(os.path.dirname(plot_path), exist_ok=True)
+
+    if os.path.exists(plot_path) and not overwrite:
+        return
 
     original_distances = get_distance_to_medoid(original_coordinates)  # (n_frames, n_keypoints)
     interpolated_distances = get_distance_to_medoid(
@@ -1672,8 +1679,60 @@ def plot_medoid_distance_outliers(
 
     fig.savefig(plot_path, dpi=300)
     plt.close()
-    print(f"Saved keypoint distance outlier plot for {recording_name} to {plot_path}.")
 
+
+def outlier_removal(coordinates, confidences, project_dir, overwrite=False, outlier_scale_factor=6.0, bodyparts=None, **kwargs):
+    """Remove outlier keypoints for all recordings in a dataset.
+
+    For each recording, identifies outlier keypoints based on their distance 
+    to the medoid, interpolates the outliers, sets their confidences to 0,
+    and generates diagnostic plots.
+
+    Parameters
+    ----------
+    coordinates: dict
+        Dictionary mapping recording names to keypoint coordinates
+    confidences: dict  
+        Dictionary mapping recording names to keypoint confidences
+    project_dir: str
+        Path to project directory for saving plots
+    overwrite: bool, default False
+        Whether or not to overwrite outlier interpolation QA plots
+    outlier_scale_factor: float, default=6.0
+        Multiplier used to set the outlier threshold
+    bodyparts: list of str, default=None
+        Names of bodyparts for plot labels
+    **kwargs
+        Additional configuration parameters (ignored)
+
+    Returns
+    -------
+    coordinates: dict
+        Updated coordinates with outliers interpolated
+    confidences: dict
+        Updated confidences with outlier values set to conf_pseudocount
+    """
+    for recording_name in coordinates:
+        raw_coords = coordinates[recording_name].copy()
+        outliers = find_medoid_distance_outliers(raw_coords, outlier_scale_factor=outlier_scale_factor)
+        coordinates[recording_name] = interpolate_keypoints(raw_coords, outliers["mask"])
+
+        # Setting confidences to 0 will signal to format_data to interpolate these points 
+        # there as well
+        confidences[recording_name] = np.where(outliers["mask"], 0, confidences[recording_name])
+        plot_medoid_distance_outliers(
+            project_dir,
+            recording_name,
+            raw_coords,
+            coordinates[recording_name],
+            outliers["mask"],
+            outliers["thresholds"],
+            bodyparts=bodyparts,
+            overwrite=overwrite,
+            **kwargs
+        )
+
+    return coordinates, confidences
 
 def estimate_sigmasq_loc(Y: jnp.ndarray, mask: jnp.ndarray, filter_size: int = 30) -> float:
     """
