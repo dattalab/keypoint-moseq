@@ -97,6 +97,26 @@ include-package-data = true
 [tool.setuptools.package-data]
 "*" = [ "*.md" ]
 
+[tool.pytest.ini_options]
+testpaths = [ "tests" ]
+python_files = [ "test_*.py" ]
+python_classes = [ "Test*" ]
+python_functions = [ "test_*" ]
+addopts = [
+  "-v",
+  "--tb=short",
+  "--strict-markers",
+  "--timeout=1800",   # 30 minute default timeout for tests
+]
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "integration: marks tests as integration tests",
+  "notebook: marks tests derived from notebooks",
+  "quick: marks tests as quick (< 1 minute)",
+  "medium: marks tests as medium duration (1-5 minutes)",
+]
+# Custom CLI options can be added via conftest.py for --no-teardown
+
 [tool.versioneer]
 VCS = "git"
 style = "pep440"
