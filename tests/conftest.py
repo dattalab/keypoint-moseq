@@ -9,6 +9,12 @@ import gdown
 from pathlib import Path
 
 
+def pytest_configure(config):
+    """Configure pytest environment - set matplotlib to non-interactive backend"""
+    import matplotlib
+    matplotlib.use('Agg')  # Non-interactive backend for tests
+
+
 def pytest_addoption(parser):
     """Add custom command line options"""
     parser.addoption(

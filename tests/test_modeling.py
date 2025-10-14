@@ -11,7 +11,7 @@ import h5py
 
 @pytest.mark.medium
 @pytest.mark.notebook
-def test_model_initialization(temp_project_dir, dlc_config):
+def test_model_initialization(temp_project_dir, dlc_config, dlc_videos_dir):
     """Test model initialization with hyperparameters
 
     Expected duration: ~30 seconds
@@ -22,42 +22,49 @@ def test_model_initialization(temp_project_dir, dlc_config):
 
     # Setup
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    config.update({
-        'use_bodyparts': [
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
             'spine4', 'spine3', 'spine2', 'spine1',
             'head', 'nose', 'right ear', 'left ear'
-        ]
-    })
+        ],
+        anterior_bodyparts=['nose'],
+        posterior_bodyparts=['spine4']
+    )
+    config = kpms.load_config(project_dir)
 
     # Load and format data
-    coordinates, confidences, _ = kpms.load_keypoints(project_dir, 'deeplabcut')
-    data, metadata = kpms.format_data(coordinates, confidences, **config())
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
+    data, metadata = kpms.format_data(coordinates, confidences, **config)
 
     # Fit PCA
-    pca = kpms.fit_pca(**data, **config())
-    latent_dim = kpms.find_pcs_to_explain_variance(pca, 0.9)
-    config.update({'latent_dim': int(latent_dim)})
+    pca = kpms.fit_pca(**data, **config)
 
-    # Estimate hyperparameters
-    hypparams = kpms.estimate_hypparams(pca=pca, **data, **config())
-    assert 'kappa' in hypparams, "Missing kappa hyperparameter"
-    assert 'gamma' in hypparams, "Missing gamma hyperparameter"
+    # Compute latent_dim manually
+    cumsum = np.cumsum(pca.explained_variance_ratio_)
+    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    kpms.update_config(project_dir, latent_dim=int(latent_dim))
+    config = kpms.load_config(project_dir)
 
-    config.update(hypparams)
+    # Estimate hyperparameters (sigmasq_loc)
+    sigmasq_loc = kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config["fps"])
+    kpms.update_config(project_dir, sigmasq_loc=sigmasq_loc)
+    config = kpms.load_config(project_dir)
 
     # Initialize model
-    model = kpms.init_model(pca=pca, **data, **config())
+    model = kpms.init_model(data, pca=pca, **config)
     assert model is not None, "Model initialization returned None"
 
-    # Verify model structure
-    assert hasattr(model, 'states'), "Model missing states attribute"
+    # Verify model structure (model is a dict, not an object)
+    assert 'states' in model, "Model missing states key"
+    assert 'params' in model, "Model missing params key"
+    assert 'hypparams' in model, "Model missing hypparams key"
 
 
 @pytest.mark.integration
 @pytest.mark.notebook
-def test_ar_hmm_fitting(temp_project_dir, dlc_config, reduced_iterations):
+def test_ar_hmm_fitting(temp_project_dir, dlc_config, dlc_videos_dir, reduced_iterations):
     """Test AR-HMM fitting with reduced iterations
 
     Expected duration: ~2 minutes
@@ -68,41 +75,48 @@ def test_ar_hmm_fitting(temp_project_dir, dlc_config, reduced_iterations):
 
     # Setup and prepare data
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    config.update({
-        'use_bodyparts': [
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
             'spine4', 'spine3', 'spine2', 'spine1',
             'head', 'nose', 'right ear', 'left ear'
-        ]
-    })
+        ],
+        anterior_bodyparts=['nose'],
+        posterior_bodyparts=['spine4']
+    )
+    config = kpms.load_config(project_dir)
 
-    coordinates, confidences, _ = kpms.load_keypoints(project_dir, 'deeplabcut')
-    data, metadata = kpms.format_data(coordinates, confidences, **config())
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
+    data, metadata = kpms.format_data(coordinates, confidences, **config)
 
     # Fit PCA and initialize model
-    pca = kpms.fit_pca(**data, **config())
-    latent_dim = kpms.find_pcs_to_explain_variance(pca, 0.9)
-    config.update({'latent_dim': int(latent_dim)})
+    pca = kpms.fit_pca(**data, **config)
 
-    hypparams = kpms.estimate_hypparams(pca=pca, **data, **config())
-    config.update(hypparams)
+    # Compute latent_dim manually
+    cumsum = np.cumsum(pca.explained_variance_ratio_)
+    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    kpms.update_config(project_dir, latent_dim=int(latent_dim))
+    config = kpms.load_config(project_dir)
 
-    model = kpms.init_model(pca=pca, **data, **config())
+    # Estimate hyperparameters
+    sigmasq_loc = kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config["fps"])
+    kpms.update_config(project_dir, sigmasq_loc=sigmasq_loc)
+    config = kpms.load_config(project_dir)
+
+    model = kpms.init_model(data, pca=pca, **config)
 
     # Fit AR-HMM only
-    model_fitted = kpms.fit_model(
-        model, pca=pca, **data, **config(),
-        ar_only=True,
-        num_iters=reduced_iterations['ar_hmm_iters']
+    model_fitted, model_name = kpms.fit_model(model, data, metadata, project_dir, ar_only=True, num_iters=reduced_iterations['ar_hmm_iters']
     )
 
     assert model_fitted is not None, "AR-HMM fitting returned None"
+    assert model_name is not None, "Model name is None"
 
 
 @pytest.mark.integration
 @pytest.mark.notebook
-def test_full_model_fitting(temp_project_dir, dlc_config, reduced_iterations):
+def test_full_model_fitting(temp_project_dir, dlc_config, dlc_videos_dir, reduced_iterations):
     """Test full model fitting with reduced iterations
 
     Expected duration: ~10 minutes
@@ -113,41 +127,44 @@ def test_full_model_fitting(temp_project_dir, dlc_config, reduced_iterations):
 
     # Setup
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    config.update({
-        'use_bodyparts': [
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
             'spine4', 'spine3', 'spine2', 'spine1',
             'head', 'nose', 'right ear', 'left ear'
-        ]
-    })
+        ],
+        anterior_bodyparts=['nose'],
+        posterior_bodyparts=['spine4']
+    )
+    config = kpms.load_config(project_dir)
 
     # Prepare data
-    coordinates, confidences, _ = kpms.load_keypoints(project_dir, 'deeplabcut')
-    data, metadata = kpms.format_data(coordinates, confidences, **config())
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
+    data, metadata = kpms.format_data(coordinates, confidences, **config)
 
     # Fit PCA
-    pca = kpms.fit_pca(**data, **config())
-    latent_dim = kpms.find_pcs_to_explain_variance(pca, 0.9)
-    config.update({'latent_dim': int(latent_dim)})
+    pca = kpms.fit_pca(**data, **config)
+
+    # Compute latent_dim manually
+    cumsum = np.cumsum(pca.explained_variance_ratio_)
+    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    kpms.update_config(project_dir, latent_dim=int(latent_dim))
+    config = kpms.load_config(project_dir)
 
     # Initialize and fit
-    hypparams = kpms.estimate_hypparams(pca=pca, **data, **config())
-    config.update(hypparams)
+    sigmasq_loc = kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config["fps"])
+    kpms.update_config(project_dir, sigmasq_loc=sigmasq_loc)
+    config = kpms.load_config(project_dir)
 
-    model = kpms.init_model(pca=pca, **data, **config())
+    model = kpms.init_model(data, pca=pca, **config)
 
     # AR-HMM
-    model = kpms.fit_model(
-        model, pca=pca, **data, **config(),
-        ar_only=True,
-        num_iters=reduced_iterations['ar_hmm_iters']
+    model, model_name = kpms.fit_model(model, data, metadata, project_dir, ar_only=True, num_iters=reduced_iterations['ar_hmm_iters']
     )
 
     # Full model
-    model_fitted = kpms.fit_model(
-        model, pca=pca, **data, **config(),
-        num_iters=reduced_iterations['full_model_iters']
+    model_fitted, _ = kpms.fit_model(model, data, metadata, project_dir, ar_only=False, num_iters=reduced_iterations['full_model_iters']
     )
 
     assert model_fitted is not None, "Full model fitting returned None"
@@ -155,7 +172,7 @@ def test_full_model_fitting(temp_project_dir, dlc_config, reduced_iterations):
 
 @pytest.mark.medium
 @pytest.mark.notebook
-def test_model_saving_and_loading(temp_project_dir, dlc_config, reduced_iterations):
+def test_model_saving_and_loading(temp_project_dir, dlc_config, dlc_videos_dir, reduced_iterations):
     """Test model checkpoint saving and loading
 
     Expected duration: ~15 minutes
@@ -166,43 +183,42 @@ def test_model_saving_and_loading(temp_project_dir, dlc_config, reduced_iteratio
 
     # Setup and fit model (abbreviated)
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    config.update({
-        'use_bodyparts': [
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
             'spine4', 'spine3', 'spine2', 'spine1',
             'head', 'nose', 'right ear', 'left ear'
-        ]
-    })
-
-    coordinates, confidences, _ = kpms.load_keypoints(project_dir, 'deeplabcut')
-    data, metadata = kpms.format_data(coordinates, confidences, **config())
-
-    pca = kpms.fit_pca(**data, **config())
-    latent_dim = kpms.find_pcs_to_explain_variance(pca, 0.9)
-    config.update({'latent_dim': int(latent_dim)})
-
-    hypparams = kpms.estimate_hypparams(pca=pca, **data, **config())
-    config.update(hypparams)
-
-    model = kpms.init_model(pca=pca, **data, **config())
-
-    # Quick fit
-    model = kpms.fit_model(
-        model, pca=pca, **data, **config(),
-        ar_only=True,
-        num_iters=5  # Very short for speed
+        ],
+        anterior_bodyparts=['nose'],
+        posterior_bodyparts=['spine4']
     )
+    config = kpms.load_config(project_dir)
 
-    # Save model
-    model_name = kpms.save_model(
-        model, project_dir, metadata=metadata,
-        pca=pca, config=config()
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
+    data, metadata = kpms.format_data(coordinates, confidences, **config)
+
+    pca = kpms.fit_pca(**data, **config)
+
+    # Compute latent_dim manually
+    cumsum = np.cumsum(pca.explained_variance_ratio_)
+    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    kpms.update_config(project_dir, latent_dim=int(latent_dim))
+    config = kpms.load_config(project_dir)
+
+    sigmasq_loc = kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config["fps"])
+    kpms.update_config(project_dir, sigmasq_loc=sigmasq_loc)
+    config = kpms.load_config(project_dir)
+
+    model = kpms.init_model(data, pca=pca, **config)
+
+    # Quick fit - fit_model automatically saves checkpoint
+    model, model_name = kpms.fit_model(model, data, metadata, project_dir, ar_only=True, num_iters=5  # Very short for speed
     )
 
     assert model_name is not None, "Model name is None"
 
-    # Check files exist
+    # Check checkpoint file was created by fit_model
     checkpoint_path = Path(project_dir) / model_name / "checkpoint.h5"
     assert checkpoint_path.exists(), "Checkpoint not saved"
 

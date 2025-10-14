@@ -31,26 +31,26 @@ classifiers = [
 dynamic = [ "version" ]
 # Core dependencies from setup.cfg
 dependencies = [
-  "bokeh==2.4.3",
+  "bokeh>=2.4.3,<3.0",           # Pinned to 2.x (Panel 0.14.4 incompatible with 3.x)
   "commentjson",
   "cytoolz",
-  "holoviews[recommended]==1.15.4",
+  "holoviews[recommended]>=1.15.4,<2.0",  # Allow 1.x minor updates
   "imageio[ffmpeg]",
   "ipykernel",
   "ipympl",
   "ipython-genutils",
   "ipywidgets",
   "jax-moseq",
-  "matplotlib==3.8.4",
+  "matplotlib>=3.8.4,<4.0",      # Allow 3.x minor/patch updates
   "ndx-pose",
   "networkx",
-  "numpy<=1.26.4",
+  "numpy<=1.26.4",               # Upper bound for jax compatibility
   "pandas",
-  "panel==0.14.4",
+  "panel>=0.14.4,<0.15",         # Pinned to 0.14.x (requires Bokeh 2.x)
   "plotly",
   "pynwb",
   "pyyaml",
-  "seaborn==0.13",
+  "seaborn>=0.13,<0.14",         # Allow 0.13.x patch updates
   "sleap-io",
   "statsmodels",
   "tables",

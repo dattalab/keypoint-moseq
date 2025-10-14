@@ -11,7 +11,7 @@ import pandas as pd
 
 @pytest.mark.medium
 @pytest.mark.notebook
-def test_result_extraction(temp_project_dir, dlc_config, reduced_iterations):
+def test_result_extraction(temp_project_dir, dlc_config, dlc_videos_dir, reduced_iterations):
     """Test extracting results from fitted model
 
     Expected duration: ~15 minutes (includes model fitting)
@@ -20,47 +20,51 @@ def test_result_extraction(temp_project_dir, dlc_config, reduced_iterations):
 
     project_dir = temp_project_dir
 
+    
     # Setup and fit model (abbreviated workflow)
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    config.update({
-        'use_bodyparts': [
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
             'spine4', 'spine3', 'spine2', 'spine1',
             'head', 'nose', 'right ear', 'left ear'
-        ]
-    })
-
-    coordinates, confidences, _ = kpms.load_keypoints(project_dir, 'deeplabcut')
-    data, metadata = kpms.format_data(coordinates, confidences, **config())
-
-    pca = kpms.fit_pca(**data, **config())
-    latent_dim = kpms.find_pcs_to_explain_variance(pca, 0.9)
-    config.update({'latent_dim': int(latent_dim)})
-
-    hypparams = kpms.estimate_hypparams(pca=pca, **data, **config())
-    config.update(hypparams)
-
-    model = kpms.init_model(pca=pca, **data, **config())
-    model = kpms.fit_model(
-        model, pca=pca, **data, **config(),
-        ar_only=True,
-        num_iters=reduced_iterations['ar_hmm_iters']
+        ],
+        anterior_bodyparts=['nose'],
+        posterior_bodyparts=['spine4']
     )
-    model = kpms.fit_model(
-        model, pca=pca, **data, **config(),
-        num_iters=reduced_iterations['full_model_iters']
+    config = kpms.load_config(project_dir)
+
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
+    data, metadata = kpms.format_data(coordinates, confidences, **config)
+
+    pca = kpms.fit_pca(**data, **config)
+
+    # Compute latent_dim manually
+    cumsum = np.cumsum(pca.explained_variance_ratio_)
+    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    kpms.update_config(project_dir, latent_dim=int(latent_dim))
+    config = kpms.load_config(project_dir)
+
+    sigmasq_loc = kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config["fps"])
+    kpms.update_config(project_dir, sigmasq_loc=sigmasq_loc)
+    config = kpms.load_config(project_dir)
+
+    model = kpms.init_model(data, pca=pca, **config)
+    model, model_name = kpms.fit_model(model, data, metadata, project_dir, ar_only=True, num_iters=reduced_iterations['ar_hmm_iters']
+    )
+    model, _ = kpms.fit_model(model, data, metadata, project_dir, ar_only=False, num_iters=reduced_iterations['full_model_iters']
     )
 
-    model_name = kpms.save_model(
-        model, project_dir, metadata=metadata,
-        pca=pca, config=config()
-    )
+    # Checkpoint was saved by fit_model, verify it exists
+    checkpoint_path = Path(project_dir) / model_name / "checkpoint.h5"
+    assert checkpoint_path.exists(), "Checkpoint file not created"
+
 
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
 
     # Extract results
-    results = kpms.extract_results(model, metadata, project_dir, model_name, config())
+    results = kpms.extract_results(model, metadata, project_dir, model_name, config)
 
     # Verify results structure
     assert 'syllable' in results, "Results missing syllable"
@@ -79,7 +83,7 @@ def test_result_extraction(temp_project_dir, dlc_config, reduced_iterations):
 
 @pytest.mark.medium
 @pytest.mark.notebook
-def test_csv_export(temp_project_dir, dlc_config, reduced_iterations):
+def test_csv_export(temp_project_dir, dlc_config, dlc_videos_dir, reduced_iterations):
     """Test CSV export of results
 
     Expected duration: ~15 minutes (includes model fitting)
@@ -88,44 +92,49 @@ def test_csv_export(temp_project_dir, dlc_config, reduced_iterations):
 
     project_dir = temp_project_dir
 
-    # Run abbreviated workflow
+    
+    # Setup and fit model (abbreviated workflow)
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    config.update({
-        'use_bodyparts': [
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
             'spine4', 'spine3', 'spine2', 'spine1',
             'head', 'nose', 'right ear', 'left ear'
-        ]
-    })
-
-    coordinates, confidences, _ = kpms.load_keypoints(project_dir, 'deeplabcut')
-    data, metadata = kpms.format_data(coordinates, confidences, **config())
-
-    pca = kpms.fit_pca(**data, **config())
-    latent_dim = kpms.find_pcs_to_explain_variance(pca, 0.9)
-    config.update({'latent_dim': int(latent_dim)})
-
-    hypparams = kpms.estimate_hypparams(pca=pca, **data, **config())
-    config.update(hypparams)
-
-    model = kpms.init_model(pca=pca, **data, **config())
-    model = kpms.fit_model(
-        model, pca=pca, **data, **config(),
-        ar_only=True, num_iters=5
+        ],
+        anterior_bodyparts=['nose'],
+        posterior_bodyparts=['spine4']
     )
-    model = kpms.fit_model(
-        model, pca=pca, **data, **config(),
-        num_iters=10
+    config = kpms.load_config(project_dir)
+
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
+    data, metadata = kpms.format_data(coordinates, confidences, **config)
+
+    pca = kpms.fit_pca(**data, **config)
+
+    # Compute latent_dim manually
+    cumsum = np.cumsum(pca.explained_variance_ratio_)
+    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    kpms.update_config(project_dir, latent_dim=int(latent_dim))
+    config = kpms.load_config(project_dir)
+
+    sigmasq_loc = kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config["fps"])
+    kpms.update_config(project_dir, sigmasq_loc=sigmasq_loc)
+    config = kpms.load_config(project_dir)
+
+    model = kpms.init_model(data, pca=pca, **config)
+    model, model_name = kpms.fit_model(model, data, metadata, project_dir, ar_only=True, num_iters=5
+    )
+    model, _ = kpms.fit_model(model, data, metadata, project_dir, ar_only=False, num_iters=10
     )
 
-    model_name = kpms.save_model(
-        model, project_dir, metadata=metadata,
-        pca=pca, config=config()
-    )
+    # Checkpoint was saved by fit_model, verify it exists
+    checkpoint_path = Path(project_dir) / model_name / "checkpoint.h5"
+    assert checkpoint_path.exists(), "Checkpoint file not created"
+
 
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
-    results = kpms.extract_results(model, metadata, project_dir, model_name, config())
+    results = kpms.extract_results(model, metadata, project_dir, model_name, config)
 
     # Export to CSV
     kpms.save_results_as_csv(results, project_dir, model_name)
@@ -152,7 +161,7 @@ def test_csv_export(temp_project_dir, dlc_config, reduced_iterations):
 
 @pytest.mark.medium
 @pytest.mark.notebook
-def test_trajectory_plots(temp_project_dir, dlc_config, reduced_iterations):
+def test_trajectory_plots(temp_project_dir, dlc_config, dlc_videos_dir, reduced_iterations):
     """Test trajectory plot generation
 
     Expected duration: ~15 minutes (includes model fitting)
@@ -161,38 +170,50 @@ def test_trajectory_plots(temp_project_dir, dlc_config, reduced_iterations):
 
     project_dir = temp_project_dir
 
-    # Abbreviated workflow
+    
+    # Setup and fit model (abbreviated workflow)
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    config.update({
-        'use_bodyparts': [
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
             'spine4', 'spine3', 'spine2', 'spine1',
             'head', 'nose', 'right ear', 'left ear'
-        ]
-    })
+        ],
+        anterior_bodyparts=['nose'],
+        posterior_bodyparts=['spine4']
+    )
+    config = kpms.load_config(project_dir)
 
-    coordinates, confidences, _ = kpms.load_keypoints(project_dir, 'deeplabcut')
-    data, metadata = kpms.format_data(coordinates, confidences, **config())
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
+    data, metadata = kpms.format_data(coordinates, confidences, **config)
 
-    pca = kpms.fit_pca(**data, **config())
-    latent_dim = kpms.find_pcs_to_explain_variance(pca, 0.9)
-    config.update({'latent_dim': int(latent_dim)})
+    pca = kpms.fit_pca(**data, **config)
 
-    hypparams = kpms.estimate_hypparams(pca=pca, **data, **config())
-    config.update(hypparams)
+    # Compute latent_dim manually
+    cumsum = np.cumsum(pca.explained_variance_ratio_)
+    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    kpms.update_config(project_dir, latent_dim=int(latent_dim))
+    config = kpms.load_config(project_dir)
 
-    model = kpms.init_model(pca=pca, **data, **config())
-    model = kpms.fit_model(model, pca=pca, **data, **config(), ar_only=True, num_iters=5)
-    model = kpms.fit_model(model, pca=pca, **data, **config(), num_iters=10)
+    sigmasq_loc = kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config["fps"])
+    kpms.update_config(project_dir, sigmasq_loc=sigmasq_loc)
+    config = kpms.load_config(project_dir)
 
-    model_name = kpms.save_model(model, project_dir, metadata=metadata, pca=pca, config=config())
+    model = kpms.init_model(data, pca=pca, **config)
+    model, model_name = kpms.fit_model(model, data, metadata, project_dir, ar_only=True, num_iters=5)
+    model, _ = kpms.fit_model(model, data, metadata, project_dir, ar_only=False, num_iters=10)
+
+    # Checkpoint was saved by fit_model, verify it exists
+    checkpoint_path = Path(project_dir) / model_name / "checkpoint.h5"
+    assert checkpoint_path.exists(), "Checkpoint file not created"
+
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
-    results = kpms.extract_results(model, metadata, project_dir, model_name, config())
+    results = kpms.extract_results(model, metadata, project_dir, model_name, config)
 
     # Generate trajectory plots
     kpms.generate_trajectory_plots(
-        coordinates, results, project_dir, model_name, config()
+        coordinates, results, project_dir, model_name, config
     )
 
     # Verify outputs
@@ -209,7 +230,7 @@ def test_trajectory_plots(temp_project_dir, dlc_config, reduced_iterations):
 
 @pytest.mark.slow
 @pytest.mark.notebook
-def test_grid_movies(temp_project_dir, dlc_config, reduced_iterations):
+def test_grid_movies(temp_project_dir, dlc_config, dlc_videos_dir, reduced_iterations):
     """Test grid movie generation
 
     Expected duration: ~20 minutes (includes model fitting + video rendering)
@@ -218,39 +239,51 @@ def test_grid_movies(temp_project_dir, dlc_config, reduced_iterations):
 
     project_dir = temp_project_dir
 
-    # Abbreviated workflow
+    
+    # Setup and fit model (abbreviated workflow)
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    config.update({
-        'use_bodyparts': [
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
             'spine4', 'spine3', 'spine2', 'spine1',
             'head', 'nose', 'right ear', 'left ear'
-        ]
-    })
+        ],
+        anterior_bodyparts=['nose'],
+        posterior_bodyparts=['spine4']
+    )
+    config = kpms.load_config(project_dir)
 
-    coordinates, confidences, _ = kpms.load_keypoints(project_dir, 'deeplabcut')
-    data, metadata = kpms.format_data(coordinates, confidences, **config())
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
+    data, metadata = kpms.format_data(coordinates, confidences, **config)
 
-    pca = kpms.fit_pca(**data, **config())
-    latent_dim = kpms.find_pcs_to_explain_variance(pca, 0.9)
-    config.update({'latent_dim': int(latent_dim)})
+    pca = kpms.fit_pca(**data, **config)
 
-    hypparams = kpms.estimate_hypparams(pca=pca, **data, **config())
-    config.update(hypparams)
+    # Compute latent_dim manually
+    cumsum = np.cumsum(pca.explained_variance_ratio_)
+    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    kpms.update_config(project_dir, latent_dim=int(latent_dim))
+    config = kpms.load_config(project_dir)
 
-    model = kpms.init_model(pca=pca, **data, **config())
-    model = kpms.fit_model(model, pca=pca, **data, **config(), ar_only=True, num_iters=5)
-    model = kpms.fit_model(model, pca=pca, **data, **config(), num_iters=10)
+    sigmasq_loc = kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config["fps"])
+    kpms.update_config(project_dir, sigmasq_loc=sigmasq_loc)
+    config = kpms.load_config(project_dir)
 
-    model_name = kpms.save_model(model, project_dir, metadata=metadata, pca=pca, config=config())
+    model = kpms.init_model(data, pca=pca, **config)
+    model, model_name = kpms.fit_model(model, data, metadata, project_dir, ar_only=True, num_iters=5)
+    model, _ = kpms.fit_model(model, data, metadata, project_dir, ar_only=False, num_iters=10)
+
+    # Checkpoint was saved by fit_model, verify it exists
+    checkpoint_path = Path(project_dir) / model_name / "checkpoint.h5"
+    assert checkpoint_path.exists(), "Checkpoint file not created"
+
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
-    results = kpms.extract_results(model, metadata, project_dir, model_name, config())
+    results = kpms.extract_results(model, metadata, project_dir, model_name, config)
 
     # Generate grid movies
     kpms.generate_grid_movies(
         coordinates, results, project_dir, model_name,
-        config=config(), fps=30, frame_path=None
+        config=config, fps=30, frame_path=None
     )
 
     # Verify outputs
@@ -267,7 +300,7 @@ def test_grid_movies(temp_project_dir, dlc_config, reduced_iterations):
 
 @pytest.mark.medium
 @pytest.mark.notebook
-def test_similarity_dendrogram(temp_project_dir, dlc_config, reduced_iterations):
+def test_similarity_dendrogram(temp_project_dir, dlc_config, dlc_videos_dir, reduced_iterations):
     """Test similarity dendrogram generation
 
     Expected duration: ~15 minutes (includes model fitting)
@@ -276,36 +309,48 @@ def test_similarity_dendrogram(temp_project_dir, dlc_config, reduced_iterations)
 
     project_dir = temp_project_dir
 
-    # Abbreviated workflow
+    
+    # Setup and fit model (abbreviated workflow)
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    config.update({
-        'use_bodyparts': [
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
             'spine4', 'spine3', 'spine2', 'spine1',
             'head', 'nose', 'right ear', 'left ear'
-        ]
-    })
+        ],
+        anterior_bodyparts=['nose'],
+        posterior_bodyparts=['spine4']
+    )
+    config = kpms.load_config(project_dir)
 
-    coordinates, confidences, _ = kpms.load_keypoints(project_dir, 'deeplabcut')
-    data, metadata = kpms.format_data(coordinates, confidences, **config())
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
+    data, metadata = kpms.format_data(coordinates, confidences, **config)
 
-    pca = kpms.fit_pca(**data, **config())
-    latent_dim = kpms.find_pcs_to_explain_variance(pca, 0.9)
-    config.update({'latent_dim': int(latent_dim)})
+    pca = kpms.fit_pca(**data, **config)
 
-    hypparams = kpms.estimate_hypparams(pca=pca, **data, **config())
-    config.update(hypparams)
+    # Compute latent_dim manually
+    cumsum = np.cumsum(pca.explained_variance_ratio_)
+    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    kpms.update_config(project_dir, latent_dim=int(latent_dim))
+    config = kpms.load_config(project_dir)
 
-    model = kpms.init_model(pca=pca, **data, **config())
-    model = kpms.fit_model(model, pca=pca, **data, **config(), ar_only=True, num_iters=5)
-    model = kpms.fit_model(model, pca=pca, **data, **config(), num_iters=10)
+    sigmasq_loc = kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config["fps"])
+    kpms.update_config(project_dir, sigmasq_loc=sigmasq_loc)
+    config = kpms.load_config(project_dir)
 
-    model_name = kpms.save_model(model, project_dir, metadata=metadata, pca=pca, config=config())
+    model = kpms.init_model(data, pca=pca, **config)
+    model, model_name = kpms.fit_model(model, data, metadata, project_dir, ar_only=True, num_iters=5)
+    model, _ = kpms.fit_model(model, data, metadata, project_dir, ar_only=False, num_iters=10)
+
+    # Checkpoint was saved by fit_model, verify it exists
+    checkpoint_path = Path(project_dir) / model_name / "checkpoint.h5"
+    assert checkpoint_path.exists(), "Checkpoint file not created"
+
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
 
     # Generate dendrogram
-    kpms.generate_similarity_dendrogram(project_dir, model_name, config())
+    kpms.generate_similarity_dendrogram(project_dir, model_name, config)
 
     # Verify output
     dendrogram_pdf = Path(project_dir) / model_name / "similarity_dendrogram.pdf"
