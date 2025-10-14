@@ -218,7 +218,7 @@ def test_project_setup(temp_project_dir, dlc_config):
 
 @pytest.mark.quick
 @pytest.mark.notebook
-def test_load_keypoints(temp_project_dir, dlc_config):
+def test_load_keypoints(temp_project_dir, dlc_config, dlc_videos_dir):
     """Test keypoint loading from DLC data
 
     Expected duration: < 1 second
@@ -228,8 +228,8 @@ def test_load_keypoints(temp_project_dir, dlc_config):
     project_dir = temp_project_dir
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
 
-    # Load keypoints
-    coordinates, confidences, bodyparts = kpms.load_keypoints(project_dir, 'deeplabcut')
+    # Load keypoints from DLC videos directory (not project_dir)
+    coordinates, confidences, bodyparts = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
 
     # Verify data structure
     assert len(coordinates) > 0, "No coordinates loaded"

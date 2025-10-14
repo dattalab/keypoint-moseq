@@ -219,45 +219,44 @@ def test_model_saving_and_loading(temp_project_dir, dlc_config, reduced_iteratio
 
 @pytest.mark.quick
 @pytest.mark.notebook
-def test_hyperparameter_estimation(temp_project_dir, dlc_config):
-    """Test hyperparameter estimation
+def test_hyperparameter_estimation(temp_project_dir, dlc_config, dlc_videos_dir):
+    """Test hyperparameter estimation (sigmasq_loc)
 
     Expected duration: < 5 seconds
     """
     import keypoint_moseq as kpms
+    import numpy as np
 
     project_dir = temp_project_dir
 
     # Setup
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    config.update({
-        'use_bodyparts': [
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
             'spine4', 'spine3', 'spine2', 'spine1',
             'head', 'nose', 'right ear', 'left ear'
-        ]
-    })
+        ],
+        anterior_bodyparts=['head', 'nose', 'right ear', 'left ear'],
+        posterior_bodyparts=['spine4', 'spine3', 'spine2', 'spine1'],
+    )
 
     # Prepare data
-    coordinates, confidences, _ = kpms.load_keypoints(project_dir, 'deeplabcut')
-    data, metadata = kpms.format_data(coordinates, confidences, **config())
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, 'deeplabcut')
+    config = kpms.load_config(project_dir)
+    data, metadata = kpms.format_data(coordinates, confidences, **config)
 
     # Fit PCA
-    pca = kpms.fit_pca(**data, **config())
-    latent_dim = kpms.find_pcs_to_explain_variance(pca, 0.9)
-    config.update({'latent_dim': int(latent_dim)})
+    pca = kpms.fit_pca(**data, **config)
 
-    # Estimate hyperparameters
-    hypparams = kpms.estimate_hypparams(pca=pca, **data, **config())
+    # Estimate sigmasq_loc hyperparameter (this is what keypoint_moseq provides)
+    sigmasq_loc = kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config["fps"])
 
-    # Verify expected parameters
-    assert 'kappa' in hypparams, "Missing kappa"
-    assert 'gamma' in hypparams, "Missing gamma"
-
-    # Check reasonable values
-    assert hypparams['kappa'] > 0, "kappa should be positive"
-    assert hypparams['gamma'] > 0, "gamma should be positive"
+    # Verify estimate is reasonable
+    assert isinstance(sigmasq_loc, (int, float, np.number)), "sigmasq_loc should be numeric"
+    assert sigmasq_loc > 0, "sigmasq_loc should be positive"
+    assert sigmasq_loc < 100, "sigmasq_loc should be reasonable (< 100)"
 
 
 @pytest.mark.quick
@@ -272,13 +271,23 @@ def test_config_update(temp_project_dir, dlc_config):
 
     # Setup
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
-    config = lambda: kpms.load_config(project_dir)
 
-    # Update config
-    test_value = 42
-    config.update({'test_param': test_value})
+    # Update config with required bodyparts first
+    kpms.update_config(
+        project_dir,
+        use_bodyparts=[
+            'spine4', 'spine3', 'spine2', 'spine1',
+            'head', 'nose', 'right ear', 'left ear'
+        ],
+        anterior_bodyparts=['head', 'nose', 'right ear', 'left ear'],
+        posterior_bodyparts=['spine4', 'spine3', 'spine2', 'spine1'],
+    )
+
+    # Update config with a real parameter (latent_dim)
+    test_value = 4
+    kpms.update_config(project_dir, latent_dim=test_value)
 
     # Verify update persisted
-    config_reloaded = kpms.load_config(project_dir)
-    assert 'test_param' in config_reloaded, "Config update not persisted"
-    assert config_reloaded['test_param'] == test_value, "Config value mismatch"
+    config = kpms.load_config(project_dir)
+    assert 'latent_dim' in config['ar_hypparams'], "Config update not persisted"
+    assert config['ar_hypparams']['latent_dim'] == test_value, "Config value mismatch"
