@@ -1,0 +1,106 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+
+requires = [ "setuptools>=45", "setuptools-scm[toml]>=6.2", "versioneer[toml]==0.29", "wheel" ]
+
+[project]
+name = "keypoint-moseq"
+description = "Unsupervised machine learning method for behavior analysis using keypoint tracking data"
+readme = "README.md"
+keywords = [ "behavior", "keypoint-tracking", "machine-learning", "motion-sequencing", "neuroscience" ]
+license = { text = "Non-Commercial Research and Academic Use - see LICENSE.md" }
+maintainers = [
+  { name = "Caleb Weinreb", email = "calebsw@gmail.com" },
+]
+authors = [
+  { name = "Caleb Weinreb", email = "calebsw@gmail.com" },
+]
+requires-python = ">=3.10"
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+dynamic = [ "version" ]
+# Core dependencies from setup.cfg
+dependencies = [
+  "bokeh==2.4.3",
+  "commentjson",
+  "cytoolz",
+  "holoviews[recommended]==1.15.4",
+  "imageio[ffmpeg]",
+  "ipykernel",
+  "ipympl",
+  "ipython-genutils",
+  "ipywidgets",
+  "jax-moseq",
+  "matplotlib==3.8.4",
+  "ndx-pose",
+  "networkx",
+  "numpy<=1.26.4",
+  "pandas",
+  "panel==0.14.4",
+  "plotly",
+  "pynwb",
+  "pyyaml",
+  "seaborn==0.13",
+  "sleap-io",
+  "statsmodels",
+  "tables",
+  "tabulate",
+  "tqdm",
+  "vidio",
+]
+
+# All optional dependencies
+optional-dependencies.all = [
+  "keypoint-moseq[dev,cuda,test]",
+]
+# CUDA support for GPU acceleration
+optional-dependencies.cuda = [
+  "jax-moseq[cuda]",
+]
+# Development and documentation dependencies
+optional-dependencies.dev = [
+  "autodocsumm",
+  "myst-nb",
+  "sphinx",
+  "sphinx-rtd-theme",
+]
+# Testing dependencies
+optional-dependencies.test = [
+  "gdown",               # For downloading test data from Google Drive
+  "h5py>=3",             # For HDF5 validation
+  "jupytext>=1.14",
+  "pytest>=7",
+  "pytest-cov>=4",
+  "pytest-timeout>=2.1",
+  "pytest-xdist>=3",     # Parallel test execution
+]
+urls."Bug Tracker" = "https://github.com/dattalab/keypoint-moseq/issues"
+urls.Documentation = "https://keypoint-moseq.readthedocs.io/en/latest/"
+urls.Homepage = "https://github.com/dattalab/keypoint-moseq"
+urls."Paper" = "https://www.nature.com/articles/s41592-024-02318-2"
+urls.Repository = "https://github.com/dattalab/keypoint-moseq"
+
+[tool.setuptools]
+packages = [ "keypoint_moseq" ]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = [ "*.md" ]
+
+[tool.versioneer]
+VCS = "git"
+style = "pep440"
+versionfile_source = "keypoint_moseq/_version.py"
+versionfile_build = "keypoint_moseq/_version.py"
+tag_prefix = ""
+parentdir_prefix = ""
