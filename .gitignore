@@ -4,6 +4,7 @@ update_pypi.sh
 docs/source/dlc*
 docs/source/demo*
 tests/dlc*
+temp*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

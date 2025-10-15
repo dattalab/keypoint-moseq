@@ -88,21 +88,50 @@ def temp_project_dir(request, no_teardown):
 
 
 @pytest.fixture(scope="session")
-def dlc_example_project():
+def dlc_example_project(test_data_cache):
     """Path to the DLC example project
 
     This fixture returns the path to the DLC example data.
+    First checks the repository location, then downloads from Google Drive if missing.
     The data is NEVER deleted during teardown - it's preserved as input data.
     Session-scoped since it's read-only data.
     """
     repo_root = Path(__file__).parent.parent
     dlc_path = repo_root / "docs" / "source" / "dlc_example_project"
 
-    if not dlc_path.exists():
-        pytest.skip("DLC example project not found at {dlc_path}")
+    # First, check if data exists in repository
+    if dlc_path.exists():
+        return str(dlc_path)
 
-    # Input data is never cleaned up - it's part of the repository
-    return str(dlc_path)
+    # If not in repo, try to download from Google Drive to cache
+    print(f"DLC example project not found at {dlc_path}")
+    print("Attempting to download from Google Drive...")
+
+    cached_zip = test_data_cache / "dlc_example_project.zip"
+    cached_extract = test_data_cache / "dlc_example_project"
+
+    # Check if already downloaded and extracted
+    if cached_extract.exists() and (cached_extract / "config.yaml").exists():
+        print(f"Using cached DLC project: {cached_extract}")
+        return str(cached_extract)
+
+    try:
+        # Download from Google Drive (file ID from keypoint_moseq_colab.ipynb)
+        file_id = "1JGyS9MbdS3MtrlYnh4xdEQwe2bYoCuSZ"
+        download_google_drive_file(file_id, cached_zip, use_cache=True)
+
+        # Extract the zip file
+        print(f"Extracting to {test_data_cache}")
+        unzip_file(cached_zip, test_data_cache)
+
+        if cached_extract.exists():
+            print(f"Successfully downloaded and extracted DLC project to {cached_extract}")
+            return str(cached_extract)
+        else:
+            pytest.skip(f"Downloaded but extraction failed - expected {cached_extract}")
+
+    except Exception as e:
+        pytest.skip(f"Failed to download DLC example project: {e}")
 
 
 @pytest.fixture(scope="session")
@@ -209,19 +238,13 @@ def unzip_file(zip_path, extract_to):
 
 
 @pytest.fixture(scope="session")
-def dlc_test_data(test_data_cache):
-    """Download and cache DLC test data from Google Drive
+def dlc_test_data(dlc_example_project):
+    """Alias for dlc_example_project fixture for backward compatibility
 
-    This fixture downloads the minimal DLC dataset used in the colab notebook.
-    The file ID is extracted from the colab notebook's google drive link.
-
-    Note: Currently uses the local dlc_example_project. If external data
-    is needed, implement download logic here.
+    This fixture is maintained for backward compatibility with older test code.
+    Use dlc_example_project directly in new code.
     """
-    # For now, return None - tests should use dlc_example_project fixture
-    # This can be extended if external test data needs to be downloaded
-    # TODO: Implement download logic if no example project is available in docs/source or tests/
-    return None
+    return dlc_example_project
 
 
 @pytest.fixture(scope="session")

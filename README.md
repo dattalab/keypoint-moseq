@@ -1,4 +1,8 @@
-# Keypoint MoSeq 
+# Keypoint MoSeq
+
+![Tests](https://github.com/dattalab/keypoint-moseq/actions/workflows/test.yml/badge.svg)
+[![codecov](https://codecov.io/gh/dattalab/keypoint-moseq/branch/main/graph/badge.svg)](https://codecov.io/gh/dattalab/keypoint-moseq)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 ![logo](docs/source/_static/logo.jpg)
 

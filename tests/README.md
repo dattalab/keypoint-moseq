@@ -19,6 +19,7 @@ This directory contains pytest-compatible tests for the keypoint-MoSeq package, 
 - `notebook_analysis.py` - Converted from `docs/source/analysis.ipynb`
 
 Conversion command used:
+
 ```bash
 jupytext --to py:percent <notebook>.ipynb -o tests/notebook_<name>.py
 ```
@@ -28,11 +29,13 @@ jupytext --to py:percent <notebook>.ipynb -o tests/notebook_<name>.py
 ### Installation
 
 Install keypoint-moseq with test dependencies:
+
 ```bash
 pip install -e ".[test]"
 ```
 
 This installs:
+
 - pytest and plugins (pytest-cov, pytest-timeout, pytest-xdist)
 - jupytext for notebook conversion
 - h5py for HDF5 validation
@@ -41,6 +44,7 @@ This installs:
 ### Test Data
 
 Tests use the DLC example project included in the repository:
+
 - Location: `docs/source/dlc_example_project/`
 - Contains: 10 minimal DLC tracking files
 - Size: ~small (suitable for CI/CD)
@@ -111,6 +115,7 @@ pytest tests/ --test-data-dir=/path/to/output
 ```
 
 Example output locations:
+
 - `/tmp/kpms_test_test_complete_workflow/`
 - Contains: model checkpoints, results, plots, videos
 
@@ -119,6 +124,7 @@ Example output locations:
 Tests have a 30-minute default timeout configured in `pyproject.toml`.
 
 Override for specific tests:
+
 ```bash
 # Set custom timeout (in seconds)
 pytest tests/ --timeout=3600
@@ -159,6 +165,7 @@ pytest tests/ --timeout=0
 - `test_grid_movies` - Video rendering (~20 minutes)
 
 Run without slow tests:
+
 ```bash
 pytest tests/ -m "not slow"
 ```
@@ -237,16 +244,19 @@ pytest tests/ -n auto
 ### Test Failures
 
 **Import errors**: Ensure package installed with test dependencies
+
 ```bash
 pip install -e ".[test]"
 ```
 
 **DLC data not found**: Verify DLC example project exists
+
 ```bash
 ls docs/source/dlc_example_project/
 ```
 
 **Timeout errors**: Increase timeout or run on faster hardware
+
 ```bash
 pytest tests/ --timeout=3600
 ```
@@ -267,6 +277,34 @@ pytest tests/test_colab_workflow.py::test_complete_workflow -s --no-teardown
 
 # Check preserved outputs
 ls /tmp/kpms_test_test_complete_workflow/
+```
+
+## Code Coverage
+
+### Generate Coverage Report
+
+Run tests with coverage measurement:
+
+```bash
+# Generate HTML and terminal coverage report
+pytest tests/ --cov=keypoint_moseq --cov-report=html --cov-report=term -m "not slow"
+
+# View HTML report in browser
+open htmlcov/index.html  # macOS
+xdg-open htmlcov/index.html  # Linux
+```
+
+### Coverage Commands
+
+```bash
+# Coverage with missing line numbers
+pytest tests/ --cov=keypoint_moseq --cov-report=term-missing
+
+# Coverage for specific module
+pytest tests/ --cov=keypoint_moseq.analysis --cov-report=term
+
+# Coverage with XML output (for CI/CD)
+pytest tests/ --cov=keypoint_moseq --cov-report=xml --cov-report=term
 ```
 
 ## Test Development
@@ -310,11 +348,13 @@ def test_feature_name(temp_project_dir, dlc_config):
 ## Additional Resources
 
 For more information about keypoint-moseq:
-- **Official Documentation**: https://keypoint-moseq.readthedocs.io/
-- **GitHub Repository**: https://github.com/dattalab/keypoint-moseq
-- **Paper**: Nature Methods (2024) - https://www.nature.com/articles/s41592-024-02318-2
+
+- **Official Documentation**: <https://keypoint-moseq.readthedocs.io/>
+- **GitHub Repository**: <https://github.com/dattalab/keypoint-moseq>
+- **Paper**: Nature Methods (2024) - <https://www.nature.com/articles/s41592-024-02318-2>
 
 For test development questions, refer to:
-- Pytest documentation: https://docs.pytest.org/
+
+- Pytest documentation: <https://docs.pytest.org/>
 - This README for test structure and conventions
 - Example test functions in existing test files
