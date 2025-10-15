@@ -15,14 +15,14 @@ import pytest
 @pytest.mark.integration
 @pytest.mark.notebook
 def test_complete_workflow(
-    temp_project_dir, dlc_config, dlc_videos_dir, reduced_iterations
+    temp_project_dir, dlc_config, dlc_videos_dir, reduced_iterations, kpms
 ):
     """Test the complete keypoint-MoSeq workflow end-to-end
 
     This test runs the full pipeline with reduced iterations suitable for CI/CD.
     Expected duration: ~15 minutes
     """
-    import keypoint_moseq as kpms
+    from tests.conftest import compute_latent_dim, load_path_from_model
 
     project_dir = temp_project_dir
 
@@ -69,7 +69,7 @@ def test_complete_workflow(
     # Step 5: Format data after outlier removal
     data, metadata = kpms.format_data(coordinates, confidences, **config)
     assert "Y" in data, "Formatted data missing Y"
-    assert "conf" in data, "Formatted data missing heading"
+    assert "conf" in data, "Formatted data missing conf"
 
     # Step 6: Skip calibration (not needed for minimal dataset)
     # Manual calibration widget would go here in interactive mode
@@ -81,9 +81,7 @@ def test_complete_workflow(
     assert pca_path.exists(), "PCA model not saved"
 
     # Step 8: Update latent dimensions
-    # Compute latent_dim manually (keypoint_moseq doesn't have find_pcs_to_explain_variance)
-    cumsum = np.cumsum(pca.explained_variance_ratio_)
-    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    latent_dim = compute_latent_dim(pca, variance_threshold=0.9)
     assert latent_dim >= 3, f"Expected at least 3 PCs, got {latent_dim}"
     kpms.update_config(project_dir, latent_dim=int(latent_dim))
     config = kpms.load_config(project_dir)
@@ -120,7 +118,7 @@ def test_complete_workflow(
     )
 
     # Step 13: Verify checkpoint was saved by fit_model
-    checkpoint_path = Path(project_dir) / model_name / "checkpoint.h5"
+    checkpoint_path = load_path_from_model(project_dir, model_name, "checkpoint.h5")
     assert checkpoint_path.exists(), "Checkpoint file not created"
 
     # Step 14: Reindex syllables
@@ -130,7 +128,8 @@ def test_complete_workflow(
     results = kpms.extract_results(
         model, metadata, project_dir, model_name, config
     )
-    assert "syllable" in results, "Results missing syllable labels"
+    example_model = results[metadata[0][0]]
+    assert "syllable" in example_model, "Results missing syllable labels"
 
     results_h5_path = Path(project_dir) / model_name / "results.h5"
     assert results_h5_path.exists(), "Results HDF5 not created"
@@ -141,76 +140,80 @@ def test_complete_workflow(
         assert len(recording_keys) > 0, "No recordings in results"
 
         first_recording = f[recording_keys[0]]
-        assert "syllable" in first_recording, "Results missing syllable dataset"
-        assert "centroid" in first_recording, "Results missing centroid dataset"
-        assert "heading" in first_recording, "Results missing heading dataset"
-        assert (
-            "latent_state" in first_recording
-        ), "Results missing latent_state dataset"
+        # Verify required datasets are present
+        required_datasets = {"syllable", "centroid", "heading", "latent_state"}
+        actual_datasets = set(first_recording.keys())
+        missing = required_datasets - actual_datasets
+        assert not missing, f"Results missing datasets: {missing}"
 
     # Step 16: Save as CSV
+    results_dir = load_path_from_model(project_dir, model_name, "results")
+    csv_files_before = list(results_dir.glob("*.csv")) if results_dir.exists() else []
+
     kpms.save_results_as_csv(results, project_dir, model_name)
-    results_dir = Path(project_dir) / model_name / "results"
     assert results_dir.exists(), "Results CSV directory not created"
-    csv_files = list(results_dir.glob("*.csv"))
-    assert len(csv_files) > 0, "No CSV files created"
+
+    csv_files_after = list(results_dir.glob("*.csv"))
+    assert len(csv_files_after) > len(csv_files_before), "No new CSV files created"
 
     # Step 17: Generate visualizations
+    # Add video_dir to config for visualization functions
+    config["video_dir"] = dlc_videos_dir
+
+    # Generate trajectory plots
     kpms.generate_trajectory_plots(
-        coordinates, results, project_dir, model_name, config
+        coordinates=coordinates,
+        results=results,
+        project_dir=project_dir,
+        model_name=model_name,
+        **config,
     )
-    trajectory_dir = Path(project_dir) / model_name / "trajectory_plots"
+    trajectory_dir = load_path_from_model(project_dir, model_name, "trajectory_plots")
     assert trajectory_dir.exists(), "Trajectory plots directory not created"
 
-    num_syllables = len(
-        np.unique([v for v in results["syllable"].values() if v >= 0])
-    )
+    num_syllables = len(set(example_model["syllable"]))
     assert num_syllables > 0, "No syllables identified"
 
     # Check for trajectory plots
-    pdf_plots = list(trajectory_dir.glob("*.pdf"))
+    pdf_plots = [f for f in trajectory_dir.glob("*.pdf")]
     assert len(pdf_plots) > 0, "No trajectory PDFs created"
 
-    # Grid movies
+    # Generate grid movies
     kpms.generate_grid_movies(
-        coordinates,
-        results,
-        project_dir,
-        model_name,
-        config=config,
-        fps=30,
+        coordinates=coordinates,
+        results=results,
+        project_dir=project_dir,
+        model_name=model_name,
         frame_path=None,
+        **config,
     )
-    grid_movies_dir = Path(project_dir) / model_name / "grid_movies"
+    grid_movies_dir = load_path_from_model(project_dir, model_name, "grid_movies")
     assert grid_movies_dir.exists(), "Grid movies directory not created"
 
-    mp4_files = list(grid_movies_dir.glob("*.mp4"))
+    mp4_files = [f for f in grid_movies_dir.glob("*.mp4")]
     assert len(mp4_files) > 0, "No grid movies created"
 
-    # Similarity dendrogram
-    kpms.generate_similarity_dendrogram(project_dir, model_name, config)
-    dendrogram_pdf = (
-        Path(project_dir) / model_name / "similarity_dendrogram.pdf"
+    # Generate similarity dendrogram
+    kpms.plot_similarity_dendrogram(
+        coordinates=coordinates,
+        results=results,
+        project_dir=project_dir,
+        model_name=model_name,
+        **config,
+    )
+    dendrogram_pdf = load_path_from_model(
+        project_dir, model_name, "similarity_dendrogram.pdf"
     )
     assert dendrogram_pdf.exists(), "Similarity dendrogram not created"
-
-    print("\n✅ Complete workflow test passed!")
-    print(f"   Model: {model_name}")
-    print(f"   Syllables identified: {num_syllables}")
-    print(f"   Trajectory plots: {len(pdf_plots)}")
-    print(f"   Grid movies: {len(mp4_files)}")
-    print(f"   CSV files: {len(csv_files)}")
 
 
 @pytest.mark.quick
 @pytest.mark.notebook
-def test_project_setup(temp_project_dir, dlc_config):
+def test_project_setup(temp_project_dir, dlc_config, kpms):
     """Test project setup and configuration
 
     Expected duration: < 1 second
     """
-    import keypoint_moseq as kpms
-
     project_dir = temp_project_dir
 
     # Test setup
@@ -242,21 +245,18 @@ def test_project_setup(temp_project_dir, dlc_config):
 
     # Test config loading after update
     config = kpms.load_config(project_dir)
-    assert "bodyparts" in config, "Config missing bodyparts"
-    assert "fps" in config, "Config missing fps"
-    assert "use_bodyparts" in config, "Config missing use_bodyparts"
+    expected_keys = {"bodyparts", "fps", "use_bodyparts"}
+    assert expected_keys.issubset(config.keys()), f"Config missing keys: {expected_keys - config.keys()}"
     assert len(config["use_bodyparts"]) == 8, "Wrong number of use_bodyparts"
 
 
 @pytest.mark.quick
 @pytest.mark.notebook
-def test_load_keypoints(temp_project_dir, dlc_config, dlc_videos_dir):
+def test_load_keypoints(temp_project_dir, dlc_config, dlc_videos_dir, kpms):
     """Test keypoint loading from DLC data
 
     Expected duration: < 1 second
     """
-    import keypoint_moseq as kpms
-
     project_dir = temp_project_dir
     kpms.setup_project(
         project_dir, deeplabcut_config=dlc_config, overwrite=True
@@ -283,14 +283,12 @@ def test_load_keypoints(temp_project_dir, dlc_config, dlc_videos_dir):
 @pytest.mark.medium
 @pytest.mark.notebook
 def test_format_and_outlier_detection(
-    temp_project_dir, dlc_config, dlc_videos_dir
+    temp_project_dir, dlc_config, dlc_videos_dir, kpms, update_kwargs
 ):
     """Test data formatting and outlier detection
 
     Expected duration: ~1 minute
     """
-    import keypoint_moseq as kpms
-
     project_dir = temp_project_dir
 
     # Setup
@@ -298,22 +296,8 @@ def test_format_and_outlier_detection(
         project_dir, deeplabcut_config=dlc_config, overwrite=True
     )
 
-    # Update config
-    kpms.update_config(
-        project_dir,
-        use_bodyparts=[
-            "spine4",
-            "spine3",
-            "spine2",
-            "spine1",
-            "head",
-            "nose",
-            "right ear",
-            "left ear",
-        ],
-        anterior_bodyparts=["nose"],
-        posterior_bodyparts=["spine4"],
-    )
+    # Update config using fixture
+    kpms.update_config(project_dir, **update_kwargs)
     config = kpms.load_config(project_dir)
 
     # Load keypoints
@@ -341,12 +325,12 @@ def test_format_and_outlier_detection(
 
 @pytest.mark.medium
 @pytest.mark.notebook
-def test_pca_fitting(temp_project_dir, dlc_config, dlc_videos_dir):
+def test_pca_fitting(temp_project_dir, dlc_config, dlc_videos_dir, kpms, update_kwargs):
     """Test PCA model fitting
 
     Expected duration: ~5 seconds
     """
-    import keypoint_moseq as kpms
+    from tests.conftest import compute_latent_dim
 
     project_dir = temp_project_dir
 
@@ -355,21 +339,8 @@ def test_pca_fitting(temp_project_dir, dlc_config, dlc_videos_dir):
         project_dir, deeplabcut_config=dlc_config, overwrite=True
     )
 
-    kpms.update_config(
-        project_dir,
-        use_bodyparts=[
-            "spine4",
-            "spine3",
-            "spine2",
-            "spine1",
-            "head",
-            "nose",
-            "right ear",
-            "left ear",
-        ],
-        anterior_bodyparts=["nose"],
-        posterior_bodyparts=["spine4"],
-    )
+    # Update config using fixture
+    kpms.update_config(project_dir, **update_kwargs)
     config = kpms.load_config(project_dir)
 
     coordinates, confidences, _ = kpms.load_keypoints(
@@ -385,8 +356,7 @@ def test_pca_fitting(temp_project_dir, dlc_config, dlc_videos_dir):
     pca_path = Path(project_dir) / "pca.p"
     assert pca_path.exists(), "PCA model not saved"
 
-    # Test variance explained - compute manually
-    cumsum = np.cumsum(pca.explained_variance_ratio_)
-    latent_dim = int(np.argmax(cumsum >= 0.9) + 1)
+    # Test variance explained using helper
+    latent_dim = compute_latent_dim(pca, variance_threshold=0.9)
     assert latent_dim >= 3, f"Expected at least 3 PCs, got {latent_dim}"
     assert latent_dim <= 10, f"Too many PCs required: {latent_dim}"

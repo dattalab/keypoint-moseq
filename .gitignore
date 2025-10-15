@@ -3,6 +3,7 @@ testing
 update_pypi.sh
 docs/source/dlc*
 docs/source/demo*
+tests/dlc*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

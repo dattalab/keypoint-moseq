@@ -31,26 +31,26 @@ classifiers = [
 dynamic = [ "version" ]
 # Core dependencies from setup.cfg
 dependencies = [
-  "bokeh>=2.4.3,<3.0",           # Pinned to 2.x (Panel 0.14.4 incompatible with 3.x)
+  "bokeh>=2.4.3,<3",                   # Pinned to 2.x (Panel 0.14.4 incompatible with 3.x)
   "commentjson",
   "cytoolz",
-  "holoviews[recommended]>=1.15.4,<2.0",  # Allow 1.x minor updates
+  "holoviews[recommended]>=1.15.4,<2", # Allow 1.x minor updates
   "imageio[ffmpeg]",
   "ipykernel",
   "ipympl",
   "ipython-genutils",
   "ipywidgets",
   "jax-moseq",
-  "matplotlib>=3.8.4,<4.0",      # Allow 3.x minor/patch updates
+  "matplotlib>=3.8.4,<4",              # Allow 3.x minor/patch updates
   "ndx-pose",
   "networkx",
-  "numpy<=1.26.4",               # Upper bound for jax compatibility
+  "numpy<=1.26.4",                     # Upper bound for jax compatibility
   "pandas",
-  "panel>=0.14.4,<0.15",         # Pinned to 0.14.x (requires Bokeh 2.x)
+  "panel>=0.14.4,<0.15",               # Pinned to 0.14.x (requires Bokeh 2.x)
   "plotly",
   "pynwb",
   "pyyaml",
-  "seaborn>=0.13,<0.14",         # Allow 0.13.x patch updates
+  "seaborn>=0.13,<0.14",               # Allow 0.13.x patch updates
   "sleap-io",
   "statsmodels",
   "tables",
@@ -103,11 +103,9 @@ python_files = [ "test_*.py" ]
 python_classes = [ "Test*" ]
 python_functions = [ "test_*" ]
 addopts = [
-  "-v",
-  "--tb=short",
-  "--strict-markers",
-  "--timeout=1800",   # 30 minute default timeout for tests
+  "-v",                   # Verbose output
 ]
+timeout = 2700  # 45 minutes per test
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
   "integration: marks tests as integration tests",

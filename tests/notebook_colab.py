@@ -13,7 +13,7 @@
 # ---
 
 # %% [markdown]
-# This notebook shows how to setup a new project, train a keypoint-MoSeq model and visualize the resulting syllables. 
+# This notebook shows how to setup a new project, train a keypoint-MoSeq model and visualize the resulting syllables.
 #
 # **Total run time: ~90 min.**
 #
@@ -125,7 +125,16 @@ kpms.update_config(
     video_dir=os.path.join(data_dir, "videos"),
     anterior_bodyparts=["nose"],
     posterior_bodyparts=["spine4"],
-    use_bodyparts=["spine4", "spine3", "spine2", "spine1", "head", "nose", "right ear", "left ear"],
+    use_bodyparts=[
+        "spine4",
+        "spine3",
+        "spine2",
+        "spine1",
+        "head",
+        "nose",
+        "right ear",
+        "left ear",
+    ],
     fps=30,
 )
 
@@ -139,7 +148,9 @@ kpms.update_config(
 keypoint_data_path = os.path.join(
     data_dir, "videos"
 )  # can be a file, a directory, or a list of files
-coordinates, confidences, bodyparts = kpms.load_keypoints(keypoint_data_path, "deeplabcut")
+coordinates, confidences, bodyparts = kpms.load_keypoints(
+    keypoint_data_path, "deeplabcut"
+)
 
 # format data for modeling
 data, metadata = kpms.format_data(coordinates, confidences, **config())
@@ -155,11 +166,7 @@ data, metadata = kpms.format_data(coordinates, confidences, **config())
 kpms.update_config(project_dir, outlier_scale_factor=6.0)
 
 coordinates, confidences = kpms.outlier_removal(
-    coordinates,
-    confidences,
-    project_dir,
-    overwrite=False,
-    **config()
+    coordinates, confidences, project_dir, overwrite=False, **config()
 )
 
 # %% [markdown]
@@ -174,7 +181,7 @@ data, metadata = kpms.format_data(coordinates, confidences, **config())
 # The purpose of calibration is to learn the relationship between keypoint errors and confidence scores. The results are stored using the `slope` and `intercept` parameters in the config.
 #
 # - Run the cell below. A widget should appear with a video frame and the name of a bodypart. A yellow marker denotes the detected location of the bodypart.
-#     
+#
 # - Annotate each frame with the correct location of the labeled bodypart
 #     - Click on the image at the correct location - an "X" should appear.
 #     - Use the prev/next buttons to annotate additional frames.
@@ -196,9 +203,9 @@ kpms.noise_calibration(project_dir, coordinates, confidences, **config())
 #
 # Run the cell below to fit a PCA model to aligned and centered keypoint coordinates.
 #
-# - The model is saved to ``{project_dir}/pca.p`` and can be reloaded using ``kpms.load_pca``. 
-# - Two plots are generated: a cumulative [scree plot](https://en.wikipedia.org/wiki/Scree_plot) and a depiction of each PC, where translucent nodes/edges represent the mean pose and opaque nodes/edges represent a perturbation in the direction of the PC. 
-# - After fitting, edit `latent_dimension` in the config. This determines the dimension of the pose trajectory used to fit keypoint-MoSeq. A good heuristic is the number of dimensions needed to explain 90% of variance, or 10 dimensions - whichever is lower.  
+# - The model is saved to ``{project_dir}/pca.p`` and can be reloaded using ``kpms.load_pca``.
+# - Two plots are generated: a cumulative [scree plot](https://en.wikipedia.org/wiki/Scree_plot) and a depiction of each PC, where translucent nodes/edges represent the mean pose and opaque nodes/edges represent a perturbation in the direction of the PC.
+# - After fitting, edit `latent_dimension` in the config. This determines the dimension of the pose trajectory used to fit keypoint-MoSeq. A good heuristic is the number of dimensions needed to explain 90% of variance, or 10 dimensions - whichever is lower.
 
 # %%
 pca = kpms.fit_pca(**data, **config())
@@ -220,7 +227,7 @@ kpms.update_config(project_dir, latent_dim=4)
 # Fitting a keypoint-MoSeq model involves:
 # 1. **Estimating hyperparameters:** Set model hyperparameters that can be automatically estimated from the input data.
 # 2. **Initialization:** Auto-regressive (AR) parameters and syllable sequences are randomly initialized using pose trajectories from PCA.
-# 3. **Fitting an AR-HMM:** The AR parameters, transition probabilities and syllable sequences are iteratively updated through Gibbs sampling. 
+# 3. **Fitting an AR-HMM:** The AR parameters, transition probabilities and syllable sequences are iteratively updated through Gibbs sampling.
 # 4. **Fitting the full model:** All parameters, including both the AR-HMM as well as centroid, heading, noise-estimates and continuous latent states (i.e. pose trajectories) are iteratively updated through Gibbs sampling. This step is especially useful for noisy data.
 # 5. **Extracting model results:** The learned states of the model are parsed and saved to disk for vizualization and downstream analysis.
 # 6. **[Optional] Applying the trained model:** The learned model parameters can be used to infer a syllable sequences for additional data.
@@ -228,9 +235,9 @@ kpms.update_config(project_dir, latent_dim=4)
 # ## Setting kappa
 #
 # Most users will need to adjust the **kappa** hyperparameter to achieve the desired distribution of syllable durations. For this tutorial we chose kappa values that yielded a median syllable duration of 400ms (12 frames). Most users will need to tune kappa to their particular dataset. Higher values of kappa lead to longer syllables. **You will need to pick two kappas: one for AR-HMM fitting and one for the full model.**
-# - We recommend iteratively updating kappa and refitting the model until the target syllable time-scale is attained.  
+# - We recommend iteratively updating kappa and refitting the model until the target syllable time-scale is attained.
 # - Model fitting can be stopped at any time by interrupting the kernel, and then restarted with a new kappa value.
-# - The full model will generally require a lower value of kappa to yield the same target syllable durations. 
+# - The full model will generally require a lower value of kappa to yield the same target syllable durations.
 # - To adjust the value of kappa in the model, use `kpms.update_hypparams` as shown below. Note that this command only changes kappa in the model dictionary, not the kappa value in the config file. The value in the config is only used during model initialization.
 
 # %% [markdown]
@@ -238,12 +245,14 @@ kpms.update_config(project_dir, latent_dim=4)
 #
 # We provide heuristics for adjusting a subset of model hyperparameters:
 #
-# - **sigmasq_loc:** The expected distance that the centroid will move each frame. If this is set too high, the centroid trajectory will be overly noisy. If it's set too low, the centroid may deviate from the animal's true location during fast locomotion. `estimate_sigmasq_loc` estimates this hyperparameter based on the empirical frame-to-frame movement of the filtered centroid trajectory. 
+# - **sigmasq_loc:** The expected distance that the centroid will move each frame. If this is set too high, the centroid trajectory will be overly noisy. If it's set too low, the centroid may deviate from the animal's true location during fast locomotion. `estimate_sigmasq_loc` estimates this hyperparameter based on the empirical frame-to-frame movement of the filtered centroid trajectory.
 
 # %%
 kpms.update_config(
     project_dir,
-    sigmasq_loc=kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config()["fps"])
+    sigmasq_loc=kpms.estimate_sigmasq_loc(
+        data["Y"], data["mask"], filter_size=config()["fps"]
+    ),
 )
 
 # %% [markdown]
@@ -277,7 +286,7 @@ model, model_name = kpms.fit_model(
 # %% [markdown]
 # ## Fitting the full model
 #
-# The following code fits a full keypoint-MoSeq model using the results of AR-HMM fitting for initialization. If using your own data, you may need to try a few values of kappa at this step. 
+# The following code fits a full keypoint-MoSeq model using the results of AR-HMM fitting for initialization. If using your own data, you may need to try a few values of kappa at this step.
 
 # %%
 # load model checkpoint
@@ -303,11 +312,11 @@ model = kpms.fit_model(
 # %% [markdown]
 # ## Sort syllables by frequency
 #
-# Permute the states and parameters of a saved checkpoint so that syllables are labeled in order of frequency (i.e. so that `0` is the most frequent, `1` is the second most, and so on). 
+# Permute the states and parameters of a saved checkpoint so that syllables are labeled in order of frequency (i.e. so that `0` is the most frequent, `1` is the second most, and so on).
 
 # %%
 # modify a saved checkpoint so syllables are ordered by frequency
-kpms.reindex_syllables_in_checkpoint(project_dir, model_name);
+kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
 
 # %% [markdown]
 # ```{warning}
@@ -338,7 +347,7 @@ results = kpms.extract_results(model, metadata, project_dir, model_name)
 # %% [markdown]
 # ### [Optional] Save results to csv
 #
-# After extracting to an h5 file, the results can also be saved as csv files. A separate file will be created for each recording and saved to `{project_dir}/{model_name}/results/`. 
+# After extracting to an h5 file, the results can also be saved as csv files. A separate file will be created for each recording and saved to `{project_dir}/{model_name}/results/`.
 
 # %%
 # optionally save results as csv
@@ -376,24 +385,30 @@ kpms.save_results_as_csv(results, project_dir, model_name)
 
 # %% [markdown]
 # ## Trajectory plots
-# Generate plots showing the median trajectory of poses associated with each given syllable. 
+# Generate plots showing the median trajectory of poses associated with each given syllable.
 
 # %%
 results = kpms.load_results(project_dir, model_name)
-kpms.generate_trajectory_plots(coordinates, results, project_dir, model_name, **config())
+kpms.generate_trajectory_plots(
+    coordinates, results, project_dir, model_name, **config()
+)
 
 # %% [markdown]
 # ## Grid movies
-# Generate video clips showing examples of each syllable. 
+# Generate video clips showing examples of each syllable.
 #
 # *Note: the code below will only work with 2D data. For 3D data, see the [FAQ](https://keypoint-moseq.readthedocs.io/en/latest/FAQs.html#making-grid-movies-for-3d-data).*
 
 # %%
-kpms.generate_grid_movies(results, project_dir, model_name, coordinates=coordinates, **config());
+kpms.generate_grid_movies(
+    results, project_dir, model_name, coordinates=coordinates, **config()
+)
 
 # %% [markdown]
 # ## Syllable Dendrogram
 # Plot a dendrogram representing distances between each syllable's median trajectory.
 
 # %%
-kpms.plot_similarity_dendrogram(coordinates, results, project_dir, model_name, **config())
+kpms.plot_similarity_dendrogram(
+    coordinates, results, project_dir, model_name, **config()
+)

@@ -38,7 +38,9 @@
 import keypoint_moseq as kpms
 
 project_dir = "path/to/project"  # the full path to the project directory
-model_name = "model_name"  # name of model to analyze (e.g. something like `2023_05_23-15_19_03`)
+model_name = (
+    "model_name"  # name of model to analyze (e.g. something like `2023_05_23-15_19_03`)
+)
 
 # %% [markdown]
 # ## Assign Groups
@@ -55,7 +57,7 @@ kpms.interactive_group_setting(project_dir, model_name)
 # %% [markdown]
 # ## Generate dataframes
 #
-# Generate a pandas dataframe called `moseq_df` that contains syllable labels and kinematic information for each frame across all the recording sessions. 
+# Generate a pandas dataframe called `moseq_df` that contains syllable labels and kinematic information for each frame across all the recording sessions.
 
 # %%
 moseq_df = kpms.compute_moseq_df(project_dir, model_name, smooth_heading=True)
@@ -126,7 +128,7 @@ kpms.plot_syll_stats_with_sem(
     exp_group="b",  # name of the experimental group for statistical testing
     figsize=(8, 4),  # figure size
     groups=stats_df["group"].unique(),  # groups to be plotted
-);
+)
 
 # %% [markdown]
 # ### Transition matrices

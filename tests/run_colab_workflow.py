@@ -2,6 +2,7 @@
 Adapted version of colab notebook for local execution with DLC example data
 This script runs with reduced iterations for testing purposes
 """
+
 import os
 import time
 import tempfile
@@ -37,7 +38,16 @@ kpms.update_config(
     video_dir=videos_dir,
     anterior_bodyparts=["nose"],
     posterior_bodyparts=["spine4"],
-    use_bodyparts=["spine4", "spine3", "spine2", "spine1", "head", "nose", "right ear", "left ear"],
+    use_bodyparts=[
+        "spine4",
+        "spine3",
+        "spine2",
+        "spine1",
+        "head",
+        "nose",
+        "right ear",
+        "left ear",
+    ],
     fps=30,
 )
 print(f"Time: {time.time() - step_start:.2f}s")
@@ -64,7 +74,7 @@ coordinates, confidences = kpms.outlier_removal(
     confidences,
     project_dir,
     overwrite=True,  # Force overwrite for testing
-    **config()
+    **config(),
 )
 print(f"Time: {time.time() - step_start:.2f}s")
 
@@ -79,7 +89,8 @@ print("Skipping noise_calibration() - requires manual interaction")
 print("\n=== Step 8: Fit PCA ===")
 step_start = time.time()
 import matplotlib
-matplotlib.use('Agg')  # Non-interactive backend
+
+matplotlib.use("Agg")  # Non-interactive backend
 pca = kpms.fit_pca(**data, **config())
 kpms.save_pca(pca, project_dir)
 kpms.print_dims_to_explain_variance(pca, 0.9)
@@ -96,7 +107,9 @@ print("\n=== Step 10: Estimate Hyperparameters ===")
 step_start = time.time()
 kpms.update_config(
     project_dir,
-    sigmasq_loc=kpms.estimate_sigmasq_loc(data["Y"], data["mask"], filter_size=config()["fps"])
+    sigmasq_loc=kpms.estimate_sigmasq_loc(
+        data["Y"], data["mask"], filter_size=config()["fps"]
+    ),
 )
 print(f"Time: {time.time() - step_start:.2f}s")
 
@@ -160,32 +173,38 @@ step_start = time.time()
 results = kpms.load_results(project_dir, model_name)
 
 # Trajectory plots
-kpms.generate_trajectory_plots(coordinates, results, project_dir, model_name, **config())
+kpms.generate_trajectory_plots(
+    coordinates, results, project_dir, model_name, **config()
+)
 
 # Grid movies
-kpms.generate_grid_movies(results, project_dir, model_name, coordinates=coordinates, **config())
+kpms.generate_grid_movies(
+    results, project_dir, model_name, coordinates=coordinates, **config()
+)
 
 # Dendrogram
-kpms.plot_similarity_dendrogram(coordinates, results, project_dir, model_name, **config())
+kpms.plot_similarity_dendrogram(
+    coordinates, results, project_dir, model_name, **config()
+)
 print(f"Time: {time.time() - step_start:.2f}s")
 
 # Final summary
 total_time = time.time() - start_time
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print(f"WORKFLOW COMPLETED SUCCESSFULLY")
 print(f"Total time: {total_time:.2f}s ({total_time/60:.2f} minutes)")
 print(f"Project directory: {project_dir}")
 print(f"Model name: {model_name}")
-print("="*60)
+print("=" * 60)
 
 # List generated files
 print("\nGenerated files:")
 for root, dirs, files in os.walk(project_dir):
-    level = root.replace(project_dir, '').count(os.sep)
-    indent = ' ' * 2 * level
-    print(f'{indent}{os.path.basename(root)}/')
-    subindent = ' ' * 2 * (level + 1)
+    level = root.replace(project_dir, "").count(os.sep)
+    indent = " " * 2 * level
+    print(f"{indent}{os.path.basename(root)}/")
+    subindent = " " * 2 * (level + 1)
     for file in files[:10]:  # Limit to first 10 files per directory
-        print(f'{subindent}{file}')
+        print(f"{subindent}{file}")
     if len(files) > 10:
-        print(f'{subindent}... and {len(files) - 10} more files')
+        print(f"{subindent}... and {len(files) - 10} more files")
