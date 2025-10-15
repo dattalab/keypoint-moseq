@@ -16,11 +16,15 @@ from matplotlib import MatplotlibDeprecationWarning
 warnings.filterwarnings("ignore", category=UserWarning, module="keypoint_moseq")
 # Bohek from Numpy 1.24: DeprecationWarning for np.bool8
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="numpy")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="bokeh")
 # From JAX: 0 should be passed as minlength instead of None
 # From JAX: shape requires ndarray or scalar, got None
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="jax")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="jax_moseq")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow_probability")
 # From matplotlib, 'mode' is deprecated, removed in Pillow 13 (2026-10-15)
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="PIL")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="matplotlib")
 # From matplotlib, tostring_rgb is deprecated
 warnings.simplefilter("ignore", MatplotlibDeprecationWarning)
 

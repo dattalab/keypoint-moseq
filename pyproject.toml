@@ -103,9 +103,12 @@ python_files = [ "test_*.py" ]
 python_classes = [ "Test*" ]
 python_functions = [ "test_*" ]
 addopts = [
-  "-v",                   # Verbose output
+  "-v",                        # Verbose output
+  "--cov=keypoint_moseq",
+  "--cov-report=term-missing",
+  "--cov-report=html",
 ]
-timeout = 2700  # 45 minutes per test
+timeout = 2700 # 45 minutes per test
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
   "integration: marks tests as integration tests",
