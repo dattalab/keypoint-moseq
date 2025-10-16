@@ -860,7 +860,7 @@ def save_keypoints(
         bodyparts = [f"bodypart{i}" for i in range(num_keypoints)]
 
     # create column names
-    suffixes = ["x", "y", "z"][:num_keypoints]
+    suffixes = ["x", "y", "z"][:num_dims]
     if confidences is not None:
         suffixes += ["conf"]
     columns = [f"{bp}_{suffix}" for bp in bodyparts for suffix in suffixes]

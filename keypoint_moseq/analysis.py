@@ -16,9 +16,28 @@ from copy import deepcopy
 from glob import glob
 import panel as pn
 from jax_moseq.utils import get_durations, get_frequencies
+from packaging import version
 
 pn.extension("plotly", "tabulator")
 na = np.newaxis
+
+# seaborn version compatibility: evaluate once at import time
+_SEABORN_VERSION = version.parse(sns.__version__)
+_USE_NATIVE_SCALE = _SEABORN_VERSION >= version.parse("0.14")
+
+
+def _get_pointplot_errorbar_kwargs():
+    """Get the appropriate errorbar kwargs for seaborn pointplot based on version.
+
+    seaborn 0.14.0 changed the errorbar API from errorbar=("ci", 68)
+    to using native_scale parameter and errorbar="se".
+    """
+    if _USE_NATIVE_SCALE:
+        # seaborn >= 0.14
+        return {"errorbar": "se", "native_scale": True}
+    else:
+        # seaborn < 0.14
+        return {"errorbar": ("ci", 68)}
 
 
 def get_syllable_names(project_dir, model_name, syllable_ixs):
@@ -1151,20 +1170,17 @@ def plot_syll_stats_with_sem(
 
     # plot each group's stat data separately, computes groupwise SEM, and orders data based on the stat/ordering parameters
     hue = "group" if groups is not None else None
-    # DEPENDENCY: seaborn<0.14 - BoxPlotter.plot() API changed in seaborn 0.14.0
-    # Breaking change: TypeError: BoxPlotter.plot() got an unexpected keyword argument 'color'
-    # This error occurs internally in seaborn's plotting functions (pointplot, boxplot, etc.)
-    # To support seaborn>=0.14, may need to update seaborn-specific keyword arguments
+    errorbar_kwargs = _get_pointplot_errorbar_kwargs()
     ax = sns.pointplot(
         data=stats_df,
         x="syllable",
         y=stat,
         hue=hue,
         order=ordering,
-        errorbar=("ci", 68),
         ax=ax,
         hue_order=groups,
         palette=colors,
+        **errorbar_kwargs,
     )
 
     # where some data has already been plotted to ax

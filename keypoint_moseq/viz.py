@@ -7,6 +7,7 @@ import logging
 import h5py
 import numpy as np
 import plotly
+import matplotlib
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
@@ -22,6 +23,7 @@ from jax_moseq.utils import get_durations, get_frequencies
 
 from plotly.subplots import make_subplots
 import plotly.io as pio
+from packaging import version
 
 pio.renderers.default = "iframe"
 
@@ -30,6 +32,10 @@ plt.rcParams["figure.dpi"] = 100
 
 # suppress warnings from imageio
 logging.getLogger().setLevel(logging.ERROR)
+
+# matplotlib version compatibility: evaluate once at import time
+_MATPLOTLIB_VERSION = version.parse(matplotlib.__version__)
+_USE_BUFFER_RGBA = _MATPLOTLIB_VERSION >= version.parse("3.10")
 
 
 def crop_image(image, centroid, crop_size):
@@ -1428,17 +1434,39 @@ def get_limits(
     return lims.astype(int)
 
 
+def _get_canvas_buffer_method(canvas):
+    """Get the appropriate canvas buffer method based on matplotlib version.
+
+    matplotlib 3.10 removed tostring_rgb() in favor of buffer_rgba().
+    This function returns the correct method to call.
+    """
+    if _USE_BUFFER_RGBA:
+        return canvas.buffer_rgba
+    else:
+        return canvas.tostring_rgb
+
+
+def _reshape_canvas_buffer(raster_flat, height, width):
+    """Reshape and convert canvas buffer to RGB format.
+
+    For matplotlib >= 3.10, drops the alpha channel from RGBA.
+    For matplotlib < 3.10, returns RGB directly.
+    """
+    if _USE_BUFFER_RGBA:
+        # matplotlib >= 3.10: RGBA buffer, drop alpha channel
+        return raster_flat.reshape((height, width, 4))[:, :, :3]
+    else:
+        # matplotlib < 3.10: RGB buffer
+        return raster_flat.reshape((height, width, 3))
+
+
 def rasterize_figure(fig):
     canvas = fig.canvas
     canvas.draw()
     width, height = canvas.get_width_height()
-    # DEPENDENCY: matplotlib<3.10 - tostring_rgb() removed in matplotlib 3.10.0
-    # Breaking change: AttributeError in matplotlib>=3.10
-    # To support matplotlib>=3.10, replace with:
-    #   raster_flat = np.frombuffer(canvas.buffer_rgba(), dtype="uint8")
-    #   raster = raster_flat.reshape((height, width, 4))[:, :, :3]  # Drop alpha channel
-    raster_flat = np.frombuffer(canvas.tostring_rgb(), dtype="uint8")
-    raster = raster_flat.reshape((height, width, 3))
+    buffer_method = _get_canvas_buffer_method(canvas)
+    raster_flat = np.frombuffer(buffer_method(), dtype="uint8")
+    raster = _reshape_canvas_buffer(raster_flat, height, width)
     return raster
 
 
