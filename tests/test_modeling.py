@@ -121,9 +121,7 @@ def test_hyperparameter_estimation(
     project_dir = temp_project_dir
 
     # Setup - use update_kwargs fixture for standard config
-    kpms.setup_project(
-        project_dir, deeplabcut_config=dlc_config, overwrite=True
-    )
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
 
     # Use different anterior/posterior for this test (testing edge case)
     kpms.update_config(
@@ -134,14 +132,12 @@ def test_hyperparameter_estimation(
     )
 
     # Prepare data
-    coordinates, confidences, _ = kpms.load_keypoints(
-        dlc_videos_dir, "deeplabcut"
-    )
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, "deeplabcut")
     config = kpms.load_config(project_dir)
     data, metadata = kpms.format_data(coordinates, confidences, **config)
 
     # Fit PCA
-    pca = kpms.fit_pca(**data, **config)
+    _ = kpms.fit_pca(**data, **config)
 
     # Estimate sigmasq_loc hyperparameter (this is what keypoint_moseq provides)
     sigmasq_loc = kpms.estimate_sigmasq_loc(
@@ -165,9 +161,7 @@ def test_config_update(temp_project_dir, dlc_config, kpms, update_kwargs):
     project_dir = temp_project_dir
 
     # Setup
-    kpms.setup_project(
-        project_dir, deeplabcut_config=dlc_config, overwrite=True
-    )
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
 
     # Update config with required bodyparts first (using standard config)
     kpms.update_config(
@@ -184,6 +178,4 @@ def test_config_update(temp_project_dir, dlc_config, kpms, update_kwargs):
     # Verify update persisted
     config = kpms.load_config(project_dir)
     assert "latent_dim" in config["ar_hypparams"], "Config update not persisted"
-    assert (
-        config["ar_hypparams"]["latent_dim"] == test_value
-    ), "Config value mismatch"
+    assert config["ar_hypparams"]["latent_dim"] == test_value, "Config value mismatch"

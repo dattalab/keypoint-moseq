@@ -11,40 +11,39 @@ Priority functions tested:
 """
 
 import os
-import tempfile
 import warnings
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch, mock_open
-import pytest
-import numpy as np
-import yaml
-import h5py
-import joblib
+from unittest.mock import patch
 
-# Suppress common warnings
-warnings.filterwarnings("ignore", category=UserWarning, message=".*os.fork.*")
-warnings.filterwarnings("ignore", category=UserWarning, message=".*FigureCanvasAgg.*")
+import h5py
+import numpy as np
+import pytest
+import yaml
 
 from keypoint_moseq.io import (
     _build_yaml,
     _get_path,
     _name_from_path,
-    generate_config,
     check_config_validity,
-    load_config,
-    update_config,
-    setup_project,
-    save_pca,
-    load_pca,
-    save_hdf5,
-    load_hdf5,
     extract_results,
-    load_results,
+    generate_config,
     load_checkpoint,
+    load_config,
+    load_hdf5,
+    load_pca,
+    load_results,
     reindex_syllables_in_checkpoint,
-    save_results_as_csv,
+    save_hdf5,
     save_keypoints,
+    save_pca,
+    save_results_as_csv,
+    setup_project,
+    update_config,
 )
+
+# Suppress common warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*os.fork.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*FigureCanvasAgg.*")
 
 
 @pytest.mark.quick
@@ -370,9 +369,7 @@ class TestPCAPersistence:
 
         # Verify loaded
         assert loaded_pca is not None
-        np.testing.assert_array_almost_equal(
-            loaded_pca.components_, pca.components_
-        )
+        np.testing.assert_array_almost_equal(loaded_pca.components_, pca.components_)
 
     def test_save_with_custom_path(self, tmp_path):
         """Test saving PCA with custom path."""
@@ -553,7 +550,9 @@ class TestLoadResults:
         loaded = load_results(project_dir=project_dir, model_name=model_name)
 
         assert "rec1" in loaded
-        np.testing.assert_array_equal(loaded["rec1"]["syllable"], test_data["rec1"]["syllable"])
+        np.testing.assert_array_equal(
+            loaded["rec1"]["syllable"], test_data["rec1"]["syllable"]
+        )
 
 
 @pytest.mark.quick
@@ -565,7 +564,9 @@ class TestSaveResultsAsCsv:
         results = {
             "recording1": {
                 "syllable": np.array([0, 1, 2, 1, 0]),
-                "centroid": np.array([[1.0, 2.0], [1.1, 2.1], [1.2, 2.2], [1.3, 2.3], [1.4, 2.4]]),
+                "centroid": np.array(
+                    [[1.0, 2.0], [1.1, 2.1], [1.2, 2.2], [1.3, 2.3], [1.4, 2.4]]
+                ),
                 "heading": np.array([0.1, 0.2, 0.3, 0.4, 0.5]),
             }
         }
@@ -652,7 +653,9 @@ class TestSaveKeypoints:
         bodyparts = ["bp1", "bp2"]
 
         save_dir = str(tmp_path / "keypoints_conf")
-        save_keypoints(save_dir, coordinates, confidences=confidences, bodyparts=bodyparts)
+        save_keypoints(
+            save_dir, coordinates, confidences=confidences, bodyparts=bodyparts
+        )
 
         df = pd.read_csv(Path(save_dir) / "rec1.csv")
         assert "bp1_conf" in df.columns
@@ -696,8 +699,9 @@ class TestSetupProject:
         # Try to setup again without overwrite
         setup_project(project_dir, overwrite=False)
 
-        captured = capsys.readouterr()
-        assert "already exists" in captured.out
+        captured = capsys.readouterr().out
+        # Prev failed bc capured was "already\nexists"
+        assert "already" in captured and "exists" in captured
 
     def test_existing_directory_with_overwrite(self, tmp_path):
         """Test that existing directory can be overwritten with flag."""
@@ -717,7 +721,7 @@ class TestSetupProject:
             project_dir,
             fps=45,
             bodyparts=["nose", "tail", "back"],
-            verbose=True
+            verbose=True,
         )
 
         config = load_config(project_dir, check_if_valid=False)
@@ -742,7 +746,11 @@ class TestCheckpointOperations:
         data = {"Y": np.random.randn(100, 10)}
         metadata = {"keys": ["rec1"], "bounds": np.array([[0, 100]])}
 
-        save_hdf5(checkpoint_path, {"model_snapshots": {"50": model_data}}, exist_ok=True)
+        save_hdf5(
+            checkpoint_path,
+            {"model_snapshots": {"50": model_data}},
+            exist_ok=True,
+        )
         save_hdf5(checkpoint_path, {"data": data}, exist_ok=True)
         save_hdf5(checkpoint_path, {"metadata": metadata}, exist_ok=True)
 
@@ -767,13 +775,24 @@ class TestCheckpointOperations:
             "states": {"z": np.array([0, 1])},
         }
 
-        save_hdf5(str(checkpoint_path), {"model_snapshots": {"100": model_data}}, exist_ok=True)
-        save_hdf5(str(checkpoint_path), {"data": {"Y": np.random.randn(10, 5)}}, exist_ok=True)
-        save_hdf5(str(checkpoint_path), {"metadata": {"keys": ["rec1"], "bounds": np.array([[0, 10]])}}, exist_ok=True)
+        save_hdf5(
+            str(checkpoint_path),
+            {"model_snapshots": {"100": model_data}},
+            exist_ok=True,
+        )
+        save_hdf5(
+            str(checkpoint_path),
+            {"data": {"Y": np.random.randn(10, 5)}},
+            exist_ok=True,
+        )
+        save_hdf5(
+            str(checkpoint_path),
+            {"metadata": {"keys": ["rec1"], "bounds": np.array([[0, 10]])}},
+            exist_ok=True,
+        )
 
         model, data, metadata, iteration = load_checkpoint(
-            project_dir=project_dir,
-            model_name=model_name
+            project_dir=project_dir, model_name=model_name
         )
 
         assert iteration == 100
@@ -788,10 +807,22 @@ class TestCheckpointOperations:
                 "params": {"value": it},
                 "states": {"z": np.array([it])},
             }
-            save_hdf5(checkpoint_path, {f"model_snapshots/{it}": model_data}, exist_ok=True)
+            save_hdf5(
+                checkpoint_path,
+                {f"model_snapshots/{it}": model_data},
+                exist_ok=True,
+            )
 
-        save_hdf5(checkpoint_path, {"data": {"Y": np.random.randn(10, 5)}}, exist_ok=True)
-        save_hdf5(checkpoint_path, {"metadata": {"keys": ["rec1"], "bounds": np.array([[0, 10]])}}, exist_ok=True)
+        save_hdf5(
+            checkpoint_path,
+            {"data": {"Y": np.random.randn(10, 5)}},
+            exist_ok=True,
+        )
+        save_hdf5(
+            checkpoint_path,
+            {"metadata": {"keys": ["rec1"], "bounds": np.array([[0, 10]])}},
+            exist_ok=True,
+        )
 
         # Load iteration 20
         model, _, _, iteration = load_checkpoint(path=checkpoint_path, iteration=20)
@@ -814,17 +845,24 @@ class TestCheckpointOperations:
             },
             "states": {
                 "z": np.array([0, 1, 2, 3, 4, 0, 1]),
-            }
+            },
         }
 
-        save_hdf5(checkpoint_path, {"model_snapshots": {"50": model_data}}, exist_ok=True)
-        save_hdf5(checkpoint_path, {"data": {"mask": np.ones(7, dtype=bool)}}, exist_ok=True)
+        save_hdf5(
+            checkpoint_path,
+            {"model_snapshots": {"50": model_data}},
+            exist_ok=True,
+        )
+        save_hdf5(
+            checkpoint_path,
+            {"data": {"mask": np.ones(7, dtype=bool)}},
+            exist_ok=True,
+        )
 
         # Reindex with custom index (reverse order)
         custom_index = np.array([4, 3, 2, 1, 0])
         returned_index = reindex_syllables_in_checkpoint(
-            path=checkpoint_path,
-            index=custom_index
+            path=checkpoint_path, index=custom_index
         )
 
         np.testing.assert_array_equal(returned_index, custom_index)
@@ -834,8 +872,7 @@ class TestCheckpointOperations:
 
         # betas should be reordered
         np.testing.assert_array_equal(
-            reindexed_model["params"]["betas"],
-            np.array([4, 3, 2, 1, 0])
+            reindexed_model["params"]["betas"], np.array([4, 3, 2, 1, 0])
         )
 
 

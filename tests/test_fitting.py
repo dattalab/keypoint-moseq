@@ -16,30 +16,29 @@ Functions tested:
 import os
 import tempfile
 import warnings
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
-import pytest
-import numpy as np
-import jax
-import jax.numpy as jnp
+from unittest.mock import Mock, patch
+
 import h5py
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+from keypoint_moseq.fitting import (
+    StopResampling,
+    _set_parallel_flag,
+    _wrapped_resample,
+    apply_model,
+    estimate_syllable_marginals,
+    expected_marginal_likelihoods,
+    fit_model,
+    init_model,
+    update_hypparams,
+)
 
 # Suppress JAX/matplotlib warnings for clean test output
 warnings.filterwarnings("ignore", category=UserWarning, message=".*os.fork.*")
 warnings.filterwarnings("ignore", category=UserWarning, message=".*FigureCanvasAgg.*")
 warnings.filterwarnings("ignore", category=UserWarning, message=".*NVIDIA GPU.*")
-
-from keypoint_moseq.fitting import (
-    _wrapped_resample,
-    _set_parallel_flag,
-    init_model,
-    fit_model,
-    apply_model,
-    estimate_syllable_marginals,
-    update_hypparams,
-    expected_marginal_likelihoods,
-    StopResampling,
-)
 
 
 @pytest.mark.quick
@@ -169,14 +168,14 @@ class TestInitModel:
         trans_hypparams = {"num_states": 50}
 
         with patch("keypoint_moseq.fitting.allo_keypoint_slds.init_model") as mock_init:
-            mock_init.return_value = {"model": "allo"}
+            mock_init.return_value = {"model": "allow"}
             result = init_model(
                 data,
                 location_aware=True,
                 trans_hypparams=trans_hypparams,
             )
 
-        assert result == {"model": "allo"}
+        assert result == {"model": "allow"}
         mock_init.assert_called_once()
 
     def test_location_aware_allo_hypparams(self):
@@ -185,8 +184,8 @@ class TestInitModel:
         trans_hypparams = {"num_states": 30}
 
         with patch("keypoint_moseq.fitting.allo_keypoint_slds.init_model") as mock_init:
-            mock_init.return_value = {"model": "allo"}
-            result = init_model(
+            mock_init.return_value = {"model": "allow"}
+            _ = init_model(
                 data,
                 location_aware=True,
                 trans_hypparams=trans_hypparams,
@@ -271,7 +270,7 @@ class TestUpdateHypparams:
         }
 
         with pytest.warns(UserWarning, match="not found"):
-            result = update_hypparams(model, unknown_param=999)
+            _ = update_hypparams(model, unknown_param=999)
 
     def test_missing_hypparams_raises(self):
         """Test error when model has no hypparams."""
@@ -298,7 +297,9 @@ class TestFitModelParameters:
             with patch("keypoint_moseq.fitting._wrapped_resample") as mock_resample:
                 mock_resample.return_value = model
                 with patch("keypoint_moseq.fitting.save_hdf5"):
-                    with patch("keypoint_moseq.fitting.device_put_as_scalar") as mock_device:
+                    with patch(
+                        "keypoint_moseq.fitting.device_put_as_scalar"
+                    ) as mock_device:
                         mock_device.return_value = model
                         _, returned_name = fit_model(
                             model,
@@ -322,7 +323,9 @@ class TestFitModelParameters:
             with patch("keypoint_moseq.fitting._wrapped_resample") as mock_resample:
                 mock_resample.return_value = model
                 with patch("keypoint_moseq.fitting.save_hdf5") as mock_save:
-                    with patch("keypoint_moseq.fitting.device_put_as_scalar") as mock_device:
+                    with patch(
+                        "keypoint_moseq.fitting.device_put_as_scalar"
+                    ) as mock_device:
                         mock_device.return_value = model
                         result, _ = fit_model(
                             model,
@@ -346,7 +349,9 @@ class TestFitModelParameters:
             with pytest.warns(UserWarning, match="Progress plots"):
                 with patch("keypoint_moseq.fitting._wrapped_resample") as mock_resample:
                     mock_resample.return_value = model
-                    with patch("keypoint_moseq.fitting.device_put_as_scalar") as mock_device:
+                    with patch(
+                        "keypoint_moseq.fitting.device_put_as_scalar"
+                    ) as mock_device:
                         mock_device.return_value = model
                         fit_model(
                             model,
@@ -367,7 +372,9 @@ class TestFitModelParameters:
 
             with patch("keypoint_moseq.fitting._wrapped_resample") as mock_resample:
                 mock_resample.return_value = model
-                with patch("keypoint_moseq.fitting.device_put_as_scalar") as mock_device:
+                with patch(
+                    "keypoint_moseq.fitting.device_put_as_scalar"
+                ) as mock_device:
                     mock_device.return_value = model
                     fit_model(
                         model,
@@ -384,15 +391,19 @@ class TestFitModelParameters:
             assert call_kwargs["ar_only"] is True
 
     def test_location_aware_uses_allo_resample(self):
-        """Test location_aware mode uses allo resample function."""
+        """Test location_aware mode uses allow resample function."""
         with tempfile.TemporaryDirectory() as tmpdir:
             model = self._create_mock_model()
             data = self._create_mock_data()
             metadata = (["rec1"], np.array([[0, 100]]))
 
-            with patch("keypoint_moseq.fitting.allo_keypoint_slds.resample_model") as mock_allo:
+            with patch(
+                "keypoint_moseq.fitting.allo_keypoint_slds.resample_model"
+            ) as mock_allo:
                 mock_allo.return_value = model
-                with patch("keypoint_moseq.fitting.device_put_as_scalar") as mock_device:
+                with patch(
+                    "keypoint_moseq.fitting.device_put_as_scalar"
+                ) as mock_device:
                     mock_device.return_value = model
                     fit_model(
                         model,
@@ -456,7 +467,9 @@ class TestApplyModelBasics:
                 mock_resample.return_value = model
                 with patch("keypoint_moseq.fitting.init_model") as mock_init:
                     mock_init.return_value = model
-                    with patch("keypoint_moseq.fitting.extract_results") as mock_extract:
+                    with patch(
+                        "keypoint_moseq.fitting.extract_results"
+                    ) as mock_extract:
                         mock_extract.return_value = {"rec1": {}}
                         with patch("jax.device_put") as mock_device:
                             mock_device.return_value = data
@@ -507,7 +520,9 @@ class TestApplyModelBasics:
         data = self._create_mock_data()
         metadata = (["rec1"], np.array([[0, 100]]))
 
-        with patch("keypoint_moseq.fitting.allo_keypoint_slds.resample_model") as mock_allo:
+        with patch(
+            "keypoint_moseq.fitting.allo_keypoint_slds.resample_model"
+        ) as mock_allo:
             mock_allo.return_value = model
             with patch("keypoint_moseq.fitting.init_model") as mock_init:
                 mock_init.return_value = model
@@ -559,7 +574,9 @@ class TestEstimateSyllableMarginals:
             mock_resample.return_value = model
             with patch("keypoint_moseq.fitting.init_model") as mock_init:
                 mock_init.return_value = model
-                with patch("keypoint_moseq.fitting.stateseq_marginals") as mock_marginals:
+                with patch(
+                    "keypoint_moseq.fitting.stateseq_marginals"
+                ) as mock_marginals:
                     # Return marginals for 10 states
                     mock_marginals.return_value = jnp.ones((100, 10))
                     with patch("keypoint_moseq.fitting.get_nlags") as mock_nlags:
@@ -591,7 +608,9 @@ class TestEstimateSyllableMarginals:
             mock_resample.return_value = model
             with patch("keypoint_moseq.fitting.init_model") as mock_init:
                 mock_init.return_value = model
-                with patch("keypoint_moseq.fitting.stateseq_marginals") as mock_marginals:
+                with patch(
+                    "keypoint_moseq.fitting.stateseq_marginals"
+                ) as mock_marginals:
                     mock_marginals.return_value = jnp.ones((100, 10))
                     with patch("keypoint_moseq.fitting.get_nlags") as mock_nlags:
                         mock_nlags.return_value = 3
@@ -625,11 +644,15 @@ class TestEstimateSyllableMarginals:
         data = self._create_mock_data()
         metadata = (["rec1"], np.array([[0, 100]]))
 
-        with patch("keypoint_moseq.fitting.allo_keypoint_slds.resample_model") as mock_allo:
+        with patch(
+            "keypoint_moseq.fitting.allo_keypoint_slds.resample_model"
+        ) as mock_allo:
             mock_allo.return_value = model
             with patch("keypoint_moseq.fitting.init_model") as mock_init:
                 mock_init.return_value = model
-                with patch("keypoint_moseq.fitting.stateseq_marginals") as mock_marginals:
+                with patch(
+                    "keypoint_moseq.fitting.stateseq_marginals"
+                ) as mock_marginals:
                     mock_marginals.return_value = jnp.ones((100, 10))
                     with patch("keypoint_moseq.fitting.get_nlags") as mock_nlags:
                         mock_nlags.return_value = 3
@@ -683,7 +706,9 @@ class TestExpectedMarginalLikelihoods:
 
             with patch("keypoint_moseq.fitting.load_checkpoint") as mock_load:
                 mock_load.return_value = self._create_mock_checkpoint_data()
-                with patch("keypoint_moseq.fitting.marginal_log_likelihood") as mock_mll:
+                with patch(
+                    "keypoint_moseq.fitting.marginal_log_likelihood"
+                ) as mock_mll:
                     mock_mll.return_value = jnp.array(-100.0)
                     scores, std_errors = expected_marginal_likelihoods(
                         checkpoint_paths=checkpoint_paths
@@ -705,7 +730,9 @@ class TestExpectedMarginalLikelihoods:
 
             with patch("keypoint_moseq.fitting.load_checkpoint") as mock_load:
                 mock_load.return_value = self._create_mock_checkpoint_data()
-                with patch("keypoint_moseq.fitting.marginal_log_likelihood") as mock_mll:
+                with patch(
+                    "keypoint_moseq.fitting.marginal_log_likelihood"
+                ) as mock_mll:
                     mock_mll.return_value = jnp.array(-100.0)
                     scores, std_errors = expected_marginal_likelihoods(
                         project_dir=tmpdir,

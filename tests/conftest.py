@@ -21,7 +21,9 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="bokeh")
 # From JAX: shape requires ndarray or scalar, got None
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="jax")
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="jax_moseq")
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="tensorflow_probability")
+warnings.filterwarnings(
+    "ignore", category=DeprecationWarning, module="tensorflow_probability"
+)
 # From matplotlib, 'mode' is deprecated, removed in Pillow 13 (2026-10-15)
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="PIL")
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="matplotlib")
@@ -125,7 +127,9 @@ def dlc_example_project(test_data_cache):
         unzip_file(cached_zip, test_data_cache)
 
         if cached_extract.exists():
-            print(f"Successfully downloaded and extracted DLC project to {cached_extract}")
+            print(
+                f"Successfully downloaded and extracted DLC project to {cached_extract}"
+            )
             return str(cached_extract)
         else:
             pytest.skip(f"Downloaded but extraction failed - expected {cached_extract}")
@@ -201,9 +205,7 @@ def download_google_drive_file(file_id, output_path, use_cache=True):
             print(f"Using cached file: {output_path}")
             return output_path
         else:
-            print(
-                f"File exists but use_cache=False, re-downloading: {output_path}"
-            )
+            print(f"File exists but use_cache=False, re-downloading: {output_path}")
 
     # Create parent directory if needed
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -342,18 +344,14 @@ def prepared_model(
     project_dir = module_project_dir
 
     # Step 1: Setup project
-    kpms.setup_project(
-        project_dir, deeplabcut_config=dlc_config, overwrite=True
-    )
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
 
     # Step 2: Update config with standard bodyparts
     kpms.update_config(project_dir, **update_kwargs)
     config = kpms.load_config(project_dir)
 
     # Step 3: Load keypoints
-    coordinates, confidences, _ = kpms.load_keypoints(
-        dlc_videos_dir, "deeplabcut"
-    )
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, "deeplabcut")
 
     # Step 4: Format data
     data, metadata = kpms.format_data(coordinates, confidences, **config)
@@ -412,9 +410,7 @@ def fitted_model(
     project_dir = module_project_dir
 
     # Step 1: Setup project
-    kpms.setup_project(
-        project_dir, deeplabcut_config=dlc_config, overwrite=True
-    )
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
 
     # Step 2: Update config
     kpms.update_config(
@@ -435,9 +431,7 @@ def fitted_model(
     config = kpms.load_config(project_dir)
 
     # Step 3: Load keypoints
-    coordinates, confidences, _ = kpms.load_keypoints(
-        dlc_videos_dir, "deeplabcut"
-    )
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, "deeplabcut")
 
     # Step 4: Format data
     data, metadata = kpms.format_data(coordinates, confidences, **config)
@@ -515,9 +509,7 @@ def compute_latent_dim(pca, variance_threshold=0.9):
     return latent_dim
 
 
-def load_path_from_model(
-    project_dir, model_name, filename, delete_existing=False
-):
+def load_path_from_model(project_dir, model_name, filename, delete_existing=False):
     """Construct standardized path to model output file
 
     Args:

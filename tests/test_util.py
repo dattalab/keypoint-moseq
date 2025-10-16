@@ -4,37 +4,35 @@ This module tests utility functions for data manipulation, validation,
 and processing in the keypoint-moseq package.
 """
 
-import pytest
-import numpy as np
-import tempfile
-import os
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 import warnings
+from unittest.mock import MagicMock, Mock, patch
+
+import numpy as np
+import pytest
 
 from keypoint_moseq.util import (
-    pad_along_axis,
-    filter_angle,
-    get_edges,
-    reindex_by_bodyparts,
-    interpolate_along_axis,
-    interpolate_keypoints,
-    filtered_derivative,
-    permute_cyclic,
-    downsample_timepoints,
-    _get_percent_padding,
     _find_optimal_segment_length,
-    get_distance_to_medoid,
+    _get_percent_padding,
+    apply_syllable_mapping,
+    check_nan_proportions,
+    check_video_paths,
+    downsample_timepoints,
+    estimate_sigmasq_loc,
+    filter_angle,
+    filtered_derivative,
+    find_matching_videos,
     find_medoid_distance_outliers,
     generate_syllable_mapping,
-    apply_syllable_mapping,
-    check_video_paths,
-    check_nan_proportions,
-    list_files_with_exts,
-    find_matching_videos,
+    get_distance_to_medoid,
+    get_edges,
     get_syllable_instances,
+    interpolate_along_axis,
+    interpolate_keypoints,
+    list_files_with_exts,
+    pad_along_axis,
+    permute_cyclic,
     print_dims_to_explain_variance,
-    estimate_sigmasq_loc,
+    reindex_by_bodyparts,
 )
 
 
@@ -74,7 +72,7 @@ class TestFilterAngle:
         """Test median filtering of angles."""
         # Create angles with some noise
         np.random.seed(42)
-        angles = np.linspace(0, 2*np.pi, 100)
+        angles = np.linspace(0, 2 * np.pi, 100)
         noisy_angles = angles + np.random.randn(100) * 0.5
 
         result = filter_angle(noisy_angles, size=9, axis=0, method="median")
@@ -84,7 +82,7 @@ class TestFilterAngle:
 
     def test_gaussian_filter(self):
         """Test Gaussian filtering of angles."""
-        angles = np.linspace(0, 2*np.pi, 100)
+        angles = np.linspace(0, 2 * np.pi, 100)
         result = filter_angle(angles, size=5, axis=0, method="gaussian")
         assert result.shape == angles.shape
 
@@ -108,7 +106,11 @@ class TestGetEdges:
     def test_edges_from_names(self):
         """Test edge list from bodypart names."""
         use_bodyparts = ["nose", "left_ear", "right_ear", "neck"]
-        skeleton = [("nose", "left_ear"), ("nose", "right_ear"), ("nose", "neck")]
+        skeleton = [
+            ("nose", "left_ear"),
+            ("nose", "right_ear"),
+            ("nose", "neck"),
+        ]
         edges = get_edges(use_bodyparts, skeleton)
         assert len(edges) == 3
         assert [0, 1] in edges
@@ -118,7 +120,10 @@ class TestGetEdges:
     def test_edges_partial_skeleton(self):
         """Test edges when some bodyparts not in use_bodyparts."""
         use_bodyparts = ["nose", "left_ear"]
-        skeleton = [("nose", "left_ear"), ("nose", "tail")]  # tail not in use_bodyparts
+        skeleton = [
+            ("nose", "left_ear"),
+            ("nose", "tail"),
+        ]  # tail not in use_bodyparts
         edges = get_edges(use_bodyparts, skeleton)
         assert len(edges) == 1
         assert [0, 1] in edges
@@ -148,7 +153,7 @@ class TestReindexByBodyparts:
         """Test reindexing a dictionary of arrays."""
         data = {
             "rec1": np.arange(8).reshape(2, 4),
-            "rec2": np.arange(8, 16).reshape(2, 4)
+            "rec2": np.arange(8, 16).reshape(2, 4),
         }
         bodyparts = ["a", "b", "c", "d"]
         use_bodyparts = ["c", "a"]
@@ -190,7 +195,9 @@ class TestInterpolateAlongAxis:
         fp = np.array([]).reshape(0, 2)
         x = np.array([0, 1, 2])
 
-        with pytest.raises(AssertionError, match="cannot interpolate without datapoints"):
+        with pytest.raises(
+            AssertionError, match="cannot interpolate without datapoints"
+        ):
             interpolate_along_axis(x, xp, fp, axis=0)
 
 
@@ -207,16 +214,20 @@ class TestInterpolateKeypoints:
 
     def test_single_outlier(self):
         """Test interpolation of single outlier frame."""
-        coordinates = np.array([
-            [[0, 0], [1, 1]],
-            [[5, 5], [6, 6]],  # Outlier frame
-            [[2, 2], [3, 3]],
-        ])
-        outliers = np.array([
-            [False, False],
-            [True, True],
-            [False, False],
-        ])
+        coordinates = np.array(
+            [
+                [[0, 0], [1, 1]],
+                [[5, 5], [6, 6]],  # Outlier frame
+                [[2, 2], [3, 3]],
+            ]
+        )
+        outliers = np.array(
+            [
+                [False, False],
+                [True, True],
+                [False, False],
+            ]
+        )
 
         result = interpolate_keypoints(coordinates, outliers)
         # Frame 1 should be interpolated between frames 0 and 2
@@ -305,7 +316,7 @@ class TestDownsampleTimepoints:
         """Test downsampling a dictionary."""
         data = {
             "rec1": np.arange(10).reshape(10, 1),
-            "rec2": np.arange(20).reshape(20, 1)
+            "rec2": np.arange(20).reshape(20, 1),
         }
         downsampled, indexes = downsample_timepoints(data, downsample_rate=3)
 
@@ -355,7 +366,7 @@ class TestFindOptimalSegmentLength:
             sequence_lengths,
             max_seg_length=200,
             max_percent_padding=50,
-            min_fragment_length=4
+            min_fragment_length=4,
         )
         assert seg_length <= 200
         assert seg_length >= 5  # Must be > min_fragment_length
@@ -367,7 +378,7 @@ class TestFindOptimalSegmentLength:
             sequence_lengths,
             max_seg_length=100,
             max_percent_padding=50,
-            min_fragment_length=10
+            min_fragment_length=10,
         )
         # All remainders should be >= 10 or == 0
         remainders = sequence_lengths % seg_length
@@ -377,10 +388,7 @@ class TestFindOptimalSegmentLength:
         """Test that sequences shorter than min_fragment_length raise."""
         sequence_lengths = np.array([10, 3, 8])  # 3 is too short
         with pytest.raises(AssertionError, match="at least"):
-            _find_optimal_segment_length(
-                sequence_lengths,
-                min_fragment_length=4
-            )
+            _find_optimal_segment_length(sequence_lengths, min_fragment_length=4)
 
 
 class TestGetDistanceToMedoid:
@@ -389,10 +397,12 @@ class TestGetDistanceToMedoid:
     def test_2d_coordinates(self):
         """Test distance calculation with 2D coordinates."""
         # Simple case: 3 keypoints arranged in line
-        coordinates = np.array([
-            [[0, 0], [1, 0], [2, 0]],  # Frame 1
-            [[0, 1], [1, 1], [2, 1]],  # Frame 2
-        ])
+        coordinates = np.array(
+            [
+                [[0, 0], [1, 0], [2, 0]],  # Frame 1
+                [[0, 1], [1, 1], [2, 1]],  # Frame 2
+            ]
+        )
         distances = get_distance_to_medoid(coordinates)
 
         assert distances.shape == (2, 3)
@@ -401,9 +411,11 @@ class TestGetDistanceToMedoid:
 
     def test_3d_coordinates(self):
         """Test distance calculation with 3D coordinates."""
-        coordinates = np.array([
-            [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
-        ])
+        coordinates = np.array(
+            [
+                [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
+            ]
+        )
         distances = get_distance_to_medoid(coordinates)
         assert distances.shape == (1, 3)
         # Medoid is (1, 1, 1), distances are sqrt(3), 0, sqrt(3)
@@ -436,16 +448,20 @@ class TestFindMedoidDistanceOutliers:
 
         result = find_medoid_distance_outliers(coordinates, outlier_scale_factor=3.0)
         # Should detect at least the injected outliers
-        assert result["mask"][10, 0] == True
-        assert result["mask"][20, 1] == True
+        assert result["mask"][10, 0]
+        assert result["mask"][20, 1]
 
     def test_scale_factor_effect(self):
         """Test that higher scale factor yields fewer outliers."""
         np.random.seed(42)
         coordinates = np.random.randn(100, 4, 2)
 
-        result_low = find_medoid_distance_outliers(coordinates, outlier_scale_factor=2.0)
-        result_high = find_medoid_distance_outliers(coordinates, outlier_scale_factor=10.0)
+        result_low = find_medoid_distance_outliers(
+            coordinates, outlier_scale_factor=2.0
+        )
+        result_high = find_medoid_distance_outliers(
+            coordinates, outlier_scale_factor=10.0
+        )
 
         # Higher scale factor should have fewer outliers
         assert np.sum(result_high["mask"]) < np.sum(result_low["mask"])
@@ -591,7 +607,9 @@ class TestFindMatchingVideos:
         (tmp_path / "video2.avi").write_text("fake video")
 
         keys = ["video1", "video2"]
-        result = find_matching_videos(keys, str(tmp_path), as_dict=True, recursive=False)
+        result = find_matching_videos(
+            keys, str(tmp_path), as_dict=True, recursive=False
+        )
 
         assert "video1" in result
         assert "video2" in result
@@ -602,7 +620,9 @@ class TestFindMatchingVideos:
         (tmp_path / "vid.mp4").write_text("fake")
 
         keys = ["vid_2024_session1"]
-        result = find_matching_videos(keys, str(tmp_path), as_dict=False, recursive=False)
+        result = find_matching_videos(
+            keys, str(tmp_path), as_dict=False, recursive=False
+        )
 
         assert len(result) == 1
         assert "vid.mp4" in result[0]
@@ -613,7 +633,9 @@ class TestFindMatchingVideos:
         (tmp_path / "video_long.mp4").write_text("fake")
 
         keys = ["video_long_session"]
-        result = find_matching_videos(keys, str(tmp_path), as_dict=False, recursive=False)
+        result = find_matching_videos(
+            keys, str(tmp_path), as_dict=False, recursive=False
+        )
 
         # Should match "video_long" not "video"
         assert "video_long.mp4" in result[0]
@@ -717,7 +739,9 @@ class TestGetSyllableInstances:
     def test_basic_instances(self):
         """Test extraction of syllable instances."""
         stateseqs = {
-            "rec1": np.array([0, 0, 0, 1, 1, 1, 2, 2, 2, 0, 0, 0, 0, 0] * 10),  # Longer sequence
+            "rec1": np.array(
+                [0, 0, 0, 1, 1, 1, 2, 2, 2, 0, 0, 0, 0, 0] * 10
+            ),  # Longer sequence
         }
 
         instances = get_syllable_instances(
@@ -726,7 +750,7 @@ class TestGetSyllableInstances:
             pre=5,
             post=70,
             min_frequency=0,
-            min_instances=0
+            min_instances=0,
         )
 
         # Should find instances of syllables (with enough boundary space)
@@ -741,7 +765,9 @@ class TestGetSyllableInstances:
     def test_min_duration_filter(self):
         """Test filtering by minimum duration."""
         stateseqs = {
-            "rec1": np.array([5, 5, 5, 5] + [0, 0, 1, 1, 1, 0] * 10 + [5, 5, 5, 5] * 20),  # Padding + repeats
+            "rec1": np.array(
+                [5, 5, 5, 5] + [0, 0, 1, 1, 1, 0] * 10 + [5, 5, 5, 5] * 20
+            ),  # Padding + repeats
         }
 
         instances = get_syllable_instances(
@@ -787,7 +813,7 @@ class TestPrintDimsToExplainVariance:
         captured = capsys.readouterr()
 
         # Should find that some components explain >=80%
-        # The function uses f">={f*100}% of variance exlained by..." (typo "exlained")
+        # The function uses f">={f*100}% of variance explained by..." (typo "explained")
         assert ">=80" in captured.out or "components" in captured.out
 
     def test_insufficient_variance(self, capsys):

@@ -27,9 +27,7 @@ def test_complete_workflow(
     project_dir = temp_project_dir
 
     # Step 1: Setup project
-    kpms.setup_project(
-        project_dir, deeplabcut_config=dlc_config, overwrite=True
-    )
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
     assert Path(project_dir, "config.yml").exists(), "Config file not created"
 
     # Step 2: Update config
@@ -125,9 +123,7 @@ def test_complete_workflow(
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
 
     # Step 15: Extract results
-    results = kpms.extract_results(
-        model, metadata, project_dir, model_name, config
-    )
+    results = kpms.extract_results(model, metadata, project_dir, model_name, config)
     example_model = results[metadata[0][0]]
     assert "syllable" in example_model, "Results missing syllable labels"
 
@@ -217,9 +213,7 @@ def test_project_setup(temp_project_dir, dlc_config, kpms):
     project_dir = temp_project_dir
 
     # Test setup
-    kpms.setup_project(
-        project_dir, deeplabcut_config=dlc_config, overwrite=True
-    )
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
 
     # Verify files created
     config_path = Path(project_dir, "config.yml")
@@ -246,7 +240,9 @@ def test_project_setup(temp_project_dir, dlc_config, kpms):
     # Test config loading after update
     config = kpms.load_config(project_dir)
     expected_keys = {"bodyparts", "fps", "use_bodyparts"}
-    assert expected_keys.issubset(config.keys()), f"Config missing keys: {expected_keys - config.keys()}"
+    assert expected_keys.issubset(
+        config.keys()
+    ), f"Config missing keys: {expected_keys - config.keys()}"
     assert len(config["use_bodyparts"]) == 8, "Wrong number of use_bodyparts"
 
 
@@ -258,9 +254,7 @@ def test_load_keypoints(temp_project_dir, dlc_config, dlc_videos_dir, kpms):
     Expected duration: < 1 second
     """
     project_dir = temp_project_dir
-    kpms.setup_project(
-        project_dir, deeplabcut_config=dlc_config, overwrite=True
-    )
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
 
     # Load keypoints from DLC videos directory (not project_dir)
     coordinates, confidences, bodyparts = kpms.load_keypoints(
@@ -292,9 +286,7 @@ def test_format_and_outlier_detection(
     project_dir = temp_project_dir
 
     # Setup
-    kpms.setup_project(
-        project_dir, deeplabcut_config=dlc_config, overwrite=True
-    )
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
 
     # Update config using fixture
     kpms.update_config(project_dir, **update_kwargs)
@@ -335,17 +327,13 @@ def test_pca_fitting(temp_project_dir, dlc_config, dlc_videos_dir, kpms, update_
     project_dir = temp_project_dir
 
     # Setup and load data
-    kpms.setup_project(
-        project_dir, deeplabcut_config=dlc_config, overwrite=True
-    )
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config, overwrite=True)
 
     # Update config using fixture
     kpms.update_config(project_dir, **update_kwargs)
     config = kpms.load_config(project_dir)
 
-    coordinates, confidences, _ = kpms.load_keypoints(
-        dlc_videos_dir, "deeplabcut"
-    )
+    coordinates, confidences, _ = kpms.load_keypoints(dlc_videos_dir, "deeplabcut")
     data, metadata = kpms.format_data(coordinates, confidences, **config)
 
     # Fit PCA

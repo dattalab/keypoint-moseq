@@ -28,22 +28,18 @@ def test_result_extraction(fitted_model, kpms):
     config = fitted_model["config"]
 
     # Verify checkpoint exists
-    checkpoint_path = load_path_from_model(
-        project_dir, model_name, "checkpoint.h5"
-    )
+    checkpoint_path = load_path_from_model(project_dir, model_name, "checkpoint.h5")
     assert checkpoint_path.exists(), "Checkpoint file not created"
 
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
 
     # Delete results.h5 if it exists (from previous test using same fixture)
-    results_h5_path = load_path_from_model(
+    _ = load_path_from_model(
         project_dir, model_name, "results.h5", delete_existing=True
     )
 
     # Extract results
-    results = kpms.extract_results(
-        model, metadata, project_dir, model_name, config
-    )
+    results = kpms.extract_results(model, metadata, project_dir, model_name, config)
 
     # Verify results structure - results is dict[recording_name -> dict[key -> data]]
     assert len(results) > 0, "No recordings in results"
@@ -80,21 +76,17 @@ def test_csv_export(fitted_model, kpms):
     config = fitted_model["config"]
 
     # Verify checkpoint exists
-    checkpoint_path = load_path_from_model(
-        project_dir, model_name, "checkpoint.h5"
-    )
+    checkpoint_path = load_path_from_model(project_dir, model_name, "checkpoint.h5")
     assert checkpoint_path.exists(), "Checkpoint file not created"
 
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
 
     # Delete results.h5 if it exists (from previous test using same fixture)
-    results_h5_path = load_path_from_model(
+    _ = load_path_from_model(
         project_dir, model_name, "results.h5", delete_existing=True
     )
 
-    results = kpms.extract_results(
-        model, metadata, project_dir, model_name, config
-    )
+    results = kpms.extract_results(model, metadata, project_dir, model_name, config)
 
     # Export to CSV
     kpms.save_results_as_csv(results, project_dir, model_name)
@@ -140,25 +132,25 @@ def test_trajectory_plots(fitted_model, kpms):
     coordinates = fitted_model["coordinates"]
 
     # Verify checkpoint exists
-    checkpoint_path = load_path_from_model(
-        project_dir, model_name, "checkpoint.h5"
-    )
+    checkpoint_path = load_path_from_model(project_dir, model_name, "checkpoint.h5")
     assert checkpoint_path.exists(), "Checkpoint file not created"
 
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
 
     # Delete results.h5 if it exists (from previous test using same fixture)
-    results_h5_path = load_path_from_model(
+    _ = load_path_from_model(
         project_dir, model_name, "results.h5", delete_existing=True
     )
 
-    results = kpms.extract_results(
-        model, metadata, project_dir, model_name, config
-    )
+    results = kpms.extract_results(model, metadata, project_dir, model_name, config)
 
     # Generate trajectory plots
     kpms.generate_trajectory_plots(
-        coordinates, results, project_dir=project_dir, model_name=model_name, fps=config["fps"]
+        coordinates,
+        results,
+        project_dir=project_dir,
+        model_name=model_name,
+        fps=config["fps"],
     )
 
     # Verify outputs
@@ -170,7 +162,9 @@ def test_trajectory_plots(fitted_model, kpms):
 
     # Note: generate_trajectory_plots filters by min_frequency and min_duration,
     # so not all syllables will have plots. Just verify we got some plots created.
-    assert len(pdf_files) >= 5, f"Expected at least 5 trajectory plots, got {len(pdf_files)}"
+    assert (
+        len(pdf_files) >= 5
+    ), f"Expected at least 5 trajectory plots, got {len(pdf_files)}"
 
 
 @pytest.mark.slow
@@ -191,21 +185,17 @@ def test_grid_movies(fitted_model, kpms):
     coordinates = fitted_model["coordinates"]
 
     # Verify checkpoint exists
-    checkpoint_path = load_path_from_model(
-        project_dir, model_name, "checkpoint.h5"
-    )
+    checkpoint_path = load_path_from_model(project_dir, model_name, "checkpoint.h5")
     assert checkpoint_path.exists(), "Checkpoint file not created"
 
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
 
     # Delete results.h5 if it exists (from previous test using same fixture)
-    results_h5_path = load_path_from_model(
+    _ = load_path_from_model(
         project_dir, model_name, "results.h5", delete_existing=True
     )
 
-    results = kpms.extract_results(
-        model, metadata, project_dir, model_name, config
-    )
+    results = kpms.extract_results(model, metadata, project_dir, model_name, config)
 
     # Generate grid movies (keypoints only, no video frames)
     kpms.generate_grid_movies(
@@ -247,26 +237,26 @@ def test_similarity_dendrogram(fitted_model, kpms):
     coordinates = fitted_model["coordinates"]
 
     # Verify checkpoint exists
-    checkpoint_path = load_path_from_model(
-        project_dir, model_name, "checkpoint.h5"
-    )
+    checkpoint_path = load_path_from_model(project_dir, model_name, "checkpoint.h5")
     assert checkpoint_path.exists(), "Checkpoint file not created"
 
     kpms.reindex_syllables_in_checkpoint(project_dir, model_name)
 
     # Delete results.h5 if it exists (from previous test using same fixture)
-    results_h5_path = load_path_from_model(
+    _ = load_path_from_model(
         project_dir, model_name, "results.h5", delete_existing=True
     )
 
     # Extract results for dendrogram
-    results = kpms.extract_results(
-        model, metadata, project_dir, model_name, config
-    )
+    results = kpms.extract_results(model, metadata, project_dir, model_name, config)
 
     # Generate dendrogram
     kpms.plot_similarity_dendrogram(
-        coordinates, results, project_dir=project_dir, model_name=model_name, fps=config["fps"]
+        coordinates,
+        results,
+        project_dir=project_dir,
+        model_name=model_name,
+        fps=config["fps"],
     )
 
     # Verify output
