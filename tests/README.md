@@ -12,18 +12,6 @@ This directory contains pytest-compatible tests for the keypoint-MoSeq package, 
 - `conftest.py` - Shared pytest fixtures and configuration
 - `__init__.py` - Package initialization
 
-### Original Notebooks (for reference)
-
-- `notebook_colab.py` - Converted from `docs/keypoint_moseq_colab.ipynb`
-- `notebook_modeling.py` - Converted from `docs/source/modeling.ipynb`
-- `notebook_analysis.py` - Converted from `docs/source/analysis.ipynb`
-
-Conversion command used:
-
-```bash
-jupytext --to py:percent <notebook>.ipynb -o tests/notebook_<name>.py
-```
-
 ## Prerequisites
 
 ### Installation
@@ -232,7 +220,7 @@ pytest tests/ -m "quick or medium" -n auto
 pytest tests/ -m "not slow" -n auto
 ```
 
-### Nightly/Weekly Tests
+### Weekly Tests
 
 ```bash
 # Run everything including slow tests (~110 minutes)
@@ -344,17 +332,3 @@ def test_feature_name(temp_project_dir, dlc_config):
     assert result is not None, "Result should not be None"
     assert Path(project_dir, "output.txt").exists(), "Output file not created"
 ```
-
-## Additional Resources
-
-For more information about keypoint-moseq:
-
-- **Official Documentation**: <https://keypoint-moseq.readthedocs.io/>
-- **GitHub Repository**: <https://github.com/dattalab/keypoint-moseq>
-- **Paper**: Nature Methods (2024) - <https://www.nature.com/articles/s41592-024-02318-2>
-
-For test development questions, refer to:
-
-- Pytest documentation: <https://docs.pytest.org/>
-- This README for test structure and conventions
-- Example test functions in existing test files
