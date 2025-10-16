@@ -1432,6 +1432,11 @@ def rasterize_figure(fig):
     canvas = fig.canvas
     canvas.draw()
     width, height = canvas.get_width_height()
+    # DEPENDENCY: matplotlib<3.10 - tostring_rgb() removed in matplotlib 3.10.0
+    # Breaking change: AttributeError in matplotlib>=3.10
+    # To support matplotlib>=3.10, replace with:
+    #   raster_flat = np.frombuffer(canvas.buffer_rgba(), dtype="uint8")
+    #   raster = raster_flat.reshape((height, width, 4))[:, :, :3]  # Drop alpha channel
     raster_flat = np.frombuffer(canvas.tostring_rgb(), dtype="uint8")
     raster = raster_flat.reshape((height, width, 3))
     return raster

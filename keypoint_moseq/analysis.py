@@ -1151,6 +1151,10 @@ def plot_syll_stats_with_sem(
 
     # plot each group's stat data separately, computes groupwise SEM, and orders data based on the stat/ordering parameters
     hue = "group" if groups is not None else None
+    # DEPENDENCY: seaborn<0.14 - BoxPlotter.plot() API changed in seaborn 0.14.0
+    # Breaking change: TypeError: BoxPlotter.plot() got an unexpected keyword argument 'color'
+    # This error occurs internally in seaborn's plotting functions (pointplot, boxplot, etc.)
+    # To support seaborn>=0.14, may need to update seaborn-specific keyword arguments
     ax = sns.pointplot(
         data=stats_df,
         x="syllable",

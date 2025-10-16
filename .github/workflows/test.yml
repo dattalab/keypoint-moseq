@@ -5,6 +5,8 @@ on:
     branches: [ main, dev ]
   pull_request:
     branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sundays at midnight UTC
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
@@ -126,7 +128,7 @@ jobs:
           MINIMUM_ORANGE: 45
 
   slow-tests:
-    name: Slow Tests (Nightly)
+    name: Slow Tests (Weekly)
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
 
