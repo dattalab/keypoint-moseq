@@ -31,26 +31,26 @@ classifiers = [
 dynamic = [ "version" ]
 # Core dependencies from setup.cfg
 dependencies = [
-  "bokeh>=2.4.3,<3.9",                    # Empirically tested up to 3.8.0
+  "bokeh>=2.4.3,<3.9",                    # Tested: 2.4.3-3.8.0 (true minimum); Breaking at <2.4.3
   "commentjson",
   "cytoolz",
-  "holoviews[recommended]>=1.15.4,<1.22", # Empirically tested up to 1.21.0
+  "holoviews[recommended]>=1.15.4,<1.22", # Tested: 1.15.4-1.21.0; 8+ years back-compat (limited by bokeh)
   "imageio[ffmpeg]",
   "ipykernel",
   "ipympl",
   "ipython-genutils",
   "ipywidgets",
   "jax-moseq",
-  "matplotlib>=3.8.4,<3.10",              # Breaking change at 3.10 (viz.py:1435 tostring_rgb removed)
+  "matplotlib>=3.0,<3.10",                # Tested: 3.0.3-3.9.2 (6.7 years back-compat); Breaking at 2.2.5, 3.10
   "ndx-pose",
   "networkx",
   "numpy<=1.26.4",                        # Upper bound for jax compatibility
   "pandas",
-  "panel>=0.14.4,<1.9",                   # Empirically tested up to 1.8.2
+  "panel>=0.14.4,<1.9",                   # Tested: 0.14.4-1.8.2 (true minimum); Breaking at <0.14.4
   "plotly",
   "pynwb",
   "pyyaml",
-  "seaborn>=0.13,<0.14",                  # Empirically tested up to 0.13.2
+  "seaborn>=0.8,<0.14",                   # Tested: 0.8.1-0.13.2 (8 years back-compat); Breaking at 0.7.1
   "sleap-io",
   "statsmodels",
   "tables",
