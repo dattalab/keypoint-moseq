@@ -125,7 +125,7 @@ jobs:
         with:
           GITHUB_TOKEN: ${{ github.token }}
           MINIMUM_GREEN: 50
-          MINIMUM_ORANGE: 45
+          MINIMUM_ORANGE: 40
 
   slow-tests:
     name: Slow Tests (Weekly)

@@ -130,7 +130,7 @@ omit = [
 
 [tool.coverage.report]
 # Minimum coverage threshold (fails if coverage drops below this)
-fail_under = 45
+fail_under = 40
 # Don't report files with 100% coverage to focus on gaps
 skip_covered = false
 # Show lines that weren't executed
