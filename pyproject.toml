@@ -40,14 +40,15 @@ dependencies = [
   "ipympl",
   "ipython-genutils",
   "ipywidgets",
+  "jax>=0.4.20,<0.7",                     # Upper for tf probability 0.25.0
   "jax-moseq",
   "matplotlib>=3,<4",                     # Tested: 3.0.3-3.10
   "ndx-pose",
   "networkx",
   "numpy<=1.26.4",                        # Upper bound for jax compatibility
-  "packaging",                            # For version comparison in compat helpers
+  "packaging",                            # For version comparison
   "pandas",
-  "panel>=0.14.4,<1.9",                   # Tested: 0.14.4-1.8.2; Breaking at <0.14.4
+  "panel>=0.14.4,<1.9",                   # Tested: 0.14.4-1.8.2
   "plotly",
   "pynwb",
   "pyyaml",
