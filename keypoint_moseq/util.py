@@ -1342,7 +1342,7 @@ def check_video_paths(video_paths, keys):
         raise ValueError("\n\n".join(error_messages))
 
 
-def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]]) -> dict[int, int]:
+def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]], runlength: bool = True) -> dict[int, int]:
     """
     Create a mapping from old syllable indexes to new syllable indexes such that each group of
     syllables in `syllable_grouping` is mapped to a single index. All syllables not included in
@@ -1358,6 +1358,11 @@ def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]])
     syllable_grouping: list[list[int]]
         List of lists representing groups of syllables that should be mapped to a single index.
 
+    runlength: bool, default=True
+        If True, frequencies are quantified using the number of non-consecutive
+        occurrences of each syllable. If False, frequency is quantified by
+        total number of frames.
+
     Returns
     -------
     mapping: dict[int, int]
@@ -1371,30 +1376,27 @@ def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]])
     >>> print(mapping)
     >>> # {0: 0, 1: 0, 2: 1, 3: 2, 4: 3, 5: 1, 6: 1}
     """
-    # Count the number of times each syllable is used
-    syllable_counts = np.zeros(max(max(v["syllable"]) for v in results.values()) + 1, dtype=int)
-    for v in results.values():
-        unique, counts = np.unique(v["syllable"], return_counts=True)
-        syllable_counts[unique] += counts
+    syllables = {k: res["syllable"] for k, res in results.items()}
+    syllable_frequencies = get_frequencies(syllables, runlength=runlength)
 
     # Get a list of all syllables that are in a group
     syllables_to_group = [s for group in syllable_grouping for s in group]
 
-    # Count the total number of times a group of syllables is used
-    all_counts = []
+    # Calculate the total frequency for each group of syllables
+    all_frequencies = []
     for group in syllable_grouping:
-        group_count = sum(syllable_counts[s] for s in group)
-        all_counts.append((group_count, group))
+        group_frequency = sum(syllable_frequencies[s] for s in group)
+        all_frequencies.append((group_frequency, group))
 
-    # Count the number of times a single syllable is used
-    for syllable in range(len(syllable_counts)):
+    # Add individual syllables not in any group
+    for syllable in range(len(syllable_frequencies)):
         if syllable not in syllables_to_group:
-            all_counts.append((syllable_counts[syllable], [syllable]))
+            all_frequencies.append((syllable_frequencies[syllable], [syllable]))
 
-    all_counts.sort(reverse=True)
+    all_frequencies.sort(reverse=True)
 
     mapping = {}
-    for i, (_, syllables) in enumerate(all_counts):
+    for i, (_, syllables) in enumerate(all_frequencies):
         for syllable in syllables:
             mapping[syllable] = i
 
