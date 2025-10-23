@@ -8,6 +8,9 @@ import warnings
 
 warnings.formatwarning = lambda msg, *a: str(msg)
 
+# Suppress harmless warnings thrown by Python 3.12's stricter syntax warnings
+warnings.filterwarnings('ignore', category=SyntaxWarning, module='panel.*')
+
 from .io import *
 from .viz import *
 from .util import *
