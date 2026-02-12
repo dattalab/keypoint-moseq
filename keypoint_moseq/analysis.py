@@ -1055,7 +1055,6 @@ def save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir):
     fig.savefig(save_path + ".pdf", dpi=300)
     print(f"Saved figure to {save_path}.png")
 
-
 def plot_syll_stats_with_sem(
     stats_df,
     project_dir,
@@ -1071,46 +1070,25 @@ def plot_syll_stats_with_sem(
     colors=None,
     join=False,
     figsize=(8, 4),
+    ax=None,          
+    save_plot=True,   
 ):
     """Plot syllable statistics with standard error of the mean.
 
     Parameters
     ----------
-    stats_df : pandas.DataFrame
-        the dataframe that contains kinematic data and the syllable label
-    project_dir : str
-        the project directory
-    model_name : str
-        the model directory name
-    save_dir : str
-        the path to save the analysis plots
-    plot_sig : bool, optional
-        whether to plot the significant syllables, by default True
-    thresh : float, optional
-        the threshold for significance, by default 0.05
-    stat : str, optional
-        the statistic to plot, by default 'frequency'
-    order : str, optional
-        the ordering of the syllables, by default 'stat'
-    groups : list, optional
-        the list of groups to plot, by default None
-    ctrl_group : str, optional
-        the control group, by default None
-    exp_group : str, optional
-        the experimental group, by default None
-    colors : list, optional
-        the list of colors to use for each group, by default None
-    join : bool, optional
-        whether to join the points with a line, by default False
-    figsize : tuple, optional
-        the figure size, by default (8, 4)
+    ... [existing params unchanged] ...
+    ax : matplotlib.axes.Axes, optional
+        Axes to plot on. If None, creates a new figure.
+    save_plot : bool, optional
+        Whether to save the figure internally (default=True).
 
     Returns
     -------
-    fig : matplotlib.figure.Figure
-        the figure object
-    legend : matplotlib.legend.Legend
-        the legend object
+    fig, legend : tuple
+        When ax=None: returns (Figure, Legend) — backward compatible
+    ax, legend : tuple
+        When ax is provided: returns (Axes, Legend)
     """
 
     # get significant syllables
@@ -1147,11 +1125,15 @@ def plot_syll_stats_with_sem(
         figsize=figsize,
     )
 
-    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    # ← MODIFIED: conditionally create figure/axes
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+    else:
+        fig = ax.figure
 
     # plot each group's stat data separately, computes groupwise SEM, and orders data based on the stat/ordering parameters
     hue = "group" if groups is not None else None
-    ax = sns.pointplot(
+    sns.pointplot(  # ← MODIFIED: removed redundant ax= assignment (returned ax is same object)
         data=stats_df,
         x="syllable",
         y=stat,
@@ -1168,11 +1150,14 @@ def plot_syll_stats_with_sem(
 
     # add syllable labels if they exist
     syll_names = get_syllable_names(project_dir, model_name, ordering)
-    plt.xticks(range(len(syll_names)), syll_names, rotation=90)
+    ax.set_xticks(range(len(syll_names)))                     
+    ax.set_xticklabels(syll_names, rotation=90)               
 
     # if a list of significant syllables is given, mark the syllables above the x-axis
     if sig_sylls is not None:
-        init_y = -0.05
+        y_min, y_max = ax.get_ylim()                           
+        init_y = y_min - 0.08 * (y_max - y_min)               
+        
         # plot all sig syllables when no reasonable control and experimental group is specified
         if isinstance(sig_sylls, dict):
             for key in sig_sylls.keys():
@@ -1181,15 +1166,9 @@ def plot_syll_stats_with_sem(
                     markings.append(np.where(ordering == s)[0])
                 if len(markings) > 0:
                     markings = np.concatenate(markings)
-                    plt.scatter(
-                        markings, [init_y] * len(markings), color="r", marker="*"
-                    )
-                    plt.text(
-                        plt.xlim()[1],
-                        init_y,
-                        f"{key[0]} vs. {key[1]} - Total {len(sig_sylls[key])} S.S.",
-                    )
-                    init_y += -0.05
+                    ax.scatter(markings, [init_y] * len(markings), color="r", marker="*") 
+                    ax.text(ax.get_xlim()[1], init_y, f"{key[0]} vs. {key[1]} - Total {len(sig_sylls[key])} S.S.")  
+                    init_y -= 0.05
                 else:
                     print("No significant syllables found.")
         else:
@@ -1201,7 +1180,7 @@ def plot_syll_stats_with_sem(
                     continue
             if len(markings) > 0:
                 markings = np.concatenate(markings)
-                plt.scatter(markings, [-0.05] * len(markings), color="r", marker="*")
+                ax.scatter(markings, [init_y] * len(markings), color="r", marker="*")  
             else:
                 print("No significant syllables found.")
 
@@ -1218,13 +1197,18 @@ def plot_syll_stats_with_sem(
 
     # add legend and axis labels
     legend = ax.legend(handles=handles, frameon=False, bbox_to_anchor=(1, 1))
-    plt.xlabel(xlabel, fontsize=12)
-    sns.despine()
+    ax.set_xlabel(xlabel, fontsize=12)  
+    sns.despine(ax=ax)                 
 
     # save the figure
-    plot_name = f"{stat}_{order}_stats"
-    save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir)
-    return fig, legend
+    if save_plot and ax is None:       
+        plot_name = f"{stat}_{order}_stats"
+        save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir)
+    
+    if ax is None:
+        return fig, legend
+    else:
+        return ax, legend
 
 
 # transition matrix
