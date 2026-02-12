@@ -1152,7 +1152,7 @@ def plot_syll_stats_with_sem(
         figsize=figsize,
     )
 
-    # ← MODIFIED: conditionally create figure/axes
+
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=figsize)
     else:
@@ -1160,7 +1160,7 @@ def plot_syll_stats_with_sem(
 
     # plot each group's stat data separately, computes groupwise SEM, and orders data based on the stat/ordering parameters
     hue = "group" if groups is not None else None
-    sns.pointplot(  # ← MODIFIED: removed redundant ax= assignment (returned ax is same object)
+    sns.pointplot(  
         data=stats_df,
         x="syllable",
         y=stat,
