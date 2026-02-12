@@ -1077,7 +1077,34 @@ def plot_syll_stats_with_sem(
 
     Parameters
     ----------
-    ... [existing params unchanged] ...
+    stats_df : pandas.DataFrame
+        the dataframe that contains kinematic data and the syllable label
+    project_dir : str
+        the project directory
+    model_name : str
+        the model directory name
+    save_dir : str
+        the path to save the analysis plots
+    plot_sig : bool, optional
+        whether to plot the significant syllables, by default True
+    thresh : float, optional
+        the threshold for significance, by default 0.05
+    stat : str, optional
+        the statistic to plot, by default 'frequency'
+    order : str, optional
+        the ordering of the syllables, by default 'stat'
+    groups : list, optional
+        the list of groups to plot, by default None
+    ctrl_group : str, optional
+        the control group, by default None
+    exp_group : str, optional
+        the experimental group, by default None
+    colors : list, optional
+        the list of colors to use for each group, by default None
+    join : bool, optional
+        whether to join the points with a line, by default False
+    figsize : tuple, optional
+        the figure size, by default (8, 4)
     ax : matplotlib.axes.Axes, optional
         Axes to plot on. If None, creates a new figure.
     save_plot : bool, optional
