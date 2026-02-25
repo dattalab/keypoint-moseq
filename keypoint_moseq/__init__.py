@@ -1,3 +1,31 @@
+# -----------------------------------------------------------------------------
+# JAX compatibility shim for chex 0.1.6 with newer JAX versions
+# chex expects deprecated jax.interpreters.* APIs that were removed
+# Modern JAX unifies all array types into jax.Array
+# -----------------------------------------------------------------------------
+import jax
+
+# Shim for jax.interpreters.pxla.ShardedDeviceArray
+if not hasattr(jax.interpreters.pxla, 'ShardedDeviceArray'):
+    jax.interpreters.pxla.ShardedDeviceArray = jax.Array
+
+# Shim for jax.interpreters.batching.BatchTracer
+if not hasattr(jax.interpreters.batching, 'BatchTracer'):
+    jax.interpreters.batching.BatchTracer = jax.Array
+
+# Shim for jax.interpreters.xla.DeviceArray and _DeviceArray
+if not hasattr(jax.interpreters.xla, 'DeviceArray'):
+    jax.interpreters.xla.DeviceArray = jax.Array
+if not hasattr(jax.interpreters.xla, '_DeviceArray'):
+    jax.interpreters.xla._DeviceArray = jax.Array
+
+# NumPy 2.0 compatibility shim
+# np.bool8 was removed in numpy 2.0, bokeh still uses it
+import numpy as np
+if not hasattr(np, 'bool8'):
+    np.bool8 = np.bool_
+# -----------------------------------------------------------------------------
+
 # use double-precision by default
 from jax import config
 
