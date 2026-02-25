@@ -161,7 +161,12 @@ If you already have a trained a MoSeq model and would like to apply it to new da
 
 .. note::
 
-   Some users have reported systematic differences in the way syllables are assigned when applying a model to new data. To control for this, we recommend running `apply_model` to both the new and original data and using these new results instead of the original model output. To save the original results, simply rename the original `results.h5` file or save the new results to a different filename using `results_path="new_file_name.h5"`.
+   Some users have reported systematic differences in the way syllables are assigned when applying a model to new data. To control for this, we recommend running ``apply_model`` on both the new and original data and using these new results instead of the original model output. Since the original data is already in ``results.h5``, you will need to set ``overwrite_results=True``::
+
+      results = kpms.apply_model(
+          model, data, metadata, project_dir, model_name,
+          overwrite_results=True, **config()
+      )
 
 
 Continue model fitting but with new data

@@ -301,6 +301,7 @@ def apply_model(
     parallel_message_passing=None,
     return_model=False,
     location_aware=False,
+    overwrite_results=False,
     **kwargs,
 ):
     """Apply a model to new data.
@@ -356,6 +357,12 @@ def apply_model(
         If True, the model will be fit using the location-aware version of the
         keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
 
+    overwrite_results : bool, default=False
+        If True, overwrite existing results for recordings that are
+        already in the results file. This is required when applying a
+        model to data that includes recordings from the original
+        training set.
+
     Returns
     -------
     results : dict
@@ -408,7 +415,8 @@ def apply_model(
                 break
 
     results = extract_results(
-        model, metadata, project_dir, model_name, save_results, results_path
+        model, metadata, project_dir, model_name, save_results, results_path,
+        overwrite=overwrite_results,
     )
 
     if return_model:

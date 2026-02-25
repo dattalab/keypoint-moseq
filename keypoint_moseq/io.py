@@ -626,6 +626,7 @@ def extract_results(
     model_name=None,
     save_results=True,
     path=None,
+    overwrite=False,
 ):
     """Extract model outputs and [optionally] save them to disk.
 
@@ -666,6 +667,12 @@ def extract_results(
     path : str, default=None
         Optional path for saving model outputs.
 
+    overwrite : bool, default=False
+        If True, overwrite existing results for recordings that are
+        already in the results file. This is required when applying a
+        model to data that includes recordings from the original
+        training set.
+
     Returns
     -------
     results_dict : dict
@@ -676,17 +683,16 @@ def extract_results(
         path = _get_path(project_dir, model_name, path, "results.h5")
 
         # check for overlapping recording names
-        recording_names = set(metadata[0])
-        if os.path.exists(path):
+        if not overwrite and os.path.exists(path):
+            recording_names = set(metadata[0])
             with h5py.File(path, "r") as f:
                 overlap = recording_names & set(f.keys())
             if overlap:
                 raise RuntimeError(fill(
                     f"{path} already contains results for "
                     f"{len(overlap)} recording(s), including "
-                    f"'{next(iter(overlap))}'. To save new results, "
-                    f"rename or remove the existing results file, or "
-                    f"use a different path via the `path` argument. "
+                    f"'{next(iter(overlap))}'. To overwrite existing "
+                    f"results, set overwrite_results=True in apply_model. "
                     f"See https://keypoint-moseq.readthedocs.io/en/"
                     f"latest/FAQs.html#detecting-existing-syllables"
                     f"-in-new-data for more information."
@@ -715,7 +721,7 @@ def extract_results(
     }
 
     if save_results:
-        save_hdf5(path, results_dict, exist_ok=True)
+        save_hdf5(path, results_dict, exist_ok=True, overwrite=overwrite)
         print(fill(f"Saved results to {path}"))
 
     return results_dict
