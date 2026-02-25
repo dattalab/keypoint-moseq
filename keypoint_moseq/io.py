@@ -675,6 +675,23 @@ def extract_results(
     if save_results:
         path = _get_path(project_dir, model_name, path, "results.h5")
 
+        # check for overlapping recording names
+        recording_names = set(metadata[0])
+        if os.path.exists(path):
+            with h5py.File(path, "r") as f:
+                overlap = recording_names & set(f.keys())
+            if overlap:
+                raise RuntimeError(fill(
+                    f"{path} already contains results for "
+                    f"{len(overlap)} recording(s), including "
+                    f"'{next(iter(overlap))}'. To save new results, "
+                    f"rename or remove the existing results file, or "
+                    f"use a different path via the `path` argument. "
+                    f"See https://keypoint-moseq.readthedocs.io/en/"
+                    f"latest/FAQs.html#detecting-existing-syllables"
+                    f"-in-new-data for more information."
+                ))
+
     states = jax.device_get(model["states"])
 
     # extract syllables; repeat first syllable an extra `nlags` times
