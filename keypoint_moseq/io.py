@@ -692,7 +692,7 @@ def extract_results(
                     f"{path} already contains results for "
                     f"{len(overlap)} recording(s), including "
                     f"'{next(iter(overlap))}'. To overwrite existing "
-                    f"results, set overwrite_results=True in apply_model. "
+                    f"results, set overwrite=True in apply_model. "
                     f"See https://keypoint-moseq.readthedocs.io/en/"
                     f"latest/FAQs.html#detecting-existing-syllables"
                     f"-in-new-data for more information."
