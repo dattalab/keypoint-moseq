@@ -411,6 +411,33 @@ Two different syllables look very similar. Is there a way to consider them as on
 Yes, see the :ref:`Merging similar syllables <merging-syllables>` section in the Advanced Usage guide for instructions on how to combine syllables that represent the same behavior.
 
 
+What statistical test is used to flag significant syllables in the syllable statistics plot?
+--------------------------------------------------------------------------------------------
+
+The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syll_stats_with_sem` come from a permutation-based Kruskal–Wallis test followed by a Dunn's z-test post-hoc, with Benjamini–Hochberg (FDR) correction applied at two levels. The same procedure is used regardless of which statistic is plotted (``frequency``, ``duration``, ``velocity_2d_mm``, etc.).
+
+**Omnibus test.** For each syllable, a Kruskal–Wallis H statistic compares the groups. Significance is established empirically by shuffling group labels 10,000 times and recomputing H. The resulting per-syllable p-values are BH-adjusted across syllables — one correction family of size *N_syllables*.
+
+**Post-hoc.** For each syllable, a Dunn's z-test is run on every pair of groups, again with empirical p-values from the same permutations. These are BH-adjusted within each syllable, across pairs — one correction family of size *N_pairs*, applied independently for each syllable. There is no joint correction across the full (syllable × pair) grid. For two-group experiments this post-hoc correction is a no-op (only one pair).
+
+**What the red stars mean.** A syllable is starred for a given pair of groups only if **both** its omnibus FDR-adjusted p-value (corrected across syllables) and its FDR-adjusted Dunn's pairwise p-value (corrected across pairs within that syllable) are below the significance threshold (default ``0.05``).
+
+**Error bars are not from this test.** The shaded error bars are 68% bootstrap confidence intervals on each group's mean across recordings. They reflect uncertainty in the group mean, not the significance test.
+
+**Notes.**
+
+- The tests are nonparametric and rank-based, so they do not assume normality.
+
+- To change the threshold, number of permutations, or multiple-comparisons method, call :py:func:`keypoint_moseq.analysis.run_kruskal` directly:
+
+   .. code-block:: python
+
+      df_kw, df_dunn, sig_sylls = kpms.analysis.run_kruskal(
+          stats_df, statistic="frequency",
+          n_perm=10000, thresh=0.05, mc_method="fdr_bh",
+      )
+
+
 Troubleshooting
 ===============
 
