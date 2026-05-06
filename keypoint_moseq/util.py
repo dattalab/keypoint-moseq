@@ -1446,7 +1446,7 @@ def get_distance_to_medoid(coordinates: np.ndarray) -> np.ndarray:
     distances: ndarray of shape (n_frames, n_keypoints)
         Euclidean distances from each keypoint to the medoid position at each frame.
     """
-    medoids = np.median(coordinates, axis=1)  # (n_frames, keypoint_dim)
+    medoids = np.nanmedian(coordinates, axis=1)  # (n_frames, keypoint_dim)
     return np.linalg.norm(coordinates - medoids[:, None, :], axis=-1)  # (n_frames, n_keypoints)
 
 
@@ -1481,8 +1481,8 @@ def find_medoid_distance_outliers(
             Distance thresholds used to classify outlier timepoints for each keypoint.
     """
     distances = get_distance_to_medoid(coordinates)  # (n_frames, n_keypoints)
-    medians = np.median(distances, axis=0)  # (n_keypoints,)
-    MADs = np.median(np.abs(distances - medians[None, :]), axis=0)  # (n_keypoints,)
+    medians = np.nanmedian(distances, axis=0)  # (n_keypoints,)
+    MADs = np.nanmedian(np.abs(distances - medians[None, :]), axis=0)  # (n_keypoints,)
     outlier_thresholds = MADs * outlier_scale_factor + medians  # (n_keypoints,)
     outlier_mask = distances > outlier_thresholds[None, :]  # (n_frames, n_keypoints)
     return {"mask": outlier_mask, "thresholds": outlier_thresholds}
