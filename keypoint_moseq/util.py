@@ -1445,8 +1445,14 @@ def get_distance_to_medoid(coordinates: np.ndarray) -> np.ndarray:
     -------
     distances: ndarray of shape (n_frames, n_keypoints)
         Euclidean distances from each keypoint to the medoid position at each frame.
+        Missing keypoints have NaN distances and are ignored when calculating
+        the medoid.
     """
-    medoids = np.median(coordinates, axis=1)  # (n_frames, keypoint_dim)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message="All-NaN slice encountered", category=RuntimeWarning
+        )
+        medoids = np.nanmedian(coordinates, axis=1)  # (n_frames, keypoint_dim)
     return np.linalg.norm(coordinates - medoids[:, None, :], axis=-1)  # (n_frames, n_keypoints)
 
 
@@ -1481,8 +1487,14 @@ def find_medoid_distance_outliers(
             Distance thresholds used to classify outlier timepoints for each keypoint.
     """
     distances = get_distance_to_medoid(coordinates)  # (n_frames, n_keypoints)
-    medians = np.median(distances, axis=0)  # (n_keypoints,)
-    MADs = np.median(np.abs(distances - medians[None, :]), axis=0)  # (n_keypoints,)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message="All-NaN slice encountered", category=RuntimeWarning
+        )
+        medians = np.nanmedian(distances, axis=0)  # (n_keypoints,)
+        MADs = np.nanmedian(
+            np.abs(distances - medians[None, :]), axis=0
+        )  # (n_keypoints,)
     outlier_thresholds = MADs * outlier_scale_factor + medians  # (n_keypoints,)
     outlier_mask = distances > outlier_thresholds[None, :]  # (n_frames, n_keypoints)
     return {"mask": outlier_mask, "thresholds": outlier_thresholds}
@@ -1632,7 +1644,8 @@ def plot_medoid_distance_outliers(
         Keypoint coordinates after interpolation.
 
     outlier_mask: ndarray of shape (n_frames, n_keypoints)
-        Boolean mask indicating outlier keypoints (True = outlier).
+        Boolean mask indicating interpolated keypoints (True = spatial outlier
+        or missing observation).
 
     outlier_thresholds: ndarray of shape (n_keypoints,)
         Distance thresholds for each keypoint above which points are considered outliers.
@@ -1683,12 +1696,20 @@ def plot_medoid_distance_outliers(
     plt.close()
 
 
-def outlier_removal(coordinates, confidences, project_dir, overwrite=False, outlier_scale_factor=6.0, bodyparts=None, **kwargs):
+def outlier_removal(
+    coordinates,
+    confidences,
+    project_dir,
+    overwrite=False,
+    outlier_scale_factor=6.0,
+    bodyparts=None,
+    **kwargs,
+):
     """Remove outlier keypoints for all recordings in a dataset.
 
-    For each recording, identifies outlier keypoints based on their distance 
-    to the medoid, interpolates the outliers, sets their confidences to 0,
-    and generates diagnostic plots.
+    For each recording, identifies outlier keypoints based on their distance
+    to the medoid, interpolates both outliers and missing keypoints, sets their
+    confidences to 0, and generates diagnostic plots.
 
     Parameters
     ----------
@@ -1712,29 +1733,38 @@ def outlier_removal(coordinates, confidences, project_dir, overwrite=False, outl
     coordinates: dict
         Updated coordinates with outliers interpolated
     confidences: dict
-        Updated confidences with outlier values set to conf_pseudocount
+        Updated confidences with outlier and missing values set to 0
     """
     for recording_name in coordinates:
         raw_coords = coordinates[recording_name].copy()
-        outliers = find_medoid_distance_outliers(raw_coords, outlier_scale_factor=outlier_scale_factor)
-        coordinates[recording_name] = interpolate_keypoints(raw_coords, outliers["mask"])
+        outliers = find_medoid_distance_outliers(
+            raw_coords, outlier_scale_factor=outlier_scale_factor
+        )
+        missing = np.isnan(raw_coords).any(axis=-1)
+        interpolation_mask = outliers["mask"] | missing
+        coordinates[recording_name] = interpolate_keypoints(
+            raw_coords, interpolation_mask
+        )
 
-        # Setting confidences to 0 will signal to format_data to interpolate these points 
-        # there as well
-        confidences[recording_name] = np.where(outliers["mask"], 0, confidences[recording_name])
+        # Setting confidences to 0 ensures interpolated points receive only the
+        # confidence pseudocount when the data are formatted for modeling.
+        confidences[recording_name] = np.where(
+            interpolation_mask, 0, confidences[recording_name]
+        )
         plot_medoid_distance_outliers(
             project_dir,
             recording_name,
             raw_coords,
             coordinates[recording_name],
-            outliers["mask"],
+            interpolation_mask,
             outliers["thresholds"],
             bodyparts=bodyparts,
             overwrite=overwrite,
-            **kwargs
+            **kwargs,
         )
 
     return coordinates, confidences
+
 
 def estimate_sigmasq_loc(Y: jnp.ndarray, mask: jnp.ndarray, filter_size: int = 30) -> float:
     """
