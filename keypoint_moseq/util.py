@@ -1459,19 +1459,21 @@ def get_distance_to_medoid(coordinates: np.ndarray) -> np.ndarray:
 def find_medoid_distance_outliers(
     coordinates: np.ndarray, outlier_scale_factor: float = 6.0
 ) -> dict[str, np.ndarray]:
-    """Identify keypoint distance outliers using Median Absolute Deviation (MAD).
+    """Identify upper-tail keypoint distance outliers using Median Absolute Deviation (MAD).
 
-    Keypoints are considered outliers when their distance to the medoid at a given timepoint differs
-    from its median value by a multiple of the median absolute deviation (MAD) for that keypoint.
+    This is an upper-tail detector. Keypoints are considered outliers when their
+    distance to the medoid at a given timepoint exceeds its median value by a
+    multiple of the median absolute deviation (MAD) for that keypoint.
 
     Parameters
     -------
     coordinates: ndarray of shape (n_frames, n_keypoints, keypoint_dim)
-        Keypoint coordinates where keypoint_dim is 2 or 3. Only the first two dimensions (x, y) are
-        used for distance calculations.
+        Keypoint coordinates where keypoint_dim is 2 or 3. All supplied
+        coordinate dimensions are used for distance calculations.
 
     outlier_scale_factor: float, default=6.0
-        Multiplier used to set the outlier threshold. Higher values result in fewer outliers.
+        Multiplier used to set the upper distance threshold. Higher values
+        produce a higher threshold, so fewer points are removed.
 
     **kwargs
         Additional keyword arguments (ignored), usually overflow from **config().
@@ -1484,7 +1486,8 @@ def find_medoid_distance_outliers(
             Boolean array where True indicates outlier keypoints.
 
         thresholds: ndarray of shape (n_keypoints,)
-            Distance thresholds used to classify outlier timepoints for each keypoint.
+            Upper distance thresholds used to classify outlier timepoints for
+            each keypoint.
     """
     distances = get_distance_to_medoid(coordinates)  # (n_frames, n_keypoints)
     with warnings.catch_warnings():
@@ -1532,7 +1535,8 @@ def plot_keypoint_traces(
         the number of traces.
 
     thresholds: ndarray of shape (n_keypoints,), optional
-        Threshold values to plot as horizontal dashed lines for each keypoint.
+        Upper distance threshold values to plot as horizontal dashed lines for
+        each keypoint.
 
     shading_mask: ndarray of shape (n_frames, n_keypoints), optional
         Boolean mask indicating frames to shade (e.g., outlier frames).
@@ -1592,11 +1596,11 @@ def plot_keypoint_traces(
                 color="black",
                 linestyle="--",
                 alpha=0.7,
-                label=f"Threshold ({threshold_value:.2f})",
+                label=f"Upper distance threshold ({threshold_value:.2f})",
             )
 
         ax.set_xlabel("Frame")
-        ax.set_ylabel("Trace Value")
+        ax.set_ylabel("Distance to frame-wise median pose")
 
         if bodyparts is not None:
             ax.set_title(f"{bodyparts[keypoint_idx]}")
@@ -1648,7 +1652,8 @@ def plot_medoid_distance_outliers(
         or missing observation).
 
     outlier_thresholds: ndarray of shape (n_keypoints,)
-        Distance thresholds for each keypoint above which points are considered outliers.
+        Upper distance thresholds for each keypoint above which points are
+        considered outliers.
 
     bodyparts: list of str
         Names of bodyparts corresponding to each keypoint. Must have length equal to
@@ -1707,9 +1712,10 @@ def outlier_removal(
 ):
     """Remove outlier keypoints for all recordings in a dataset.
 
-    For each recording, identifies outlier keypoints based on their distance
-    to the medoid, interpolates both outliers and missing keypoints, sets their
-    confidences to 0, and generates diagnostic plots.
+    For each recording, applies an upper-tail detector to identify keypoints
+    whose distance to the medoid is unusually large, interpolates both outliers
+    and missing keypoints, sets their confidences to 0, and generates
+    diagnostic plots.
 
     Parameters
     ----------
@@ -1722,7 +1728,8 @@ def outlier_removal(
     overwrite: bool, default False
         Whether or not to overwrite outlier interpolation QA plots
     outlier_scale_factor: float, default=6.0
-        Multiplier used to set the outlier threshold
+        Multiplier used to set the upper distance threshold. Higher values
+        produce a higher threshold, so fewer points are removed.
     bodyparts: list of str, default=None
         Names of bodyparts for plot labels
     **kwargs

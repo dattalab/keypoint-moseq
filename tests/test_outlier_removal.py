@@ -1,6 +1,7 @@
 import warnings
 
 import h5py
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
@@ -53,6 +54,23 @@ def test_nan_aware_calculations_preserve_finite_data_behavior():
 
     np.testing.assert_allclose(result["thresholds"], expected_thresholds)
     np.testing.assert_array_equal(result["mask"], expected_mask)
+
+
+def test_outlier_plot_labels_upper_distance_threshold():
+    traces = [np.ones((3, 1))]
+
+    fig = util.plot_keypoint_traces(
+        traces,
+        bodyparts=["tail"],
+        thresholds=np.array([2.0]),
+    )
+
+    ax = fig.axes[0]
+    assert ax.get_ylabel() == "Distance to frame-wise median pose"
+    assert "Upper distance threshold (2.00)" in [
+        text.get_text() for text in ax.get_legend().get_texts()
+    ]
+    plt.close(fig)
 
 
 def test_outlier_removal_interpolates_missing_and_outlier_points(
