@@ -622,6 +622,9 @@ def reindex_syllables_in_checkpoint(
         model["params"]["pi"] = model["params"]["pi"][index, :][:, index]
         model["params"]["Ab"] = model["params"]["Ab"][index]
         model["params"]["Q"] = model["params"]["Q"][index]
+        if "mu_aux" in model["params"]:
+            model["params"]["mu_aux"] = model["params"]["mu_aux"][index]
+            model["params"]["sigma_aux"] = model["params"]["sigma_aux"][index]
         model["states"]["z"] = np.argsort(index)[model["states"]["z"]]
         return model
 
