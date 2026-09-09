@@ -602,6 +602,10 @@ def reindex_syllables_in_checkpoint(
         model["params"]["pi"] = model["params"]["pi"][index, :][:, index]
         model["params"]["Ab"] = model["params"]["Ab"][index]
         model["params"]["Q"] = model["params"]["Q"][index]
+        # allocentric dynamics params (location-aware model) are also per-state
+        for key in ["delta_h", "sigmasq_h", "delta_v", "sigmasq_v"]:
+            if key in model["params"]:
+                model["params"][key] = model["params"][key][index]
         model["states"]["z"] = np.argsort(index)[model["states"]["z"]]
         return model
 
