@@ -48,13 +48,13 @@ If your keypoint tracking data contains a high proportion of NaNs, you may get t
    <br />
 
 
-- Check if the NaNs are occuring in a specific subset of recordings. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic recordings. For a recording-by-recording breakdown of NaNs, run
+- Check if the NaNs are occurring in a specific subset of recordings. If they are, then it may be useful to exclude them from modeling, or to retrain the keypoint detection network with added training examples from the problematic recordings. For a recording-by-recording breakdown of NaNs, run
 
 .. code-block:: python
 
    kpms.check_nan_proportions(coordinates, bodyparts, breakdown=True)
 
-- Rerun keypoint detection with a lower threshold for missing data. In general, keypoint tracking algorithms such as SLEAP and DeepLabCut will mark a keypoint as NaN in a given frame if its confidence is below a certain level. In SLEAP, this level can be adjusted using the argument ``--peak_threshold`` when `running inference from the command line <https://sleap.ai/notebooks/Training_and_inference_on_an_example_dataset.html#inference>`_, e.g.
+- Rerun keypoint detection with a lower threshold for missing data. In general, keypoint tracking algorithms such as SLEAP and DeepLabCut will mark a keypoint as NaN in a given frame if its confidence is below a certain level. In SLEAP, this level can be adjusted using the argument ``--peak_threshold`` when `running inference from the command line <https://legacy.sleap.ai/notebooks/Training_and_inference_on_an_example_dataset.html#inference>`_, e.g.
 
 .. code-block:: python
 
@@ -186,7 +186,7 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
 
    project_dir = 'project/directory'
    config = lambda: kpms.load_config(project_dir)
-   model_name = 'name_of_model' (e.g. '2023_03_16-15_50_11')
+   model_name = 'name_of_model'  # e.g. '2023_03_16-15_50_11'
    
    # load and format new data (e.g. from DeepLabCut)
    new_data = 'path/to/new/data/' # can be a file, a directory, or a list of files
@@ -204,7 +204,7 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
    
    # continue fitting, now with the new data
    model, model_name = kpms.fit_model(
-      model, data, metadata, project_dir, ar_only=False, num_iters=200)[0]
+      model, data, metadata, project_dir, ar_only=False, num_iters=200)
       
 
 Interpreting model outputs
@@ -330,7 +330,7 @@ Below we provide two code recipes to get around these issues. The first recipe i
 
    .. code-block:: python
 
-      heading = {k: np.zeros_like(v) for k in heading.items()}
+      headings = {k: np.zeros_like(v) for k, v in headings.items()}
 
 
 Why are there only trajectory plots for a subset of syllables?
@@ -348,9 +348,9 @@ There are two reasons why a syllable might be excluded from the trajectory plots
 
    Note that the number of *usable* syllable instances may be less than the total number of instances. Three criteria determine whether an instance is usable:
 
-   - ``pre``: the number of frames prior to syllable onset that are included in the trajectory. By default, ``pre=5``, meaning that the trajectory will include the 5 frames prior to syllable onset. If a particular syllable instance starts within the first 5 frames of the video, then it is excluded.
+   - ``pre``: the time (in seconds) prior to syllable onset that is included in the trajectory. By default, ``pre=0.167`` (5 frames at 30 fps). If a particular syllable instance starts within that interval at the beginning of the video, then it is excluded.
 
-   - ``post``: the number of frames after syllable onset that are included in the trajectory. By default, ``post=15``, meaning that the trajectory will include the 15 frames after syllable onset. If a particular syllable instance starts within the last 15 frames of the video, then it is excluded.
+   - ``post``: the time (in seconds) after syllable onset that is included in the trajectory. By default, ``post=0.5`` (15 frames at 30 fps). If a particular syllable instance starts within that interval at the end of the video, then it is excluded.
 
    - ``min_duration``: the minimum duration of a syllable instance. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
 
@@ -376,9 +376,9 @@ There are two reasons why a syllable might not have a grid movie:
 
 2) There aren't enough usable instances of the syllable. There have to be at least enough instances to fill up every cell of the grid. The number of grid cells is determined by the ``rows`` and ``cols`` parameters. Note that the number of *usable* syllable instances may be less than the total number of instances. Three criteria determine whether an instance is usable:
 
-   - ``pre``: the number of frames prior to syllable onset that are included in the grid movie. By default, ``pre=30``, meaning that movie in each grid cell starts 30 frames prior to syllable onset. So if a particular syllable instance starts within the first 30 frames of the experiment, then it is excluded.
+   - ``pre``: the time (in seconds) prior to syllable onset that is included in the grid movie. By default, ``pre=1.0``, meaning that the movie in each grid cell starts 1 second (30 frames at 30 fps) prior to syllable onset. So if a particular syllable instance starts within the first second of the experiment, then it is excluded.
 
-   - ``post``: the number of frames after syllable onset that are included in the grid movie. By default, ``post=60``, meaning that the movie in each grid cell ends 60 frames after syllavle onset. If a particular syllable instance starts within the last 60 frames of the experiment, then it is excluded.
+   - ``post``: the time (in seconds) after syllable onset that is included in the grid movie. By default, ``post=2.0``, meaning that the movie in each grid cell ends 2 seconds (60 frames at 30 fps) after syllable onset. If a particular syllable instance starts within the last 2 seconds of the experiment, then it is excluded.
 
    - ``min_duration``: the minimum duration of a syllable instance. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
 
@@ -402,11 +402,11 @@ Users occasionally find that the trajectory plot and grid movie for a given syll
 
    kpms.generate_trajectory_plots(..., density_sample=False)
 
-Density sampling is a way of selecting syllable instances that are most representative relative to the full dataset. Specifically, for each syllable, a syllable-specific density function is computed in trajectory space and compared to the overall density across all syllables. An exemplar instance that maximizes the ratio between these densities is chosen for each syllable, and its nearest neighbors are randomly sampled. When the distribution of trajectories for a syllable is multimodal (i.e., it represents a mixture of distinct behaviors), the examplar syllable may not capture the full range of behaviors, or it may jump from one mode to another when an existing model is applied to new data. In these cases, it may be better to sample syllable instances uniformly by setting turning off density sampling as shown above.
+Density sampling is a way of selecting syllable instances that are most representative relative to the full dataset. Specifically, for each syllable, a syllable-specific density function is computed in trajectory space and compared to the overall density across all syllables. An exemplar instance that maximizes the ratio between these densities is chosen for each syllable, and its nearest neighbors are randomly sampled. When the distribution of trajectories for a syllable is multimodal (i.e., it represents a mixture of distinct behaviors), the exemplar syllable may not capture the full range of behaviors, or it may jump from one mode to another when an existing model is applied to new data. In these cases, it may be better to sample syllable instances uniformly by setting turning off density sampling as shown above.
 
 
 Two different syllables look very similar. Is there a way to consider them as one syllable?
-----------------------------------------------------
+-------------------------------------------------------------------------------------------
 
 Yes, see the :ref:`Merging similar syllables <merging-syllables>` section in the Advanced Usage guide for instructions on how to combine syllables that represent the same behavior.
 
@@ -441,11 +441,11 @@ The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syl
 Troubleshooting
 ===============
 
-We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following in a command terminal in an environment with keypoint-moseq installed (not inside a jupyter notebook!).
+We are continually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following in a command terminal in an environment with keypoint-moseq installed (not inside a jupyter notebook!).
    
-.. code-block:: python
+.. code-block:: bash
 
-    pip install --U keypoint_moseq 
+    pip install -U keypoint-moseq
 
 Note that for any already open notebooks, you will need to restart the kernel to use the updated version. If your problem remains after troubleshooting, please open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_. 
 
@@ -506,7 +506,7 @@ There are two main causes of GPU out of memory (OOM) errors:
    This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
 
 
-  - Switch to single-precision computing by running the code below immediarely after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs.
+  - Switch to single-precision computing by running the code below immediately after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs.
 
   .. code-block:: python
    
@@ -555,7 +555,7 @@ The following actions may help resolve NaNs during model fitting. If they don't,
 
 - Try increasing adjusting the `jitter` parameter, which controls the amount of regularization used to prevent singular matrices. The default value is 1e-3, but it may be necessary to increase this to 1e-2 or 1e-1 using the `jitter` keyword argument in `fit_model`.
 
-- Enable parallel Kalman sampling. By default, it is only enabled when fittin with a GPU. You can override this, however, using the argument `parallel_message_passing=True` when running `fit_model`.
+- Enable parallel Kalman sampling. By default, it is only enabled when fitting with a GPU. You can override this, however, using the argument `parallel_message_passing=True` when running `fit_model`.
 
 
 Installation errors
@@ -569,6 +569,6 @@ Installation errors
 
   First, check if jax can detect your GPU::
 
-     python -c "import jax; print(jax.default_backend())
+     python -c "import jax; print(jax.default_backend())"
 
   The result should be "gpu". If it isn't, then you might not be using the right version of ``cudatoolkit`` or ``cudnn``. If you installed these via ``conda``, you can check by doing a ``conda list | grep cud``. If you are on the right versions, try `updating your GPU driver to the latest version <https://nvidia.com/drivers>`_.
