@@ -1,0 +1,7 @@
+files:
+- checkpoint.h5
+- fitting_progress.pdf
+snapshots:
+- '0'
+- '5'
+- '10'

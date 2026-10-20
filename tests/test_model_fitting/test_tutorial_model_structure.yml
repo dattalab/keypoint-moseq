@@ -1,0 +1,66 @@
+keys:
+- hypparams
+- noise_prior
+- params
+- seed
+- states
+params:
+  Ab:
+    dtype: float64
+    shape:
+    - 100
+    - 4
+    - 13
+  Cd:
+    dtype: float64
+    shape:
+    - 14
+    - 5
+  Q:
+    dtype: float64
+    shape:
+    - 100
+    - 4
+    - 4
+  betas:
+    dtype: float64
+    shape:
+    - 100
+  pi:
+    dtype: float64
+    shape:
+    - 100
+    - 100
+  sigmasq:
+    dtype: float64
+    shape:
+    - 8
+states:
+  h:
+    dtype: float64
+    shape:
+    - 70
+    - 10030
+  s:
+    dtype: float64
+    shape:
+    - 70
+    - 10030
+    - 8
+  v:
+    dtype: float64
+    shape:
+    - 70
+    - 10030
+    - 2
+  x:
+    dtype: float64
+    shape:
+    - 70
+    - 10030
+    - 4
+  z:
+    dtype: int64
+    shape:
+    - 70
+    - 10027
