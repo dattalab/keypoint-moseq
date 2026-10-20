@@ -45,6 +45,12 @@ def setup_tutorial_project(project_dir):
         bodyparts=TUTORIAL_BODYPARTS,
         skeleton=TUTORIAL_SKELETON,
     )
+    apply_tutorial_config_edits(project_dir)
+
+
+def apply_tutorial_config_edits(project_dir):
+    """Apply the modeling notebook's `update_config` call for the example
+    DeepLabCut dataset."""
     kpms.update_config(
         project_dir,
         video_dir="dlc_project/videos/",
@@ -67,6 +73,11 @@ def setup_tutorial_project(project_dir):
 @pytest.fixture
 def project_dir(tmp_path):
     return str(tmp_path / "demo_project")
+
+
+@pytest.fixture
+def dlc_config(dlc_project_dir):
+    return os.path.join(dlc_project_dir, "config.yaml")
 
 
 def test_config_without_project_raises(project_dir):
@@ -101,6 +112,37 @@ def test_tutorial_config(project_dir, data_regression):
     config = lambda: kpms.load_config(project_dir)
 
     data_regression.check(plain_config(config()))
+
+
+def test_dlc_config(project_dir, dlc_config, data_regression):
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config)
+
+    assert os.listdir(project_dir) == ["config.yml"]
+    data_regression.check(
+        kpms.load_config(project_dir, check_if_valid=False, build_indexes=False)
+    )
+
+
+def test_dlc_config_after_tutorial_edits(project_dir, dlc_config, data_regression):
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config)
+    apply_tutorial_config_edits(project_dir)
+    config = lambda: kpms.load_config(project_dir)
+
+    data_regression.check(plain_config(config()))
+
+
+def test_config_after_dlc_setup_raises_on_placeholder_heading_bodyparts(
+    project_dir, dlc_config, capsys
+):
+    kpms.setup_project(project_dir, deeplabcut_config=dlc_config)
+    config = lambda: kpms.load_config(project_dir)
+
+    with pytest.raises(ValueError, match="'BODYPART1' is not in list"):
+        config()
+
+    printed = " ".join(capsys.readouterr().out.split())
+    assert "`anterior_bodyparts` contains BODYPART1" in printed
+    assert "`posterior_bodyparts` contains BODYPART3" in printed
 
 
 @pytest.mark.parametrize("customized", [False, True], ids=["default", "tutorial"])
