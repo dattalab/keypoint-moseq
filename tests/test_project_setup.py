@@ -36,7 +36,7 @@ def plain_config(config):
     }
 
 
-def setup_tutorial_project(project_dir):
+def setup_tutorial_project(project_dir, config_edits):
     """Set up a project with the custom bodyparts and config edits from the
     modeling notebook."""
     kpms.setup_project(
@@ -45,29 +45,7 @@ def setup_tutorial_project(project_dir):
         bodyparts=TUTORIAL_BODYPARTS,
         skeleton=TUTORIAL_SKELETON,
     )
-    apply_tutorial_config_edits(project_dir)
-
-
-def apply_tutorial_config_edits(project_dir):
-    """Apply the modeling notebook's `update_config` call for the example
-    DeepLabCut dataset."""
-    kpms.update_config(
-        project_dir,
-        video_dir="dlc_project/videos/",
-        anterior_bodyparts=["nose"],
-        posterior_bodyparts=["spine4"],
-        use_bodyparts=[
-            "spine4",
-            "spine3",
-            "spine2",
-            "spine1",
-            "head",
-            "nose",
-            "right ear",
-            "left ear",
-        ],
-        fps=30,
-    )
+    kpms.update_config(project_dir, **config_edits)
 
 
 @pytest.fixture
@@ -107,8 +85,8 @@ def test_default_config(project_dir, data_regression):
     data_regression.check(plain_config(config()))
 
 
-def test_tutorial_config(project_dir, data_regression):
-    setup_tutorial_project(project_dir)
+def test_tutorial_config(project_dir, tutorial_config_edits, data_regression):
+    setup_tutorial_project(project_dir, tutorial_config_edits)
     config = lambda: kpms.load_config(project_dir)
 
     data_regression.check(plain_config(config()))
@@ -123,10 +101,8 @@ def test_dlc_config(project_dir, dlc_config, data_regression):
     )
 
 
-def test_dlc_config_after_tutorial_edits(project_dir, dlc_config, data_regression):
-    kpms.setup_project(project_dir, deeplabcut_config=dlc_config)
-    apply_tutorial_config_edits(project_dir)
-    config = lambda: kpms.load_config(project_dir)
+def test_dlc_config_after_tutorial_edits(tutorial_project_dir, data_regression):
+    config = lambda: kpms.load_config(tutorial_project_dir)
 
     data_regression.check(plain_config(config()))
 
@@ -146,9 +122,11 @@ def test_config_after_dlc_setup_raises_on_placeholder_heading_bodyparts(
 
 
 @pytest.mark.parametrize("customized", [False, True], ids=["default", "tutorial"])
-def test_rerunning_setup_keeps_existing_config(project_dir, customized):
+def test_rerunning_setup_keeps_existing_config(
+    project_dir, tutorial_config_edits, customized
+):
     if customized:
-        setup_tutorial_project(project_dir)
+        setup_tutorial_project(project_dir, tutorial_config_edits)
     else:
         kpms.setup_project(project_dir)
     config = lambda: kpms.load_config(project_dir)
