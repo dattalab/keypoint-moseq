@@ -25,3 +25,13 @@ def dlc_project_dir():
         f for f in files if f.endswith(os.path.join("dlc_project", "config.yaml"))
     )
     return os.path.dirname(config_path)
+
+
+@pytest.fixture(scope="session")
+def tutorial_keypoints(dlc_project_dir):
+    """Coordinates, confidences and bodyparts loaded the way the modeling
+    notebook loads the example DeepLabCut dataset."""
+    import keypoint_moseq as kpms
+
+    keypoint_data_path = os.path.join(dlc_project_dir, "videos")
+    return kpms.load_keypoints(keypoint_data_path, "deeplabcut")
