@@ -1,0 +1,34 @@
+name: tests
+
+# The nightly run resolves every dependency to its newest allowed release, so
+# a breaking upstream release (including transitive ones) fails here within a
+# day. The installed versions are printed before pytest runs.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 4 * * *"
+      timezone: "America/New_York"
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # versioneer derives the package version from tags
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: false
+
+      - name: Restore test data
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/keypoint-moseq/open_field_2D.zip
+          key: open-field-2d-22ec317b33039875cb21c76dca027017
+
+      - name: Run tests
+        run: uvx nox

@@ -1,0 +1,53 @@
+PCA_fitting_num_frames: 1000000
+added_noise_level: 0.1
+anterior_bodyparts:
+- BODYPART1
+anterior_idxs:
+- 0
+ar_hypparams:
+  K_0_scale: 10.0
+  S_0_scale: 0.01
+  latent_dim: 10
+  nlags: 3
+bodyparts:
+- BODYPART1
+- BODYPART2
+- BODYPART3
+cen_hypparams:
+  sigmasq_loc: 0.5
+conf_pseudocount: 0.001
+conf_threshold: 0.5
+error_estimator:
+  intercept: 0.25
+  slope: -0.5
+fix_heading: false
+fps: 30
+keypoint_colormap: autumn
+obs_hypparams:
+  nu_s: 5
+  nu_sigma: 100000.0
+  sigmasq_0: 0.1
+  sigmasq_C: 0.1
+outlier_scale_factor: 6.0
+posterior_bodyparts:
+- BODYPART3
+posterior_idxs:
+- 2
+recording_name_suffix: ''
+skeleton:
+- - BODYPART1
+  - BODYPART2
+- - BODYPART2
+  - BODYPART3
+trans_hypparams:
+  alpha: 5.7
+  gamma: 1000.0
+  kappa: 1000000.0
+  num_states: 100
+use_bodyparts:
+- BODYPART1
+- BODYPART2
+- BODYPART3
+verbose: false
+video_dir: ''
+whiten: true

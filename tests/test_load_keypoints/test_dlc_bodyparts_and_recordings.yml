@@ -1,0 +1,21 @@
+bodyparts:
+- tail
+- spine4
+- spine3
+- spine2
+- spine1
+- head
+- nose
+- right ear
+- left ear
+recordings:
+- 21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6b_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_27_04_cage4_mouse2_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
