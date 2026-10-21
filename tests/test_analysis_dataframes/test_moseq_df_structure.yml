@@ -1,0 +1,54 @@
+columns:
+- name
+- centroid_x
+- centroid_y
+- heading
+- angular_velocity
+- velocity_px_s
+- syllable
+- frame_index
+- group
+- onset
+dtypes:
+  angular_velocity: float64
+  centroid_x: float64
+  centroid_y: float64
+  frame_index: int64
+  group: object
+  heading: float64
+  name: object
+  onset: bool
+  syllable: int64
+  velocity_px_s: float64
+frames:
+  21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 71524
+  21_12_10_def6a_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 53512
+  21_12_10_def6a_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 35818
+  21_12_10_def6b_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 53527
+  21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 107507
+  21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 107520
+  22_04_26_cage4_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 53623
+  22_04_26_cage4_0_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 53625
+  22_04_26_cage4_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 53632
+  22_27_04_cage4_mouse2_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 53623
+groups:
+  21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  - a
+  21_12_10_def6a_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  - a
+  21_12_10_def6a_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  - a
+  21_12_10_def6b_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  - a
+  21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  - a
+  21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  - a
+  22_04_26_cage4_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  - b
+  22_04_26_cage4_0_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  - b
+  22_04_26_cage4_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  - b
+  22_27_04_cage4_mouse2_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  - b

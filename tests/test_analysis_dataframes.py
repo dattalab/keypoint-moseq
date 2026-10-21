@@ -1,0 +1,227 @@
+import numpy as np
+import pytest
+from jax_moseq.utils import get_frequencies
+
+import keypoint_moseq as kpms
+from keypoint_moseq.util import filter_angle
+from analysis_utils import FPS, cohort_group, runs
+
+MIN_FREQUENCY = 0.005  # `min_frequency` of the notebook's stats_df cell
+KINEMATICS = ["heading", "angular_velocity", "velocity_px_s"]
+
+
+def column_types(df):
+    return {
+        "columns": list(df.columns),
+        "dtypes": {column: str(dtype) for column, dtype in df.dtypes.items()},
+    }
+
+
+def recording_rows(df, results):
+    """Rows of `df` for each recording, in the order of `results`."""
+    return {name: df[df["name"] == name] for name in results}
+
+
+def test_moseq_df_structure(tutorial_moseq_df, data_regression):
+    frames = tutorial_moseq_df.groupby("name", sort=False).size()
+    groups = tutorial_moseq_df.groupby("name", sort=False)["group"].unique()
+
+    data_regression.check(
+        {
+            **column_types(tutorial_moseq_df),
+            "frames": {name: int(count) for name, count in frames.items()},
+            "groups": {name: list(values) for name, values in groups.items()},
+        }
+    )
+
+
+def test_moseq_df_matches_results(tutorial_moseq_df, tutorial_analysis_project):
+    project_dir, model_name = tutorial_analysis_project
+    results = kpms.load_results(project_dir, model_name)
+    lengths = [len(recording["syllable"]) for recording in results.values()]
+    concatenated = lambda key: np.concatenate([r[key] for r in results.values()])
+
+    np.testing.assert_array_equal(tutorial_moseq_df["name"], np.repeat(list(results), lengths))
+    np.testing.assert_array_equal(
+        tutorial_moseq_df["frame_index"], np.concatenate([np.arange(n) for n in lengths])
+    )
+    np.testing.assert_array_equal(tutorial_moseq_df["syllable"], concatenated("syllable"))
+    np.testing.assert_array_equal(
+        tutorial_moseq_df[["centroid_x", "centroid_y"]], concatenated("centroid")
+    )
+    np.testing.assert_array_equal(
+        tutorial_moseq_df["group"], np.repeat([cohort_group(n) for n in results], lengths)
+    )
+
+
+def test_moseq_df_kinematics(tutorial_moseq_df, tutorial_analysis_project):
+    project_dir, model_name = tutorial_analysis_project
+    results = kpms.load_results(project_dir, model_name)
+
+    for name, rows in recording_rows(tutorial_moseq_df, results).items():
+        centroid = results[name]["centroid"]
+        heading = filter_angle(results[name]["heading"])
+        smoothed_heading = filter_angle(heading, size=3, method="gaussian")
+        speed = np.linalg.norm(np.diff(centroid, axis=0), axis=1) * FPS
+
+        np.testing.assert_allclose(
+            rows["velocity_px_s"], np.concatenate([[0], speed]), rtol=1e-12, err_msg=name
+        )
+        np.testing.assert_array_equal(rows["heading"], heading, err_msg=name)
+        np.testing.assert_allclose(
+            rows["angular_velocity"],
+            np.concatenate([[0], np.diff(smoothed_heading) * FPS]),
+            rtol=1e-12,
+            err_msg=name,
+        )
+
+
+def test_moseq_df_onsets(tutorial_moseq_df):
+    syllables = tutorial_moseq_df["syllable"].to_numpy()
+
+    # Onsets are found across the concatenated recordings, so a recording's
+    # first frame is not an onset when the previous recording ends in the
+    # same syllable.
+    np.testing.assert_array_equal(
+        tutorial_moseq_df["onset"], np.concatenate([[True], syllables[1:] != syllables[:-1]])
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=UnboundLocalError,
+    reason="compute_moseq_df reads `index_data` before assigning it when "
+    "index.csv is missing, so its default-group fallback never runs",
+)
+def test_moseq_df_without_index_uses_default_group(analysis_project_without_groups):
+    project_dir, model_name = analysis_project_without_groups
+
+    moseq_df = kpms.compute_moseq_df(project_dir, model_name, smooth_heading=True)
+
+    assert (moseq_df["group"] == "default").all()
+
+
+def test_filter_angle_values(ndarrays_regression):
+    """`compute_moseq_df` smooths headings with `filter_angle`. The tutorial
+    headings come from the fitted model, so the filter is snapshotted on a
+    fixed series instead: a random walk from the legacy `RandomState`, whose
+    stream NumPy keeps fixed."""
+    steps = np.random.RandomState(0).normal(scale=0.3, size=1000)
+    angles = (np.cumsum(steps) + np.pi) % (2 * np.pi) - np.pi
+    median = filter_angle(angles)
+
+    ndarrays_regression.check(
+        {
+            "median": median,
+            "median_then_gaussian": filter_angle(median, size=3, method="gaussian"),
+        },
+        default_tolerance=dict(rtol=1e-10, atol=1e-12),
+    )
+
+
+def test_stats_df_structure(tutorial_stats_df, data_regression):
+    groups = tutorial_stats_df.groupby("name", sort=False)["group"].unique()
+
+    data_regression.check(
+        {
+            **column_types(tutorial_stats_df),
+            "groups": {name: list(values) for name, values in groups.items()},
+        }
+    )
+
+
+def test_stats_df_rows(tutorial_stats_df, tutorial_analysis_project):
+    project_dir, model_name = tutorial_analysis_project
+    results = kpms.load_results(project_dir, model_name)
+    frequencies = get_frequencies({name: r["syllable"] for name, r in results.items()})
+    included = np.flatnonzero(frequencies > MIN_FREQUENCY)
+
+    rows = [
+        (group, name, int(syllable))
+        for group, name, syllable in zip(
+            tutorial_stats_df["group"], tutorial_stats_df["name"], tutorial_stats_df["syllable"]
+        )
+    ]
+    expected = {
+        (cohort_group(name), name, int(syllable))
+        for name, recording in results.items()
+        for syllable in np.intersect1d(included, recording["syllable"])
+    }
+
+    assert len(rows) == len(set(rows))
+    assert set(rows) == expected
+
+
+def test_stats_df_frequency_and_duration(tutorial_stats_df, tutorial_analysis_project):
+    project_dir, model_name = tutorial_analysis_project
+    results = kpms.load_results(project_dir, model_name)
+
+    for name, rows in recording_rows(tutorial_stats_df, results).items():
+        syllables = rows["syllable"].to_numpy()
+        run_syllables, run_lengths = runs(results[name]["syllable"])
+        mean_run_lengths = [run_lengths[run_syllables == s].mean() for s in syllables]
+
+        np.testing.assert_array_equal(
+            rows["frequency"],
+            get_frequencies(results[name]["syllable"])[syllables],
+            err_msg=name,
+        )
+        np.testing.assert_allclose(
+            rows["duration"], np.array(mean_run_lengths) / FPS, rtol=1e-12, err_msg=name
+        )
+
+
+def test_stats_df_kinematics(tutorial_stats_df, tutorial_moseq_df, tutorial_analysis_project):
+    project_dir, model_name = tutorial_analysis_project
+    results = kpms.load_results(project_dir, model_name)
+    frames = recording_rows(tutorial_moseq_df, results)
+
+    for name, rows in recording_rows(tutorial_stats_df, results).items():
+        for _, row in rows.iterrows():
+            values = frames[name].loc[frames[name]["syllable"] == row["syllable"], KINEMATICS]
+            values = values.to_numpy()
+            std = (
+                values.std(axis=0, ddof=1)
+                if len(values) > 1
+                else np.full(len(KINEMATICS), np.nan)
+            )
+            expected = {
+                "mean": values.mean(axis=0),
+                "std": std,
+                "min": values.min(axis=0),
+                "max": values.max(axis=0),
+            }
+            for statistic, expected_values in expected.items():
+                columns = [f"{kinematic}_{statistic}" for kinematic in KINEMATICS]
+                np.testing.assert_allclose(
+                    row[columns].to_numpy(dtype=float),
+                    expected_values,
+                    rtol=1e-10,
+                    atol=1e-10,
+                    err_msg=f"{name} syllable {row['syllable']} {statistic}",
+                )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=UnboundLocalError,
+    reason="compute_stats_df reads `index_df` before assigning it when "
+    "index.csv is missing, so it raises after printing that the file is missing",
+)
+def test_stats_df_without_index_uses_default_group(
+    analysis_project_without_groups, tutorial_moseq_df
+):
+    project_dir, model_name = analysis_project_without_groups
+    moseq_df = tutorial_moseq_df.assign(group="default")
+
+    stats_df = kpms.compute_stats_df(
+        project_dir,
+        model_name,
+        moseq_df,
+        min_frequency=0.005,
+        groupby=["group", "name"],
+        fps=30,
+    )
+
+    assert (stats_df["group"] == "default").all()
+    assert set(stats_df["name"]) == set(moseq_df["name"])

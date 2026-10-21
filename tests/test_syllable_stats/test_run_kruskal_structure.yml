@@ -1,0 +1,13 @@
+dunn_columns:
+- ('syllable', '')
+- group1
+- group2
+- value
+group_pairs:
+- - a
+  - b
+kruskal_columns:
+- statistic
+- pvalue
+- p_adj
+- is_sig
