@@ -26,9 +26,15 @@ uvx nox -r -- -k checkpoint         # run tests whose names match
 
 The same suite runs on every pull request and nightly against the newest allowed version of every dependency.
 
+## What the tests check
+
+Most tests record what keypoint-MoSeq does today, not what it should do. Their job is to catch changes nobody intended, such as a dependency update that shifts a result, so a passing test is not an endorsement of the behavior it checks. A failing test means behavior changed; whether that is a problem depends on whether the change was intended.
+
+Known bugs are recorded the same way. A test marked `@pytest.mark.xfail(strict=True)` reproduces a crash or wrong result that exists today, and its `reason` names the bug. When a change fixes the bug, that test fails because the bug no longer occurs: remove the marker and make the test check the corrected behavior.
+
 ## Adding tests
 
-Bug fixes and new features should come with a test. Most tests follow a step of `docs/source/modeling.ipynb`. The shared fixtures in `tests/conftest.py` run the notebook's steps in order on the tutorial dataset, so a new test can usually request the fixture for the step it needs and check that step's output.
+Bug fixes and new features should come with a test. Most tests follow a step of the tutorial notebooks, `docs/source/modeling.ipynb` and `docs/source/analysis.ipynb`. The shared fixtures in `tests/conftest.py` run the notebook's steps in order on the tutorial dataset, so a new test can usually request the fixture for the step it needs and check that step's output.
 
 ## When a snapshot test fails
 
