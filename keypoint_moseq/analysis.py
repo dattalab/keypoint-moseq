@@ -392,7 +392,7 @@ def generate_syll_info(project_dir, model_name, syll_info_path):
     grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
     assert len(grid_movies) > 0, (
         "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
-        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
+        "https://keypoint-moseq.readthedocs.io/en/stable/modeling.html#visualization"
     )
     # make movie paths into a dataframe
     movie_df = pd.DataFrame(
@@ -433,7 +433,7 @@ def label_syllables(project_dir, model_name, moseq_df):
     grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
     assert len(grid_movies) > 0, (
         "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
-        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
+        "https://keypoint-moseq.readthedocs.io/en/stable/modeling.html#visualization"
     )
 
     # load syll_info

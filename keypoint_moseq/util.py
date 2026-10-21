@@ -825,7 +825,7 @@ def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdo
             )
             warnings.warn(
                 "This may cause problems during modeling. See "
-                "https://keypoint-moseq.readthedocs.io/en/latest/FAQs.html#high-proportion-of-nans"
+                "https://keypoint-moseq.readthedocs.io/en/stable/FAQs.html#high-proportion-of-nans"
                 " for additional information."
             )
 
