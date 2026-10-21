@@ -1,0 +1,29 @@
+name: release
+
+# Publishing a GitHub release builds the source distribution from the release
+# tag and uploads it to PyPI. PyPI accepts the upload through trusted
+# publishing for this repository and workflow file, so no API token is stored.
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # versioneer derives the package version from tags
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: false
+
+      - name: Build source distribution
+        run: uv build --sdist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
