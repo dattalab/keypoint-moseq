@@ -36,7 +36,7 @@ def _wrapped_resample(resample_func, data, model, pbar=None, **resample_options)
         for msg in messages:
             warning_text.append("  - {}".format(msg))
         warning_text.append(
-            "\nFor additional information, see https://keypoint-moseq.readthedocs.io/en/latest/troubleshooting.html#nans-during-fitting"
+            "\nFor additional information, see https://keypoint-moseq.readthedocs.io/en/stable/FAQs.html#nans-during-fitting"
         )
         warnings.warn("\n".join(warning_text))
         raise StopResampling()
