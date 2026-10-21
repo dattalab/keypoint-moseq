@@ -24,7 +24,7 @@ uvx nox -r -- tests/test_pca.py     # run one test file
 uvx nox -r -- -k checkpoint         # run tests whose names match
 ```
 
-The same suite runs on every pull request, on every push to `main`, and nightly against the newest allowed version of every dependency.
+The same suite runs on every pull request and nightly against the newest allowed version of every dependency.
 
 ## Adding tests
 
