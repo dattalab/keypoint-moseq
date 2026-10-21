@@ -1,0 +1,5 @@
+columns:
+- syllable
+- label
+- short_description
+- movie_path

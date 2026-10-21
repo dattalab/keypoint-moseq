@@ -1,12 +1,25 @@
 import contextlib
 import io
+import math
 import os
 import shutil
 import zipfile
 
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import pooch
 import pytest
+
+from analysis_utils import (
+    bigram_plot_summary,
+    cohort_group,
+    graph_plot_summary,
+    read_syll_info,
+    syll_stats_plot_summary,
+    syllable_description,
+    syllable_label,
+)
 
 OPEN_FIELD_2D_URL = (
     "https://zenodo.org/api/records/10636983/files/open_field_2D.zip/content"
@@ -387,3 +400,280 @@ def tutorial_dendrogram(tutorial_outlier_removed, tutorial_reindexed, tutorial_r
     labels = [label.get_text() for label in plt.gcf().axes[0].get_xticklabels()]
     plt.close("all")
     return results, labels, os.path.join(project_dir, model_name, "similarity_dendrogram")
+
+
+FROZEN_STATS_DF = os.path.join(os.path.dirname(__file__), "data", "frozen_stats_df.csv")
+
+
+@pytest.fixture(scope="session")
+def tutorial_analysis_project(
+    tmp_path_factory,
+    tutorial_outlier_removed,
+    tutorial_reindexed,
+    tutorial_results,
+    tutorial_grid_movies,
+):
+    """Project directory and model name for the analysis notebook: a new
+    project holding copies of the reindexed model's `results.h5` and grid
+    movies, laid out as the notebook's setup cell describes. The analysis
+    notebook writes `index.csv` to the project directory and `syll_info.csv`
+    and figures to the model directory, so the copy keeps them out of the
+    modeling project."""
+    modeling_project_dir, _, _ = tutorial_outlier_removed
+    model_name, _ = tutorial_reindexed
+    source_dir = os.path.join(modeling_project_dir, model_name)
+    project_dir = str(tmp_path_factory.mktemp("analysis") / "demo_project")
+    model_dir = os.path.join(project_dir, model_name)
+
+    os.makedirs(model_dir)
+    shutil.copy(os.path.join(source_dir, "results.h5"), model_dir)
+    shutil.copytree(
+        os.path.join(source_dir, "grid_movies"), os.path.join(model_dir, "grid_movies")
+    )
+    return project_dir, model_name
+
+
+@pytest.fixture
+def analysis_project_without_groups(tmp_path, tutorial_analysis_project):
+    """Project directory and model name holding only a copy of the analysis
+    project's `results.h5`, as before the group-setting cell has run."""
+    source_project_dir, model_name = tutorial_analysis_project
+    project_dir = str(tmp_path / "demo_project")
+    model_dir = os.path.join(project_dir, model_name)
+
+    os.makedirs(model_dir)
+    shutil.copy(os.path.join(source_project_dir, model_name, "results.h5"), model_dir)
+    return project_dir, model_name
+
+
+@pytest.fixture(scope="session")
+def tutorial_groups_assigned(tutorial_analysis_project):
+    """Widget and `index.csv` contents (as generated and as saved) of the
+    analysis notebook's group-setting cell. Each recording's group cell is
+    edited to its cohort group, typed with surrounding spaces and a
+    newline, and "Save group info" is clicked."""
+    import keypoint_moseq as kpms
+
+    project_dir, model_name = tutorial_analysis_project
+    index_path = os.path.join(project_dir, "index.csv")
+
+    widget = kpms.interactive_group_setting(project_dir, model_name)
+    initial_index = pd.read_csv(index_path)
+    table, button = widget[0], widget[1][0]
+    table.patch(
+        {
+            "group": [
+                (row, f"  {cohort_group(name)}\n")
+                for row, name in enumerate(table.value["name"])
+            ]
+        }
+    )
+    button.clicks += 1
+    return {
+        "widget": widget,
+        "initial_index": initial_index,
+        "saved_index": pd.read_csv(index_path),
+    }
+
+
+@pytest.fixture(scope="session")
+def tutorial_moseq_df(tutorial_analysis_project, tutorial_groups_assigned):
+    """`moseq_df` from the analysis notebook's dataframe cell."""
+    import keypoint_moseq as kpms
+
+    project_dir, model_name = tutorial_analysis_project
+    return kpms.compute_moseq_df(project_dir, model_name, smooth_heading=True)
+
+
+@pytest.fixture(scope="session")
+def tutorial_stats_df(tutorial_analysis_project, tutorial_moseq_df):
+    """`stats_df` from the analysis notebook's summary statistics cell."""
+    import keypoint_moseq as kpms
+
+    project_dir, model_name = tutorial_analysis_project
+    return kpms.compute_stats_df(
+        project_dir,
+        model_name,
+        tutorial_moseq_df,
+        min_frequency=0.005,
+        groupby=["group", "name"],
+        fps=30,
+    )
+
+
+@pytest.fixture(scope="session")
+def tutorial_syllables_labeled(tutorial_analysis_project, tutorial_moseq_df):
+    """Widget and `syll_info.csv` contents (as generated and as saved) of
+    the analysis notebook's syllable labeling cell. Every syllable in the
+    widget's table, which lists those with a grid movie, gets a label and a
+    short description typed with surrounding whitespace, and "Save syllable
+    info" is clicked."""
+    import keypoint_moseq as kpms
+
+    project_dir, model_name = tutorial_analysis_project
+    syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
+
+    widget = kpms.label_syllables(project_dir, model_name, tutorial_moseq_df)
+    initial_syll_info = read_syll_info(syll_info_path)
+    table, button = widget[1][0], widget[1][1][0]
+    syllables = list(table.value["syllable"])
+    table.patch(
+        {
+            "label": [
+                (row, f"  {syllable_label(s)}\n") for row, s in enumerate(syllables)
+            ],
+            "short_description": [
+                (row, f" {syllable_description(s)}  ") for row, s in enumerate(syllables)
+            ],
+        }
+    )
+    button.clicks += 1
+    return {
+        "widget": widget,
+        "initial_syll_info": initial_syll_info,
+        "saved_syll_info": read_syll_info(syll_info_path),
+    }
+
+
+def plot_syll_stats(stats_df, project_dir, model_name):
+    """Figure summary and printed output of the analysis notebook's group
+    comparison cell run on `stats_df`. The global NumPy random state is
+    seeded because the Kruskal-Wallis check inside `run_kruskal` draws from
+    it."""
+    import keypoint_moseq as kpms
+
+    np.random.seed(0)
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        fig, legend = kpms.plot_syll_stats_with_sem(
+            stats_df,
+            project_dir,
+            model_name,
+            plot_sig=True,
+            thresh=0.05,
+            stat="frequency",
+            order="stat",
+            ctrl_group="a",
+            exp_group="b",
+            figsize=(8, 4),
+            groups=stats_df["group"].unique(),
+        )
+    summary = syll_stats_plot_summary(fig, legend)
+    plt.close("all")
+    return {**summary, "printed": printed.getvalue()}
+
+
+@pytest.fixture(scope="session")
+def tutorial_syll_stats_plot(
+    tutorial_analysis_project, tutorial_stats_df, tutorial_syllables_labeled
+):
+    """Figure summary and printed output of the analysis notebook's group
+    comparison cell."""
+    project_dir, model_name = tutorial_analysis_project
+    return plot_syll_stats(tutorial_stats_df, project_dir, model_name)
+
+
+@pytest.fixture(scope="session")
+def frozen_stats_df():
+    """A `stats_df` stored in the repository, so that statistics computed
+    from it can be snapshotted by value."""
+    # Output of `compute_stats_df`, called as in the analysis notebook with
+    # the cohort groups, for a full-scale fit of the tutorial dataset (model
+    # 2025_02_11-10_07_45 in the maintainers' test assets). The frequency of
+    # one syllable differs significantly between the groups.
+    return pd.read_csv(FROZEN_STATS_DF, float_precision="round_trip")
+
+
+@pytest.fixture(scope="session")
+def frozen_syll_stats_plot(tmp_path_factory, frozen_stats_df):
+    """Figure summary and printed output of the analysis notebook's group
+    comparison cell run on the frozen `stats_df`, in a project without
+    syllable labels."""
+    project_dir = str(tmp_path_factory.mktemp("frozen_stats") / "demo_project")
+    return plot_syll_stats(frozen_stats_df, project_dir, "frozen_model")
+
+
+@pytest.fixture(scope="session")
+def tutorial_transition_matrices(
+    tutorial_analysis_project, tutorial_groups_assigned, tutorial_syllables_labeled
+):
+    """Outputs, printed text and figure summary of the analysis notebook's
+    transition matrix cell. `outputs` holds `trans_mats`, `usages`, `groups`
+    and `syll_include`."""
+    import keypoint_moseq as kpms
+
+    project_dir, model_name = tutorial_analysis_project
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        outputs = kpms.generate_transition_matrices(
+            project_dir, model_name, normalize="bigram", min_frequency=0.005
+        )
+        trans_mats, usages, groups, syll_include = outputs
+        kpms.visualize_transition_bigram(
+            project_dir,
+            model_name,
+            groups,
+            trans_mats,
+            syll_include,
+            normalize="bigram",
+            show_syllable_names=True,
+        )
+    figure = bigram_plot_summary(plt.gcf())
+    plt.close("all")
+    return {"outputs": outputs, "printed": printed.getvalue(), "figure": figure}
+
+
+@pytest.fixture(scope="session")
+def tutorial_transition_graphs(tutorial_analysis_project, tutorial_transition_matrices):
+    """Printed text, axis titles and per-group graph summaries of the
+    analysis notebook's transition graph cell."""
+    import keypoint_moseq as kpms
+
+    project_dir, model_name = tutorial_analysis_project
+    trans_mats, usages, groups, syll_include = tutorial_transition_matrices["outputs"]
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        kpms.plot_transition_graph_group(
+            project_dir,
+            model_name,
+            groups,
+            trans_mats,
+            usages,
+            syll_include,
+            layout="circular",
+            show_syllable_names=False,
+        )
+    axes = plt.gcf().axes
+    summary = {
+        "printed": printed.getvalue(),
+        "titles": [ax.get_title() for ax in axes],
+        "graphs": [graph_plot_summary(ax) for ax in axes[: len(groups)]],
+    }
+    plt.close("all")
+    return summary
+
+
+@pytest.fixture(scope="session")
+def tutorial_transition_graph_difference(
+    tutorial_analysis_project, tutorial_transition_matrices
+):
+    """Printed text, axis titles, legend entries and per-pair graph
+    summaries of the analysis notebook's difference graph cell."""
+    import keypoint_moseq as kpms
+
+    project_dir, model_name = tutorial_analysis_project
+    trans_mats, usages, groups, syll_include = tutorial_transition_matrices["outputs"]
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        kpms.plot_transition_graph_difference(
+            project_dir, model_name, groups, trans_mats, usages, syll_include, layout="circular"
+        )
+    axes = plt.gcf().axes
+    summary = {
+        "printed": printed.getvalue(),
+        "titles": [ax.get_title() for ax in axes],
+        "legend": [text.get_text() for text in axes[-1].get_legend().get_texts()],
+        "graphs": [graph_plot_summary(ax) for ax in axes[: math.comb(len(groups), 2)]],
+    }
+    plt.close("all")
+    return summary
