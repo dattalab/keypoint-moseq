@@ -4,10 +4,7 @@ This page covers how changes get into the repository and how to run and extend t
 
 ## How changes get merged
 
-All changes reach `main` through a pull request; direct pushes to `main` are blocked. A pull request can be merged once:
-
-- the `tests` check passes, and
-- a maintainer (@calebweinreb or @JRJacoby) has approved it.
+All changes reach `main` through a pull request; direct pushes to `main` are blocked. A pull request can be merged once its `tests` check passes, and is merged by a maintainer with write access to the repository. For a first-time contributor's pull request, a maintainer approves the test run before it starts.
 
 Small, focused pull requests are reviewed fastest. For larger changes, open an issue first to discuss the approach.
 
