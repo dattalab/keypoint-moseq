@@ -63,7 +63,8 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
     Returns
     -------
     list
-        A list of file paths.
+        A list of file paths in sorted order, so the result does not depend
+        on the order in which the filesystem lists directory entries.
     """
     if isinstance(filepath_pattern, list):
         matches = []
@@ -86,7 +87,7 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
 
         # filter matches by extension
         matches = [match for match in matches if os.path.splitext(match)[1].lower() in ext_list]
-        return matches
+        return sorted(matches)
 
 
 def find_matching_videos(

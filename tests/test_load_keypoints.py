@@ -1,3 +1,24 @@
+import os
+
+from keypoint_moseq.util import list_files_with_exts
+
+
+def test_directory_listing_is_sorted(dlc_project_dir, tmp_path):
+    filenames = sorted(
+        name
+        for name in os.listdir(os.path.join(dlc_project_dir, "videos"))
+        if name.endswith(".h5")
+    )
+    # Local filesystems often list a small directory in creation order, so
+    # create the files in reverse.
+    for name in reversed(filenames):
+        (tmp_path / name).touch()
+
+    files = list_files_with_exts(str(tmp_path), ["h5"])
+
+    assert [os.path.basename(path) for path in files] == filenames
+
+
 def test_dlc_bodyparts_and_recordings(tutorial_keypoints, data_regression):
     coordinates, confidences, bodyparts = tutorial_keypoints
 

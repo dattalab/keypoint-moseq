@@ -1,0 +1,9 @@
+columns:
+- syllable
+- centroid x
+- centroid y
+- heading
+- latent_state 0
+- latent_state 1
+- latent_state 2
+- latent_state 3
