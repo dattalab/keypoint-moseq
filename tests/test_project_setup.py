@@ -113,7 +113,10 @@ def test_config_after_dlc_setup_raises_on_placeholder_heading_bodyparts(
     kpms.setup_project(project_dir, deeplabcut_config=dlc_config)
     config = lambda: kpms.load_config(project_dir)
 
-    with pytest.raises(ValueError, match="'BODYPART1' is not in list"):
+    # The error comes from `list.index`, whose message names the missing item
+    # before Python 3.14 and not from 3.14 on; the printed message below
+    # names the bodypart on every version.
+    with pytest.raises(ValueError, match="not in list"):
         config()
 
     printed = " ".join(capsys.readouterr().out.split())

@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 from jax_moseq.utils import get_frequencies
 
@@ -8,12 +9,23 @@ from analysis_utils import FPS, cohort_group, runs
 
 MIN_FREQUENCY = 0.005  # `min_frequency` of the notebook's stats_df cell
 KINEMATICS = ["heading", "angular_velocity", "velocity_px_s"]
+# pandas 2 stores text columns as `object` and pandas 3 as `str`, and pandas
+# 3 requires Python 3.11 or later, so the dtype of a text column depends on
+# the installed versions. Snapshots record either one under this name.
+TEXT_DTYPE = "object or str"
 
 
 def column_types(df):
     return {
         "columns": list(df.columns),
-        "dtypes": {column: str(dtype) for column, dtype in df.dtypes.items()},
+        "dtypes": {
+            column: (
+                TEXT_DTYPE
+                if pd.api.types.infer_dtype(df[column], skipna=False) == "string"
+                else str(dtype)
+            )
+            for column, dtype in df.dtypes.items()
+        },
     }
 
 
