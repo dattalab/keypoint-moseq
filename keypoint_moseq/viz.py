@@ -191,7 +191,7 @@ def plot_pcs(
     d = len(pca.mean_) // (k - 1)
 
     if keypoint_colors is None:
-        cmap = plt.cm.get_cmap(keypoint_colormap)
+        cmap = plt.get_cmap(keypoint_colormap)
         keypoint_colors = cmap(np.linspace(0, 1, k))
 
     Gamma = np.array(center_embedding(k))
@@ -1431,10 +1431,7 @@ def get_limits(
 def rasterize_figure(fig):
     canvas = fig.canvas
     canvas.draw()
-    width, height = canvas.get_width_height()
-    raster_flat = np.frombuffer(canvas.tostring_rgb(), dtype="uint8")
-    raster = raster_flat.reshape((height, width, 3))
-    return raster
+    return np.asarray(canvas.buffer_rgba())[..., :3].copy()
 
 
 def plot_trajectories(

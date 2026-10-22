@@ -290,6 +290,7 @@ def _noise_calibration_widget(
         with output:
             output.clear_output(wait=True)
             ax.clear()
+            current_annotation_marker[0] = None
             ax.imshow(sample_images[image_key])
 
             frame = image_key[1]
