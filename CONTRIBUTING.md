@@ -70,6 +70,12 @@ Commit the regenerated files together with the code change.
 
 `docs/source/modeling.ipynb` defines how keypoint-MoSeq is meant to be run. If a change affects that workflow, update the notebook and its Colab copy, `docs/keypoint_moseq_colab.ipynb`, in the same pull request.
 
+## Version numbers
+
+Maintainers choose the version number when they publish a release, based on what changes for someone who upgrades. A patch release (`0.7.0` → `0.7.1`) leaves every output unchanged for the same dependency versions: syllables and fitted parameters, PCA, dataframes, saved files and figures. Patch releases hold crash fixes, documentation, performance improvements with identical output, and tightened dependency requirements that exclude a broken upstream release. Anything that changes outputs, including a bug fix that changes results people already have, is a minor release (`0.7.0` → `0.8.0`), as are new features, deprecations and other changes to the dependency requirements. While the version is 0.x, API changes and changes that stop older projects from loading are minor releases too, called out in the release notes.
+
+If your pull request changes outputs, or needed a stored snapshot regenerated, say so in its description.
+
 ## Reporting problems
 
 Open an issue at https://github.com/dattalab/keypoint-moseq/issues. Include the keypoint-MoSeq version, your Python version, your operating system, your GPU and CUDA version if you use one, and the full error message.
