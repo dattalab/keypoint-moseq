@@ -1,8 +1,11 @@
 name: tests
 
-# The nightly run resolves every dependency to its newest allowed release, so
-# a breaking upstream release (including transitive ones) fails here within a
-# day. The installed versions are printed before pytest runs.
+# Pull requests test the oldest and newest supported Pythons. Pushes to main,
+# the nightly run and manual runs test every supported Python, each in its
+# own job. Every run resolves each dependency to its newest allowed release,
+# so a breaking upstream release (including transitive ones) fails the
+# nightly within a day. The installed versions are printed before pytest
+# runs.
 on:
   push:
     branches: [main]
@@ -12,9 +15,21 @@ on:
       timezone: "America/New_York"
   workflow_dispatch:
 
+# A new push to a pull request cancels that pull request's earlier run. Other
+# events each get their own group, so no run on main is ever cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
-  tests:
+  pytest:
+    name: pytest (python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep both lists in step with PYTHON_VERSIONS in noxfile.py.
+        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.10", "3.14"]' || '["3.10", "3.11", "3.12", "3.13", "3.14"]') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -31,4 +46,14 @@ jobs:
           key: open-field-2d-22ec317b33039875cb21c76dca027017
 
       - name: Run tests
-        run: uvx nox
+        run: uvx nox -s tests-${{ matrix.python }}
+
+  # The check that the repository requires before merging. It passes only
+  # when every pytest job above passed, whichever Pythons this run tested.
+  tests:
+    if: always()
+    needs: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every pytest job to pass
+        run: test "${{ needs.pytest.result }}" = success
