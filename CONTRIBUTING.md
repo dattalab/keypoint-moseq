@@ -4,27 +4,43 @@ This page covers how changes get into the repository and how to run and extend t
 
 ## How changes get merged
 
-All changes reach `main` through a pull request; direct pushes to `main` are blocked. A pull request can be merged once its `tests` check passes, and is merged by a maintainer with write access to the repository. For a first-time contributor's pull request, a maintainer approves the test run before it starts.
+All changes reach `main` through a pull request; direct pushes to `main` are blocked. A pull request can be merged once its `tests` check passes (see [Which Python versions are tested](#which-python-versions-are-tested)), and is merged by a maintainer with write access to the repository. For a first-time contributor's pull request, a maintainer approves the test run before it starts.
 
 Small, focused pull requests are reviewed fastest. For larger changes, open an issue first to discuss the approach.
 
 ## Running the tests
 
-The test suite runs the steps of the modeling tutorial on the tutorial dataset. With [uv](https://docs.astral.sh/uv/) installed, run it from the repository root:
+The test suite runs the steps of the modeling tutorial on the tutorial dataset. With [uv](https://docs.astral.sh/uv/) installed, run it from the repository root for one Python version:
 
 ```bash
-uvx nox
+uvx nox -s tests-3.10
 ```
 
-This builds a fresh Python 3.10 environment, installs keypoint-MoSeq with its `test` dependencies, and runs pytest. The first run downloads the tutorial dataset (about 300 MB) from Zenodo and caches it in your user cache directory (`~/.cache/keypoint-moseq` on Linux). The full suite takes about 8 minutes on a CPU.
+This builds a fresh Python 3.10 environment, installs keypoint-MoSeq with its `test` dependencies, and runs pytest. The first run downloads the tutorial dataset (about 300 MB) from Zenodo and caches it in your user cache directory (`~/.cache/keypoint-moseq` on Linux). The full suite takes about 8 to 11 minutes per Python version on a CPU.
 
 ```bash
-uvx nox -r                          # reuse the existing environment
-uvx nox -r -- tests/test_pca.py     # run one test file
-uvx nox -r -- -k checkpoint         # run tests whose names match
+uvx nox -s tests-3.10 tests-3.14              # the versions a pull request is tested on
+uvx nox                                       # every supported version, one after another
+uvx nox -r -s tests-3.10                      # reuse the existing environment
+uvx nox -r -s tests-3.10 -- tests/test_pca.py # run one test file
+uvx nox -r -s tests-3.10 -- -k checkpoint     # run tests whose names match
 ```
 
-The same suite runs on every pull request and nightly against the newest allowed version of every dependency.
+nox uses uv to find or download each Python version, so keep uv current (`uv self update`). An old uv may only know a pre-release of the newest Python and silently test against it.
+
+## Which Python versions are tested
+
+keypoint-MoSeq supports Python 3.10 through 3.14. The list lives in `PYTHON_VERSIONS` in `noxfile.py`, and each version has a nox session named `tests-<version>`. Every test run installs the newest release of each dependency that the requirements in `setup.cfg` allow, and the newest releases differ by Python version: Python 3.10, for example, gets pandas 2 and an older NumPy, while later versions get pandas 3 and newer NumPy and matplotlib releases.
+
+| When | Python versions | Required to merge |
+|---|---|---|
+| Every push to a pull request | 3.10 and 3.14 | Yes |
+| Every push to `main` | 3.10, 3.11, 3.12, 3.13, 3.14 | No |
+| Nightly, and on demand from the Actions tab | 3.10, 3.11, 3.12, 3.13, 3.14 | No |
+
+A pull request is tested on the oldest and newest supported versions because those bracket the range of dependency releases. Each version runs as its own `pytest (python <version>)` job, in parallel, and the `tests` check passes only when every one of them passes, so a pull request needs the full suite to pass on both 3.10 and 3.14. Before opening one, run those two sessions locally. A failure on `main` or in the nightly run that a pull request did not show usually means a newly released dependency broke something on one Python version; it is fixed in its own pull request.
+
+The tests run on a CPU. On a GPU, keypoint-MoSeq fits with parallel message passing, a code path that CPU runs do not exercise, so changes to model fitting should also be checked on a GPU with the `cuda` extra installed.
 
 ## What the tests check
 
@@ -41,9 +57,12 @@ Bug fixes and new features should come with a test. Most tests follow a step of 
 Many tests compare outputs with stored values in the `tests/test_*/` directories. The failure message lists which values differ and by how much. If your change is not meant to alter that output, the test has found something worth investigating. If it is, check that the reported differences are the ones you intended, then regenerate the stored values and run the test again:
 
 ```bash
-uvx nox -r -- --force-regen tests/test_pca.py
-uvx nox -r -- tests/test_pca.py
+uvx nox -r -s tests-3.10 -- --force-regen tests/test_pca.py
+uvx nox -r -s tests-3.10 -- tests/test_pca.py
+uvx nox -r -s tests-3.14 -- tests/test_pca.py
 ```
+
+The stored values have to hold on every supported Python version, so after regenerating them on one version, run the test on the other. Numeric snapshots carry a tolerance for differences in the last few digits between NumPy releases. Where dependency releases legitimately disagree, the test records every accepted form: text columns, for example, are stored as `object or str` because pandas 2 and pandas 3 give them different dtypes.
 
 Commit the regenerated files together with the code change.
 
@@ -53,4 +72,4 @@ Commit the regenerated files together with the code change.
 
 ## Reporting problems
 
-Open an issue at https://github.com/dattalab/keypoint-moseq/issues. Include the keypoint-MoSeq version, your operating system, your GPU and CUDA version if you use one, and the full error message.
+Open an issue at https://github.com/dattalab/keypoint-moseq/issues. Include the keypoint-MoSeq version, your Python version, your operating system, your GPU and CUDA version if you use one, and the full error message.

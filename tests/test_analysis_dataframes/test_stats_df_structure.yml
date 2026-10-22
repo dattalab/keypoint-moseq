@@ -23,12 +23,12 @@ dtypes:
   angular_velocity_std: float64
   duration: float64
   frequency: float64
-  group: object
+  group: object or str
   heading_max: float64
   heading_mean: float64
   heading_min: float64
   heading_std: float64
-  name: object
+  name: object or str
   syllable: int64
   velocity_px_s_max: float64
   velocity_px_s_mean: float64
