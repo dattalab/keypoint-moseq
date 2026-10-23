@@ -6,7 +6,7 @@ Motion Sequencing (MoSeq) is an unsupervised machine learning method for animal 
 
 ## [Documentation](https://keypoint-moseq.readthedocs.io/en/stable/)
 
-- [Colab](https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb)
+- [Colab](https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/stable/docs/keypoint_moseq_colab.ipynb)
 
 - [Installation](https://keypoint-moseq.readthedocs.io/en/stable/install.html)
 

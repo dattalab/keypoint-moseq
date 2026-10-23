@@ -1,5 +1,6 @@
 """The release workflow refuses to publish when a notebook's
-`notebook_version` does not match the release tag."""
+`notebook_version` does not match the release tag, and moves the stable
+branch only for final releases."""
 
 import json
 import os
@@ -10,6 +11,7 @@ import pytest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(REPO, ".github", "scripts", "check_notebook_versions.py")
+FINAL_RELEASE_SCRIPT = os.path.join(REPO, ".github", "scripts", "is_final_release.py")
 NOTEBOOKS = [
     "docs/source/modeling.ipynb",
     "docs/source/analysis.ipynb",
@@ -76,3 +78,21 @@ def test_notebook_without_the_check_fails(tmp_path):
 
     assert result.returncode != 0
     assert "check_installation" in result.stdout + result.stderr
+
+
+def final_release_output(tag):
+    result = subprocess.run(
+        [sys.executable, FINAL_RELEASE_SCRIPT, tag], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result.stdout.strip()
+
+
+@pytest.mark.parametrize("tag", ["0.8.1", "v0.8.1", "1.0"])
+def test_final_release_moves_stable(tag):
+    assert final_release_output(tag) == "final=true"
+
+
+@pytest.mark.parametrize("tag", ["0.9.0b1", "0.9.0rc1", "0.9.0a2", "0.9.0.dev0", "v0.9.0beta"])
+def test_pre_release_leaves_stable(tag):
+    assert final_release_output(tag) == "final=false"
