@@ -78,6 +78,8 @@ Maintainers choose the version number when they publish a release, based on what
 
 If your pull request changes outputs, or needed a stored snapshot regenerated, say so in its description.
 
+Each tutorial notebook (`docs/source/modeling.ipynb`, `docs/source/analysis.ipynb` and the Colab copy) calls `kpms.check_installation(notebook_version="X.Y")` near the top, which raises when the installed keypoint-MoSeq is a different minor version than the notebook states. Before publishing a minor release, set `notebook_version` in all three notebooks to the new version in a pull request. The release workflow checks this before uploading to PyPI and stops if any notebook states another version. GitHub has already created the tag by then, so after merging the fix, delete the release and its tag (`git push --delete origin <tag>`) and publish the release again from the updated `main`. Patch releases keep the same `notebook_version`.
+
 ## Reporting problems
 
 Open an issue at https://github.com/dattalab/keypoint-moseq/issues. Include the keypoint-MoSeq version, your Python version, your operating system, your GPU and CUDA version if you use one, and the full error message.

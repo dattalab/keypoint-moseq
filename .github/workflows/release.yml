@@ -3,6 +3,8 @@ name: release
 # Publishing a GitHub release builds the source distribution from the release
 # tag and uploads it to PyPI. PyPI accepts the upload through trusted
 # publishing for this repository and workflow file, so no API token is stored.
+# The upload only happens if every tutorial notebook states the release's
+# major.minor version in its check_installation(notebook_version=...) call.
 on:
   release:
     types: [published]
@@ -21,6 +23,9 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: false
+
+      - name: Check that the notebooks state this release's version
+        run: python3 .github/scripts/check_notebook_versions.py "${{ github.event.release.tag_name }}"
 
       - name: Build source distribution
         run: uv build --sdist

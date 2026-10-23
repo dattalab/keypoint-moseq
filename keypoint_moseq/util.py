@@ -1,8 +1,14 @@
 import os
+import sys
+import site
+import platform
 import glob
+import importlib.util
 import tabulate
 import tqdm
 import warnings
+from importlib import metadata
+from packaging.version import InvalidVersion, Version
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -2417,3 +2423,277 @@ def estimate_sigmasq_loc(Y: jnp.ndarray, mask: jnp.ndarray, filter_size: int = 3
     smoothed_centroids = median_filter(masked_centroids, (1, filter_size, 1))
     distances = np.linalg.norm(np.diff(smoothed_centroids, axis=1), axis=-1)  # (batch, frames)
     return float(np.nanmean(distances)**2)
+
+
+# Distribution name, module name and label of each package that
+# check_installation reports.
+_INSTALLATION_PACKAGES = [
+    ("keypoint-moseq", "keypoint_moseq", "keypoint-moseq"),
+    ("jax-moseq", "jax_moseq", "jax-moseq"),
+    ("jax", "jax", "jax"),
+    ("jaxlib", "jaxlib", "jaxlib"),
+    ("jax-cuda12-plugin", "jax_plugins.xla_cuda12", "JAX CUDA plugin"),
+]
+_REPOSITORY_URL = "https://github.com/dattalab/keypoint-moseq"
+
+
+def _installed_version(distribution):
+    """Version of an installed distribution, or None if it is not installed."""
+    try:
+        return metadata.version(distribution)
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def _parse_version(version):
+    """Parse a version string, or return None if it is not a valid version."""
+    try:
+        return Version(version)
+    except (InvalidVersion, TypeError):
+        return None
+
+
+def _module_directory(module_name):
+    """Directory a module is (or would be) imported from, or None."""
+    module = sys.modules.get(module_name)
+    path = getattr(module, "__file__", None)
+    if path is None:
+        try:
+            spec = importlib.util.find_spec(module_name)
+        except ModuleNotFoundError:
+            spec = None
+        path = spec.origin if spec is not None else None
+    return os.path.dirname(path) if path else None
+
+
+def _explain_gpu_error(message):
+    """Explain an error raised by a small GPU computation.
+
+    Parameters
+    ----------
+    message: str
+        The error message.
+
+    Returns
+    -------
+    explanation: str
+        What the error usually means and how to fix it, followed by the
+        original message.
+    """
+    lower = message.lower()
+    if "no kernel image" in lower:
+        hint = (
+            "This jaxlib build has no code for this GPU, because the GPU is too "
+            "old for it or the NVIDIA driver is too old. Update the driver (run "
+            "nvidia-smi to see its version), use a newer GPU, or use the CPU "
+            "install."
+        )
+    elif any(
+        key in lower
+        for key in ("cusolver", "cublas", "cudnn", "libcudart", "ptxas", "dynamic library")
+    ):
+        hint = (
+            "JAX could not use the CUDA libraries it was installed with, usually "
+            "because another CUDA installation is found first: a system CUDA "
+            "toolkit on LD_LIBRARY_PATH or PATH (for example from `module load "
+            "cuda` on a cluster), or packages in ~/.local. Start Jupyter without "
+            "them, then run this check again."
+        )
+    elif "resource_exhausted" in lower or "out of memory" in lower:
+        hint = (
+            "The GPU ran out of memory for a tiny test, so another process is "
+            "probably using it: JAX reserves 75% of GPU memory in each process "
+            "that imports it. Close other notebooks or scripts using this GPU "
+            "(nvidia-smi lists them)."
+        )
+    else:
+        return f"error: {message}"
+    return f"{fill(hint)}\nerror: {message}"
+
+
+def check_installation(notebook_version=None):
+    """Report the keypoint-MoSeq and JAX installation, and raise if it has a
+    known problem.
+
+    Prints the Python interpreter; the version and location of keypoint-moseq,
+    jax-moseq, jax, jaxlib and the JAX CUDA plugin; and the devices JAX can
+    use. With a GPU, it runs a small matrix multiply and Cholesky
+    decomposition, the first operations that fail when the CUDA setup is
+    broken. After printing, it raises one error listing every problem found:
+
+    - the notebook calling it is written for a different minor version of
+      keypoint-MoSeq than the one installed. Development installs from git,
+      with versions such as "0.7.1+4.gc871cae", are not checked.
+    - keypoint-MoSeq was upgraded after this kernel imported it
+    - a package is imported from the user site-packages (e.g. ~/.local)
+      instead of this environment
+    - the versions of jax, jaxlib and the JAX CUDA plugin do not match
+    - the JAX CUDA plugin is installed but JAX sees no GPU
+    - the GPU test fails
+
+    Parameters
+    ----------
+    notebook_version: str, default=None
+        The keypoint-MoSeq version (major.minor, e.g. "0.8") that the calling
+        notebook is written for. If None, the notebook is not checked.
+
+    Raises
+    ------
+    RuntimeError
+        Listing every problem found.
+    """
+    problems = []
+    lines = [
+        "keypoint-MoSeq installation check",
+        f"  Python {platform.python_version()} ({sys.executable})",
+    ]
+
+    installed, directories = {}, {}
+    for distribution, module_name, label in _INSTALLATION_PACKAGES:
+        installed[distribution] = _installed_version(distribution)
+        directories[distribution] = _module_directory(module_name)
+    running = sys.modules["keypoint_moseq"].__version__
+    shown = {d: running if d == "keypoint-moseq" else installed[d] for d in installed}
+    width = max(len(v) for v in shown.values() if v is not None)
+    for distribution, _, label in _INSTALLATION_PACKAGES:
+        version = shown[distribution]
+        if version is None:
+            lines.append(f"  {label:<16} not installed")
+        else:
+            lines.append(f"  {label:<16} {version:<{width}}  {directories[distribution] or ''}")
+
+    # a kernel that imported an older keypoint-moseq than the one on disk
+    running_parsed = _parse_version(running)
+    installed_parsed = _parse_version(installed["keypoint-moseq"])
+    if (
+        running_parsed is not None
+        and installed_parsed is not None
+        and running_parsed.base_version != installed_parsed.base_version
+    ):
+        problems.append(
+            f"keypoint-moseq {installed['keypoint-moseq']} is installed, but this "
+            f"kernel is running {running}, imported before keypoint-moseq was "
+            "upgraded or reinstalled. Save your work, then restart the kernel "
+            "(Kernel > Restart Kernel) and run the notebook from the top."
+        )
+
+    # packages that shadow this environment's from the user site-packages
+    user_site = os.path.realpath(site.getusersitepackages())
+    for distribution, _, label in _INSTALLATION_PACKAGES:
+        directory = directories[distribution]
+        if directory and os.path.realpath(directory).startswith(user_site + os.sep):
+            problems.append(
+                f"{label} is imported from {directory}, in the user site-packages "
+                f"({user_site}), not from this environment ({sys.prefix}). Packages "
+                "there take precedence over the environment's, so a different "
+                f"{label} runs than the one installed here. Remove it from "
+                f"{user_site}, or set the environment variable PYTHONNOUSERSITE=1 "
+                "before starting Jupyter so that Python ignores that folder."
+            )
+
+    # jax, jaxlib and the CUDA plugin must belong together
+    jax_version = _parse_version(installed["jax"])
+    jaxlib_version = _parse_version(installed["jaxlib"])
+    plugin = installed["jax-cuda12-plugin"]
+    if jax_version and jaxlib_version and jax_version.release[:2] != jaxlib_version.release[:2]:
+        problems.append(
+            f"jax {installed['jax']} and jaxlib {installed['jaxlib']} do not match. "
+            'Reinstall them together: pip install -U "keypoint-moseq[cuda]" for '
+            "GPU, or pip install -U keypoint-moseq for CPU."
+        )
+    if plugin and installed["jaxlib"] and plugin != installed["jaxlib"]:
+        problems.append(
+            f"The JAX CUDA plugin {plugin} does not match jaxlib "
+            f'{installed["jaxlib"]}. Reinstall them together: pip install -U '
+            '"keypoint-moseq[cuda]".'
+        )
+
+    # devices, and a small computation on the GPU
+    devices = jax.devices()
+    gpus = [d for d in devices if d.platform == "gpu"]
+    lines.append(
+        "  Devices: " + ", ".join(f"{d.platform}:{d.id} ({d.device_kind})" for d in devices)
+    )
+    cuda_paths = [p for p in os.environ.get("LD_LIBRARY_PATH", "").split(os.pathsep) if "cuda" in p.lower()]
+    if cuda_paths:
+        lines.append(f"  CUDA folders on LD_LIBRARY_PATH: {', '.join(cuda_paths)}")
+    if gpus:
+        gpu = gpus[0]
+        try:
+            x = jax.device_put(jnp.eye(64) * 2.0, gpu)
+            jnp.linalg.cholesky(x @ x + jnp.eye(64)).block_until_ready()
+            lines.append(f"  GPU test: passed on {gpu.device_kind}")
+        except Exception as error:
+            lines.append(f"  GPU test: failed on {gpu.device_kind}")
+            problems.append(
+                f"The GPU test failed on {gpu.device_kind}. "
+                + _explain_gpu_error(str(error))
+            )
+    elif plugin:
+        visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+        message = f"The JAX CUDA plugin {plugin} is installed, but JAX sees no GPU. "
+        if cuda_paths:
+            message += (
+                f"LD_LIBRARY_PATH includes {', '.join(cuda_paths)}. A CUDA "
+                "installation there is loaded instead of the CUDA libraries "
+                "installed with JAX, which stops JAX's CUDA plugin from starting "
+                "(JAX may report this as being unable to load a CUDA library, or "
+                "as a CUDA-enabled jaxlib not being installed). Remove those "
+                "folders from LD_LIBRARY_PATH before starting Jupyter; on a "
+                "cluster, `module unload cuda`. Other causes: "
+            )
+        else:
+            message += "Common causes: "
+        message += (
+            "this machine has no GPU (for example a cluster login node, or a job "
+            "that did not request one); CUDA_VISIBLE_DEVICES "
+            f"({'not set' if visible is None else repr(visible)}) hides it; or the "
+            "NVIDIA driver is missing or too old for CUDA 12 (version 525 or "
+            "newer). Run nvidia-smi to see the GPU and driver. On Colab, set the "
+            "runtime type to GPU."
+        )
+        problems.append(message)
+    else:
+        lines.append(
+            "  JAX is using the CPU. For GPU support on Linux, install "
+            "keypoint-moseq[cuda]."
+        )
+
+    # the notebook and the installed keypoint-moseq
+    if notebook_version is not None:
+        if running_parsed is None or running_parsed.local is not None:
+            lines.append(
+                f"  Notebook: written for {notebook_version}; not checked, since "
+                f"{running} is a development install"
+            )
+        else:
+            installed_minor = ".".join(str(n) for n in running_parsed.release[:2])
+            notebook_minor = ".".join(str(notebook_version).split(".")[:2])
+            if installed_minor == notebook_minor:
+                lines.append(f"  Notebook: written for {notebook_version}, as installed")
+            else:
+                notebooks = (
+                    f"{_REPOSITORY_URL}/blob/{running}/docs/source/modeling.ipynb "
+                    f"and {_REPOSITORY_URL}/blob/{running}/docs/source/analysis.ipynb"
+                )
+                if running_parsed < Version(notebook_minor):
+                    install = (
+                        "upgrade with pip install -U keypoint-moseq (or "
+                        '"keypoint-moseq[cuda]" for GPU)'
+                    )
+                else:
+                    install = f'install it with pip install "keypoint-moseq=={notebook_minor}.*"'
+                problems.append(
+                    f"This notebook is written for keypoint-moseq {notebook_version}, "
+                    f"but {running} is installed, and functions change between "
+                    f"versions. Either {install} and restart the kernel, or use "
+                    f"the notebooks for {running}: {notebooks}"
+                )
+                lines.append(f"  Notebook: written for {notebook_version}, not {running}")
+
+    print("\n".join(lines))
+    if problems:
+        raise RuntimeError(
+            f"The installation check found {len(problems)} problem(s):\n\n"
+            + "\n\n".join(f"{i}. {p}" for i, p in enumerate(problems, 1))
+        )
