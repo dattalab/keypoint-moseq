@@ -40,6 +40,8 @@ keypoint-MoSeq supports Python 3.10 through 3.14. The list lives in `PYTHON_VERS
 
 A pull request is tested on the oldest and newest supported versions because those bracket the range of dependency releases. Each version runs as its own `pytest (python <version>)` job, in parallel, and the `tests` check passes only when every one of them passes, so a pull request needs the full suite to pass on both 3.10 and 3.14. Before opening one, run those two sessions locally. A failure on `main` or in the nightly run that a pull request did not show usually means a newly released dependency broke something on one Python version; it is fixed in its own pull request.
 
+The test suite runs on Linux. On macOS and Windows, every run instead installs keypoint-MoSeq from the checkout and imports it, on Python 3.10 and 3.14 (the `install-<version>` nox sessions, as `install (<os>, python <version>)` jobs), and the `tests` check requires those jobs to pass too. A requirement with no wheels for macOS or Windows makes `pip install keypoint-moseq` quietly install an older release that it can satisfy there, so these jobs catch it before a release does.
+
 The tests run on a CPU. On a GPU, keypoint-MoSeq fits with parallel message passing, a code path that CPU runs do not exercise, so changes to model fitting should also be checked on a GPU with the `cuda` extra installed.
 
 ## What the tests check
