@@ -611,7 +611,7 @@ def get_centroids_headings(
     return centroids, headings
 
 
-def filter_centroids_headings(centroids, headings, filter_size=9):
+def filter_centroids_headings(centroids, headings, smoothing_filter_frames=9):
     """Perform median filtering on centroids and headings.
 
     Parameters
@@ -624,7 +624,7 @@ def filter_centroids_headings(centroids, headings, filter_size=9):
         Dictionary mapping recording names to heading angles (in radians) as 1d
         arrays of shape (n_frames,).
 
-    filter_size: int, default=9
+    smoothing_filter_frames: int, default=9
         Kernel size for median filtering
 
     Returns
@@ -632,22 +632,23 @@ def filter_centroids_headings(centroids, headings, filter_size=9):
     filtered_centroids: dict
     filtered_headings: dict
     """
-    centroids = {k: median_filter(v, (filter_size, 1)) for k, v in centroids.items()}
-    headings = {k: filter_angle(v, size=filter_size) for k, v in headings.items()}
+    centroids = {k: median_filter(v, (smoothing_filter_frames, 1)) for k, v in centroids.items()}
+    headings = {k: filter_angle(v, size=smoothing_filter_frames) for k, v in headings.items()}
     return centroids, headings
 
 
 def get_syllable_instances(
     stateseqs,
-    min_duration=3,
-    pre=30,
-    post=60,
+    min_instance_duration_frames=3,
+    before_onset_frames=30,
+    after_onset_frames=60,
     min_frequency=0,
     min_instances=0,
 ):
     """Map each syllable to a list of instances when it occured. Only include
-    instances that meet the criteria specified by `pre`, `post`, and
-    `min_duration`. Only include syllables that meet the criteria specified by
+    instances that meet the criteria specified by `before_onset_frames`,
+    `after_onset_frames`, and `min_instance_duration_frames`. Only include
+    syllables that meet the criteria specified by
     `min_frequency` and `min_instances`.
 
     Parameters
@@ -655,14 +656,14 @@ def get_syllable_instances(
     stateseqs: dict {str : 1d array}
         Dictionary mapping names to syllable sequences
 
-    min_duration: int, default=3
+    min_instance_duration_frames: int, default=3
         Mininum duration, in frames, for inclusion of a syllable instance
 
-    pre: int, default=30
+    before_onset_frames: int, default=30
         Syllable instances that start before this frame of the state
         sequence will be excluded
 
-    post: int, default=60
+    after_onset_frames: int, default=60
         Syllable instances that start within this many frames of the end of
         the state sequence will be excluded
 
@@ -689,7 +690,11 @@ def get_syllable_instances(
         starts = np.insert(transitions, 0, 0)
         ends = np.append(transitions, len(stateseq))
         for s, e, syllable in zip(starts, ends, stateseq[starts]):
-            if e - s >= min_duration and s >= pre and s < len(stateseq) - post:
+            if (
+                e - s >= min_instance_duration_frames
+                and s >= before_onset_frames
+                and s < len(stateseq) - after_onset_frames
+            ):
                 syllable_instances[syllable].append((key, s, e))
 
     frequencies_filter = get_frequencies(stateseqs) >= min_frequency
@@ -765,17 +770,17 @@ def reindex_by_bodyparts(data, bodyparts, use_bodyparts, axis=1):
 def get_instance_trajectories(
     syllable_instances,
     coordinates,
-    pre=0,
-    post=None,
+    before_onset_frames=0,
+    after_onset_frames=None,
     centroids=None,
     headings=None,
-    filter_size=9,
+    smoothing_filter_frames=9,
 ):
     """Extract keypoint trajectories for a collection of syllable instances.
 
     If centroids and headings are provided, each trajectory is transformed into
     the ego-centric reference frame from the moment of syllable onset. When
-    `post` is not None, trajectories will all terminate a fixed number of
+    `after_onset_frames` is not None, trajectories will all terminate a fixed number of
     frames after syllable onset.
 
     Parameters
@@ -788,14 +793,14 @@ def get_instance_trajectories(
         Dictionary mapping names to coordinates, formatted as ndarrays with
         shape (num_frames, num_keypoints, d)
 
-    pre: int, default=0
+    before_onset_frames: int, default=0
         Number of frames to include before syllable onset
 
-    post: int, defualt=None
-        Determines the length of the trajectory. When `post=None`, the
+    after_onset_frames: int, default=None
+        Determines the length of the trajectory. When `after_onset_frames=None`, the
         trajectory terminates at the end of the syllable instance. Otherwise
         the trajectory terminates at a fixed number of frames after syllable
-        (where the number is determined by `post`).
+        (where the number is determined by `after_onset_frames`).
 
     centroids: dict, default=None
         Dictionary with the same keys as `coordinates` mapping each name to an
@@ -805,23 +810,25 @@ def get_instance_trajectories(
         Dictionary with the same keys as `coordinates` mapping each name to a
         1d array of heading angles in radians
 
-    filter_size: int, default=9
+    smoothing_filter_frames: int, default=9
         Size of median filter applied to `centroids` and `headings`
 
     Returns
     -------
     trajectories: list
-        List or array of trajectories (a list is used when `post=None`,
+        List or array of trajectories (a list is used when `after_onset_frames=None`,
         otherwise an array). Each trajectory is an array of shape
         (n_frames, n_bodyparts, [2 or 3]).
     """
     if centroids is not None and headings is not None:
         centroids, headings = filter_centroids_headings(
-            centroids, headings, filter_size=filter_size
+            centroids, headings, smoothing_filter_frames=smoothing_filter_frames
         )
 
-    if post is None:
-        trajectories = [coordinates[key][s - pre : e] for key, s, e in syllable_instances]
+    if after_onset_frames is None:
+        trajectories = [
+            coordinates[key][s - before_onset_frames : e] for key, s, e in syllable_instances
+        ]
         if centroids is not None and headings is not None:
             trajectories = [
                 np_io(inverse_rigid_transform)(x, centroids[key][s], headings[key][s])
@@ -829,7 +836,10 @@ def get_instance_trajectories(
             ]
     else:
         trajectories = np.array(
-            [coordinates[key][s - pre : s + post] for key, s, e in syllable_instances]
+            [
+                coordinates[key][s - before_onset_frames : s + after_onset_frames]
+                for key, s, e in syllable_instances
+            ]
         )
         if centroids is not None and headings is not None:
             c = np.array([centroids[key][s] for key, s, e in syllable_instances])[:, None]
@@ -847,11 +857,11 @@ def sample_instances(
     pca_dim=4,
     n_neighbors=50,
     coordinates=None,
-    pre=5,
-    post=15,
+    before_onset_frames=5,
+    after_onset_frames=15,
     centroids=None,
     headings=None,
-    filter_size=9,
+    smoothing_filter_frames=9,
 ):
     """Sample a fixed number of instances for each syllable.
 
@@ -887,7 +897,7 @@ def sample_instances(
         neighbors of the examplar syllable instance (used when
         `mode='density'`)
 
-    coordinates, pre, pos, centroids, heading, filter_size
+    coordinates, before_onset_frames, after_onset_frames, centroids, heading, smoothing_filter_frames
         Passed to :py:func:`keypoint_moseq.util.get_instance_trajectories`
 
     Returns
@@ -922,11 +932,11 @@ def sample_instances(
             syllable: get_instance_trajectories(
                 instances,
                 coordinates,
-                pre=pre,
-                post=post,
+                before_onset_frames=before_onset_frames,
+                after_onset_frames=after_onset_frames,
                 centroids=centroids,
                 headings=headings,
-                filter_size=filter_size,
+                smoothing_filter_frames=smoothing_filter_frames,
             )
             for syllable, instances in syllable_instances.items()
         }
@@ -1481,10 +1491,10 @@ def _check_coordinates_match_results(coordinates, results):
 def get_typical_trajectories(
     coordinates,
     results,
-    pre=5,
-    post=15,
+    before_onset_frames=5,
+    after_onset_frames=15,
     min_frequency=0.005,
-    min_duration=3,
+    min_instance_duration_frames=3,
     bodyparts=None,
     use_bodyparts=None,
     density_sample=True,
@@ -1502,7 +1512,7 @@ def get_typical_trajectories(
         Dictionary containing modeling results for a dataset (see
         :py:func:`keypoint_moseq.fitting.extract_results`).
 
-    pre: int, default=5, post: int, default=15
+    before_onset_frames: int, default=5, after_onset_frames: int, default=15
         Defines the temporal window, in frames, around syllable onset for
         computing the average trajectory. Note that the window is independent
         of the actual duration of the syllable.
@@ -1510,7 +1520,7 @@ def get_typical_trajectories(
     min_frequency: float, default=0.005
         Minimum frequency of a syllable to plotted.
 
-    min_duration: int, default=3
+    min_instance_duration_frames: int, default=3
         Minimum duration, in frames, of a syllable instance to be included in
         the trajectory average.
 
@@ -1535,7 +1545,8 @@ def get_typical_trajectories(
     -------
     representative_trajectories: dict
         Dictionary mapping syllable indexes to representative trajectories
-        as arrays of shape (pre+pose, n_bodyparts, [2 or 3]).
+        as arrays of shape (before_onset_frames + after_onset_frames,
+        n_bodyparts, [2 or 3]).
     """
     _check_coordinates_match_results(coordinates, results)
     if bodyparts is not None and use_bodyparts is not None:
@@ -1548,9 +1559,9 @@ def get_typical_trajectories(
     min_instances = sampling_options["n_neighbors"] if density_sample else 1
     syllable_instances = get_syllable_instances(
         syllables,
-        pre=pre,
-        post=post,
-        min_duration=min_duration,
+        before_onset_frames=before_onset_frames,
+        after_onset_frames=after_onset_frames,
+        min_instance_duration_frames=min_instance_duration_frames,
         min_frequency=min_frequency,
         min_instances=min_instances,
     )
@@ -1574,8 +1585,8 @@ def get_typical_trajectories(
             coordinates=coordinates,
             centroids=centroids,
             headings=headings,
-            pre=pre,
-            post=post,
+            before_onset_frames=before_onset_frames,
+            after_onset_frames=after_onset_frames,
             **sampling_options,
         )
     else:
@@ -1585,8 +1596,8 @@ def get_typical_trajectories(
         syllable: get_instance_trajectories(
             instances,
             coordinates,
-            pre=pre,
-            post=post,
+            before_onset_frames=before_onset_frames,
+            after_onset_frames=after_onset_frames,
             centroids=centroids,
             headings=headings,
         )
@@ -1600,10 +1611,10 @@ def syllable_similarity(
     coordinates,
     results,
     metric="cosine",
-    pre=5,
-    post=15,
+    before_onset_frames=5,
+    after_onset_frames=15,
     min_frequency=0.005,
-    min_duration=3,
+    min_instance_duration_frames=3,
     bodyparts=None,
     use_bodyparts=None,
     density_sample=False,
@@ -1633,10 +1644,10 @@ def syllable_similarity(
     typical_trajectories = get_typical_trajectories(
         coordinates,
         results,
-        pre,
-        post,
+        before_onset_frames,
+        after_onset_frames,
         min_frequency,
-        min_duration,
+        min_instance_duration_frames,
         bodyparts,
         use_bodyparts,
         density_sample,

@@ -27,9 +27,9 @@ def selected_syllables(
     `get_syllable_instances`, given their window (in seconds) and filters."""
     instances = get_syllable_instances(
         {name: recording["syllable"] for name, recording in results.items()},
-        pre=round(pre * config["fps"]),
-        post=round(post * config["fps"]),
-        min_duration=min_duration,
+        before_onset_frames=round(pre * config["fps"]),
+        after_onset_frames=round(post * config["fps"]),
+        min_instance_duration_frames=min_duration,
         min_frequency=min_frequency,
         min_instances=min_instances,
     )
@@ -244,3 +244,37 @@ def test_dendrogram_rejects_coordinates_of_a_different_length(tmp_path):
     assert "299" in message
     assert "300" in message
     assert "rec_a" not in message
+
+
+def moving_keypoints(results, n_keypoints=4, seed=0):
+    """Keypoints scattered around each recording's centroid, so grid-movie
+    crops have a real extent."""
+    rng = np.random.default_rng(seed)
+    return {
+        name: r["centroid"][:, None, :] + rng.normal(scale=5, size=(len(r["centroid"]), n_keypoints, 2))
+        for name, r in results.items()
+    }
+
+
+def test_min_instance_duration_is_in_seconds(tmp_path):
+    # Syllable runs in the synthetic results last 3 to 11 frames; at 100 fps,
+    # a 0.1 s minimum excludes every run shorter than 10 frames.
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+
+    sampled = kpms.generate_grid_movies(
+        results,
+        output_dir=str(tmp_path),
+        coordinates=moving_keypoints(results),
+        keypoints_only=True,
+        fps=100,
+        before_onset_sec=0.05,
+        after_onset_sec=0.1,
+        min_instance_duration_sec=0.1,
+        min_frequency=0.0,
+        rows=1,
+        cols=2,
+    )
+
+    durations = [end - start for instances in sampled.values() for _, start, end in instances]
+    assert durations
+    assert min(durations) >= 10

@@ -705,8 +705,8 @@ def _grid_movie_tile(
     dot_color,
     window_size,
     scaled_window_size,
-    pre,
-    post,
+    before_onset_frames,
+    after_onset_frames,
     dot_radius,
     overlay_keypoints,
     edges,
@@ -716,10 +716,11 @@ def _grid_movie_tile(
     use_dims,
 ):
     scale_factor = scaled_window_size / window_size
-    cs = centroids[key][start - pre : start + post]
-    h, c = headings[key][start], cs[pre]
+    clip_frames = slice(start - before_onset_frames, start + after_onset_frames)
+    cs = centroids[key][clip_frames]
+    h, c = headings[key][start], cs[before_onset_frames]
     r = np.float32([[np.cos(h), np.sin(h)], [-np.sin(h), np.cos(h)]])
-    syllable_coordinates = coordinates[key][start - pre : start + post].copy()
+    syllable_coordinates = coordinates[key][clip_frames].copy()
 
     keypoint_dimension = next(iter(centroids.values())).shape[-1]
 
@@ -746,7 +747,7 @@ def _grid_movie_tile(
     tile = []
 
     if video_paths is not None:
-        frame_ixs = video_frame_indexes[key][start - pre : start + post]
+        frame_ixs = video_frame_indexes[key][clip_frames]
         reader = OpenCVReader(video_paths[key])
         frames = [reader[ix] for ix in frame_ixs]
         reader.close()
@@ -762,7 +763,7 @@ def _grid_movie_tile(
 
             frame = cv2.warpAffine(frame, np.float32(M), (window_size, window_size))
             frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
-            if 0 <= ii - pre <= end - start and dot_radius > 0:
+            if 0 <= ii - before_onset_frames <= end - start and dot_radius > 0:
                 pos = tuple([int(x) for x in M @ np.append(c, 1) * scale_factor])
                 cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
             tile.append(frame)
@@ -782,7 +783,7 @@ def _grid_movie_tile(
             frame = overlay_keypoints_on_image(
                 background.copy(), uvs, edges=edges, **plot_options
             )
-            if 0 <= ii - pre <= end - start and dot_radius > 0:
+            if 0 <= ii - before_onset_frames <= end - start and dot_radius > 0:
                 pos = (int(c[0]), int(c[1]))
                 cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
             tile.append(frame)
@@ -801,8 +802,8 @@ def grid_movie(
     video_frame_indexes,
     dot_color=(255, 255, 255),
     dot_radius=4,
-    pre=30,
-    post=60,
+    before_onset_frames=30,
+    after_onset_frames=60,
     scaled_window_size=None,
     edges=[],
     overlay_keypoints=False,
@@ -854,10 +855,10 @@ def grid_movie(
     dot_radius: int, default=4
         Radius of the dot indicating syllable onset and offset
 
-    pre: int, default=30
+    before_onset_frames: int, default=30
         Number of frames before syllable onset to include in the movie
 
-    post: int, default=60
+    after_onset_frames: int, default=60
         Number of frames after syllable onset to include in the movie
 
     scaled_window_size: int, default=None
@@ -884,7 +885,7 @@ def grid_movie(
 
     Returns
     -------
-    frames: array of shape `(post+pre, width, height, 3)`
+    frames: array of shape `(after_onset_frames+before_onset_frames, width, height, 3)`
         Array of frames in the grid movie where::
 
             width = rows * scaled_window_size
@@ -912,8 +913,8 @@ def grid_movie(
                 dot_color,
                 window_size,
                 scaled_window_size,
-                pre,
-                post,
+                before_onset_frames,
+                after_onset_frames,
                 dot_radius,
                 overlay_keypoints,
                 edges,
@@ -925,7 +926,12 @@ def grid_movie(
         )
 
     tiles = np.stack(tiles).reshape(
-        rows, cols, post + pre, scaled_window_size, scaled_window_size, 3
+        rows,
+        cols,
+        after_onset_frames + before_onset_frames,
+        scaled_window_size,
+        scaled_window_size,
+        3,
     )
     frames = np.concatenate(np.concatenate(tiles, axis=2), axis=2)
     return frames
@@ -936,8 +942,8 @@ def get_grid_movie_window_size(
     centroids,
     headings,
     coordinates,
-    pre,
-    post,
+    before_onset_frames,
+    after_onset_frames,
     pctl=90,
     fudge_factor=1.1,
     blocksize=16,
@@ -966,7 +972,7 @@ def get_grid_movie_window_size(
         Dictionary mapping recording names to keypoint coordinates as
         ndarrays of shape (n_frames, n_bodyparts, 2).
 
-    pre, post: int
+    before_onset_frames, after_onset_frames: int
         Number of frames before/after syllable onset that are included
         in the grid movies.
 
@@ -982,8 +988,8 @@ def get_grid_movie_window_size(
     all_trajectories = get_instance_trajectories(
         sum(sampled_instances.values(), []),
         coordinates,
-        pre=pre,
-        post=post,
+        before_onset_frames=before_onset_frames,
+        after_onset_frames=after_onset_frames,
         centroids=centroids,
         headings=headings,
     )
@@ -1004,13 +1010,13 @@ def generate_grid_movies(
     video_dir=None,
     video_paths=None,
     video_frame_indexes=None,
-    pre=1.0,
-    post=2.0,
+    before_onset_sec=1.0,
+    after_onset_sec=2.0,
     rows=4,
     cols=6,
-    filter_size=9,
+    smoothing_filter_frames=9,
     min_frequency=0.005,
-    min_duration=3,
+    min_instance_duration_sec=0.1,
     dot_radius=4,
     dot_color=(255, 255, 255),
     quality=7,
@@ -1040,7 +1046,7 @@ def generate_grid_movies(
     (see :py:func:`keypoint_moseq.viz.grid_movie`). This method
     generates a grid movie for each syllable that is used sufficiently
     often (i.e. has at least `rows*cols` instances with duration
-    of at least `min_duration` and an overall frequency of at least
+    of at least `min_instance_duration_sec` and an overall frequency of at least
     `min_frequency`). The grid movies are saved to `output_dir` if
     specified, or else to `{project_dir}/{model_name}/grid_movies`.
     A subset of parameters are documented below. See
@@ -1081,15 +1087,16 @@ def generate_grid_movies(
         corresponded to a subset of frames from each video (i.e. if videos were
         trimmed or coordinates were downsampled).
 
-    filter_size: int, default=9
+    smoothing_filter_frames: int, default=9
         Size of the median filter applied to centroids and headings
 
     min_frequency: float, default=0.005
         Minimum frequency of a syllable to be included in the grid movies.
 
-    min_duration: int, default=3
-        Minimum duration, in frames, of a syllable instance to be included in
-        the grid movie for that syllable.
+    min_instance_duration_sec: float, default=0.1
+        Minimum duration, in seconds, of a syllable instance to be included in
+        the grid movie for that syllable. This value will be converted to
+        frames (at least 1) using the fps parameter.
 
     sampling_options: dict, default={}
         Dictionary of options for sampling syllable instances (see
@@ -1123,11 +1130,11 @@ def generate_grid_movies(
         Quality of the grid movies. Higher values result in higher
         quality movies but larger file sizes.
 
-    pre: float, default=1.0
+    before_onset_sec: float, default=1.0
         Time in seconds before syllable onset to include in the grid movie.
         This value will be converted to frames using the fps parameter.
 
-    post: float, default=2.0
+    after_onset_sec: float, default=2.0
         Time in seconds after syllable onset to include in the grid movie.
         This value will be converted to frames using the fps parameter.
 
@@ -1213,8 +1220,9 @@ def generate_grid_movies(
             "or `overlay_keypoints` is True"
         )
 
-    pre = round(pre * fps)
-    post = round(post * fps)
+    before_onset_frames = round(before_onset_sec * fps)
+    after_onset_frames = round(after_onset_sec * fps)
+    min_instance_duration_frames = max(1, round(min_instance_duration_sec * fps))
 
     # prepare output directory
     output_dir = _get_path(
@@ -1250,7 +1258,7 @@ def generate_grid_movies(
         headings = {k: v["heading"] for k, v in results.items()}
 
     centroids, headings = filter_centroids_headings(
-        centroids, headings, filter_size=filter_size
+        centroids, headings, smoothing_filter_frames=smoothing_filter_frames
     )
 
     # scale keypoints if necessary
@@ -1293,9 +1301,9 @@ def generate_grid_movies(
     # sample instances for each syllable
     syllable_instances = get_syllable_instances(
         syllables,
-        pre=pre,
-        post=post,
-        min_duration=min_duration,
+        before_onset_frames=before_onset_frames,
+        after_onset_frames=after_onset_frames,
+        min_instance_duration_frames=min_instance_duration_frames,
         min_frequency=min_frequency,
         min_instances=rows * cols,
     )
@@ -1322,7 +1330,12 @@ def generate_grid_movies(
     # determine window size for grid movies
     if window_size is None:
         window_size = get_grid_movie_window_size(
-            sampled_instances, centroids, headings, coordinates, pre, post
+            sampled_instances,
+            centroids,
+            headings,
+            coordinates,
+            before_onset_frames,
+            after_onset_frames,
         )
         print(f"Using window size of {window_size} pixels")
         if keypoints_only:
@@ -1370,8 +1383,8 @@ def generate_grid_movies(
             edges=edges,
             scaled_window_size=scaled_window_size,
             dot_color=dot_color,
-            pre=pre,
-            post=post,
+            before_onset_frames=before_onset_frames,
+            after_onset_frames=after_onset_frames,
             dot_radius=dot_radius,
             overlay_keypoints=overlay_keypoints,
             coordinates=coordinates,
@@ -1682,10 +1695,10 @@ def generate_trajectory_plots(
     project_dir=None,
     model_name=None,
     output_dir=None,
-    pre=0.167,  # 5 frames at 30 fps
-    post=0.5,  # 15 frames at 30 fps
+    before_onset_sec=0.167,  # 5 frames at 30 fps
+    after_onset_sec=0.5,  # 15 frames at 30 fps
     min_frequency=0.005,
-    min_duration=3,
+    min_instance_duration_sec=0.1,
     skeleton=[],
     bodyparts=None,
     use_bodyparts=None,
@@ -1739,13 +1752,18 @@ def generate_trajectory_plots(
         Directory where trajectory plots should be saved. If None,
         plots will be saved to `{project_dir}/{model_name}/trajectory_plots`.
 
-    pre: float, default=0.167
+    before_onset_sec: float, default=0.167
         Time in seconds before syllable onset to include in the trajectory plots.
         This value will be converted to frames using the fps parameter.
 
-    post: float, default=0.5
+    after_onset_sec: float, default=0.5
         Time in seconds after syllable onset to include in the trajectory plots.
         This value will be converted to frames using the fps parameter.
+
+    min_instance_duration_sec: float, default=0.1
+        Minimum duration, in seconds, of a syllable instance to be included in
+        the trajectory plots. This value will be converted to frames (at least
+        1) using the fps parameter.
 
     skeleton : list, default=[]
         List of edges that define the skeleton, where each edge is a
@@ -1799,8 +1817,9 @@ def generate_trajectory_plots(
 
     assert fps is not None, "Passing None for fps is not supported."
 
-    pre = round(pre * fps)
-    post = round(post * fps)
+    before_onset_frames = round(before_onset_sec * fps)
+    after_onset_frames = round(after_onset_sec * fps)
+    min_instance_duration_frames = max(1, round(min_instance_duration_sec * fps))
 
     plot_options.update({"keypoint_colormap": keypoint_colormap})
     edges = [] if len(skeleton) == 0 else get_edges(use_bodyparts, skeleton)
@@ -1815,10 +1834,10 @@ def generate_trajectory_plots(
     typical_trajectories = get_typical_trajectories(
         coordinates,
         results,
-        pre,
-        post,
+        before_onset_frames,
+        after_onset_frames,
         min_frequency,
-        min_duration,
+        min_instance_duration_frames,
         bodyparts,
         use_bodyparts,
         density_sample,
@@ -1877,11 +1896,12 @@ def generate_trajectory_plots(
                 plt.close(fig=fig)
 
                 if save_gifs:
-                    frame_duration = (pre + post) / len(rasters) / fps
+                    n_frames = before_onset_frames + after_onset_frames
+                    frame_duration = n_frames / len(rasters) / fps
                     path = os.path.join(output_dir, f"{title}{suffix}.gif")
                     save_gif(rasters, path, duration=frame_duration)
                 if save_mp4s:
-                    use_fps = len(rasters) / (pre + post) * fps
+                    use_fps = len(rasters) / n_frames * fps
                     path = os.path.join(output_dir, f"{title}{suffix}.mp4")
                     write_video_clip(rasters, path, fps=use_fps)
 
@@ -1899,11 +1919,12 @@ def generate_trajectory_plots(
         plt.show()
 
         if save_gifs:
-            frame_duration = (pre + post) / len(rasters) / fps
+            n_frames = before_onset_frames + after_onset_frames
+            frame_duration = n_frames / len(rasters) / fps
             path = os.path.join(output_dir, f"all_trajectories{suffix}.gif")
             save_gif(rasters, path, duration=frame_duration)
         if save_mp4s:
-            use_fps = len(rasters) / (pre + post) * fps
+            use_fps = len(rasters) / n_frames * fps
             path = os.path.join(output_dir, f"all_trajectories{suffix}.mp4")
             write_video_clip(rasters, path, fps=use_fps)
 
@@ -2448,10 +2469,10 @@ def plot_similarity_dendrogram(
     model_name=None,
     save_path=None,
     metric="cosine",
-    pre=0.167,
-    post=0.5,
+    before_onset_sec=0.167,
+    after_onset_sec=0.5,
     min_frequency=0.005,
-    min_duration=3,
+    min_instance_duration_sec=0.1,
     bodyparts=None,
     use_bodyparts=None,
     density_sample=False,
@@ -2491,19 +2512,20 @@ def plot_similarity_dendrogram(
     metric: str, default='cosine'
         Distance metric to use. See :py:func:`scipy.spatial.pdist` for options.
 
-    pre: float, default=0.167
+    before_onset_sec: float, default=0.167
         Time in seconds before syllable onset to include in each syllable's
         typical trajectory. This value will be converted to frames using the
         fps parameter.
 
-    post: float, default=0.5
+    after_onset_sec: float, default=0.5
         Time in seconds after syllable onset to include in each syllable's
         typical trajectory. This value will be converted to frames using the
         fps parameter.
 
-    min_duration: int, default=3
-        Minimum duration, in frames, of a syllable instance to be included in
-        the typical trajectory.
+    min_instance_duration_sec: float, default=0.1
+        Minimum duration, in seconds, of a syllable instance to be included in
+        the typical trajectory. This value will be converted to frames (at
+        least 1) using the fps parameter.
 
     figsize: tuple of float, default=(10,5)
         Size of the dendrogram plot.
@@ -2512,8 +2534,9 @@ def plot_similarity_dendrogram(
         Framerate of the videos from which keypoints were derived.
         Must be specified, typically using the project config.
     """
-    pre = round(pre * fps)
-    post = round(post * fps)
+    before_onset_frames = round(before_onset_sec * fps)
+    after_onset_frames = round(after_onset_sec * fps)
+    min_instance_duration_frames = max(1, round(min_instance_duration_sec * fps))
 
     save_path = _get_path(project_dir, model_name, save_path, "similarity_dendrogram")
 
@@ -2521,10 +2544,10 @@ def plot_similarity_dendrogram(
         coordinates,
         results,
         metric,
-        pre,
-        post,
+        before_onset_frames,
+        after_onset_frames,
         min_frequency,
-        min_duration,
+        min_instance_duration_frames,
         bodyparts,
         use_bodyparts,
         density_sample,
