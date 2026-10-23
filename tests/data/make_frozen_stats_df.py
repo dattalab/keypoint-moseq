@@ -50,8 +50,6 @@ def main(model_dir, output_csv):
 
         moseq_df = kpms.compute_moseq_df(project_dir, model_name, smooth_heading=True)
         stats_df = kpms.compute_stats_df(
-            project_dir,
-            model_name,
             moseq_df,
             min_frequency=0.005,
             groupby=["group", "name"],

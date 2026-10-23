@@ -3,10 +3,13 @@ import struct
 
 import imageio
 import imageio_ffmpeg
+import numpy as np
+import pytest
 from PIL import Image
 
 import keypoint_moseq as kpms
 from keypoint_moseq.util import get_syllable_instances
+from analysis_utils import synthetic_results
 
 PDF_SIGNATURE = b"%PDF"
 GIF_SIGNATURES = (b"GIF87a", b"GIF89a")
@@ -145,3 +148,99 @@ def test_similarity_dendrogram(tutorial_dendrogram, tutorial_outlier_removed):
     for extension, signature in [("pdf", PDF_SIGNATURE), ("png", PNG_SIGNATURE)]:
         with open(f"{save_path}.{extension}", "rb") as f:
             assert f.read(len(signature)) == signature, extension
+
+
+def test_grid_movies_reject_frame_indexes_beyond_video(
+    dlc_project_dir,
+    tutorial_outlier_removed,
+    tutorial_reindexed,
+    tutorial_results,
+    tmp_path,
+    monkeypatch,
+):
+    project_dir, coordinates, _ = tutorial_outlier_removed
+    model_name, _ = tutorial_reindexed
+    config = lambda: kpms.load_config(project_dir)
+    results = kpms.load_results(project_dir, model_name)
+    name = sorted(results)[0]
+    video_frame_indexes = {k: np.arange(len(v["syllable"])) for k, v in results.items()}
+    video_frame_indexes[name] = video_frame_indexes[name] + 1  # last index is past the video's end
+    monkeypatch.chdir(os.path.dirname(dlc_project_dir))
+
+    with pytest.raises(ValueError) as error:
+        kpms.generate_grid_movies(
+            results,
+            project_dir,
+            model_name,
+            output_dir=str(tmp_path),
+            coordinates=coordinates,
+            video_frame_indexes=video_frame_indexes,
+            min_frequency=GRID_MOVIE_MIN_FREQUENCY,
+            **config(),
+        )
+
+    assert name in str(error.value)
+    assert "up to" in str(error.value)
+
+
+def test_keypoints_only_grid_movies_do_not_need_videos(
+    tutorial_outlier_removed, tutorial_reindexed, tutorial_results, tmp_path
+):
+    """Run from the test's working directory, where the config's relative
+    `video_dir` does not resolve, so any attempt to open a video fails."""
+    project_dir, coordinates, _ = tutorial_outlier_removed
+    model_name, _ = tutorial_reindexed
+    config = lambda: kpms.load_config(project_dir)
+    results = kpms.load_results(project_dir, model_name)
+
+    kpms.generate_grid_movies(
+        results,
+        project_dir,
+        model_name,
+        output_dir=str(tmp_path),
+        coordinates=coordinates,
+        keypoints_only=True,
+        min_frequency=GRID_MOVIE_MIN_FREQUENCY,
+        **config(),
+    )
+
+    assert any(f.endswith(".mp4") for f in os.listdir(tmp_path))
+
+
+def synthetic_coordinates(results, n_keypoints=4):
+    """Keypoints with one row per frame of each recording in `results`."""
+    return {
+        name: np.zeros((len(r["syllable"]), n_keypoints, 2)) for name, r in results.items()
+    }
+
+
+def test_trajectory_plots_reject_coordinates_missing_recordings(tmp_path):
+    results = synthetic_results(["rec_a", "rec_b", "rec_c"])
+    coordinates = synthetic_coordinates({"rec_a": results["rec_a"]})
+
+    with pytest.raises(ValueError) as error:
+        kpms.generate_trajectory_plots(
+            coordinates, results, output_dir=str(tmp_path), save_gifs=False, fps=30
+        )
+
+    message = str(error.value)
+    assert "2 of 3 recordings" in message
+    assert "rec_b" in message
+    assert "rec_c" in message
+
+
+def test_dendrogram_rejects_coordinates_of_a_different_length(tmp_path):
+    results = synthetic_results(["rec_a", "rec_b"])
+    coordinates = synthetic_coordinates(results)
+    coordinates["rec_b"] = coordinates["rec_b"][:-1]
+
+    with pytest.raises(ValueError) as error:
+        kpms.plot_similarity_dendrogram(
+            coordinates, results, save_path=str(tmp_path / "dendrogram"), fps=30
+        )
+
+    message = str(error.value)
+    assert "rec_b" in message
+    assert "299" in message
+    assert "300" in message
+    assert "rec_a" not in message

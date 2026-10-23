@@ -1,6 +1,7 @@
 import os
 import glob
 import tabulate
+import tqdm
 import warnings
 import numpy as np
 import pandas as pd
@@ -90,6 +91,222 @@ def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
         return sorted(matches)
 
 
+DEFAULT_VIDEO_EXTENSIONS = [".mp4", ".avi", ".mov", ".mkv"]
+
+# Characters that a Windows path typed without the r prefix picks up from
+# backslash escapes such as "\t" in "D:\data\testcsv".
+_ESCAPE_CHARACTERS = {
+    "\t": "tab",
+    "\r": "carriage return",
+    "\n": "newline",
+    "\a": "bell",
+    "\b": "backspace",
+    "\f": "form feed",
+    "\v": "vertical tab",
+}
+
+
+def _path_diagnostics(path):
+    """Describe where a path that was not found resolves to, for error messages.
+
+    Parameters
+    ----------
+    path: str
+        Path as the user gave it.
+
+    Returns
+    -------
+    lines: list of str
+        The resolved absolute path, the current directory, and a note when
+        the path contains a character that a backslash escape produces.
+    """
+    lines = [
+        f"  resolved to: {os.path.abspath(path)}",
+        f"  current directory: {os.getcwd()}",
+    ]
+    escapes = [name for char, name in _ESCAPE_CHARACTERS.items() if char in str(path)]
+    if escapes:
+        lines.append(
+            fill(
+                f"The path contains a {escapes[0]} character, which usually means "
+                "a Windows path was written without the r prefix. Write it as a "
+                'raw string, e.g. r"D:\\data\\videos", or with forward slashes, '
+                'e.g. "D:/data/videos".'
+            )
+        )
+    return lines
+
+
+def _extensions_found(directory, recursive=True):
+    """Summarize the files in `directory` by extension, most common first.
+
+    Parameters
+    ----------
+    directory: str
+        Directory to list.
+
+    recursive: bool, default=True
+        Whether to include files in subdirectories.
+
+    Returns
+    -------
+    summary: str
+        E.g. ".h5 (10), .mp4 (10)", or an empty string if there are no files.
+    """
+    pattern = os.path.join(directory, "**", "*") if recursive else os.path.join(directory, "*")
+    counts = {}
+    for path in glob.glob(pattern, recursive=recursive):
+        if os.path.isfile(path):
+            ext = os.path.splitext(path)[1].lower() or "(no extension)"
+            counts[ext] = counts.get(ext, 0) + 1
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return ", ".join(f"{ext} ({n})" for ext, n in ordered)
+
+
+def _no_files_found_message(what, filepath_pattern, extensions, recursive=True):
+    """Explain why no files of a given kind were found for a path or pattern.
+
+    Parameters
+    ----------
+    what: str
+        The kind of file searched for, e.g. "keypoint files".
+
+    filepath_pattern: str or list of str
+        The file, directory, or glob pattern (or a list of them) searched.
+
+    extensions: list of str
+        Extensions searched for.
+
+    recursive: bool, default=True
+        Whether subdirectories were searched.
+
+    Returns
+    -------
+    message: str
+        For each path: whether it exists, where it resolves to, and what
+        files it holds.
+    """
+    patterns = filepath_pattern if isinstance(filepath_pattern, list) else [filepath_pattern]
+    lines = [f"No {what} with extensions {', '.join(extensions)} found."]
+    for pattern in patterns:
+        lines.append("")
+        if any(char in str(pattern) for char in "*?["):
+            lines.append(f"Pattern {pattern} matched no such files.")
+            lines += _path_diagnostics(pattern)
+        elif not os.path.exists(pattern):
+            lines.append(f"{pattern} does not exist.")
+            lines += _path_diagnostics(pattern)
+        elif os.path.isdir(pattern):
+            found = _extensions_found(pattern, recursive)
+            where = f"{os.path.abspath(pattern)}{' (including subdirectories)' if recursive else ''}"
+            lines.append(f"{where} contains: {found or 'no files'}")
+        else:
+            lines.append(f"{os.path.abspath(pattern)} is a file with a different extension.")
+    return "\n".join(lines)
+
+
+def _check_keypoint_dicts(coordinates, confidences=None):
+    """Check that keypoints are in the format keypoint-MoSeq reads them in.
+
+    Custom loaders build these dictionaries by hand, and a malformed one
+    otherwise fails deep inside whichever function reads it first, with an
+    error that does not name the recording or the problem.
+
+    Parameters
+    ----------
+    coordinates: dict
+        Should map recording names (strings) to numeric arrays of shape
+        (n_frames, n_keypoints, 2) or (n_frames, n_keypoints, 3).
+
+    confidences: dict, default=None
+        Should have the same recording names as `coordinates`, mapped to
+        numeric arrays of shape (n_frames, n_keypoints).
+
+    Raises
+    ------
+    ValueError
+        Listing every problem found, by recording.
+    """
+    if not isinstance(coordinates, dict):
+        raise ValueError(
+            "`coordinates` must be a dict mapping recording names to keypoint "
+            f"arrays, not {type(coordinates).__name__}"
+        )
+    problems = []
+    for key in coordinates:
+        if not isinstance(key, str):
+            problems.append(
+                f"recording names must be strings, but one is {key!r} "
+                f"({type(key).__name__})"
+            )
+
+    def numeric(array):
+        return np.issubdtype(array.dtype, np.number) or array.dtype == bool
+
+    for key, value in coordinates.items():
+        array = np.asarray(value)
+        if array.ndim != 3 or array.shape[-1] not in (2, 3):
+            problems.append(
+                f"coordinates[{key!r}] has shape {array.shape}; expected "
+                "(n_frames, n_keypoints, 2) or (n_frames, n_keypoints, 3)"
+            )
+        if not numeric(array):
+            problems.append(
+                f"coordinates[{key!r}] holds {array.dtype} values, not numeric "
+                "coordinates (a header row read as data can cause this)"
+            )
+
+    if confidences is not None:
+        if not isinstance(confidences, dict):
+            raise ValueError(
+                "`confidences` must be a dict mapping recording names to "
+                f"confidence arrays, not {type(confidences).__name__}"
+            )
+        only_coordinates = [k for k in coordinates if k not in confidences]
+        only_confidences = [k for k in confidences if k not in coordinates]
+        if only_coordinates:
+            problems.append(
+                f"confidences has no entry for {len(only_coordinates)} recording(s) "
+                f"in coordinates: {', '.join(map(str, only_coordinates))}"
+            )
+        if only_confidences:
+            problems.append(
+                f"confidences has entries for {len(only_confidences)} recording(s) "
+                f"not in coordinates: {', '.join(map(str, only_confidences))}"
+            )
+        for key in coordinates:
+            if key not in confidences:
+                continue
+            coords, confs = np.asarray(coordinates[key]), np.asarray(confidences[key])
+            if confs.shape != coords.shape[:2]:
+                problems.append(
+                    f"confidences[{key!r}] has shape {confs.shape}, but "
+                    f"coordinates[{key!r}] has shape {coords.shape}, so the "
+                    f"confidences should have shape {coords.shape[:2]}"
+                )
+            if not numeric(confs):
+                problems.append(f"confidences[{key!r}] holds {confs.dtype} values, not numbers")
+
+    if problems:
+        raise ValueError(
+            "The keypoint data are not in the format keypoint-MoSeq expects:\n"
+            + "\n".join(f"  - {p}" for p in problems)
+            + "\n\nSee https://keypoint-moseq.readthedocs.io/en/stable/FAQs.html"
+            "#loading-keypoint-tracking-data for the expected format."
+        )
+
+
+def _closest_name(name, candidates):
+    """Return the candidate sharing the longest prefix with `name`, or None
+    if no candidate shares even its first character."""
+    best, best_length = None, 0
+    for candidate in candidates:
+        length = len(os.path.commonprefix([name, candidate]))
+        if length > best_length:
+            best, best_length = candidate, length
+    return best
+
+
 def find_matching_videos(
     keys,
     video_dir,
@@ -120,6 +337,9 @@ def find_matching_videos(
     A suffix can also be specified, in which case the recording name is assumed
     to have the form `{video_name}{suffix}{more_text}`.
 
+    When several videos share a name (e.g. `mouse1.avi` and `mouse1.mp4`), the
+    one that sorts last is used and a warning names them all.
+
     Parameters
     -------
     keys: iterable
@@ -129,8 +349,8 @@ def find_matching_videos(
         Path to the video directory.
 
     video_extension: str, default=None
-        Extension of the video files. If None, videos are assumed to have the
-        one of the following extensions: "mp4", "avi", "mov"
+        Extension of the video files. If None, videos are assumed to have
+        one of the following extensions: "mp4", "avi", "mov", "mkv"
 
     recursive: bool, default=True
         If True, search recursively for videos in subdirectories of
@@ -146,34 +366,136 @@ def find_matching_videos(
     Returns
     -------
     video_paths: list or dict (depending on `as_dict`)
-    """
 
+    Raises
+    ------
+    ValueError
+        If `video_dir` is not set or does not exist, if it holds no videos
+        with the searched extensions, or if any recording has no matching
+        video. The message says what was searched and what was found.
+    """
+    keys = list(keys)
     if video_extension is None:
-        extensions = [".mp4", ".avi", ".mov"]
+        extensions = DEFAULT_VIDEO_EXTENSIONS
     else:
         if video_extension[0] != ".":
             video_extension = "." + video_extension
         extensions = [video_extension]
 
-    videos = list_files_with_exts(video_dir, extensions, recursive=recursive)
-    videos_to_paths = {os.path.splitext(os.path.basename(f))[0]: f for f in videos}
+    if video_dir is None:
+        raise ValueError(
+            fill(
+                "`video_dir` is not set. Set it in the project config, e.g. "
+                "`kpms.update_config(project_dir, video_dir='path/to/videos')`, "
+                "or pass it directly."
+            )
+        )
+    is_pattern = any(char in str(video_dir) for char in "*?[")
+    if not is_pattern and not os.path.exists(video_dir):
+        raise ValueError("\n".join([f"video_dir does not exist: {video_dir}", *_path_diagnostics(video_dir)]))
 
-    video_paths = []
+    searched = (
+        f"{os.path.abspath(video_dir)}{' (including subdirectories)' if recursive else ''} "
+        f"for {', '.join(extensions)}"
+    )
+    videos = list_files_with_exts(video_dir, extensions, recursive=recursive)
+    if len(videos) == 0:
+        lines = [f"No videos found: searched {searched}."]
+        found = _extensions_found(video_dir, recursive) if os.path.isdir(video_dir) else ""
+        if found:
+            lines.append(
+                fill(
+                    f"Files found there, by extension: {found}. If your videos "
+                    "have one of these extensions, pass it as `video_extension`."
+                )
+            )
+        raise ValueError("\n".join(lines))
+
+    # `videos` is sorted, so the last video listed under a name is the one
+    # that sorts last.
+    paths_by_name = {}
+    for path in videos:
+        paths_by_name.setdefault(os.path.splitext(os.path.basename(path))[0], []).append(path)
+    videos_to_paths = {name: paths[-1] for name, paths in paths_by_name.items()}
+
+    video_paths, unmatched, used_names = {}, [], set()
     for key in keys:
         matches = [
             v
             for v in videos_to_paths
             if os.path.basename(key).startswith(v + recording_name_suffix)
         ]
-        assert len(matches) > 0, fill(f"No matching videos found for {key}")
+        if len(matches) == 0:
+            unmatched.append(key)
+            continue
+        longest_match = max(matches, key=len)
+        video_paths[key] = videos_to_paths[longest_match]
+        used_names.add(longest_match)
 
-        longest_match = sorted(matches, key=lambda v: len(v))[-1]
-        video_paths.append(videos_to_paths[longest_match])
+    if unmatched:
+        lines = [f"No video found for {len(unmatched)} of {len(keys)} recordings:"]
+        for key in unmatched:
+            closest = _closest_name(os.path.basename(key), videos_to_paths)
+            hint = (
+                f"  (closest video: {os.path.basename(videos_to_paths[closest])})"
+                if closest is not None
+                else ""
+            )
+            lines.append(f"  {key}{hint}")
+        names = sorted(os.path.basename(p) for p in videos_to_paths.values())
+        listed = ", ".join(names[:10]) + (f", and {len(names) - 10} more" if len(names) > 10 else "")
+        suffix_rule = (
+            f", followed by '{recording_name_suffix}'," if recording_name_suffix else ""
+        )
+        lines += [
+            "",
+            f"Searched {searched} and found {len(names)} videos: {listed}.",
+            "",
+            fill(
+                "A video matches a recording when the video's filename without "
+                f"its extension{suffix_rule} is the start of the recording name. "
+                "For example, mouse1.mp4 matches the recording "
+                "'mouse1DLC_resnet50_shuffle1'."
+            ),
+        ]
+        raise ValueError("\n".join(lines))
+
+    shared = sorted(name for name in used_names if len(paths_by_name[name]) > 1)
+    if shared:
+        lines = ["Several videos share a name, so one of them was picked:"]
+        for name in shared:
+            lines.append(f"  {name}: {', '.join(paths_by_name[name])}. Using {videos_to_paths[name]}.")
+        lines.append("Pass `video_extension` to choose which one is used.")
+        warnings.warn("\n".join(lines))
 
     if as_dict:
-        return dict(zip(keys, video_paths))
-    else:
         return video_paths
+    return [video_paths[key] for key in keys]
+
+
+def get_recording_lengths(metadata):
+    """Number of frames in each recording described by `format_data` metadata.
+
+    `format_data` cuts each recording into segments that overlap, so the
+    data mask counts the overlapping frames twice. Each recording's length
+    is instead the end of its last segment.
+
+    Parameters
+    ----------
+    metadata: tuple (keys, bounds)
+        Recording name and (start, end) frame of each segment, as returned by
+        :py:func:`keypoint_moseq.util.format_data`.
+
+    Returns
+    -------
+    lengths: dict
+        Dictionary mapping each recording name to its number of frames.
+    """
+    keys, bounds = metadata
+    lengths = {}
+    for key, (start, end) in zip(keys, bounds):
+        lengths[str(key)] = max(lengths.get(str(key), 0), int(end))
+    return lengths
 
 
 def pad_along_axis(arr, pad_widths, axis=0, value=0):
@@ -1020,6 +1342,7 @@ def format_data(
         array of recording names and an array of (start,end) times. See
         :py:func:`jax_moseq.utils.batch` for details.
     """
+    _check_keypoint_dicts(coordinates, confidences)
     if keys is None:
         keys = sorted(coordinates.keys())
     else:
@@ -1090,6 +1413,65 @@ def format_data(
     return data, metadata
 
 
+def _check_coordinates_match_results(coordinates, results):
+    """Check that `coordinates` holds the keypoints of every recording in
+    `results`, frame for frame.
+
+    Plots of typical trajectories, the similarity dendrogram and grid movies
+    look up each recording's keypoints by the frames of its syllables. A
+    recording added with `apply_model` but not loaded into `coordinates`, or
+    keypoints of a different length, otherwise fail with a bare KeyError or
+    silently pair syllables with the wrong frames.
+
+    Parameters
+    ----------
+    coordinates: dict
+        Dictionary mapping recording names to keypoint coordinates.
+
+    results: dict
+        Dictionary containing modeling results for a dataset (see
+        :py:func:`keypoint_moseq.fitting.extract_results`).
+
+    Raises
+    ------
+    ValueError
+        Listing every recording in `results` that is missing from
+        `coordinates` or has a different number of frames there.
+    """
+    missing = [k for k in results if k not in coordinates]
+    mismatched = [
+        (k, len(coordinates[k]), len(results[k]["syllable"]))
+        for k in results
+        if k in coordinates and len(coordinates[k]) != len(results[k]["syllable"])
+    ]
+    if not (missing or mismatched):
+        return
+    lines = []
+    if missing:
+        lines += [
+            f"`coordinates` is missing {len(missing)} of {len(results)} recordings in `results`:",
+            *[f"  {k}" for k in missing],
+            "",
+            fill(
+                "Load keypoints for every recording in `results`, including any "
+                "added with `apply_model`, before plotting."
+            ),
+        ]
+    if mismatched:
+        if lines:
+            lines.append("")
+        lines += [
+            "`coordinates` and `results` have different numbers of frames for:",
+            *[f"  {k}: {c:,} frames in coordinates, {r:,} in results" for k, c, r in mismatched],
+            "",
+            fill(
+                "Each recording's keypoints must be the ones the model was fit or "
+                "applied to, frame for frame."
+            ),
+        ]
+    raise ValueError("\n".join(lines))
+
+
 def get_typical_trajectories(
     coordinates,
     results,
@@ -1149,6 +1531,7 @@ def get_typical_trajectories(
         Dictionary mapping syllable indexes to representative trajectories
         as arrays of shape (pre+pose, n_bodyparts, [2 or 3]).
     """
+    _check_coordinates_match_results(coordinates, results)
     if bodyparts is not None and use_bodyparts is not None:
         coordinates = reindex_by_bodyparts(coordinates, bodyparts, use_bodyparts)
 
@@ -1291,56 +1674,293 @@ def downsample_timepoints(data, downsample_rate):
     return downsampled_data, indexes
 
 
-def check_video_paths(video_paths, keys):
-    """
-    Check if video paths are valid and match the keys.
+_COMMON_FRAME_CAUSES = (
+    "Common causes: the keypoints were tracked on a different copy of the "
+    "video (full-length, trimmed, re-encoded or stitched); the wrong video was "
+    "matched (a video matches every recording whose name starts with the "
+    "video's name); or the keypoints were trimmed or downsampled without "
+    "passing `video_frame_indexes`."
+)
+
+
+def _reencode_hint(path):
+    """Return the ffmpeg command that re-encodes `path` into a seekable mp4."""
+    stem = os.path.splitext(path)[0]
+    return (
+        "re-encoding usually fixes this:\n"
+        f"      ffmpeg -i {path} -c:v libx264 -pix_fmt yuv420p {stem}_reencoded.mp4"
+    )
+
+
+def _fraction_outside_frame(xy, width, height, margin):
+    """Fraction of points in `xy` (shape (n, 2)) farther outside a
+    `width` x `height` frame than `margin` times its width or height."""
+    mx, my = margin * width, margin * height
+    x, y = xy[:, 0], xy[:, 1]
+    outside = (x < -mx) | (x > width - 1 + mx) | (y < -my) | (y > height - 1 + my)
+    return outside.mean()
+
+
+def _scaled_frame_size(xy, width, height, margin, threshold):
+    """Return the smallest integer factor 2-4 by which dividing `xy` puts it
+    inside the frame, or None. Only keypoints that overshoot the frame on both
+    axes are tested, since a resized copy of the video scales both axes, while
+    an offset or stitched video moves keypoints out along one."""
+    overshoots_x = xy[:, 0].max() > width - 1 + margin * width
+    overshoots_y = xy[:, 1].max() > height - 1 + margin * height
+    if not (overshoots_x and overshoots_y):
+        return None
+    for factor in (2, 3, 4):
+        if _fraction_outside_frame(xy / factor, width, height, margin) <= threshold:
+            return factor
+    return None
+
+
+def check_videos(
+    coordinates,
+    video_dir=None,
+    video_paths=None,
+    video_frame_indexes=None,
+    video_extension=None,
+    print_table=False,
+    outside_frame_margin=0.02,
+    outside_frame_threshold=0.01,
+    fps=None,
+    **kwargs,
+):
+    """Check that every recording has a readable video that lines up with its
+    keypoints.
+
+    Calibration and grid movies read video frames by the row index of each
+    recording's keypoints. This function catches the ways that pairing goes
+    wrong before either one runs: a missing or unreadable video, keypoints
+    that need frames past the end of the video, and keypoints that fall
+    outside the video frame, as they do when they were tracked on a resized,
+    cropped or otherwise different copy of the video.
+
+    Missing videos, unreadable videos and keypoints that run past the end of
+    a video raise an error. Keypoints outside the frame only warn, because
+    the check cannot tell a mismatched video from coordinates that were
+    transformed on purpose. A video that reports more frames than its
+    keypoints have also warns: OpenCV estimates the frame count of
+    variable-frame-rate video, and frames read from such a video can be off
+    by one or more, but keypoints trimmed at the end on purpose look the same.
 
     Parameters
     ----------
-    video_paths: dict
-        Dictionary mapping keys to video paths.
+    coordinates: dict
+        Dictionary mapping recording names to keypoint coordinates as ndarrays
+        of shape (n_frames, n_keypoints, dim).
 
-    keys: list
-        List of keys that require a video path.
+    video_dir: str, default=None
+        Directory to search for videos (see
+        :py:func:`keypoint_moseq.util.find_matching_videos`). Required unless
+        `video_paths` is given.
+
+    video_paths: dict, default=None
+        Dictionary mapping recording names to video paths. When given,
+        `video_dir` is not searched.
+
+    video_frame_indexes: dict, default=None
+        Dictionary mapping recording names to the video frame of each row of
+        keypoints, for keypoints that were trimmed or downsampled from their
+        videos. By default row `i` corresponds to video frame `i`.
+
+    video_extension: str, default=None
+        Preferred video extension (passed to
+        :py:func:`keypoint_moseq.util.find_matching_videos`).
+
+    print_table: bool, default=False
+        Print the video matched to each recording, with its frame count and
+        size.
+
+    outside_frame_margin: float, default=0.02
+        Keypoints count as outside the frame only when they are past its edge
+        by more than this fraction of the frame's width or height, since pose
+        trackers can place keypoints a few pixels past the edge.
+
+    outside_frame_threshold: float, default=0.01
+        Warn about a recording when more than this fraction of its finite
+        keypoints fall outside the frame. Only 2D keypoints are checked.
+
+    fps: float, default=None
+        Frame rate used in the re-encoding command suggested for videos that
+        report more frames than their keypoints have. Defaults to the frame
+        rate the video reports.
+
+    Returns
+    -------
+    video_paths: dict
+        Dictionary mapping each recording name in `coordinates` to its video
+        path.
 
     Raises
     ------
     ValueError
-        If any of the following are true:
-        - a video path is not provided for a key in `keys`
-        - a video isn't readable.
-        - a video path does not exist.
+        If any recording has no video, a video that does not exist or cannot
+        be read, or keypoints that need frames past the end of its video. The
+        message lists every such recording.
     """
-    missing_keys = set(keys) - set(video_paths.keys())
+    _check_keypoint_dicts(coordinates)
+    keys = sorted(coordinates.keys())
+    if video_paths is None:
+        video_paths = find_matching_videos(
+            keys, video_dir, as_dict=True, video_extension=video_extension
+        )
+    # Without `video_frame_indexes`, row i of the keypoints is video frame i,
+    # so a video with more frames than rows may have a wrong frame count.
+    check_frame_count = video_frame_indexes is None
+    if video_frame_indexes is None:
+        video_frame_indexes = {k: np.arange(len(v)) for k, v in coordinates.items()}
 
-    nonexistent_videos = []
-    unreadable_videos = []
-    for path in video_paths.values():
+    problems = {}  # recording -> (video path, reason, reason is a frame mismatch)
+    outside = {}  # recording -> description lines
+    longer_videos = {}  # recording -> description lines
+    table = []
+    for key in tqdm.tqdm(keys, desc="Checking videos", ncols=72):
+        path = video_paths.get(key)
+        if path is None:
+            problems[key] = ("(none)", "no video path was given for this recording", False)
+            continue
         if not os.path.exists(path):
-            nonexistent_videos.append(path)
-        else:
+            problems[key] = (path, "the video file does not exist", False)
+            continue
+
+        last_frame = int(np.max(video_frame_indexes[key]))
+        reader = OpenCVReader(path)
+        try:
+            nframes = reader.nframes
+            video_fps = reader.fps
+            if nframes <= 0:
+                problems[key] = (
+                    path,
+                    f"the video could not be read (OpenCV reports {nframes} "
+                    f"frames); {_reencode_hint(path)}",
+                    False,
+                )
+                continue
+            if last_frame >= nframes:
+                problems[key] = (
+                    path,
+                    f"the keypoints need video frames up to {last_frame}, but "
+                    f"the video has {nframes} frames",
+                    True,
+                )
+                continue
             try:
-                reader = OpenCVReader(path)
-                reader[reader.nframes - 1]
-                reader.close()
-            except:
-                unreadable_videos.append(path)
+                frame = reader[last_frame]
+            except ValueError:
+                problems[key] = (
+                    path,
+                    f"frame {last_frame}, the last frame the keypoints need, could "
+                    f"not be decoded (the video reports {nframes} frames); "
+                    f"{_reencode_hint(path)}",
+                    False,
+                )
+                continue
+        finally:
+            reader.close()
 
-    error_messages = []
+        height, width = frame.shape[:2]
+        table.append(f"  {key}\n    {path}  ({nframes:,} frames, {width} x {height})")
 
-    if len(missing_keys) > 0:
-        error_messages.append("The following keys require a video path: {}".format(missing_keys))
-    if len(nonexistent_videos) > 0:
-        error_messages.append("The following videos do not exist: {}".format(nonexistent_videos))
-    if len(unreadable_videos) > 0:
-        error_messages.append(
-            "The following videos are not readable and must be reencoded: {}".format(
-                unreadable_videos
+        n_keypoint_frames = len(coordinates[key])
+        if check_frame_count and nframes - n_keypoint_frames > 1:
+            rate = f"{fps if fps is not None else round(video_fps, 3):g}"
+            stem = os.path.splitext(path)[0]
+            longer_videos[key] = [
+                f"  {key}",
+                f"    video: {path} ({nframes:,} frames)",
+                f"    keypoints: {n_keypoint_frames:,} frames",
+                f'    re-encode: ffmpeg -i {path} -vf "setpts=N/({rate}*TB)" -r {rate} '
+                f"-c:v libx264 -pix_fmt yuv420p {stem}_cfr.mp4",
+            ]
+
+        xy = coordinates[key].reshape(-1, coordinates[key].shape[-1])
+        xy = xy[np.isfinite(xy).all(axis=1)]
+        if xy.shape[1] != 2 or len(xy) == 0:
+            continue
+        fraction = _fraction_outside_frame(xy, width, height, outside_frame_margin)
+        if fraction > outside_frame_threshold:
+            lines = [
+                f"  {key}",
+                f"    video: {path} ({width} x {height})",
+                f"    keypoints: x {xy[:, 0].min():.0f}-{xy[:, 0].max():.0f}, "
+                f"y {xy[:, 1].min():.0f}-{xy[:, 1].max():.0f}; "
+                f"{fraction:.1%} of keypoints outside the frame",
+            ]
+            factor = _scaled_frame_size(
+                xy, width, height, outside_frame_margin, outside_frame_threshold
+            )
+            if factor is not None:
+                lines.append(
+                    f"    (dividing the keypoints by {factor} puts them inside the "
+                    f"frame, as if they were tracked on a {factor * width} x "
+                    f"{factor * height} copy of this video)"
+                )
+            outside[key] = lines
+
+    if print_table:
+        print(f"Videos matched to {len(table)} of {len(keys)} recordings:")
+        print("\n".join(table))
+
+    if problems:
+        lines = [
+            f"Videos and keypoints do not line up for {len(problems)} of "
+            f"{len(keys)} recordings:",
+            "",
+        ]
+        for key, (path, reason, _) in problems.items():
+            lines += [f"  {key}", f"    video: {path}", f"    {reason}", ""]
+        if any(is_frame_mismatch for _, _, is_frame_mismatch in problems.values()):
+            lines.append(fill(_COMMON_FRAME_CAUSES))
+        raise ValueError("\n".join(lines))
+
+    if outside:
+        lines = [
+            f"Keypoints fall outside the video frame for {len(outside)} of "
+            f"{len(keys)} recordings:",
+            "",
+        ]
+        for key_lines in outside.values():
+            lines += key_lines + [""]
+        lines.append(
+            fill(
+                "Calibration frames and grid-movie crops for these recordings "
+                "will be off-target. Check that each video is the same file, at "
+                "the same resolution and crop, that the keypoints were tracked on."
             )
         )
+        warnings.warn("\n".join(lines))
 
-    if len(error_messages) > 0:
-        raise ValueError("\n\n".join(error_messages))
+    if longer_videos:
+        lines = [
+            f"The video reports more frames than the keypoints have for "
+            f"{len(longer_videos)} of {len(keys)} recordings:",
+            "",
+        ]
+        for key_lines in longer_videos.values():
+            lines += key_lines + [""]
+        lines += [
+            fill(
+                "If the keypoints were tracked on the whole video, the video's "
+                "frame count is probably wrong, which happens with "
+                "variable-frame-rate video: OpenCV estimates the frame count, and "
+                "frames read from such a video can be off by one or more, so "
+                "calibration and grid movies would show the wrong frames. The "
+                "re-encode command above keeps every frame and gives the video a "
+                "constant frame rate."
+            ),
+            "",
+            fill(
+                "If you trimmed frames from the end of the keypoints on purpose, "
+                "you can ignore this warning. If you trimmed frames anywhere else, "
+                "pass `video_frame_indexes`."
+            ),
+        ]
+        warnings.warn("\n".join(lines))
+
+    return {key: video_paths[key] for key in keys}
 
 
 def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]], runlength: bool = True) -> dict[int, int]:
@@ -1743,6 +2363,7 @@ def outlier_removal(
     confidences: dict
         Updated confidences with outlier and missing values set to 0
     """
+    _check_keypoint_dicts(coordinates, confidences)
     for recording_name in coordinates:
         raw_coords = coordinates[recording_name].copy()
         outliers = find_medoid_distance_outliers(

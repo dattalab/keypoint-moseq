@@ -1,5 +1,7 @@
 import numpy as np
 
+import keypoint_moseq as kpms
+
 SNAPSHOT_FRAMES = 1000
 
 
@@ -33,3 +35,16 @@ def test_tutorial_format_data_values(
             "mask": np.asarray(data["mask"]),
         }
     )
+
+
+def test_recording_lengths_from_metadata():
+    rng = np.random.default_rng(0)
+    lengths = {"rec_a": 2500, "rec_b": 1200}
+    coordinates = {name: rng.uniform(0, 50, (n, 4, 2)) for name, n in lengths.items()}
+    confidences = {name: np.ones((n, 4)) for name, n in lengths.items()}
+
+    data, metadata = kpms.format_data(coordinates, confidences, seg_length=500)
+
+    # Consecutive segments overlap, so the mask counts some frames twice.
+    assert data["mask"].sum() > sum(lengths.values())
+    assert kpms.get_recording_lengths(metadata) == lengths

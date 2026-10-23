@@ -1,10 +1,13 @@
 import os
+import warnings
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 from scipy import stats
 
+import keypoint_moseq as kpms
 from keypoint_moseq.analysis import run_kruskal
 from analysis_utils import check_figure_files, syllable_names
 
@@ -191,3 +194,51 @@ def test_run_kruskal_frozen_significant_syllables(frozen_kruskal, data_regressio
     data_regression.check(
         {f"{a} vs {b}": [int(s) for s in syllables] for (a, b), syllables in sig_pairs.items()}
     )
+
+
+def plot_with_significance(stats_df, project_dir):
+    """The notebook's group comparison cell, with significance testing."""
+    np.random.seed(0)
+    kpms.plot_syll_stats_with_sem(
+        stats_df,
+        project_dir,
+        "model",
+        plot_sig=True,
+        thresh=THRESH,
+        stat=STAT,
+        ctrl_group=CTRL_GROUP,
+        exp_group=EXP_GROUP,
+    )
+    plt.close("all")
+
+
+def test_stats_plot_warns_when_a_compared_group_has_few_recordings(frozen_stats_df, tmp_path):
+    exp_names = sorted(frozen_stats_df.loc[frozen_stats_df["group"] == EXP_GROUP, "name"].unique())
+    kept = frozen_stats_df[
+        (frozen_stats_df["group"] == CTRL_GROUP) | frozen_stats_df["name"].isin(exp_names[:2])
+    ]
+
+    with pytest.warns(UserWarning, match="at least 3 recordings") as record:
+        plot_with_significance(kept, str(tmp_path))
+
+    message = "\n".join(str(w.message) for w in record)
+    assert f"'{EXP_GROUP}'" in message
+    for name in exp_names[:2]:
+        assert name in message
+
+
+def test_stats_plot_with_enough_recordings_per_group_does_not_warn_about_size(
+    frozen_stats_df, tmp_path
+):
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        plot_with_significance(frozen_stats_df, str(tmp_path))
+
+    assert not [w for w in record if "at least 3 recordings" in str(w.message)]
+
+
+def test_stats_plot_warns_when_every_recording_is_in_default(frozen_stats_df, tmp_path):
+    with pytest.warns(UserWarning, match="default") as record:
+        plot_with_significance(frozen_stats_df.assign(group="default"), str(tmp_path))
+
+    assert any("interactive_group_setting" in str(w.message) for w in record)

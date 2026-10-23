@@ -78,7 +78,7 @@ Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the ra
     for kappa in kappas:
         print(f"Fitting model with kappa={kappa}")
         model_name = f'{prefix}-{kappa}'
-        model = kpms.init_model(data, pca=pca, **config())
+        model = kpms.init_model(data, metadata=metadata, pca=pca, **config())
         
         # stage 1: fit the model with AR only
         model = kpms.update_hypparams(model, kappa=kappa)
@@ -147,7 +147,7 @@ The code below shows how to fit multiple models with different random seeds.
         model_name = f'{prefix}-{restart}'
         
         model = kpms.init_model(
-            data, pca=pca, **config(), seed=jax.random.PRNGKey(restart)
+            data, metadata=metadata, pca=pca, **config(), seed=jax.random.PRNGKey(restart)
         )
 
         # stage 1: fit the model with AR only

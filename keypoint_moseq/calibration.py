@@ -4,7 +4,7 @@ import os
 from textwrap import fill
 from vidio.read import OpenCVReader
 from keypoint_moseq.io import update_config
-from keypoint_moseq.util import find_matching_videos, get_edges
+from keypoint_moseq.util import check_videos, find_matching_videos, get_edges
 
 
 def sample_error_frames(
@@ -420,18 +420,7 @@ def noise_calibration(
         trimmed or coordinates were downsampled).
     """
 
-    if os.path.exists(os.path.join(project_dir, "error_annotations.csv")):
-        response = input(
-            "error_annotations.csv already exists. Continuing will overwrite the existing file (start noise calibration from scratch). Do you want to continue? (y/n)"
-        )
-        if response != "y":
-            return
-        else:
-            os.remove(os.path.join(project_dir, "error_annotations.csv"))
-
-    if video_frame_indexes is None:
-        video_frame_indexes = {k: np.arange(len(v)) for k, v in coordinates.items()}
-    else:
+    if video_frame_indexes is not None:
         assert set(video_frame_indexes.keys()) == set(
             coordinates.keys()
         ), "The keys of `video_frame_indexes` must match the keys of `results`"
@@ -445,6 +434,28 @@ def noise_calibration(
 
     dim = list(coordinates.values())[0].shape[-1]
     assert dim == 2, "Calibration is only supported for 2D keypoints."
+
+    # Check the videos before the prompt below, which deletes any existing
+    # annotations.
+    check_videos(
+        coordinates,
+        video_dir=video_dir,
+        video_frame_indexes=video_frame_indexes,
+        video_extension=video_extension,
+        print_table=False,
+        fps=kwargs.get("fps"),
+    )
+    if video_frame_indexes is None:
+        video_frame_indexes = {k: np.arange(len(v)) for k, v in coordinates.items()}
+
+    if os.path.exists(os.path.join(project_dir, "error_annotations.csv")):
+        response = input(
+            "error_annotations.csv already exists. Continuing will overwrite the existing file (start noise calibration from scratch). Do you want to continue? (y/n)"
+        )
+        if response != "y":
+            return
+        else:
+            os.remove(os.path.join(project_dir, "error_annotations.csv"))
 
     confidences = {k: v + conf_pseudocount for k, v in confidences.items()}
     sample_keys = sample_error_frames(confidences, bodyparts, use_bodyparts)

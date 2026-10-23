@@ -117,3 +117,18 @@ def test_noise_calibration_existing_annotations_overwritten(
 
     assert widget is not None
     assert not os.path.exists(annotations_path(project_dir))
+
+
+def test_noise_calibration_rejects_keypoints_longer_than_video(calibration_inputs):
+    project_dir, coordinates, confidences = calibration_inputs
+    config = lambda: kpms.load_config(project_dir)
+    name = sorted(coordinates)[0]
+    coordinates, confidences = dict(coordinates), dict(confidences)
+    coordinates[name] = np.concatenate([coordinates[name], coordinates[name][-1:]])
+    confidences[name] = np.concatenate([confidences[name], confidences[name][-1:]])
+
+    with pytest.raises(ValueError) as error:
+        kpms.noise_calibration(project_dir, coordinates, confidences, **config())
+
+    assert name in str(error.value)
+    assert "up to" in str(error.value)

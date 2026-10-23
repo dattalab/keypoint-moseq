@@ -190,10 +190,10 @@ def tutorial_model(
     import keypoint_moseq as kpms
 
     project_dir, _, _ = tutorial_outlier_removed
-    data, _ = tutorial_formatted_data
+    data, metadata = tutorial_formatted_data
     pca, _ = tutorial_pca
     config = lambda: kpms.load_config(project_dir)
-    return kpms.init_model(data, pca=pca, **config())
+    return kpms.init_model(data, metadata=metadata, pca=pca, **config())
 
 
 @pytest.fixture(scope="session")
@@ -486,14 +486,11 @@ def tutorial_moseq_df(tutorial_analysis_project, tutorial_groups_assigned):
 
 
 @pytest.fixture(scope="session")
-def tutorial_stats_df(tutorial_analysis_project, tutorial_moseq_df):
+def tutorial_stats_df(tutorial_moseq_df):
     """`stats_df` from the analysis notebook's summary statistics cell."""
     import keypoint_moseq as kpms
 
-    project_dir, model_name = tutorial_analysis_project
     return kpms.compute_stats_df(
-        project_dir,
-        model_name,
         tutorial_moseq_df,
         min_frequency=0.005,
         groupby=["group", "name"],

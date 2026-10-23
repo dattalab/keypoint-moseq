@@ -199,7 +199,7 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
 
    # initialize a new model using saved parameters
    model = kpms.init_model(
-      data, pca=pca, params=model['params'], 
+      data, metadata=metadata, pca=pca, params=model['params'],
       hypparams=model['hypparams'], **config())
    
    # continue fitting, now with the new data

@@ -1,4 +1,5 @@
 import os
+import re
 import numpy as np
 import tqdm
 import h5py
@@ -10,22 +11,154 @@ from datetime import datetime
 
 from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_hdf5, extract_results, load_checkpoint
+from keypoint_moseq.util import get_recording_lengths
 from jax_moseq.models import allo_keypoint_slds, keypoint_slds
 from jax_moseq.models.arhmm import stateseq_marginals, marginal_log_likelihood
 from jax_moseq.utils.autoregression import get_nlags
 from jax_moseq.utils import check_for_nans, device_put_as_scalar, unbatch
+from jax_moseq.utils import get_mixed_map_gpus, get_mixed_map_iters
 
 
 class StopResampling(Exception):
     pass
 
 
-def _wrapped_resample(resample_func, data, model, pbar=None, **resample_options):
+OUT_OF_MEMORY_FAQ = "https://keypoint-moseq.readthedocs.io/en/stable/FAQs.html#out-of-memory"
+
+
+def _is_out_of_memory(error):
+    """Whether `error` is the error XLA raises when an allocation fails."""
+    return isinstance(error, RuntimeError) and "RESOURCE_EXHAUSTED" in str(error)
+
+
+def _out_of_memory_error(
+    error, stage, data, hypparams, parallel_message_passing=None, metadata=None
+):
+    """Explain an XLA out-of-memory error in terms of the data and settings.
+
+    XLA's message names only the allocation that failed. Users need to know
+    how much data they asked the device to hold and which settings reduce
+    memory use, and those settings live in jax-moseq, not in the fitting call.
+
+    Parameters
+    ----------
+    error: RuntimeError
+        The `RESOURCE_EXHAUSTED` error raised by XLA.
+
+    stage: str
+        What was running, e.g. "AR-HMM fitting".
+
+    data: dict or None
+        Data passed to the model, with a `mask` of shape (n_segments,
+        segment_length). None if unavailable.
+
+    hypparams: dict
+        Model hyperparameters; `ar_hypparams` supplies `latent_dim` and
+        `num_states` when present.
+
+    parallel_message_passing: bool, default=None
+        The setting in effect, or None if it does not apply to `stage`.
+
+    metadata: tuple (keys, bounds), default=None
+        Segment metadata from `format_data`, used to count the recordings'
+        frames. Without it the data are described by their segments.
+
+    Returns
+    -------
+    MemoryError
+    """
+    device = jax.devices()[0]
+    on_gpu = device.platform == "gpu"
+    stats = device.memory_stats() if hasattr(device, "memory_stats") else None
+    limit = (stats or {}).get("bytes_limit")
+    requested = re.search(r"allocate\s+([\d.]+\s*[KMGT]?i?B)", str(error))
+    ar_hypparams = (hypparams or {}).get("ar_hypparams", {})
+    iters, gpus = get_mixed_map_iters(), get_mixed_map_gpus()
+
+    lines = [f"Ran out of {'GPU ' if on_gpu else ''}memory during {stage}.", ""]
+    device_text = f"{device.device_kind} ({device.platform}"
+    device_text += f", {limit / 2**30:.1f} GiB available to JAX)" if limit else ")"
+    if requested:
+        lines.append(f"  XLA tried to allocate {requested.group(1)} on {device_text}.")
+    else:
+        lines.append(f"  Device: {device_text}.")
+    if data is not None:
+        n_segments, segment_length = np.asarray(data["mask"]).shape
+        segments = f"{n_segments:,} segments of {segment_length:,} frames"
+        if metadata is not None:
+            n_frames = sum(get_recording_lengths(metadata).values())
+            data_text = f"  Data: {n_frames:,} frames, split into {segments}"
+        else:
+            data_text = f"  Data: {segments}"
+        if "latent_dim" in ar_hypparams:
+            data_text += (
+                f" (latent_dim={ar_hypparams['latent_dim']}, "
+                f"num_states={ar_hypparams.get('num_states')})"
+            )
+        lines.append(data_text + ".")
+    settings = f"mixed_map_iters={iters}, mixed_map_gpus={gpus}"
+    if parallel_message_passing is not None:
+        settings = f"parallel_message_passing={parallel_message_passing}, " + settings
+    lines += [f"  Settings: {settings}.", "", "Ways to fit within memory:"]
+    if on_gpu:
+        lines.append(
+            "  - If another notebook or script is using this GPU, shut it down. JAX "
+            "reserves 75% of GPU memory when keypoint_moseq is imported, so a "
+            "second process has little left."
+        )
+    lines.append(
+        "  - Split the data into batches that are processed one after another: "
+        f"`from jax_moseq.utils import set_mixed_map_iters; set_mixed_map_iters({2 * iters})`. "
+        "Memory use falls roughly in proportion to the number of batches, and "
+        "fitting slows by about the same factor."
+    )
+    if parallel_message_passing:
+        lines.append(
+            "  - Pass `parallel_message_passing=False`, which uses 4-6 times less "
+            "memory and is slower by a similar factor."
+        )
+    if on_gpu:
+        lines.append(
+            "  - Spread the work across several GPUs with "
+            "`jax_moseq.utils.set_mixed_map_gpus` (Linux only)."
+        )
+    lines += [
+        "  - Fit the model on a subset of the recordings, then use `apply_model` "
+        "for the rest.",
+        "",
+        f"See {OUT_OF_MEMORY_FAQ}",
+    ]
+    return MemoryError("\n".join(lines))
+
+
+def _wrapped_resample(
+    resample_func, data, model, pbar=None, stage=None, metadata=None, **resample_options
+):
     try:
         model = resample_func(data, **model, **resample_options)
     except KeyboardInterrupt:
         print("Early termination of fitting: user interruption")
         raise StopResampling()
+    except RuntimeError as error:
+        if not _is_out_of_memory(error):
+            raise
+        if pbar is not None:
+            pbar.close()
+        if stage is None:
+            if resample_options.get("states_only"):
+                stage = "applying the model"
+            elif resample_options.get("ar_only"):
+                stage = "AR-HMM fitting"
+            else:
+                stage = "full-model fitting"
+        raise _out_of_memory_error(
+            error,
+            stage,
+            data,
+            model.get("hypparams"),
+            resample_options.get("parallel_message_passing"),
+            metadata,
+        ) from error
 
     any_nans, nan_info, messages = check_for_nans(model)
 
@@ -61,7 +194,12 @@ def _set_parallel_flag(parallel_message_passing):
 
 
 def init_model(
-    *args, location_aware=False, allo_hypparams=None, trans_hypparams=None, **kwargs
+    *args,
+    location_aware=False,
+    allo_hypparams=None,
+    trans_hypparams=None,
+    metadata=None,
+    **kwargs,
 ):
     """Initialize a model. Wrapper for `jax_moseq.models.keypoint_slds.init_model`
     and `jax_moseq.models.allo_keypoint_slds.init_model`.
@@ -76,34 +214,53 @@ def init_model(
         Hyperparameters for the `allo_keypoint_slds` model. If None, default
         hyperparameters will be used.
 
+    metadata : tuple (keys, bounds), default=None
+        Segment metadata from :py:func:`keypoint_moseq.format_data`. Used only
+        to report the number of frames if initialization runs out of memory.
+
     Returns
     -------
     model : dict
         Model dictionary containing states, parameters, hyperparameters, noise
         prior, and random seed.
-    """
-    if location_aware:
-        num_states = trans_hypparams["num_states"]
-        allo_hypparams = {
-            "alpha0_v": 10,
-            "beta0_v": 0.1,
-            "lambda0_v": 1,
-            "alpha0_h": 10,
-            "beta0_h": 0.1,
-            "lambda0_h": 1,
-            "num_states": num_states,
-        }
 
-        return allo_keypoint_slds.init_model(
-            *args,
-            allo_hypparams=allo_hypparams,
-            trans_hypparams=trans_hypparams,
-            **kwargs,
-        )
-    else:
-        return keypoint_slds.init_model(
-            *args, trans_hypparams=trans_hypparams, **kwargs
-        )
+    Raises
+    ------
+    MemoryError
+        If the device runs out of memory, with the data size and the
+        settings that reduce memory use.
+    """
+    try:
+        if location_aware:
+            num_states = trans_hypparams["num_states"]
+            allo_hypparams = {
+                "alpha0_v": 10,
+                "beta0_v": 0.1,
+                "lambda0_v": 1,
+                "alpha0_h": 10,
+                "beta0_h": 0.1,
+                "lambda0_h": 1,
+                "num_states": num_states,
+            }
+
+            return allo_keypoint_slds.init_model(
+                *args,
+                allo_hypparams=allo_hypparams,
+                trans_hypparams=trans_hypparams,
+                **kwargs,
+            )
+        else:
+            return keypoint_slds.init_model(
+                *args, trans_hypparams=trans_hypparams, **kwargs
+            )
+    except RuntimeError as error:
+        if not _is_out_of_memory(error):
+            raise
+        data = kwargs.get("data", args[0] if args else None)
+        hypparams = kwargs.get("hypparams") or {"ar_hypparams": kwargs.get("ar_hypparams", {})}
+        raise _out_of_memory_error(
+            error, "model initialization", data, hypparams, metadata=metadata
+        ) from error
 
 
 def fit_model(
@@ -255,6 +412,7 @@ def fit_model(
                     data,
                     model,
                     pbar=pbar,
+                    metadata=metadata,
                     ar_only=ar_only,
                     verbose=verbose,
                     jitter=jitter,
@@ -386,6 +544,7 @@ def apply_model(
 
     model = init_model(
         data=data,
+        metadata=metadata,
         seed=model["seed"],
         params=model["params"],
         hypparams=model["hypparams"],
@@ -406,6 +565,7 @@ def apply_model(
                     data,
                     model,
                     pbar=pbar,
+                    metadata=metadata,
                     ar_only=ar_only,
                     states_only=True,
                     verbose=verbose,
@@ -497,6 +657,7 @@ def estimate_syllable_marginals(
 
     model = init_model(
         data=data,
+        metadata=metadata,
         seed=model["seed"],
         params=model["params"],
         hypparams=model["hypparams"],
@@ -521,6 +682,8 @@ def estimate_syllable_marginals(
                     data,
                     model,
                     pbar=pbar,
+                    metadata=metadata,
+                    stage="estimating syllable marginals",
                     states_only=True,
                     verbose=verbose,
                     parallel_message_passing=parallel_message_passing,

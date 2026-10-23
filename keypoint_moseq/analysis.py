@@ -5,6 +5,7 @@ from matplotlib.lines import Line2D
 from cytoolz import sliding_window
 import networkx as nx
 import os
+import warnings
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -12,6 +13,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from itertools import combinations
+from textwrap import fill
 from copy import deepcopy
 from glob import glob
 import panel as pn
@@ -53,8 +55,132 @@ def get_syllable_names(project_dir, model_name, syllable_ixs):
     return names
 
 
+MIN_RECORDINGS_PER_GROUP = 3
+
+
+def _read_index_csv(index_filepath):
+    """Read index.csv as text, with surrounding whitespace removed.
+
+    Every value stays a string: pandas would otherwise read recording names
+    like "0012" as numbers and groups like "NA" or "None" as missing. Rows
+    keep their position in the file, so row i is on line i + 2.
+
+    Parameters
+    ----------
+    index_filepath : str
+        Path to index.csv.
+
+    Returns
+    -------
+    index_df : pandas.DataFrame
+        With at least the columns "name" and "group"; empty cells are "".
+    """
+    index_df = pd.read_csv(
+        index_filepath,
+        index_col=False,
+        dtype=str,
+        keep_default_na=False,
+        skip_blank_lines=False,
+    ).fillna("")
+    index_df.columns = [str(column).strip() for column in index_df.columns]
+    if not {"name", "group"} <= set(index_df.columns):
+        raise ValueError(
+            f"index.csv must have the columns 'name' and 'group', but "
+            f"{index_filepath} has: {', '.join(index_df.columns)}"
+        )
+    for column in index_df.columns:
+        index_df[column] = index_df[column].str.strip()
+    return index_df
+
+
+def _read_index_groups(project_dir, recordings):
+    """Look up the group of each recording in the project's index.csv.
+
+    Every analysis function that attaches groups to modeling results reads
+    them through here, so the rules are the same everywhere: rows for other
+    recordings and rows with neither a name nor a group are ignored, and
+    every recording asked for must have exactly one row with a group.
+
+    Parameters
+    ----------
+    project_dir : str
+        Project directory holding index.csv.
+    recordings : list of str
+        Recordings whose groups are needed.
+
+    Returns
+    -------
+    groups : dict or None
+        Group of each recording, or None if the project has no index.csv.
+
+    Raises
+    ------
+    ValueError
+        Listing every recording with no row, an empty group, or several
+        rows, with line numbers in index.csv.
+    """
+    index_filepath = os.path.join(project_dir, "index.csv")
+    if not os.path.exists(index_filepath):
+        return None
+    index_df = _read_index_csv(index_filepath)
+
+    lines_of = {}
+    for row, name in enumerate(index_df["name"]):
+        if name:
+            lines_of.setdefault(name, []).append(row + 2)
+    group_on_line = {row + 2: group for row, group in enumerate(index_df["group"])}
+    unnamed = [
+        (row + 2, group)
+        for row, (name, group) in enumerate(zip(index_df["name"], index_df["group"]))
+        if group and not name
+    ]
+
+    missing = [r for r in recordings if r not in lines_of]
+    duplicated = [(r, lines_of[r]) for r in recordings if len(lines_of.get(r, [])) > 1]
+    no_group = [
+        (r, lines_of[r][0])
+        for r in recordings
+        if len(lines_of.get(r, [])) == 1 and not group_on_line[lines_of[r][0]]
+    ]
+    if missing or duplicated or no_group:
+        lines = [
+            f"index.csv does not give every recording being analyzed exactly one "
+            f"group ({index_filepath}):",
+            "",
+        ]
+        if missing:
+            lines.append(
+                f"  {len(missing)} of {len(recordings)} recordings have no row: "
+                f"{', '.join(missing)}"
+            )
+            if unnamed:
+                rows = ", ".join(f"line {line} (group '{group}')" for line, group in unnamed)
+                lines.append(f"  rows with a group but no name: {rows}")
+        for recording, line in no_group:
+            lines.append(f"  {recording} has no group (line {line})")
+        for recording, rows in duplicated:
+            lines.append(
+                f"  {recording} appears on lines {', '.join(map(str, rows))}"
+            )
+        lines += [
+            "",
+            fill(
+                "Give each recording one row with a group; recordings without a "
+                "group belong in 'default'. To add recordings that are missing "
+                "from index.csv, re-run `kpms.interactive_group_setting(project_dir, "
+                "model_name)`, which adds them to the group 'default'."
+            ),
+        ]
+        raise ValueError("\n".join(lines))
+    return {r: group_on_line[lines_of[r][0]] for r in recordings}
+
+
 def generate_index(project_dir, model_name, index_filepath):
-    """Generate index file as a csv.
+    """Write index.csv with a row for every recording in the model's results.
+
+    Recordings already in index.csv keep their rows and groups; recordings
+    that are not, such as ones added with `apply_model`, are appended in the
+    group "default". The file is only rewritten when rows are added.
 
     Parameters
     ----------
@@ -65,32 +191,21 @@ def generate_index(project_dir, model_name, index_filepath):
     index_filepath : str
         path to index file
     """
-
-    # load model results
     results_dict = load_results(project_dir, model_name)
 
-    # check if file exists
     if os.path.exists(index_filepath):
-        index_df = pd.read_csv(index_filepath, index_col=False)
-
-        # all files are created
-        if len(index_df) == len(results_dict.keys()):
+        index_df = _read_index_csv(index_filepath)
+        listed = set(index_df["name"])
+        missing = [name for name in results_dict if name not in listed]
+        if not missing:
             return
-        else:
-            # subset all the files
-            files = index_df.name.values
-            # find the missing file in results dict that's not in index
-            for i in results_dict.keys():
-                if i not in files:
-                    index_df.loc[len(index_df.index)] = [i, "default"]
-            # write index dataframe
-            index_df.to_csv(index_filepath, index=False)
+        index_df = pd.concat(
+            [index_df, pd.DataFrame({"name": missing, "group": "default"})],
+            ignore_index=True,
+        )
     else:
-        # generate a new index file
-        results_dict = load_results(project_dir, model_name)
         index_df = pd.DataFrame({"name": list(results_dict.keys()), "group": "default"})
-        # write index dataframe
-        index_df.to_csv(index_filepath, index=False)
+    index_df.to_csv(index_filepath, index=False)
 
 
 def interactive_group_setting(project_dir, model_name):
@@ -106,14 +221,11 @@ def interactive_group_setting(project_dir, model_name):
 
     index_filepath = os.path.join(project_dir, "index.csv")
 
-    if not os.path.exists(index_filepath):
-        generate_index(project_dir, model_name, index_filepath)
-
-    # making the interactive dataframe
-    # open index dataframe
+    # add any recordings in the model's results that index.csv lacks
+    generate_index(project_dir, model_name, index_filepath)
 
     # make a tabulator dataframe
-    summary_data = pd.read_csv(index_filepath, index_col=False)
+    summary_data = pd.read_csv(index_filepath, index_col=False, dtype=str, keep_default_na=False)
 
     titles = {"name": "recording name", "group": "group"}
 
@@ -189,11 +301,8 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smoo
     if results_dict is None:
         results_dict = load_results(project_dir, model_name)
 
-    # load index file
-    index_filepath = os.path.join(project_dir, "index.csv")
-    if os.path.exists(index_filepath):
-        index_data = pd.read_csv(index_filepath, index_col=False)
-    else:
+    groups = _read_index_groups(project_dir, list(results_dict))
+    if groups is None:
         print(
             "index.csv not found, if you want to include group information for each video, please run the Assign Groups widget first"
         )
@@ -222,14 +331,7 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smoo
             )
         )
 
-        if index_data is not None:
-            # find the group for each recording from index data
-            s_group.append(
-                [index_data[index_data["name"] == k]["group"].values[0]] * n_frame
-            )
-        else:
-            # no index data
-            s_group.append(["default"] * n_frame)
+        s_group.append([groups[k] if groups is not None else "default"] * n_frame)
         frame_index.append(np.arange(n_frame))
 
         if smooth_heading:
@@ -285,8 +387,6 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smoo
 
 
 def compute_stats_df(
-    project_dir,
-    model_name,
     moseq_df,
     min_frequency=0.005,
     groupby=["group", "name"],
@@ -294,12 +394,18 @@ def compute_stats_df(
 ):
     """Summary statistics for syllable frequencies and kinematic values.
 
+    Everything is computed from `moseq_df`, which already holds each frame's
+    syllable, kinematics and group, so the statistics always describe the
+    same recordings and groups as the dataframe they were computed from.
+
     Parameters
     ----------
     moseq_df : pandas.DataFrame
-        the dataframe that contains kinematic data for each frame
-    threshold : float, optional
-        usge threshold for the syllable to be included, by default 0.005
+        the dataframe that contains kinematic data for each frame (see
+        :py:func:`keypoint_moseq.analysis.compute_moseq_df`)
+    min_frequency : float, optional
+        syllables whose frequency across all recordings is at or below this
+        threshold are left out, by default 0.005
     groupby : list, optional
         the list of column names to group by, by default ['group', 'name']
     fps : int, optional
@@ -309,35 +415,52 @@ def compute_stats_df(
     -------
     stats_df : pandas.DataFrame
         the summary statistics dataframe for syllable frequencies and kinematic values
-    """
-    # compute runlength encoding for syllables
 
-    # load model results
-    results_dict = load_results(project_dir, model_name)
-    syllables = {k: res["syllable"] for k, res in results_dict.items()}
+    Raises
+    ------
+    ValueError
+        If any recording in `moseq_df` has more than one group. Syllable
+        frequencies are computed per recording, so each recording must belong
+        to a single group.
+    """
+    groups_per_recording = moseq_df.groupby("name", sort=False)["group"].unique()
+    mixed = groups_per_recording[groups_per_recording.map(len) > 1]
+    if len(mixed) > 0:
+        lines = [
+            "Each recording must belong to a single group, but these recordings "
+            "have several in moseq_df:"
+        ]
+        lines += [f"  {name}: {', '.join(map(str, groups))}" for name, groups in mixed.items()]
+        lines.append(
+            fill(
+                "Groups are assigned per recording, in index.csv before "
+                "compute_moseq_df, because syllable frequencies are computed per "
+                "recording."
+            )
+        )
+        raise ValueError("\n".join(lines))
+    group_of = {name: groups[0] for name, groups in groups_per_recording.items()}
+
+    # each recording's syllables in frame order
+    syllables = {}
+    for name, rows in moseq_df.groupby("name", sort=False):
+        if "frame_index" in rows:
+            rows = rows.sort_values("frame_index", kind="stable")
+        syllables[name] = rows["syllable"].to_numpy()
+
     # frequencies is array of frequencies for sorted syllables [syll_0, syll_1...]
     frequencies = get_frequencies(syllables)
     syll_include = np.where(frequencies > min_frequency)[0]
 
-    # add group information
-    # load index file
-    index_filepath = os.path.join(project_dir, "index.csv")
-    if os.path.exists(index_filepath):
-        index_df = pd.read_csv(index_filepath, index_col=False)
-    else:
-        print(
-            "index.csv not found, if you want to include group information for each video, please run the Assign Groups widget first"
-        )
-
     # construct frequency dataframe
     # syllable frequencies within one session add up to 1
     frequency_df = []
-    for k, v in results_dict.items():
-        syll_freq = get_frequencies(v["syllable"])
+    for name, recording_syllables in syllables.items():
+        syll_freq = get_frequencies(recording_syllables)
         df = pd.DataFrame(
             {
-                "name": k,
-                "group": index_df[index_df["name"] == k]["group"].values[0],
+                "name": name,
+                "group": group_of[name],
                 "syllable": np.arange(len(syll_freq)),
                 "frequency": syll_freq,
             }
@@ -1056,6 +1179,50 @@ def save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir):
     print(f"Saved figure to {save_path}.png")
 
 
+def _warn_if_groups_cannot_be_compared(stats_df, groups=None):
+    """Warn when significance tests between groups would be meaningless.
+
+    Every recording in "default" means no groups were assigned, so there is
+    nothing to compare. A group with fewer than MIN_RECORDINGS_PER_GROUP
+    recordings makes the Kruskal-Wallis and Dunn tests unreliable.
+
+    Parameters
+    ----------
+    stats_df : pandas.DataFrame
+        Output of :py:func:`keypoint_moseq.analysis.compute_stats_df`.
+    groups : list, optional
+        Groups being compared; all groups in `stats_df` by default.
+    """
+    present = list(pd.unique(stats_df["group"]))
+    if present == ["default"]:
+        warnings.warn(
+            fill(
+                "Every recording is in the group 'default', so there are no "
+                "groups to compare and no significance is tested. To compare "
+                "groups, assign them with `kpms.interactive_group_setting`, then "
+                "re-run compute_moseq_df and compute_stats_df."
+            )
+        )
+        return
+    if len(present) < 2 or "name" not in stats_df.columns:
+        return
+    compared = [g for g in (present if groups is None else groups) if g in present]
+    small = {}
+    for group in compared:
+        names = sorted(stats_df.loc[stats_df["group"] == group, "name"].unique())
+        if len(names) < MIN_RECORDINGS_PER_GROUP:
+            small[group] = names
+    if small:
+        lines = [
+            f"Significance tests need at least {MIN_RECORDINGS_PER_GROUP} recordings "
+            "per group, but:"
+        ]
+        for group, names in small.items():
+            lines.append(f"  group '{group}' has {len(names)}: {', '.join(names)}")
+        lines.append("Significance results involving these groups are unreliable.")
+        warnings.warn("\n".join(lines))
+
+
 def plot_syll_stats_with_sem(
     stats_df,
     project_dir,
@@ -1117,6 +1284,9 @@ def plot_syll_stats_with_sem(
     sig_sylls = None
     if groups is None:
         groups = stats_df["group"].unique()
+
+    if plot_sig:
+        _warn_if_groups_cannot_be_compared(stats_df, groups)
 
     if plot_sig and len(stats_df["group"].unique()) > 1:
         # run kruskal wallis and dunn's test
@@ -1510,15 +1680,14 @@ def generate_transition_matrices(
     if not os.path.exists(index_file):
         generate_index(project_dir, model_name, index_file)
 
-    index_data = pd.read_csv(index_file, index_col=False)
-
-    label_group = list(index_data.group.values)
-    recordings = list(index_data.name.values)
-    group = sorted(list(index_data.group.unique()))
-    print("Group(s):", ", ".join(group))
-
-    # load model reuslts
+    # load model results
     results_dict = load_results(project_dir, model_name)
+    recordings = list(results_dict)
+    groups = _read_index_groups(project_dir, recordings)
+
+    label_group = [groups[recording] for recording in recordings]
+    group = sorted(set(label_group))
+    print("Group(s):", ", ".join(group))
 
     # filter out syllables by freqency
     model_labels = [results_dict[recording]["syllable"] for recording in recordings]

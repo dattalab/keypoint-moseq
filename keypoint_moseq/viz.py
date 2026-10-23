@@ -16,6 +16,7 @@ from scipy.cluster.hierarchy import linkage, dendrogram, leaves_list
 from textwrap import fill
 from PIL import Image
 from keypoint_moseq.util import *
+from keypoint_moseq.util import _check_coordinates_match_results
 from keypoint_moseq.io import load_results, _get_path
 from jax_moseq.models.keypoint_slds import center_embedding
 from jax_moseq.utils import get_durations, get_frequencies
@@ -1223,6 +1224,9 @@ def generate_grid_movies(
     if results is None:
         results = load_results(project_dir, model_name)
 
+    if coordinates is not None:
+        _check_coordinates_match_results(coordinates, results)
+
     # extract syllables from results
     syllables = {k: v["syllable"] for k, v in results.items()}
 
@@ -1245,18 +1249,7 @@ def generate_grid_movies(
 
     # load video readers if necessary
     if not keypoints_only:
-        if video_paths is None:
-            video_paths = find_matching_videos(
-                results.keys(),
-                video_dir,
-                as_dict=True,
-                video_extension=video_extension,
-            )
-        check_video_paths(video_paths, results.keys())
-
-        if video_frame_indexes is None:
-            video_frame_indexes = {k: np.arange(len(v)) for k, v in syllables.items()}
-        else:
+        if video_frame_indexes is not None:
             assert set(video_frame_indexes.keys()) == set(
                 syllables.keys()
             ), "The keys of `video_frame_indexes` must match the keys of `results`"
@@ -1267,6 +1260,20 @@ def generate_grid_movies(
                     f"\n\tLength of `video_frame_indexes` = {len(video_frame_indexes[k])}"
                     f"\n\tLength of modeling results = {len(v)}"
                 )
+
+        # The grid-movie crops follow the centroids, which share the
+        # keypoints' pixel frame, so they stand in for keypoints here.
+        video_paths = check_videos(
+            {k: v[:, None, :] for k, v in centroids.items()},
+            video_dir=video_dir,
+            video_paths=video_paths,
+            video_frame_indexes=video_frame_indexes,
+            video_extension=video_extension,
+            print_table=False,
+            fps=fps,
+        )
+        if video_frame_indexes is None:
+            video_frame_indexes = {k: np.arange(len(v)) for k, v in syllables.items()}
     else:
         video_paths = None
 
