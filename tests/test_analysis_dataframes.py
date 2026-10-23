@@ -215,7 +215,6 @@ def test_stats_df_with_default_group(tutorial_moseq_df):
         moseq_df,
         min_frequency=0.005,
         groupby=["group", "name"],
-        fps=30,
     )
 
     assert (stats_df["group"] == "default").all()
@@ -226,9 +225,9 @@ def test_stats_df_needs_only_moseq_df(tmp_path):
     """No results.h5 or index.csv exists anywhere; everything comes from
     moseq_df."""
     results = synthetic_results(["rec_a", "rec_b"])
-    moseq_df = kpms.compute_moseq_df(str(tmp_path), "model", results_dict=results)
+    moseq_df = kpms.compute_moseq_df(str(tmp_path), "model", results_dict=results, fps=FPS)
 
-    stats_df = kpms.compute_stats_df(moseq_df, min_frequency=0.0, fps=FPS)
+    stats_df = kpms.compute_stats_df(moseq_df, min_frequency=0.0)
 
     for name, rows in recording_rows(stats_df, results).items():
         syllables = rows["syllable"].to_numpy()
@@ -241,7 +240,7 @@ def test_stats_df_needs_only_moseq_df(tmp_path):
 
 def test_stats_df_rejects_a_recording_with_several_groups(tmp_path):
     results = synthetic_results(["rec_a", "rec_b"])
-    moseq_df = kpms.compute_moseq_df(str(tmp_path), "model", results_dict=results)
+    moseq_df = kpms.compute_moseq_df(str(tmp_path), "model", results_dict=results, fps=FPS)
     first_rows = moseq_df.index[moseq_df["name"] == "rec_a"][:10]
     moseq_df.loc[first_rows, "group"] = "KO"
 

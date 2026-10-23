@@ -656,15 +656,15 @@ def get_syllable_instances(
         Dictionary mapping names to syllable sequences
 
     min_duration: int, default=3
-        Mininum duration for inclusion of a syllable instance
+        Mininum duration, in frames, for inclusion of a syllable instance
 
     pre: int, default=30
-        Syllable instances that start before this location in the state
+        Syllable instances that start before this frame of the state
         sequence will be excluded
 
     post: int, default=60
-        Syllable instances that end after this location in the state sequence
-        will be excluded
+        Syllable instances that start within this many frames of the end of
+        the state sequence will be excluded
 
     min_frequency: int, default=0
         Minimum allowed frequency (across all state sequences) for inclusion of
@@ -1503,16 +1503,16 @@ def get_typical_trajectories(
         :py:func:`keypoint_moseq.fitting.extract_results`).
 
     pre: int, default=5, post: int, default=15
-        Defines the temporal window around syllable onset for computing the
-        average trajectory. Note that the window is independent of the actual
-        duration of the syllable.
+        Defines the temporal window, in frames, around syllable onset for
+        computing the average trajectory. Note that the window is independent
+        of the actual duration of the syllable.
 
     min_frequency: float, default=0.005
         Minimum frequency of a syllable to plotted.
 
-    min_duration: float, default=3
-        Minimum duration of a syllable instance to be included in the
-        trajectory average.
+    min_duration: int, default=3
+        Minimum duration, in frames, of a syllable instance to be included in
+        the trajectory average.
 
     bodyparts: list of str, default=None
         List of bodypart names in `coordinates`.

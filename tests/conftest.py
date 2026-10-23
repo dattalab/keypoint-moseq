@@ -204,10 +204,17 @@ def tutorial_arhmm(tutorial_outlier_removed, tutorial_formatted_data, tutorial_m
 
     project_dir, _, _ = tutorial_outlier_removed
     data, metadata = tutorial_formatted_data
+    config = lambda: kpms.load_config(project_dir)
     num_ar_iters = 5
 
     model, model_name = kpms.fit_model(
-        tutorial_model, data, metadata, project_dir, ar_only=True, num_iters=num_ar_iters
+        tutorial_model,
+        data,
+        metadata,
+        project_dir,
+        ar_only=True,
+        num_iters=num_ar_iters,
+        **config(),
     )
     return model, model_name, num_ar_iters
 
@@ -221,6 +228,7 @@ def tutorial_full_model(tutorial_outlier_removed, tutorial_arhmm):
 
     project_dir, _, _ = tutorial_outlier_removed
     _, model_name, num_ar_iters = tutorial_arhmm
+    config = lambda: kpms.load_config(project_dir)
     num_full_iters = 5
 
     model, data, metadata, current_iter = kpms.load_checkpoint(
@@ -236,6 +244,7 @@ def tutorial_full_model(tutorial_outlier_removed, tutorial_arhmm):
         ar_only=False,
         start_iter=current_iter,
         num_iters=current_iter + num_full_iters,
+        **config(),
     )[0]
     return model, current_iter + num_full_iters
 
@@ -414,8 +423,9 @@ def tutorial_analysis_project(
     tutorial_grid_movies,
 ):
     """Project directory and model name for the analysis notebook: a new
-    project holding copies of the reindexed model's `results.h5` and grid
-    movies, laid out as the notebook's setup cell describes. The analysis
+    project holding copies of the modeling project's config and the reindexed
+    model's `results.h5` and grid movies, laid out as the notebook's setup
+    cell describes. The analysis
     notebook writes `index.csv` to the project directory and `syll_info.csv`
     and figures to the model directory, so the copy keeps them out of the
     modeling project."""
@@ -426,6 +436,7 @@ def tutorial_analysis_project(
     model_dir = os.path.join(project_dir, model_name)
 
     os.makedirs(model_dir)
+    shutil.copy(os.path.join(modeling_project_dir, "config.yml"), project_dir)
     shutil.copy(os.path.join(source_dir, "results.h5"), model_dir)
     shutil.copytree(
         os.path.join(source_dir, "grid_movies"), os.path.join(model_dir, "grid_movies")
@@ -435,13 +446,15 @@ def tutorial_analysis_project(
 
 @pytest.fixture
 def analysis_project_without_groups(tmp_path, tutorial_analysis_project):
-    """Project directory and model name holding only a copy of the analysis
-    project's `results.h5`, as before the group-setting cell has run."""
+    """Project directory and model name holding only copies of the analysis
+    project's config and `results.h5`, as before the group-setting cell has
+    run."""
     source_project_dir, model_name = tutorial_analysis_project
     project_dir = str(tmp_path / "demo_project")
     model_dir = os.path.join(project_dir, model_name)
 
     os.makedirs(model_dir)
+    shutil.copy(os.path.join(source_project_dir, "config.yml"), project_dir)
     shutil.copy(os.path.join(source_project_dir, model_name, "results.h5"), model_dir)
     return project_dir, model_name
 
@@ -494,7 +507,6 @@ def tutorial_stats_df(tutorial_moseq_df):
         tutorial_moseq_df,
         min_frequency=0.005,
         groupby=["group", "name"],
-        fps=30,
     )
 
 

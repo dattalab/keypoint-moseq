@@ -509,6 +509,7 @@ def plot_progress(
     window_size=600,
     min_frequency=0.001,
     min_histogram_length=10,
+    fps=None,
 ):
     """Plot the progress of the model during fitting.
 
@@ -563,6 +564,10 @@ def plot_progress(
     min_histogram_length : int, default=10
         Minimum x-axis length of the frequency distribution plot.
 
+    fps : float, default=None
+        Frame rate of the recordings. If given, syllable durations are shown
+        in seconds; otherwise in frames.
+
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -597,11 +602,18 @@ def plot_progress(
     axs[0].set_title("Frequency distribution")
     axs[0].set_yticks([])
 
+    # durations are counted in frames, and shown in seconds when fps is given
+    scale, unit = (1 / fps, "s") if fps else (1, "frames")
     lim = int(np.percentile(durations, 95))
     binsize = max(int(np.floor(lim / 30)), 1)
-    axs[1].hist(durations, range=(1, lim), bins=(int(lim / binsize)), density=True)
-    axs[1].set_xlim([1, lim])
-    axs[1].set_xlabel("syllable duration (frames)")
+    axs[1].hist(
+        durations * scale,
+        range=(scale, lim * scale),
+        bins=(int(lim / binsize)),
+        density=True,
+    )
+    axs[1].set_xlim([scale, lim * scale])
+    axs[1].set_xlabel(f"syllable duration ({unit})")
     axs[1].set_ylabel("probability")
     axs[1].set_title("Duration distribution")
     axs[1].set_yticks([])
@@ -620,10 +632,11 @@ def plot_progress(
                 sample_state_history.append(z[batch_ix, start : start + window_size])
                 median_durations.append(np.median(get_durations(z, mask)))
 
+        median_durations = np.array(median_durations) * scale
         axs[2].scatter(saved_iterations, median_durations)
-        axs[2].set_ylim([-1, np.max(median_durations) * 1.1])
+        axs[2].set_ylim([-scale, np.max(median_durations) * 1.1])
         axs[2].set_xlabel("iteration")
-        axs[2].set_ylabel("duration")
+        axs[2].set_ylabel(f"median duration ({unit})")
         axs[2].set_title("Median duration")
 
         axs[3].imshow(
@@ -1075,8 +1088,8 @@ def generate_grid_movies(
         Minimum frequency of a syllable to be included in the grid movies.
 
     min_duration: int, default=3
-        Minimum duration of a syllable instance to be included in the
-        grid movie for that syllable.
+        Minimum duration, in frames, of a syllable instance to be included in
+        the grid movie for that syllable.
 
     sampling_options: dict, default={}
         Dictionary of options for sampling syllable instances (see
@@ -2477,6 +2490,20 @@ def plot_similarity_dendrogram(
 
     metric: str, default='cosine'
         Distance metric to use. See :py:func:`scipy.spatial.pdist` for options.
+
+    pre: float, default=0.167
+        Time in seconds before syllable onset to include in each syllable's
+        typical trajectory. This value will be converted to frames using the
+        fps parameter.
+
+    post: float, default=0.5
+        Time in seconds after syllable onset to include in each syllable's
+        typical trajectory. This value will be converted to frames using the
+        fps parameter.
+
+    min_duration: int, default=3
+        Minimum duration, in frames, of a syllable instance to be included in
+        the typical trajectory.
 
     figsize: tuple of float, default=(10,5)
         Size of the dendrogram plot.

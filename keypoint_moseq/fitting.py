@@ -278,6 +278,7 @@ def fit_model(
     generate_progress_plots=True,
     save_every_n_iters=25,
     location_aware=False,
+    fps=None,
     **kwargs,
 ):
     """Fit a model to data.
@@ -351,6 +352,12 @@ def fit_model(
     location_aware : bool, default=False
         If True, the model will be fit using the location-aware version of the
         keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
+
+    fps : float, default=None
+        Frame rate of the recordings. If given, the progress plots show
+        syllable durations in seconds; otherwise in frames. The notebook passes
+        it with the rest of the config (`**config()`); other config entries are
+        ignored.
 
     Returns
     -------
@@ -440,6 +447,7 @@ def fit_model(
                             project_dir,
                             model_name,
                             savefig=True,
+                            fps=fps,
                         )
 
     return model, model_name

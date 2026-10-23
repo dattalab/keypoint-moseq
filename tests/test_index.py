@@ -28,13 +28,13 @@ def save_results(project_dir, results):
 
 def moseq_df_groups(project_dir, results):
     """Group of each recording in the moseq_df built from `results`."""
-    moseq_df = kpms.compute_moseq_df(str(project_dir), MODEL_NAME, results_dict=results)
+    moseq_df = kpms.compute_moseq_df(str(project_dir), MODEL_NAME, results_dict=results, fps=30)
     return moseq_df.groupby("name")["group"].unique().map(list).to_dict()
 
 
 def index_error(project_dir, results):
     with pytest.raises(ValueError) as error:
-        kpms.compute_moseq_df(str(project_dir), MODEL_NAME, results_dict=results)
+        kpms.compute_moseq_df(str(project_dir), MODEL_NAME, results_dict=results, fps=30)
     return str(error.value)
 
 

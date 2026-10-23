@@ -1,5 +1,5 @@
 from keypoint_moseq.util import filter_angle
-from keypoint_moseq.io import load_results
+from keypoint_moseq.io import load_config, load_results
 from math import ceil
 from matplotlib.lines import Line2D
 from cytoolz import sliding_window
@@ -275,9 +275,14 @@ def interactive_group_setting(project_dir, model_name):
     return pn.Row(summary_table, pn.Column(button))
 
 
-def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smooth_heading=True):
+def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=None, smooth_heading=True):
     """Compute moseq dataframe from results dict that contains all kinematic
     values by frame.
+
+    Velocities are converted from per-frame to per-second with the frame
+    rate, which is also stored in the "fps" column so that
+    :py:func:`keypoint_moseq.analysis.compute_stats_df` converts syllable
+    durations with the same rate.
 
     Parameters
     ----------
@@ -287,8 +292,9 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smoo
         the name of the model directory
     results_dict : dict
         dictionary of results from model fitting
-    fps: int, optional
-        The fps of the recordings
+    fps: float, optional
+        The frame rate of the recordings. By default, the `fps` in the
+        project's config.yml.
     smooth_heading : bool, optional
         boolean flag whether smooth the computed heading, by default True
 
@@ -296,10 +302,30 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smoo
     -------
     moseq_df : pandas.DataFrame
         the dataframe that contains kinematic data for each frame
+
+    Raises
+    ------
+    ValueError
+        If `fps` is not given and the project has no config.yml with an
+        `fps` entry.
     """
 
     if results_dict is None:
         results_dict = load_results(project_dir, model_name)
+
+    if fps is None:
+        config_path = os.path.join(project_dir, "config.yml")
+        config_fps = load_config(project_dir).get("fps") if os.path.exists(config_path) else None
+        if config_fps is None:
+            raise ValueError(
+                fill(
+                    "compute_moseq_df needs the frame rate of the recordings to "
+                    "convert velocities to per-second units. Pass `fps`, or set "
+                    f"`fps` in the project config ({config_path}) with "
+                    "`kpms.update_config(project_dir, fps=...)`."
+                )
+            )
+        fps = config_fps
 
     groups = _read_index_groups(project_dir, list(results_dict))
     if groups is None:
@@ -373,6 +399,7 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smoo
     moseq_df["syllable"] = np.concatenate(syllables)
     moseq_df["frame_index"] = np.concatenate(frame_index)
     moseq_df["group"] = np.concatenate(s_group)
+    moseq_df["fps"] = fps
 
     # compute syllable onset
     change = np.diff(moseq_df["syllable"]) != 0
@@ -390,7 +417,6 @@ def compute_stats_df(
     moseq_df,
     min_frequency=0.005,
     groupby=["group", "name"],
-    fps=30,
 ):
     """Summary statistics for syllable frequencies and kinematic values.
 
@@ -408,8 +434,6 @@ def compute_stats_df(
         threshold are left out, by default 0.005
     groupby : list, optional
         the list of column names to group by, by default ['group', 'name']
-    fps : int, optional
-        frame per second information of the recording, by default 30
 
     Returns
     -------
@@ -419,10 +443,27 @@ def compute_stats_df(
     Raises
     ------
     ValueError
-        If any recording in `moseq_df` has more than one group. Syllable
+        If any recording in `moseq_df` has more than one group (syllable
         frequencies are computed per recording, so each recording must belong
-        to a single group.
+        to a single group), or if `moseq_df` has no "fps" column or more than
+        one frame rate.
     """
+    if "fps" not in moseq_df.columns:
+        raise ValueError(
+            fill(
+                "moseq_df has no 'fps' column, so syllable durations cannot be "
+                "converted to seconds. Recompute it with compute_moseq_df."
+            )
+        )
+    frame_rates = pd.unique(moseq_df["fps"])
+    if len(frame_rates) > 1:
+        raise ValueError(
+            f"moseq_df mixes recordings at several frame rates "
+            f"({', '.join(map(str, frame_rates))} fps); compute statistics for each "
+            "frame rate separately."
+        )
+    fps = frame_rates[0]
+
     groups_per_recording = moseq_df.groupby("name", sort=False)["group"].unique()
     mixed = groups_per_recording[groups_per_recording.map(len) > 1]
     if len(mixed) > 0:

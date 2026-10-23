@@ -348,11 +348,11 @@ There are two reasons why a syllable might be excluded from the trajectory plots
 
    Note that the number of *usable* syllable instances may be less than the total number of instances. Three criteria determine whether an instance is usable:
 
-   - ``pre``: the number of frames prior to syllable onset that are included in the trajectory. By default, ``pre=5``, meaning that the trajectory will include the 5 frames prior to syllable onset. If a particular syllable instance starts within the first 5 frames of the video, then it is excluded.
+   - ``pre``: the time, in seconds, before syllable onset that is included in the trajectory. By default, ``pre=0.167`` (5 frames at 30 fps). If a particular syllable instance starts within the first ``pre`` seconds of the video, then it is excluded.
 
-   - ``post``: the number of frames after syllable onset that are included in the trajectory. By default, ``post=15``, meaning that the trajectory will include the 15 frames after syllable onset. If a particular syllable instance starts within the last 15 frames of the video, then it is excluded.
+   - ``post``: the time, in seconds, after syllable onset that is included in the trajectory. By default, ``post=0.5`` (15 frames at 30 fps). If a particular syllable instance starts within the last ``post`` seconds of the video, then it is excluded.
 
-   - ``min_duration``: the minimum duration of a syllable instance. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
+   - ``min_duration``: the minimum duration of a syllable instance, in frames. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
 
 In summary, the following parameter changes will tend to increase the number of syllables included in the trajectory plots: 
 
@@ -376,11 +376,11 @@ There are two reasons why a syllable might not have a grid movie:
 
 2) There aren't enough usable instances of the syllable. There have to be at least enough instances to fill up every cell of the grid. The number of grid cells is determined by the ``rows`` and ``cols`` parameters. Note that the number of *usable* syllable instances may be less than the total number of instances. Three criteria determine whether an instance is usable:
 
-   - ``pre``: the number of frames prior to syllable onset that are included in the grid movie. By default, ``pre=30``, meaning that movie in each grid cell starts 30 frames prior to syllable onset. So if a particular syllable instance starts within the first 30 frames of the experiment, then it is excluded.
+   - ``pre``: the time, in seconds, before syllable onset that is included in the grid movie. By default, ``pre=1.0``, meaning that the movie in each grid cell starts 1 second before syllable onset. So if a particular syllable instance starts within the first second of the experiment, then it is excluded.
 
-   - ``post``: the number of frames after syllable onset that are included in the grid movie. By default, ``post=60``, meaning that the movie in each grid cell ends 60 frames after syllavle onset. If a particular syllable instance starts within the last 60 frames of the experiment, then it is excluded.
+   - ``post``: the time, in seconds, after syllable onset that is included in the grid movie. By default, ``post=2.0``, meaning that the movie in each grid cell ends 2 seconds after syllable onset. If a particular syllable instance starts within the last 2 seconds of the experiment, then it is excluded.
 
-   - ``min_duration``: the minimum duration of a syllable instance. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
+   - ``min_duration``: the minimum duration of a syllable instance, in frames. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
 
 In summary, the following parameter changes will tend to increase the number of syllables included in the grid movies:
 
