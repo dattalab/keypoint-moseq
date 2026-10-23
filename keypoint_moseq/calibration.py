@@ -420,18 +420,6 @@ def noise_calibration(
         trimmed or coordinates were downsampled).
     """
 
-    if video_frame_indexes is not None:
-        assert set(video_frame_indexes.keys()) == set(
-            coordinates.keys()
-        ), "The keys of `video_frame_indexes` must match the keys of `results`"
-        for k, v in coordinates.items():
-            assert len(v) == len(video_frame_indexes[k]), (
-                "There is a mismatch between the length of `video_frame_indexes` "
-                f"and the length of `coordinates` results for key {k}."
-                f"\n\tLength of video_frame_indexes = {len(video_frame_indexes[k])}"
-                f"\n\tLength of coordinates = {len(v)}"
-            )
-
     dim = list(coordinates.values())[0].shape[-1]
     assert dim == 2, "Calibration is only supported for 2D keypoints."
 

@@ -132,3 +132,22 @@ def test_noise_calibration_rejects_keypoints_longer_than_video(calibration_input
 
     assert name in str(error.value)
     assert "up to" in str(error.value)
+
+
+def test_noise_calibration_rejects_frame_indexes_missing_a_recording(calibration_inputs):
+    project_dir, coordinates, confidences = calibration_inputs
+    config = lambda: kpms.load_config(project_dir)
+    first, *rest = sorted(coordinates)
+    video_frame_indexes = {k: np.arange(len(coordinates[k])) for k in rest}
+
+    with pytest.raises(ValueError) as error:
+        kpms.noise_calibration(
+            project_dir,
+            coordinates,
+            confidences,
+            video_frame_indexes=video_frame_indexes,
+            **config(),
+        )
+
+    assert first in str(error.value)
+    assert "video_frame_indexes" in str(error.value)

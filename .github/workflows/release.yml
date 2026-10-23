@@ -25,7 +25,9 @@ jobs:
           enable-cache: false
 
       - name: Check that the notebooks state this release's version
-        run: python3 .github/scripts/check_notebook_versions.py "${{ github.event.release.tag_name }}"
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: python3 .github/scripts/check_notebook_versions.py "$TAG"
 
       - name: Build source distribution
         run: uv build --sdist

@@ -95,13 +95,24 @@ def test_development_install_skips_the_notebook_check(monkeypatch, capsys):
 
 def test_stale_kernel_raises(monkeypatch):
     # The package on disk was upgraded after this kernel imported kpms.
-    fake_versions(monkeypatch, keypoint_moseq="99.0.0")
+    monkeypatch.setattr(kpms, "__version__", "0.8.0")
+    fake_versions(monkeypatch, keypoint_moseq="0.8.1")
 
     message = check_error()
 
-    assert "99.0.0" in message
-    assert INSTALLED.split("+")[0] in message
+    assert "0.8.1" in message
+    assert "0.8.0" in message
     assert "restart the kernel" in message
+
+
+def test_development_install_skips_the_stale_kernel_check(monkeypatch):
+    # An editable install computes its version from git when imported, while
+    # the installed metadata keeps the version from install time, so the two
+    # differ once a new tag is pulled. Restarting the kernel would not help.
+    monkeypatch.setattr(kpms, "__version__", "0.8.0+3.gabc1234")
+    fake_versions(monkeypatch, keypoint_moseq="0.7.1+5.gdef5678")
+
+    kpms.check_installation()
 
 
 def test_packages_shadowed_from_the_user_site_raise(monkeypatch, tmp_path):
@@ -127,28 +138,33 @@ def test_mismatched_jax_and_jaxlib_raise(monkeypatch):
 
 
 @without_gpu
-def test_cuda_plugin_without_a_visible_gpu_raises(monkeypatch):
+def test_cuda_plugin_without_a_visible_gpu_reports_the_cpu(monkeypatch, capsys):
+    # A GPU install can be used on a machine without a GPU, e.g. for the
+    # analysis notebook, so this is reported but is not a problem.
     fake_versions(monkeypatch, jax_cuda12_plugin=jax.__version__)
 
-    message = check_error()
+    kpms.check_installation()
 
-    assert "CUDA plugin" in message
-    assert "nvidia-smi" in message
-    assert "CUDA_VISIBLE_DEVICES" in message
+    out = capsys.readouterr().out
+    assert "JAX is using the CPU" in out
+    assert "If you expected a GPU here" in out
+    assert "nvidia-smi" in out
+    assert "CUDA_VISIBLE_DEVICES" in out
 
 
 @without_gpu
-def test_system_cuda_on_the_library_path_is_named_as_the_cause(monkeypatch):
+def test_system_cuda_on_the_library_path_is_named_as_the_cause(monkeypatch, capsys):
     # Reproduced on an A100 node: a system CUDA toolkit first on
     # LD_LIBRARY_PATH stops JAX's CUDA plugin from starting, and JAX falls
     # back to the CPU, saying a CUDA-enabled jaxlib is not installed.
     fake_versions(monkeypatch, jax_cuda12_plugin=jax.__version__)
     monkeypatch.setenv("LD_LIBRARY_PATH", "/n/app/cuda/12.8.0-gcc-14.2.0/lib64:/usr/lib")
 
-    message = check_error()
+    kpms.check_installation()
 
-    assert "/n/app/cuda/12.8.0-gcc-14.2.0/lib64" in message
-    assert "module unload" in message
+    expected = capsys.readouterr().out.split("If you expected a GPU here")[1]
+    assert "/n/app/cuda/12.8.0-gcc-14.2.0/lib64" in expected
+    assert "module unload" in expected
 
 
 @without_gpu
@@ -157,7 +173,10 @@ def test_cpu_only_install_without_cuda_plugin_passes(monkeypatch, capsys):
 
     kpms.check_installation()
 
-    assert "keypoint-moseq[cuda]" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "JAX is using the CPU" in out
+    assert "keypoint-moseq[cuda]" in out
+    assert "If you expected a GPU here" not in out
 
 
 @with_gpu
@@ -168,13 +187,29 @@ def test_gpu_test_runs_on_a_visible_gpu(capsys):
 
 
 def test_every_problem_is_listed_and_the_report_is_printed_first(monkeypatch, capsys):
-    fake_versions(monkeypatch, keypoint_moseq="99.0.0", jaxlib="0.4.0")
+    monkeypatch.setattr(kpms, "__version__", "0.8.0")
+    fake_versions(monkeypatch, keypoint_moseq="0.8.1", jaxlib="0.4.0")
 
     message = check_error()
 
     assert "restart the kernel" in message
     assert "jaxlib" in message
     assert jax.__version__ in capsys.readouterr().out
+
+
+def test_report_is_printed_when_jax_cannot_list_its_devices(monkeypatch, capsys):
+    # e.g. JAX_PLATFORMS=cuda on a machine where the CUDA backend cannot start
+    def no_devices():
+        raise RuntimeError("Unable to initialize backend 'cuda'")
+
+    monkeypatch.setattr(jax, "devices", no_devices)
+
+    message = check_error()
+
+    assert "Unable to initialize backend 'cuda'" in message
+    out = capsys.readouterr().out
+    assert jax.__version__ in out
+    assert sys.executable in out
 
 
 @pytest.mark.parametrize(

@@ -108,9 +108,10 @@ def _out_of_memory_error(
         )
     lines.append(
         "  - Split the data into batches that are processed one after another: "
-        f"`from jax_moseq.utils import set_mixed_map_iters; set_mixed_map_iters({2 * iters})`. "
-        "Memory use falls roughly in proportion to the number of batches, and "
-        "fitting slows by about the same factor."
+        "restart the kernel, then run "
+        f"`from jax_moseq.utils import set_mixed_map_iters; set_mixed_map_iters({2 * iters})` "
+        "before fitting. Memory use falls roughly in proportion to the number "
+        "of batches, and fitting slows by about the same factor."
     )
     if parallel_message_passing:
         lines.append(
@@ -119,8 +120,9 @@ def _out_of_memory_error(
         )
     if on_gpu:
         lines.append(
-            "  - Spread the work across several GPUs with "
-            "`jax_moseq.utils.set_mixed_map_gpus` (Linux only)."
+            "  - Spread the work across several GPUs (Linux only): restart the "
+            "kernel, then call `jax_moseq.utils.set_mixed_map_gpus` before "
+            "fitting."
         )
     lines += [
         "  - Fit the model on a subset of the recordings, then use `apply_model` "
@@ -318,7 +320,7 @@ def fit_model(
         Index of the starting iteration, which is non-zero when continuing a
         previous fit.
 
-    verbose : bool, default=True
+    verbose : bool, default=False
         If True, print the model's progress during fitting.
 
     ar_only : bool, default=False
@@ -356,8 +358,8 @@ def fit_model(
     fps : float, default=None
         Frame rate of the recordings. If given, the progress plots show
         syllable durations in seconds; otherwise in frames. The notebook passes
-        it with the rest of the config (`**config()`); other config entries are
-        ignored.
+        it with the rest of the config (`**config()`), which also sets
+        `verbose`; other config entries are ignored.
 
     Returns
     -------

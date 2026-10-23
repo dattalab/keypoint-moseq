@@ -1,14 +1,16 @@
 import os
 import sys
-import site
-import platform
 import glob
-import importlib.util
 import tabulate
 import tqdm
 import warnings
-from importlib import metadata
-from packaging.version import InvalidVersion, Version
+# Private names, so that `from .util import *` does not add them to the
+# keypoint_moseq namespace (the tutorial names a variable `metadata`).
+import importlib.util as _importlib_util
+import platform as _platform
+import site as _site
+from importlib import metadata as _metadata
+from packaging.version import InvalidVersion as _InvalidVersion, Version as _Version
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -388,7 +390,7 @@ def find_matching_videos(
             video_extension = "." + video_extension
         extensions = [video_extension]
 
-    if video_dir is None:
+    if video_dir is None or video_dir == "":
         raise ValueError(
             fill(
                 "`video_dir` is not set. Set it in the project config, e.g. "
@@ -1705,8 +1707,35 @@ def _reencode_hint(path):
     stem = os.path.splitext(path)[0]
     return (
         "re-encoding usually fixes this:\n"
-        f"      ffmpeg -i {path} -c:v libx264 -pix_fmt yuv420p {stem}_reencoded.mp4"
+        f'      ffmpeg -i "{path}" -c:v libx264 -pix_fmt yuv420p "{stem}_reencoded.mp4"'
     )
+
+
+def _check_video_frame_indexes(video_frame_indexes, coordinates):
+    """Raise if `video_frame_indexes` does not give the video frame of each
+    row of keypoints, for every recording in `coordinates` and no others."""
+    missing = sorted(set(coordinates) - set(video_frame_indexes))
+    extra = sorted(set(video_frame_indexes) - set(coordinates))
+    wrong_length = [
+        f"  {key}: {len(video_frame_indexes[key])} video frame indexes for "
+        f"{len(coordinates[key])} frames"
+        for key in sorted(set(coordinates) & set(video_frame_indexes))
+        if len(video_frame_indexes[key]) != len(coordinates[key])
+    ]
+    if missing or extra or wrong_length:
+        lines = [
+            "`video_frame_indexes` must give the video frame of each row of "
+            "keypoints, for every recording and no others:",
+            "",
+        ]
+        if missing:
+            lines.append(
+                f"  missing for {len(missing)} of {len(coordinates)} recordings: "
+                f"{', '.join(missing)}"
+            )
+        if extra:
+            lines.append(f"  given for recordings not in the keypoints: {', '.join(extra)}")
+        raise ValueError("\n".join(lines + wrong_length))
 
 
 def _fraction_outside_frame(xy, width, height, margin):
@@ -1781,7 +1810,9 @@ def check_videos(
     video_frame_indexes: dict, default=None
         Dictionary mapping recording names to the video frame of each row of
         keypoints, for keypoints that were trimmed or downsampled from their
-        videos. By default row `i` corresponds to video frame `i`.
+        videos. It must have an entry, with one frame per row, for every
+        recording in `coordinates` and no others. By default row `i`
+        corresponds to video frame `i`.
 
     video_extension: str, default=None
         Preferred video extension (passed to
@@ -1814,11 +1845,14 @@ def check_videos(
     Raises
     ------
     ValueError
-        If any recording has no video, a video that does not exist or cannot
-        be read, or keypoints that need frames past the end of its video. The
+        If `video_frame_indexes` does not match `coordinates`, or if any
+        recording has no video, a video that does not exist or cannot be
+        read, or keypoints that need frames past the end of its video. The
         message lists every such recording.
     """
     _check_keypoint_dicts(coordinates)
+    if video_frame_indexes is not None:
+        _check_video_frame_indexes(video_frame_indexes, coordinates)
     keys = sorted(coordinates.keys())
     if video_paths is None:
         video_paths = find_matching_videos(
@@ -1856,24 +1890,26 @@ def check_videos(
                     False,
                 )
                 continue
-            if last_frame >= nframes:
-                problems[key] = (
-                    path,
-                    f"the keypoints need video frames up to {last_frame}, but "
-                    f"the video has {nframes} frames",
-                    True,
-                )
-                continue
+            # OpenCV's frame count comes from the video header and can be one
+            # short, so the frame at that index is used if it decodes.
             try:
                 frame = reader[last_frame]
             except ValueError:
-                problems[key] = (
-                    path,
-                    f"frame {last_frame}, the last frame the keypoints need, could "
-                    f"not be decoded (the video reports {nframes} frames); "
-                    f"{_reencode_hint(path)}",
-                    False,
-                )
+                if last_frame >= nframes:
+                    problems[key] = (
+                        path,
+                        f"the keypoints need video frames up to {last_frame}, but "
+                        f"the video has {nframes} frames",
+                        True,
+                    )
+                else:
+                    problems[key] = (
+                        path,
+                        f"frame {last_frame}, the last frame the keypoints need, "
+                        f"could not be decoded (the video reports {nframes} "
+                        f"frames); {_reencode_hint(path)}",
+                        False,
+                    )
                 continue
         finally:
             reader.close()
@@ -1889,8 +1925,8 @@ def check_videos(
                 f"  {key}",
                 f"    video: {path} ({nframes:,} frames)",
                 f"    keypoints: {n_keypoint_frames:,} frames",
-                f'    re-encode: ffmpeg -i {path} -vf "setpts=N/({rate}*TB)" -r {rate} '
-                f"-c:v libx264 -pix_fmt yuv420p {stem}_cfr.mp4",
+                f'    re-encode: ffmpeg -i "{path}" -vf "setpts=N/({rate}*TB)" -r {rate} '
+                f'-c:v libx264 -pix_fmt yuv420p "{stem}_cfr.mp4"',
             ]
 
         xy = coordinates[key].reshape(-1, coordinates[key].shape[-1])
@@ -2451,16 +2487,16 @@ _REPOSITORY_URL = "https://github.com/dattalab/keypoint-moseq"
 def _installed_version(distribution):
     """Version of an installed distribution, or None if it is not installed."""
     try:
-        return metadata.version(distribution)
-    except metadata.PackageNotFoundError:
+        return _metadata.version(distribution)
+    except _metadata.PackageNotFoundError:
         return None
 
 
 def _parse_version(version):
     """Parse a version string, or return None if it is not a valid version."""
     try:
-        return Version(version)
-    except (InvalidVersion, TypeError):
+        return _Version(version)
+    except (_InvalidVersion, TypeError):
         return None
 
 
@@ -2470,7 +2506,7 @@ def _module_directory(module_name):
     path = getattr(module, "__file__", None)
     if path is None:
         try:
-            spec = importlib.util.find_spec(module_name)
+            spec = _importlib_util.find_spec(module_name)
         except ModuleNotFoundError:
             spec = None
         path = spec.origin if spec is not None else None
@@ -2528,19 +2564,23 @@ def check_installation(notebook_version=None):
 
     Prints the Python interpreter; the version and location of keypoint-moseq,
     jax-moseq, jax, jaxlib and the JAX CUDA plugin; and the devices JAX can
-    use. With a GPU, it runs a small matrix multiply and Cholesky
+    use. Without a GPU, the report says that JAX is using the CPU and, when
+    the JAX CUDA plugin is installed, lists the common reasons a GPU is not
+    found. With a GPU, it runs a small matrix multiply and Cholesky
     decomposition, the first operations that fail when the CUDA setup is
     broken. After printing, it raises one error listing every problem found:
 
     - the notebook calling it is written for a different minor version of
-      keypoint-MoSeq than the one installed. Development installs from git,
-      with versions such as "0.7.1+4.gc871cae", are not checked.
+      keypoint-MoSeq than the one installed
     - keypoint-MoSeq was upgraded after this kernel imported it
     - a package is imported from the user site-packages (e.g. ~/.local)
       instead of this environment
     - the versions of jax, jaxlib and the JAX CUDA plugin do not match
-    - the JAX CUDA plugin is installed but JAX sees no GPU
+    - JAX cannot list its devices
     - the GPU test fails
+
+    The first two checks skip development installs from git, whose versions,
+    such as "0.7.1+4.gc871cae", are computed from git when imported.
 
     Parameters
     ----------
@@ -2556,7 +2596,7 @@ def check_installation(notebook_version=None):
     problems = []
     lines = [
         "keypoint-MoSeq installation check",
-        f"  Python {platform.python_version()} ({sys.executable})",
+        f"  Python {_platform.python_version()} ({sys.executable})",
     ]
 
     installed, directories = {}, {}
@@ -2573,11 +2613,15 @@ def check_installation(notebook_version=None):
         else:
             lines.append(f"  {label:<16} {version:<{width}}  {directories[distribution] or ''}")
 
-    # a kernel that imported an older keypoint-moseq than the one on disk
     running_parsed = _parse_version(running)
     installed_parsed = _parse_version(installed["keypoint-moseq"])
+    # A development install computes its version from git when imported, so
+    # it is not compared with the version installed on disk or the notebook's.
+    development = running_parsed is None or running_parsed.local is not None
+
+    # a kernel that imported an older keypoint-moseq than the one on disk
     if (
-        running_parsed is not None
+        not development
         and installed_parsed is not None
         and running_parsed.base_version != installed_parsed.base_version
     ):
@@ -2589,7 +2633,7 @@ def check_installation(notebook_version=None):
         )
 
     # packages that shadow this environment's from the user site-packages
-    user_site = os.path.realpath(site.getusersitepackages())
+    user_site = os.path.realpath(_site.getusersitepackages())
     for distribution, _, label in _INSTALLATION_PACKAGES:
         directory = directories[distribution]
         if directory and os.path.realpath(directory).startswith(user_site + os.sep):
@@ -2620,11 +2664,21 @@ def check_installation(notebook_version=None):
         )
 
     # devices, and a small computation on the GPU
-    devices = jax.devices()
+    try:
+        devices = jax.devices()
+    except Exception as error:
+        devices = []
+        lines.append("  Devices: JAX could not list them")
+        problems.append(
+            "JAX could not list its devices, so it cannot run. "
+            + _explain_gpu_error(str(error))
+        )
+    else:
+        lines.append(
+            "  Devices: "
+            + ", ".join(f"{d.platform}:{d.id} ({d.device_kind})" for d in devices)
+        )
     gpus = [d for d in devices if d.platform == "gpu"]
-    lines.append(
-        "  Devices: " + ", ".join(f"{d.platform}:{d.id} ({d.device_kind})" for d in devices)
-    )
     cuda_paths = [p for p in os.environ.get("LD_LIBRARY_PATH", "").split(os.pathsep) if "cuda" in p.lower()]
     if cuda_paths:
         lines.append(f"  CUDA folders on LD_LIBRARY_PATH: {', '.join(cuda_paths)}")
@@ -2640,39 +2694,42 @@ def check_installation(notebook_version=None):
                 f"The GPU test failed on {gpu.device_kind}. "
                 + _explain_gpu_error(str(error))
             )
-    elif plugin:
-        visible = os.environ.get("CUDA_VISIBLE_DEVICES")
-        message = f"The JAX CUDA plugin {plugin} is installed, but JAX sees no GPU. "
-        if cuda_paths:
-            message += (
-                f"LD_LIBRARY_PATH includes {', '.join(cuda_paths)}. A CUDA "
-                "installation there is loaded instead of the CUDA libraries "
-                "installed with JAX, which stops JAX's CUDA plugin from starting "
-                "(JAX may report this as being unable to load a CUDA library, or "
-                "as a CUDA-enabled jaxlib not being installed). Remove those "
-                "folders from LD_LIBRARY_PATH before starting Jupyter; on a "
-                "cluster, `module unload cuda`. Other causes: "
-            )
-        else:
-            message += "Common causes: "
-        message += (
-            "this machine has no GPU (for example a cluster login node, or a job "
-            "that did not request one); CUDA_VISIBLE_DEVICES "
-            f"({'not set' if visible is None else repr(visible)}) hides it; or the "
-            "NVIDIA driver is missing or too old for CUDA 12 (version 525 or "
-            "newer). Run nvidia-smi to see the GPU and driver. On Colab, set the "
-            "runtime type to GPU."
-        )
-        problems.append(message)
-    else:
+    elif devices:
         lines.append(
-            "  JAX is using the CPU. For GPU support on Linux, install "
-            "keypoint-moseq[cuda]."
+            "  JAX is using the CPU. For GPU support (Linux only), install "
+            "keypoint-moseq[cuda] and use a machine with a GPU."
         )
+        if plugin:
+            visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+            expected = (
+                f"  If you expected a GPU here: the JAX CUDA plugin {plugin} is "
+                "installed, but JAX found no GPU it could use. "
+            )
+            if cuda_paths:
+                expected += (
+                    f"LD_LIBRARY_PATH includes {', '.join(cuda_paths)}. A CUDA "
+                    "installation there is loaded instead of the CUDA libraries "
+                    "installed with JAX, which stops JAX's CUDA plugin from "
+                    "starting (JAX may report this as being unable to load a CUDA "
+                    "library, or as a CUDA-enabled jaxlib not being installed). "
+                    "Remove those folders from LD_LIBRARY_PATH before starting "
+                    "Jupyter; on a cluster, `module unload cuda`. Other causes: "
+                )
+            else:
+                expected += "Common causes: "
+            expected += (
+                "this machine has no GPU (for example a cluster login node, or a "
+                "job that did not request one); CUDA_VISIBLE_DEVICES "
+                f"({'not set' if visible is None else repr(visible)}) hides it; or "
+                "the NVIDIA driver is missing or too old for CUDA 12 (version 525 "
+                "or newer). Run nvidia-smi to see the GPU and driver. On Colab, "
+                "set the runtime type to GPU."
+            )
+            lines.append(expected)
 
     # the notebook and the installed keypoint-moseq
     if notebook_version is not None:
-        if running_parsed is None or running_parsed.local is not None:
+        if development:
             lines.append(
                 f"  Notebook: written for {notebook_version}; not checked, since "
                 f"{running} is a development install"
@@ -2687,7 +2744,7 @@ def check_installation(notebook_version=None):
                     f"{_REPOSITORY_URL}/blob/{running}/docs/source/modeling.ipynb "
                     f"and {_REPOSITORY_URL}/blob/{running}/docs/source/analysis.ipynb"
                 )
-                if running_parsed < Version(notebook_minor):
+                if running_parsed < _Version(notebook_minor):
                     install = (
                         "upgrade with pip install -U keypoint-moseq (or "
                         '"keypoint-moseq[cuda]" for GPU)'

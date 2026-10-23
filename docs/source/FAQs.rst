@@ -204,7 +204,8 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
    
    # continue fitting, now with the new data
    model, model_name = kpms.fit_model(
-      model, data, metadata, project_dir, ar_only=False, num_iters=200)[0]
+      model, data, metadata, project_dir, ar_only=False, num_iters=200,
+      **config())
       
 
 Interpreting model outputs
@@ -441,13 +442,14 @@ The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syl
 Troubleshooting
 ===============
 
-We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following in a command terminal in an environment with keypoint-moseq installed (not inside a jupyter notebook!).
-   
-.. code-block:: python
+Many problems are fixed in newer versions of keypoint-MoSeq, so first make sure you are using the latest one. Running ``kpms.check_installation()`` in a notebook prints the installed versions of keypoint-MoSeq and JAX and the devices JAX can use, and explains any installation problem it finds. To update to the latest version, run the following in a terminal, in the environment where keypoint-moseq is installed (not inside a Jupyter notebook):
 
-    pip install --U keypoint_moseq 
+.. code-block:: bash
 
-Note that for any already open notebooks, you will need to restart the kernel to use the updated version. If your problem remains after troubleshooting, please open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_. 
+    pip install -U keypoint-moseq            # CPU
+    pip install -U "keypoint-moseq[cuda]"    # GPU with CUDA 12
+
+Restart the kernel of any open notebook to use the updated version. If your problem remains after troubleshooting, please open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_.
 
 
 Dead kernel

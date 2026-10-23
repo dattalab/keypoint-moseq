@@ -308,6 +308,95 @@ def test_frame_rate_warning_is_skipped_with_video_frame_indexes(video_dir):
     )
 
 
+def test_video_frame_indexes_missing_a_recording_raise(video_dir):
+    coordinates = {"mouseA_dlc": keypoints_inside(10), "mouseB_dlc": keypoints_inside(10)}
+
+    with pytest.raises(ValueError) as error:
+        kpms.check_videos(
+            coordinates,
+            video_dir=video_dir,
+            video_frame_indexes={"mouseA_dlc": np.arange(10)},
+        )
+
+    message = str(error.value)
+    assert "video_frame_indexes" in message
+    assert "mouseB_dlc" in message
+    assert "mouseA_dlc" not in message
+
+
+def test_video_frame_indexes_for_another_recording_raise(video_dir):
+    coordinates = {"mouseA_dlc": keypoints_inside(10)}
+    video_frame_indexes = {"mouseA_dlc": np.arange(10), "mouseC_dlc": np.arange(10)}
+
+    with pytest.raises(ValueError) as error:
+        kpms.check_videos(
+            coordinates, video_dir=video_dir, video_frame_indexes=video_frame_indexes
+        )
+
+    assert "mouseC_dlc" in str(error.value)
+
+
+def test_video_frame_indexes_of_the_wrong_length_raise(video_dir):
+    coordinates = {"mouseA_dlc": keypoints_inside(5), "mouseB_dlc": keypoints_inside(10)}
+    video_frame_indexes = {"mouseA_dlc": np.array([0, 2, 4, 6]), "mouseB_dlc": np.arange(10)}
+
+    with pytest.raises(ValueError) as error:
+        kpms.check_videos(
+            coordinates, video_dir=video_dir, video_frame_indexes=video_frame_indexes
+        )
+
+    message = str(error.value)
+    assert "mouseA_dlc" in message
+    assert "4 video frame indexes" in message
+    assert "5 frames" in message
+    assert "mouseB_dlc" not in message
+
+
+def test_frame_at_the_reported_frame_count_is_used_when_it_decodes(video_dir, monkeypatch):
+    # OpenCV's frame count comes from the video header and can be one short.
+    # vidio still reads the frame at that index when it decodes.
+    class UndercountingReader(kpms.util.OpenCVReader):
+        def __init__(self, filename):
+            super().__init__(filename)
+            self.nframes -= 1
+
+    monkeypatch.setattr(kpms.util, "OpenCVReader", UndercountingReader)
+
+    check_silently({"mouseA_dlc": keypoints_inside(10)}, video_dir=video_dir)
+
+
+def test_reencode_command_quotes_the_video_path(tmp_path):
+    directory = tmp_path / "my videos"
+    directory.mkdir()
+    unreadable = directory / "mouse A.avi"
+    unreadable.write_bytes(b"not a video")
+
+    with pytest.raises(ValueError) as error:
+        kpms.check_videos(
+            {"mouseA_dlc": keypoints_inside(10)},
+            video_paths={"mouseA_dlc": str(unreadable)},
+        )
+
+    message = str(error.value)
+    assert f'ffmpeg -i "{unreadable}"' in message
+    assert f'"{directory / "mouse A_reencoded.mp4"}"' in message
+
+
+def test_frame_rate_command_quotes_the_video_path(tmp_path):
+    directory = tmp_path / "my videos"
+    directory.mkdir()
+    path = write_video(directory / "mouse A.avi")
+
+    with pytest.warns(UserWarning) as record:
+        kpms.check_videos(
+            {"mouse A_dlc": keypoints_inside(8)}, video_dir=str(directory), fps=30
+        )
+
+    message = "\n".join(str(w.message) for w in record)
+    assert f'ffmpeg -i "{path}"' in message
+    assert f'"{directory / "mouse A_cfr.mp4"}"' in message
+
+
 def test_tutorial_videos_pass_check(
     tutorial_project_dir, tutorial_keypoints, dlc_project_dir, monkeypatch, capsys
 ):

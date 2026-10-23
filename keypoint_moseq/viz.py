@@ -456,8 +456,8 @@ def plot_kappa_scan(kappas, project_dir, prefix, figsize=(8, 2.5)):
         Figure containing the plot.
 
     final_median_durations : array of float
-        Median syllable durations for each kappa value, derived using the
-        final iteration of each model.
+        Median syllable durations, in frames, for each kappa value, derived
+        using the final iteration of each model.
     """
     median_dur_histories = []
     final_median_durs = []
@@ -484,11 +484,11 @@ def plot_kappa_scan(kappas, project_dir, prefix, figsize=(8, 2.5)):
         axs[0].plot(*zip(*history.items()), color=color, label=label)
     axs[0].legend(loc="center left", bbox_to_anchor=(1, 0.5))
     axs[0].set_xlabel("iteration")
-    axs[0].set_ylabel("median duration")
+    axs[0].set_ylabel("median duration (frames)")
 
     axs[1].scatter(kappas, final_median_durs)
     axs[1].set_xlabel("kappa")
-    axs[1].set_ylabel("final median duration")
+    axs[1].set_ylabel("final median duration (frames)")
     axs[1].set_xscale("log")
 
     fig.set_size_inches(figsize)
@@ -1270,18 +1270,6 @@ def generate_grid_movies(
 
     # load video readers if necessary
     if not keypoints_only:
-        if video_frame_indexes is not None:
-            assert set(video_frame_indexes.keys()) == set(
-                syllables.keys()
-            ), "The keys of `video_frame_indexes` must match the keys of `results`"
-            for k, v in syllables.items():
-                assert len(v) == len(video_frame_indexes[k]), (
-                    "There is a mismatch between the length of `video_frame_indexes` "
-                    f"and the length of modeling results for key {k}."
-                    f"\n\tLength of `video_frame_indexes` = {len(video_frame_indexes[k])}"
-                    f"\n\tLength of modeling results = {len(v)}"
-                )
-
         # The grid-movie crops follow the centroids, which share the
         # keypoints' pixel frame, so they stand in for keypoints here.
         video_paths = check_videos(

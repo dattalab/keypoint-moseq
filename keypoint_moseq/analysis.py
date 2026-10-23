@@ -62,8 +62,9 @@ def _read_index_csv(index_filepath):
     """Read index.csv as text, with surrounding whitespace removed.
 
     Every value stays a string: pandas would otherwise read recording names
-    like "0012" as numbers and groups like "NA" or "None" as missing. Rows
-    keep their position in the file, so row i is on line i + 2.
+    like "0012" as numbers and groups like "NA" or "None" as missing. Blank
+    rows are dropped, and each remaining row keeps its position in the file
+    as its index, so the row with index i is on line i + 2.
 
     Parameters
     ----------
@@ -90,7 +91,7 @@ def _read_index_csv(index_filepath):
         )
     for column in index_df.columns:
         index_df[column] = index_df[column].str.strip()
-    return index_df
+    return index_df[(index_df != "").any(axis=1)]
 
 
 def _read_index_groups(project_dir, recordings):
@@ -125,13 +126,13 @@ def _read_index_groups(project_dir, recordings):
     index_df = _read_index_csv(index_filepath)
 
     lines_of = {}
-    for row, name in enumerate(index_df["name"]):
+    for row, name in index_df["name"].items():
         if name:
             lines_of.setdefault(name, []).append(row + 2)
-    group_on_line = {row + 2: group for row, group in enumerate(index_df["group"])}
+    group_on_line = {row + 2: group for row, group in index_df["group"].items()}
     unnamed = [
         (row + 2, group)
-        for row, (name, group) in enumerate(zip(index_df["name"], index_df["group"]))
+        for row, name, group in zip(index_df.index, index_df["name"], index_df["group"])
         if group and not name
     ]
 
@@ -225,7 +226,7 @@ def interactive_group_setting(project_dir, model_name):
     generate_index(project_dir, model_name, index_filepath)
 
     # make a tabulator dataframe
-    summary_data = pd.read_csv(index_filepath, index_col=False, dtype=str, keep_default_na=False)
+    summary_data = _read_index_csv(index_filepath).reset_index(drop=True)
 
     titles = {"name": "recording name", "group": "group"}
 
@@ -315,7 +316,11 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=None, sm
 
     if fps is None:
         config_path = os.path.join(project_dir, "config.yml")
-        config_fps = load_config(project_dir).get("fps") if os.path.exists(config_path) else None
+        config_fps = (
+            load_config(project_dir, check_if_valid=False, build_indexes=False).get("fps")
+            if os.path.exists(config_path)
+            else None
+        )
         if config_fps is None:
             raise ValueError(
                 fill(

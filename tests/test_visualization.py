@@ -183,6 +183,39 @@ def test_grid_movies_reject_frame_indexes_beyond_video(
     assert "up to" in str(error.value)
 
 
+def test_grid_movies_reject_frame_indexes_of_the_wrong_length(
+    dlc_project_dir,
+    tutorial_outlier_removed,
+    tutorial_reindexed,
+    tutorial_results,
+    tmp_path,
+    monkeypatch,
+):
+    project_dir, coordinates, _ = tutorial_outlier_removed
+    model_name, _ = tutorial_reindexed
+    config = lambda: kpms.load_config(project_dir)
+    results = kpms.load_results(project_dir, model_name)
+    name = sorted(results)[0]
+    video_frame_indexes = {k: np.arange(len(v["syllable"])) for k, v in results.items()}
+    video_frame_indexes[name] = video_frame_indexes[name][:-1]
+    monkeypatch.chdir(os.path.dirname(dlc_project_dir))
+
+    with pytest.raises(ValueError) as error:
+        kpms.generate_grid_movies(
+            results,
+            project_dir,
+            model_name,
+            output_dir=str(tmp_path),
+            coordinates=coordinates,
+            video_frame_indexes=video_frame_indexes,
+            min_frequency=GRID_MOVIE_MIN_FREQUENCY,
+            **config(),
+        )
+
+    assert name in str(error.value)
+    assert "video_frame_indexes" in str(error.value)
+
+
 def test_keypoints_only_grid_movies_do_not_need_videos(
     tutorial_outlier_removed, tutorial_reindexed, tutorial_results, tmp_path
 ):

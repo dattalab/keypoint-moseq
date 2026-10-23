@@ -44,6 +44,16 @@ def test_moseq_df_reads_the_frame_rate_from_the_project_config(tmp_path):
     )
 
 
+def test_moseq_df_reads_the_frame_rate_without_checking_the_bodyparts(tmp_path, capsys):
+    project_dir = project_with_fps(tmp_path, 60)
+    kpms.update_config(project_dir, anterior_bodyparts=["not_a_bodypart"])
+
+    moseq_df = kpms.compute_moseq_df(project_dir, "model", results_dict=synthetic_results(NAMES))
+
+    assert (moseq_df["fps"] == 60).all()
+    assert "ACTION REQUIRED" not in capsys.readouterr().out
+
+
 def test_explicit_frame_rate_is_used_over_the_config(tmp_path):
     project_dir = project_with_fps(tmp_path, 60)
 

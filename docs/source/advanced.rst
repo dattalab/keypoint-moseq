@@ -90,7 +90,8 @@ Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the ra
             model_name, 
             ar_only=True, 
             num_iters=num_ar_iters, 
-            save_every_n_iters=25
+            save_every_n_iters=25,
+            **config()
         )[0];
 
         # stage 2: fit the full model
@@ -104,7 +105,8 @@ Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the ra
             ar_only=False, 
             start_iter=num_ar_iters,
             num_iters=num_full_iters, 
-            save_every_n_iters=25
+            save_every_n_iters=25,
+            **config()
         );
 
     kpms.plot_kappa_scan(kappas, project_dir, prefix)
@@ -159,7 +161,8 @@ The code below shows how to fit multiple models with different random seeds.
             project_dir, 
             model_name,
             ar_only=True, 
-            num_iters=num_ar_iters
+            num_iters=num_ar_iters,
+            **config()
         )[0]
 
         # stage 2: fit the full model
@@ -172,7 +175,8 @@ The code below shows how to fit multiple models with different random seeds.
             model_name,
             ar_only=False, 
             start_iter=num_ar_iters,
-            num_iters=num_full_iters
+            num_iters=num_full_iters,
+            **config()
         );
 
         kpms.reindex_syllables_in_checkpoint(project_dir, model_name);

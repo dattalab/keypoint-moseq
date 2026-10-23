@@ -26,6 +26,9 @@ def check_message(error, stage, data_text):
     assert "91.03GiB" in message
     assert data_text in message
     assert "set_mixed_map_iters" in message
+    # mixed_map reads the setting when a function is first compiled, so it
+    # only applies to a fit started in a new kernel
+    assert "restart the kernel" in message
     assert "FAQs.html#out-of-memory" in message
     assert isinstance(error.value.__cause__, RuntimeError)
 

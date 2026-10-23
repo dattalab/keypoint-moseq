@@ -27,6 +27,14 @@ def test_unset_video_dir_raises():
     assert "not set" in message
 
 
+def test_empty_video_dir_raises_as_unset():
+    # A new project's config.yml has `video_dir: ''` until it is set.
+    message = matching_error(["mouseA_dlc"], "")
+
+    assert "video_dir" in message
+    assert "not set" in message
+
+
 def test_missing_video_dir_shows_the_resolved_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 

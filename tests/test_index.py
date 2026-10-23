@@ -64,6 +64,36 @@ def test_blank_index_rows_are_ignored(tmp_path, results):
     assert moseq_df_groups(tmp_path, results)["rec_c"] == ["KO"]
 
 
+def test_line_numbers_count_blank_lines(tmp_path, results):
+    write_index(tmp_path, "name,group\nrec_a,WT\n\nrec_b,\nrec_c,KO\n")
+
+    message = index_error(tmp_path, results)
+    assert "rec_b" in message
+    assert "line 4" in message
+
+
+def test_group_setting_does_not_write_blank_rows_back(tmp_path, results):
+    save_results(tmp_path, results)
+    write_index(tmp_path, "name,group\nrec_a,WT\n\n,\nrec_b,KO\n")
+
+    widget = kpms.interactive_group_setting(str(tmp_path), MODEL_NAME)
+
+    with open(os.path.join(tmp_path, "index.csv")) as f:
+        assert f.read() == "name,group\nrec_a,WT\nrec_b,KO\nrec_c,default\n"
+    assert list(widget[0].value["name"]) == NAMES
+
+
+def test_group_setting_does_not_show_blank_rows(tmp_path, results):
+    # index.csv lists every recording, so it is not rewritten before the
+    # widget reads it
+    save_results(tmp_path, results)
+    write_index(tmp_path, "name,group\nrec_a,WT\n,\nrec_b,KO\nrec_c,KO\n")
+
+    widget = kpms.interactive_group_setting(str(tmp_path), MODEL_NAME)
+
+    assert list(widget[0].value["name"]) == NAMES
+
+
 def test_recordings_missing_from_index_raise(tmp_path, results):
     write_index(tmp_path, "name,group\nrec_a,WT\n")
 
