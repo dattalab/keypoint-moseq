@@ -5,6 +5,11 @@ name: release
 # publishing for this repository and workflow file, so no API token is stored.
 # The upload only happens if every tutorial notebook states the release's
 # major.minor version in its check_installation(notebook_version=...) call.
+#
+# After the upload, a final release (not a pre-release such as 0.9.0b1) moves
+# the stable branch to the release commit. The documentation's notebook links
+# and the Colab links point at stable, and Read the Docs builds the stable
+# documentation from it, so they change only once PyPI has the release.
 on:
   release:
     types: [published]
@@ -34,3 +39,23 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  stable:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check whether this is a final release
+        id: release
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: python3 .github/scripts/is_final_release.py "$TAG" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Move the stable branch to this release
+        if: steps.release.outputs.final == 'true'
+        run: git push origin HEAD:refs/heads/stable

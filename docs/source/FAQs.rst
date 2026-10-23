@@ -472,7 +472,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
   Required GPU memory scales roughly linearly with the size of the dataset and the number of latent dimensions used. For example, a dataset with 4 latent dimensions will require roughly ~3MB GPU memory for each 100 frames of data during model fitting. If your GPU isn't big enough, try one of the following:
 
-  - Use `Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb>`_. 
+  - Use `Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/stable/docs/keypoint_moseq_colab.ipynb>`_. 
 
     - Colab provides free access to GPUs with 16GB of VRAM.
     
