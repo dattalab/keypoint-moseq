@@ -8,11 +8,13 @@ columns:
 - syllable
 - frame_index
 - group
+- fps
 - onset
 dtypes:
   angular_velocity: float64
   centroid_x: float64
   centroid_y: float64
+  fps: int64
   frame_index: int64
   group: object or str
   heading: float64

@@ -199,12 +199,13 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
 
    # initialize a new model using saved parameters
    model = kpms.init_model(
-      data, pca=pca, params=model['params'], 
+      data, metadata=metadata, pca=pca, params=model['params'],
       hypparams=model['hypparams'], **config())
    
    # continue fitting, now with the new data
    model, model_name = kpms.fit_model(
-      model, data, metadata, project_dir, ar_only=False, num_iters=200)[0]
+      model, data, metadata, project_dir, ar_only=False, num_iters=200,
+      **config())
       
 
 Interpreting model outputs
@@ -348,11 +349,11 @@ There are two reasons why a syllable might be excluded from the trajectory plots
 
    Note that the number of *usable* syllable instances may be less than the total number of instances. Three criteria determine whether an instance is usable:
 
-   - ``pre``: the number of frames prior to syllable onset that are included in the trajectory. By default, ``pre=5``, meaning that the trajectory will include the 5 frames prior to syllable onset. If a particular syllable instance starts within the first 5 frames of the video, then it is excluded.
+   - ``before_onset_sec``: the time, in seconds, before syllable onset that is included in the trajectory. By default, ``before_onset_sec=0.167`` (5 frames at 30 fps). If a particular syllable instance starts within the first ``before_onset_sec`` seconds of the video, then it is excluded.
 
-   - ``post``: the number of frames after syllable onset that are included in the trajectory. By default, ``post=15``, meaning that the trajectory will include the 15 frames after syllable onset. If a particular syllable instance starts within the last 15 frames of the video, then it is excluded.
+   - ``after_onset_sec``: the time, in seconds, after syllable onset that is included in the trajectory. By default, ``after_onset_sec=0.5`` (15 frames at 30 fps). If a particular syllable instance starts within the last ``after_onset_sec`` seconds of the video, then it is excluded.
 
-   - ``min_duration``: the minimum duration of a syllable instance. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
+   - ``min_instance_duration_sec``: the minimum duration of a syllable instance, in seconds. By default, ``min_instance_duration_sec=0.1`` (3 frames at 30 fps), meaning that shorter syllable instances are excluded.
 
 In summary, the following parameter changes will tend to increase the number of syllables included in the trajectory plots: 
 
@@ -360,11 +361,11 @@ In summary, the following parameter changes will tend to increase the number of 
 
 - Lowering ``n_neighbors`` (e.g. to 20)
 
-- Lowering ``pre`` (at this point you're scraping the bottom of the barrel)
+- Lowering ``before_onset_sec`` (at this point you're scraping the bottom of the barrel)
 
-- Lowering ``post`` (again, scraping the bottom of the barrel here)
+- Lowering ``after_onset_sec`` (again, scraping the bottom of the barrel here)
 
-- Lowering ``min_duration`` (this should be avoided; why are your syllables so short?)
+- Lowering ``min_instance_duration_sec`` (this should be avoided; why are your syllables so short?)
 
 
 Why are there only grid movies for a subset of syllables?
@@ -376,21 +377,21 @@ There are two reasons why a syllable might not have a grid movie:
 
 2) There aren't enough usable instances of the syllable. There have to be at least enough instances to fill up every cell of the grid. The number of grid cells is determined by the ``rows`` and ``cols`` parameters. Note that the number of *usable* syllable instances may be less than the total number of instances. Three criteria determine whether an instance is usable:
 
-   - ``pre``: the number of frames prior to syllable onset that are included in the grid movie. By default, ``pre=30``, meaning that movie in each grid cell starts 30 frames prior to syllable onset. So if a particular syllable instance starts within the first 30 frames of the experiment, then it is excluded.
+   - ``before_onset_sec``: the time, in seconds, before syllable onset that is included in the grid movie. By default, ``before_onset_sec=1.0``, meaning that the movie in each grid cell starts 1 second before syllable onset. So if a particular syllable instance starts within the first second of the experiment, then it is excluded.
 
-   - ``post``: the number of frames after syllable onset that are included in the grid movie. By default, ``post=60``, meaning that the movie in each grid cell ends 60 frames after syllavle onset. If a particular syllable instance starts within the last 60 frames of the experiment, then it is excluded.
+   - ``after_onset_sec``: the time, in seconds, after syllable onset that is included in the grid movie. By default, ``after_onset_sec=2.0``, meaning that the movie in each grid cell ends 2 seconds after syllable onset. If a particular syllable instance starts within the last 2 seconds of the experiment, then it is excluded.
 
-   - ``min_duration``: the minimum duration of a syllable instance. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
+   - ``min_instance_duration_sec``: the minimum duration of a syllable instance, in seconds. By default, ``min_instance_duration_sec=0.1`` (3 frames at 30 fps), meaning that shorter syllable instances are excluded.
 
 In summary, the following parameter changes will tend to increase the number of syllables included in the grid movies:
 
 - Lowering ``min_frequency`` (e.g. to 0.001)
 
-- Lowering ``pre`` (at this point you're scraping the bottom of the barrel)
+- Lowering ``before_onset_sec`` (at this point you're scraping the bottom of the barrel)
 
-- Lowering ``post`` (again, scraping the bottom of the barrel here)
+- Lowering ``after_onset_sec`` (again, scraping the bottom of the barrel here)
 
-- Lowering ``min_duration`` (this should be avoided; why are your syllables so short?)
+- Lowering ``min_instance_duration_sec`` (this should be avoided; why are your syllables so short?)
 
 
 Why do my trajectory plots and grid movies disagree?
@@ -441,13 +442,14 @@ The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syl
 Troubleshooting
 ===============
 
-We are contiually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following in a command terminal in an environment with keypoint-moseq installed (not inside a jupyter notebook!).
-   
-.. code-block:: python
+Many problems are fixed in newer versions of keypoint-MoSeq, so first make sure you are using the latest one. Running ``kpms.check_installation()`` in a notebook prints the installed versions of keypoint-MoSeq and JAX and the devices JAX can use, and explains any installation problem it finds. To update to the latest version, run the following in a terminal, in the environment where keypoint-moseq is installed (not inside a Jupyter notebook):
 
-    pip install --U keypoint_moseq 
+.. code-block:: bash
 
-Note that for any already open notebooks, you will need to restart the kernel to use the updated version. If your problem remains after troubleshooting, please open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_. 
+    pip install -U keypoint-moseq            # CPU
+    pip install -U "keypoint-moseq[cuda]"    # GPU with CUDA 12
+
+Restart the kernel of any open notebook to use the updated version. If your problem remains after troubleshooting, please open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_.
 
 
 Dead kernel

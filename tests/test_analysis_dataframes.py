@@ -5,7 +5,7 @@ from jax_moseq.utils import get_frequencies
 
 import keypoint_moseq as kpms
 from keypoint_moseq.util import filter_angle
-from analysis_utils import FPS, cohort_group, runs
+from analysis_utils import FPS, cohort_group, runs, synthetic_results
 
 MIN_FREQUENCY = 0.005  # `min_frequency` of the notebook's stats_df cell
 KINEMATICS = ["heading", "angular_velocity", "velocity_px_s"]
@@ -99,12 +99,6 @@ def test_moseq_df_onsets(tutorial_moseq_df):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=UnboundLocalError,
-    reason="compute_moseq_df reads `index_data` before assigning it when "
-    "index.csv is missing, so its default-group fallback never runs",
-)
 def test_moseq_df_without_index_uses_default_group(analysis_project_without_groups):
     project_dir, model_name = analysis_project_without_groups
 
@@ -214,26 +208,47 @@ def test_stats_df_kinematics(tutorial_stats_df, tutorial_moseq_df, tutorial_anal
                 )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=UnboundLocalError,
-    reason="compute_stats_df reads `index_df` before assigning it when "
-    "index.csv is missing, so it raises after printing that the file is missing",
-)
-def test_stats_df_without_index_uses_default_group(
-    analysis_project_without_groups, tutorial_moseq_df
-):
-    project_dir, model_name = analysis_project_without_groups
+def test_stats_df_with_default_group(tutorial_moseq_df):
     moseq_df = tutorial_moseq_df.assign(group="default")
 
     stats_df = kpms.compute_stats_df(
-        project_dir,
-        model_name,
         moseq_df,
         min_frequency=0.005,
         groupby=["group", "name"],
-        fps=30,
     )
 
     assert (stats_df["group"] == "default").all()
     assert set(stats_df["name"]) == set(moseq_df["name"])
+
+
+def test_stats_df_needs_only_moseq_df(tmp_path):
+    """No results.h5 or index.csv exists anywhere; everything comes from
+    moseq_df."""
+    results = synthetic_results(["rec_a", "rec_b"])
+    moseq_df = kpms.compute_moseq_df(str(tmp_path), "model", results_dict=results, fps=FPS)
+
+    stats_df = kpms.compute_stats_df(moseq_df, min_frequency=0.0)
+
+    for name, rows in recording_rows(stats_df, results).items():
+        syllables = rows["syllable"].to_numpy()
+        np.testing.assert_array_equal(
+            rows["frequency"],
+            get_frequencies(results[name]["syllable"])[syllables],
+            err_msg=name,
+        )
+
+
+def test_stats_df_rejects_a_recording_with_several_groups(tmp_path):
+    results = synthetic_results(["rec_a", "rec_b"])
+    moseq_df = kpms.compute_moseq_df(str(tmp_path), "model", results_dict=results, fps=FPS)
+    first_rows = moseq_df.index[moseq_df["name"] == "rec_a"][:10]
+    moseq_df.loc[first_rows, "group"] = "KO"
+
+    with pytest.raises(ValueError) as error:
+        kpms.compute_stats_df(moseq_df)
+
+    message = str(error.value)
+    assert "rec_a" in message
+    assert "KO" in message
+    assert "default" in message
+    assert "rec_b" not in message

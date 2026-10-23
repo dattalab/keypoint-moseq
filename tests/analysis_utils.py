@@ -10,6 +10,24 @@ PDF_SIGNATURE = b"%PDF"
 PNG_SIGNATURE = b"\x89PNG"
 
 
+def synthetic_results(names, n_frames=300, num_syllables=5, seed=0):
+    """Results with only the fields the analysis dataframes read: for each
+    recording, a syllable sequence made of runs of 3 to 11 frames, a
+    random-walk centroid and a heading. Quick to build, so tests of input
+    checks do not need a fitted model."""
+    rng = np.random.default_rng(seed)
+    results = {}
+    for name in names:
+        labels = rng.integers(0, num_syllables, n_frames)
+        run_lengths = rng.integers(3, 12, n_frames)
+        results[name] = {
+            "syllable": np.repeat(labels, run_lengths)[:n_frames],
+            "centroid": np.cumsum(rng.normal(size=(n_frames, 2)), axis=0),
+            "heading": rng.uniform(-np.pi, np.pi, n_frames),
+        }
+    return results
+
+
 def cohort_group(name):
     """Group of a tutorial recording in the analysis tests: "a" for the
     recordings from 2021 and "b" for those from 2022."""

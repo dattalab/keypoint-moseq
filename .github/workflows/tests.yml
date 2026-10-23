@@ -5,7 +5,8 @@ name: tests
 # own job. Every run resolves each dependency to its newest allowed release,
 # so a breaking upstream release (including transitive ones) fails the
 # nightly within a day. The installed versions are printed before pytest
-# runs.
+# runs. The test suite runs on Linux; on macOS and Windows, every run installs
+# keypoint-moseq and imports it, on the oldest and newest supported Pythons.
 on:
   push:
     branches: [main]
@@ -48,12 +49,39 @@ jobs:
       - name: Run tests
         run: uvx nox -s tests-${{ matrix.python }}
 
+  # Installing from the checkout fails if a requirement has no wheels for the
+  # platform, where an install from PyPI would fall back to an older release.
+  install:
+    name: install (${{ matrix.os }}, python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        # Keep in step with the oldest and newest of PYTHON_VERSIONS in
+        # noxfile.py.
+        python: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # versioneer derives the package version from tags
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: false
+
+      - name: Install and import
+        run: uvx nox -s install-${{ matrix.python }}
+
   # The check that the repository requires before merging. It passes only
-  # when every pytest job above passed, whichever Pythons this run tested.
+  # when every pytest and install job above passed, whichever Pythons this
+  # run tested.
   tests:
     if: always()
-    needs: pytest
+    needs: [pytest, install]
     runs-on: ubuntu-latest
     steps:
-      - name: Require every pytest job to pass
-        run: test "${{ needs.pytest.result }}" = success
+      - name: Require every pytest and install job to pass
+        run: |
+          test "${{ needs.pytest.result }}" = success
+          test "${{ needs.install.result }}" = success

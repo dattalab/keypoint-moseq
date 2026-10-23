@@ -40,6 +40,8 @@ keypoint-MoSeq supports Python 3.10 through 3.14. The list lives in `PYTHON_VERS
 
 A pull request is tested on the oldest and newest supported versions because those bracket the range of dependency releases. Each version runs as its own `pytest (python <version>)` job, in parallel, and the `tests` check passes only when every one of them passes, so a pull request needs the full suite to pass on both 3.10 and 3.14. Before opening one, run those two sessions locally. A failure on `main` or in the nightly run that a pull request did not show usually means a newly released dependency broke something on one Python version; it is fixed in its own pull request.
 
+The test suite runs on Linux. On macOS and Windows, every run instead installs keypoint-MoSeq from the checkout and imports it, on Python 3.10 and 3.14 (the `install-<version>` nox sessions, as `install (<os>, python <version>)` jobs), and the `tests` check requires those jobs to pass too. A requirement with no wheels for macOS or Windows makes `pip install keypoint-moseq` quietly install an older release that it can satisfy there, so these jobs catch it before a release does.
+
 The tests run on a CPU. On a GPU, keypoint-MoSeq fits with parallel message passing, a code path that CPU runs do not exercise, so changes to model fitting should also be checked on a GPU with the `cuda` extra installed.
 
 ## What the tests check
@@ -75,6 +77,8 @@ Commit the regenerated files together with the code change.
 Maintainers choose the version number when they publish a release, based on what changes for someone who upgrades. A patch release (`0.7.0` → `0.7.1`) leaves every output unchanged for the same dependency versions: syllables and fitted parameters, PCA, dataframes, saved files and figures. Patch releases hold crash fixes, documentation, performance improvements with identical output, and tightened dependency requirements that exclude a broken upstream release. Anything that changes outputs, including a bug fix that changes results people already have, is a minor release (`0.7.0` → `0.8.0`), as are new features, deprecations and other changes to the dependency requirements. While the version is 0.x, API changes and changes that stop older projects from loading are minor releases too, called out in the release notes.
 
 If your pull request changes outputs, or needed a stored snapshot regenerated, say so in its description.
+
+Each tutorial notebook (`docs/source/modeling.ipynb`, `docs/source/analysis.ipynb` and the Colab copy) calls `kpms.check_installation(notebook_version="X.Y")` near the top, which raises when the installed keypoint-MoSeq is a different minor version than the notebook states. Before publishing a minor release, set `notebook_version` in all three notebooks to the new version in a pull request. The release workflow checks this before uploading to PyPI and stops if any notebook states another version. GitHub has already created the tag by then, so after merging the fix, delete the release and its tag (`git push --delete origin <tag>`) and publish the release again from the updated `main`. Patch releases keep the same `notebook_version`.
 
 ## Reporting problems
 

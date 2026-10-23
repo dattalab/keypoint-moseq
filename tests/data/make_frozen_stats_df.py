@@ -48,14 +48,11 @@ def main(model_dir, output_csv):
         )
         button.clicks += 1
 
-        moseq_df = kpms.compute_moseq_df(project_dir, model_name, smooth_heading=True)
+        moseq_df = kpms.compute_moseq_df(project_dir, model_name, fps=30, smooth_heading=True)
         stats_df = kpms.compute_stats_df(
-            project_dir,
-            model_name,
             moseq_df,
             min_frequency=0.005,
             groupby=["group", "name"],
-            fps=30,
         )
 
     stats_df.to_csv(output_csv, index=False)

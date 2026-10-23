@@ -17,6 +17,7 @@ from ndx_pose import PoseEstimation
 from itertools import islice
 
 from keypoint_moseq.util import list_files_with_exts, check_nan_proportions
+from keypoint_moseq.util import _no_files_found_message
 from jax_moseq.utils import get_frequencies, unbatch
 from scipy.io import loadmat
 
@@ -1072,9 +1073,10 @@ def load_keypoints(
 
     # get list of filepaths
     filepaths = list_files_with_exts(filepath_pattern, extensions, recursive=recursive)
-    assert len(filepaths) > 0, fill(
-        f"No files with extensions {extensions} found for {filepath_pattern}"
-    )
+    if len(filepaths) == 0:
+        raise ValueError(
+            _no_files_found_message("keypoint files", filepath_pattern, extensions, recursive)
+        )
 
     # load keypoints from each file
     coordinates, confidences, bodyparts = {}, {}, None
