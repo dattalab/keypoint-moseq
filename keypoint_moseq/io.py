@@ -1419,7 +1419,12 @@ def _loadtree_hdf5(leaf):
         return data
     else:
         leaf_type = leaf.attrs["type"]
-        values = map(_loadtree_hdf5, leaf.values())
+        if leaf_type in ("list", "tuple"):
+            # elements are saved as arr0, arr1, ..., which h5py lists in name
+            # order (arr0, arr1, arr10, ...), so they are read by index
+            values = (_loadtree_hdf5(leaf[f"arr{k}"]) for k in range(len(leaf)))
+        else:
+            values = map(_loadtree_hdf5, leaf.values())
         if leaf_type == "dict":
             return dict(zip(leaf.keys(), values))
         elif leaf_type == "list":
