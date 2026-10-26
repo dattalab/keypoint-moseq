@@ -1896,8 +1896,8 @@ def generate_trajectory_plots(
                 plt.savefig(os.path.join(output_dir, f"{title}{suffix}.pdf"))
                 plt.close(fig=fig)
 
+                n_frames = before_onset_frames + after_onset_frames
                 if save_gifs:
-                    n_frames = before_onset_frames + after_onset_frames
                     frame_duration = n_frames / len(rasters) / fps
                     path = os.path.join(output_dir, f"{title}{suffix}.gif")
                     save_gif(rasters, path, duration=frame_duration)
@@ -1919,8 +1919,8 @@ def generate_trajectory_plots(
         plt.savefig(os.path.join(output_dir, f"all_trajectories{suffix}.pdf"))
         plt.show()
 
+        n_frames = before_onset_frames + after_onset_frames
         if save_gifs:
-            n_frames = before_onset_frames + after_onset_frames
             frame_duration = n_frames / len(rasters) / fps
             path = os.path.join(output_dir, f"all_trajectories{suffix}.gif")
             save_gif(rasters, path, duration=frame_duration)
@@ -2013,8 +2013,8 @@ def overlay_keypoints_on_image(
         canvas = cv2.circle(canvas, pos, node_size, colors[i], -1, lineType=cv2.LINE_AA)
 
     if opacity < 1.0:
-        image = cv2.addWeighted(image, 1 - opacity, canvas, opacity, 0)
-    return image
+        canvas = cv2.addWeighted(image, 1 - opacity, canvas, opacity, 0)
+    return canvas
 
 
 def overlay_keypoints_on_video(

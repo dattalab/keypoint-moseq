@@ -311,3 +311,41 @@ def test_min_instance_duration_is_in_seconds(tmp_path):
     durations = [end - start for instances in sampled.values() for _, start, end in instances]
     assert durations
     assert min(durations) >= 10
+
+
+@pytest.mark.parametrize("save_gifs", [False, True], ids=["mp4_only", "mp4_and_gif"])
+def test_trajectory_plot_mp4s_span_the_syllable_window(tmp_path, save_gifs):
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    fps, pre, post = 30, 0.167, 0.5  # the default window: 5 frames before onset, 15 after
+
+    kpms.generate_trajectory_plots(
+        moving_keypoints(results),
+        results,
+        output_dir=str(tmp_path),
+        save_gifs=save_gifs,
+        save_mp4s=True,
+        fps=fps,
+        before_onset_sec=pre,
+        after_onset_sec=post,
+        min_frequency=0.0,
+    )
+
+    mp4s = sorted(p for p in os.listdir(tmp_path) if p.endswith(".mp4"))
+    assert mp4s
+    assert any(p.endswith(".gif") for p in os.listdir(tmp_path)) == save_gifs
+    window = (round(pre * fps) + round(post * fps)) / fps
+    for name in mp4s:
+        _, seconds = imageio_ffmpeg.count_frames_and_secs(str(tmp_path / name))
+        assert seconds == pytest.approx(window, abs=0.05), name
+
+
+@pytest.mark.parametrize("copy", [False, True])
+def test_overlay_keypoints_on_image_returns_the_drawn_image(copy):
+    image = np.zeros((40, 40, 3), dtype=np.uint8)
+    coordinates = np.array([[10.0, 10.0], [30.0, 30.0]])
+
+    overlaid = kpms.overlay_keypoints_on_image(image, coordinates, copy=copy)
+
+    assert overlaid[10, 10].any() and overlaid[30, 30].any()
+    if copy:
+        assert not image.any()
