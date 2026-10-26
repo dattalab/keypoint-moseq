@@ -1,3 +1,4 @@
+import datetime
 import html
 import os
 import re
@@ -77,9 +78,18 @@ def test_group_setting_confirms_the_saved_groups(
     assert saved.group(1) == html.escape(f"{index_path(project_dir)}: {groups}")
 
 
-def test_group_setting_sends_a_confirmation_for_every_save(analysis_project_without_groups):
+def test_group_setting_sends_a_confirmation_for_every_save(
+    analysis_project_without_groups, monkeypatch
+):
     """The browser shows "Saving..." from the click until Python sends a
-    confirmation, so saving unchanged groups again must send one again."""
+    confirmation, so saving unchanged groups again must send one again. The
+    clock is fixed so both saves produce the same confirmation text."""
+    class FixedClock(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 1, 1, 12, 0, 0)
+
+    monkeypatch.setattr(kpms.analysis, "datetime", FixedClock)
     project_dir, model_name = analysis_project_without_groups
     widget = kpms.interactive_group_setting(project_dir, model_name)
     button, status = widget[1].objects

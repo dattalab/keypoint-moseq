@@ -1034,7 +1034,9 @@ def run_kruskal(
     syllable_data = grouped_data.drop(["group", "name"], axis=1).values
     # syllable label of each column of `syllable_data`; the tests below work
     # by column position, and the results are labeled with these at the end
-    syllables = df_only_stats.columns.to_numpy()
+    # the pivoted columns mixed names and syllables, so their Index has dtype
+    # object; listing them recovers the syllables' own dtype
+    syllables = np.asarray(df_only_stats.columns.tolist())
 
     N_m, N_s = syllable_data.shape
     # Run KW and return H-stats

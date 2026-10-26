@@ -77,6 +77,8 @@ def load_sampled_frames(
     video_frame_indexes,
     video_extension=None,
     video_paths=None,
+    recording_name_suffix="",
+    shared_videos=False,
 ):
     """Load sampled frames from a directory of videos.
 
@@ -102,6 +104,12 @@ def load_sampled_frames(
         Dictionary mapping recording names to video paths. If None, videos
         are matched to recordings in `video_dir`.
 
+    recording_name_suffix: str, default=""
+        See :py:func:`keypoint_moseq.util.find_matching_videos`.
+
+    shared_videos: bool, default=False
+        See :py:func:`keypoint_moseq.util.find_matching_videos`.
+
     Returns
     -------
     sample_images: dict
@@ -110,7 +118,13 @@ def load_sampled_frames(
     """
     keys = sorted(set([k[0] for k in sample_keys]))
     if video_paths is None:
-        videos = find_matching_videos(keys, video_dir, video_extension=video_extension)
+        videos = find_matching_videos(
+            keys,
+            video_dir,
+            video_extension=video_extension,
+            recording_name_suffix=recording_name_suffix,
+            shared_videos=shared_videos,
+        )
     else:
         videos = [video_paths[key] for key in keys]
     key_to_video = dict(zip(keys, videos))

@@ -495,3 +495,23 @@ def test_grid_movies_pass_video_matching_settings(check_videos_calls, tmp_path):
         )
 
     assert {k: check_videos_calls[0].get(k) for k in MATCHING_SETTINGS} == MATCHING_SETTINGS
+
+
+def test_load_sampled_frames_passes_video_matching_settings(monkeypatch, tmp_path):
+    calls = []
+
+    def record(*args, **kwargs):
+        calls.append(kwargs)
+        raise Checked
+
+    monkeypatch.setattr(kpms.calibration, "find_matching_videos", record)
+
+    with pytest.raises(Checked):
+        kpms.calibration.load_sampled_frames(
+            [("mouseA_dlc", 0, 0)],
+            str(tmp_path),
+            {"mouseA_dlc": np.arange(10)},
+            **MATCHING_SETTINGS,
+        )
+
+    assert {k: calls[0].get(k) for k in MATCHING_SETTINGS} == MATCHING_SETTINGS

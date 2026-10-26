@@ -310,6 +310,9 @@ def test_run_kruskal_with_a_gap_in_the_syllables():
     assert list(kruskal["is_sig"]) == [False, False, True]
     assert sorted(set(dunn[("syllable", "")])) == [0, 1, 5]
     assert list(sig_pairs[("a", "b")]) == [5]
+    # labels keep the dtype of stats_df's syllable column
+    assert kruskal.index.dtype == np.int64
+    assert sig_pairs[("a", "b")].dtype == np.int64
 
 
 def group_means(stats_df, group, stat):
@@ -349,6 +352,10 @@ def test_stats_plot_ordered_by_difference(frozen_stats_df, tmp_path):
         ctrl_group=CTRL_GROUP,
         exp_group=EXP_GROUP,
     )
+    ticks = [label.get_text() for label in fig.axes[0].get_xticklabels()]
     plt.close("all")
 
-    assert fig is not None
+    expected = kpms.analysis.sort_syllables_by_stat_difference(
+        frozen_stats_df, CTRL_GROUP, EXP_GROUP, stat=STAT
+    )
+    assert ticks == [str(syllable) for syllable in expected]
