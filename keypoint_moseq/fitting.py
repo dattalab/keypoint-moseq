@@ -470,6 +470,7 @@ def apply_model(
     return_model=False,
     location_aware=False,
     overwrite=False,
+    jitter=0.001,
     **kwargs,
 ):
     """Apply a model to new data.
@@ -531,6 +532,9 @@ def apply_model(
         model to data that includes recordings from the original
         training set.
 
+    jitter : float, default=0.001
+        See :py:func:`keypoint_moseq.fitting.fit_model`.
+
     Returns
     -------
     results : dict
@@ -579,6 +583,7 @@ def apply_model(
                     ar_only=ar_only,
                     states_only=True,
                     verbose=verbose,
+                    jitter=jitter,
                     parallel_message_passing=parallel_message_passing,
                 )
             except StopResampling:
@@ -606,6 +611,7 @@ def estimate_syllable_marginals(
     verbose=False,
     parallel_message_passing=None,
     location_aware=False,
+    jitter=0.001,
     **kwargs,
 ):
     """Estimate marginal distributions over syllables.
@@ -649,6 +655,9 @@ def estimate_syllable_marginals(
     location_aware : bool, default=False
         If True, the model will be fit using the location-aware version of the
         keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
+
+    jitter : float, default=0.001
+        See :py:func:`keypoint_moseq.fitting.fit_model`.
 
     Returns
     -------
@@ -696,6 +705,7 @@ def estimate_syllable_marginals(
                     stage="estimating syllable marginals",
                     states_only=True,
                     verbose=verbose,
+                    jitter=jitter,
                     parallel_message_passing=parallel_message_passing,
                 )
             except StopResampling:
