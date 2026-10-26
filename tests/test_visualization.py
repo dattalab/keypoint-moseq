@@ -423,3 +423,27 @@ def test_3D_trajectory_plot(tmp_path, shown_plotly_figures):
     assert len(keypoint_colorscales(fig)) > 0
     assert all(c == colorscale for c in keypoint_colorscales(fig))
     assert (tmp_path / "all_trajectories.html").exists()
+
+
+@pytest.mark.parametrize("n_syllables", [1, 3], ids=["one_syllable", "three_syllables"])
+def test_3D_trajectory_slider_shows_one_syllable_at_a_time(
+    n_syllables, tmp_path, shown_plotly_figures
+):
+    # generate_trajectory_plots draws one syllable when only one passes its
+    # frequency and instance filters.
+    n_frames, edges = 20, [[0, 1], [1, 2], [2, 3]]
+    Xs = np.random.default_rng(0).normal(size=(n_syllables, n_frames, 4, 3))
+    titles = [f"Syllable{s}" for s in range(n_syllables)]
+
+    kpms.plot_trajectories_3D(Xs, titles, edges, str(tmp_path))
+
+    [fig] = shown_plotly_figures
+    steps = fig.layout.sliders[0].steps
+    traces = n_frames * (len(edges) + 1)  # each frame's keypoints, then its edges
+    assert len(fig.data) == n_syllables * traces
+    assert [step.label for step in steps] == titles
+    for i, step in enumerate(steps):
+        visible = np.zeros(len(fig.data), dtype=bool)
+        visible[i * traces : (i + 1) * traces] = True
+        np.testing.assert_array_equal(step.args[0]["visible"], visible, err_msg=step.label)
+    assert (tmp_path / "all_trajectories.html").exists()

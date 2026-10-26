@@ -2599,7 +2599,7 @@ def plot_trajectories_3D(
     fig = initialize_3D_plot(height)
 
     def visibility_mask(i):
-        n = (len(edges) + 1) * len(Xs[1])
+        n = (len(edges) + 1) * len(Xs[0])
         visible = np.zeros(n * len(Xs))
         visible[n * i : n * (i + 1)] = 1
         return visible > 0
