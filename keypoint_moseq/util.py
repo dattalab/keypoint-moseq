@@ -1222,7 +1222,7 @@ def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdo
 def _get_percent_padding(sequence_lengths, seg_length):
     """
     Calculate the percentage of padding required when batching sequences of the specified
-    lengths (see :py:func:`jax_moseq.utils.batch`)
+    lengths (see :py:func:`jax_moseq.utils.utils.batch`)
 
     Parameters
     ----------
@@ -1258,7 +1258,7 @@ def _find_optimal_segment_length(
     max_percent_padding=50,
     min_fragment_length=4,
 ):
-    """Find a segment length to use for batching (see :py:func:`jax_moseq.utils.batch`).
+    """Find a segment length to use for batching (see :py:func:`jax_moseq.utils.utils.batch`).
 
     Parameters
     ----------
@@ -1334,7 +1334,7 @@ def format_data(
 
     Data are transformed as follows:
         1. Coordinates and confidences are each merged into a single array
-           using :py:func:`jax_moseq.utils.batch`. Each row of the merged
+           using :py:func:`jax_moseq.utils.utils.batch`. Each row of the merged
            arrays is a segment from one recording.
         2. The keypoints axis is reindexed according to the order of elements
            in `use_bodyparts` with respect to their initial order in
@@ -1358,7 +1358,7 @@ def format_data(
         numpy arrays of shape (T,K).
 
     keys: list of str, default=None
-        (See :py:func:`jax_moseq.utils.batch`)
+        (See :py:func:`jax_moseq.utils.utils.batch`)
 
     bodyparts: list, default=None
         Label for each keypoint represented in `coordinates`. Required to
@@ -1381,15 +1381,15 @@ def format_data(
         'min_fragment_length' is still enforced to prevent downstream runtime errors.
 
     max_seg_length: int, default=10,000
-        Maximum allowed segment length for batching (see :py:func:`jax_moseq.utils.batch`).
+        Maximum allowed segment length for batching (see :py:func:`jax_moseq.utils.utils.batch`).
         Ignored if `seg_length` is provided.
 
     max_percent_padding: float, default=50
         Maximum allowed padding as a percentage of the total sequence length when data are batched
-        (see :py:func:`jax_moseq.utils.batch`). Ignored if `seg_length` is provided.
+        (see :py:func:`jax_moseq.utils.utils.batch`). Ignored if `seg_length` is provided.
 
     min_fragment_length: int, default=4
-        Minimum allowed sequence length after batching (see :py:func:`jax_moseq.utils.batch`).
+        Minimum allowed sequence length after batching (see :py:func:`jax_moseq.utils.utils.batch`).
 
     Returns
     -------
@@ -1402,16 +1402,16 @@ def format_data(
         conf: jax array with shape (n_segs, seg_length, K)
             Confidences from all recordings broken into fixed-length segments.
             If no input is provided for `confidences`, every confidence is 1
-            (plus `conf_pseudocount`).
+            (0 for NaN keypoints), plus `conf_pseudocount`.
 
         mask: jax array with shape (n_segs, seg_length)
             Binary array where 0 indicates areas of padding
-            (see :py:func:`jax_moseq.utils.batch`).
+            (see :py:func:`jax_moseq.utils.utils.batch`).
 
     metadata: tuple (keys, bounds)
         Metadata for the rows of `Y`, `conf` and `mask`, as a tuple with an
         array of recording names and an array of (start,end) times. See
-        :py:func:`jax_moseq.utils.batch` for details.
+        :py:func:`jax_moseq.utils.utils.batch` for details.
     """
     _check_keypoint_dicts(coordinates, confidences)
     if keys is None:

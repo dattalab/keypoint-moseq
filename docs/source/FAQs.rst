@@ -99,7 +99,7 @@ Substantial size variation between animals may cause syllables to become over-fr
 ----------------
 Keypoint-MoSeq can be used with 3D keypoint data.
 
-- For data loading, we support Anipose, SLEAP-anipose, FreiPose and DANNCE (see :ref:`Loading keypoint tracking data <loading data>`). 
+- For data loading, we support Anipose, SLEAP-anipose, NWB, FreiPose and DANNCE (see :ref:`Loading keypoint tracking data <loading data>`). 
 
 - For visualization, :py:func:`keypoint_moseq.viz.plot_pcs` and :py:func:`keypoint_moseq.viz.generate_trajectory_plots` can be run exactly as described in the tutorial. Both functions will render 2D projections in the x/y and x/z planes and also generate 3D interactive plots. The 3D plots are rendered in the notebook and can also be viewed offline in a browser using the saved .html file. For grid movies, see :ref:`Making grid movies for 3D data <3d grid movies>`.
 
@@ -146,9 +146,8 @@ If you already have a trained MoSeq model and would like to apply it to new data
 
 .. code-block:: python
 
-   # load the most recent model checkpoint and pca object
+   # load the most recent model checkpoint
    model = kpms.load_checkpoint(project_dir, model_name)[0]
-   pca = kpms.load_pca(project_dir)
 
    # load new data (e.g. from deeplabcut)
    new_data = 'path/to/new/data/' # can be a file, a directory, or a list of files
@@ -485,7 +484,7 @@ There are two main causes of GPU out of memory (OOM) errors:
     - Larger GPUs can be accessed using colab pro. 
 
 
-  - Disable parallel message passing. This results in a large (4-6 fold) reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fitting.fit_model` or :py:func:`keypoint_moseq.fitting.apply_model`. For example
+  - Disable parallel message passing. This results in a large (4-6 fold) reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fitting.fit_model`, :py:func:`keypoint_moseq.fitting.apply_model` or :py:func:`keypoint_moseq.fitting.estimate_syllable_marginals`. For example
 
    .. code-block:: python
 
@@ -536,7 +535,6 @@ There are two main causes of GPU out of memory (OOM) errors:
       .. code-block:: python
 
         model = kpms.load_checkpoint(project_dir, model_name)[0]
-        pca = kpms.load_pca(project_dir)
 
         new_data_batch1 = ['path/to/file3.h5', 'path/to/second/file4.h5']
         new_data_batch2 = ['path/to/file5.h5', 'path/to/second/file6.h5']

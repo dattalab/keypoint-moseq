@@ -398,8 +398,8 @@ def fit_model(
 
     num_iters : int, default=50
         Index of the last iteration. Fitting runs iterations `start_iter`
-        through `num_iters`, so to continue a fit for N more iterations, pass
-        `num_iters=start_iter + N`.
+        through `num_iters` inclusive, so to continue a fit until its last
+        snapshot is N iterations later, pass `num_iters=start_iter + N`.
 
     start_iter : int, default=0
         Index of the starting iteration, which is non-zero when continuing a

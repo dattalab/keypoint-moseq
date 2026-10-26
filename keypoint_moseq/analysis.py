@@ -1006,10 +1006,13 @@ def run_kruskal(
         DataFrame containing KW test results.
     dunn_results_df : pandas.DataFrame
         Dunn's z statistic for each syllable and pair of groups (a syllable
-        column, then `group1`, `group2` and `value`).
+        column, then `group1`, `group2` and `value`). Syllables are given as
+        positions among the sorted syllables of `stats_df`, which equal the
+        syllable labels only when those are 0, 1, 2, ...
     significant_syllables : dict
         Maps each pair of groups to the syllables whose corrected KW p-value
-        and corrected Dunn p-value are both below `thresh`.
+        and corrected Dunn p-value are both below `thresh`, as positions
+        among the sorted syllables of `stats_df`.
     """
     rnd = np.random.RandomState(seed=seed)
     # get grouped mean data
@@ -1323,7 +1326,7 @@ def plot_syll_stats_with_sem(
     join=False,
     figsize=(8, 4),
 ):
-    """Plot syllable statistics with standard error of the mean.
+    """Plot syllable statistics with 68% bootstrap confidence intervals.
 
     Parameters
     ----------
@@ -1705,7 +1708,8 @@ def visualize_transition_bigram(
         directory to save the figure to, by default
         `{project_dir}/{model_name}/figures`
     normalize : str, optional
-        the method to normalize the transition matrix, by default 'bigram'
+        the normalization used by `generate_transition_matrices`; only sets
+        the colorbar label, by default 'bigram'
     figsize : tuple, optional
         the figure size, by default (12,6)
     show_syllable_names : bool, optional
@@ -2037,18 +2041,8 @@ def plot_transition_graph_difference(
         sub_ax.axis("off")
     # add legend
     legend_elements = [
-        Line2D([0], [0], color="r", lw=2, label="Transition higher in second group"),
         Line2D([0], [0], color="b", lw=2, label="Transition higher in first group"),
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="w",
-            label="Usage higher in second group",
-            markerfacecolor="w",
-            markeredgecolor="r",
-            markersize=10,
-        ),
+        Line2D([0], [0], color="r", lw=2, label="Transition higher in second group"),
         Line2D(
             [0],
             [0],
@@ -2057,6 +2051,16 @@ def plot_transition_graph_difference(
             label="Usage higher in first group",
             markerfacecolor="w",
             markeredgecolor="b",
+            markersize=10,
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            label="Usage higher in second group",
+            markerfacecolor="w",
+            markeredgecolor="r",
             markersize=10,
         ),
     ]

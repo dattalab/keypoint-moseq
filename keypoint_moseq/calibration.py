@@ -383,8 +383,8 @@ def noise_calibration(
             - Use the toolbar to the left of the figure to pan and zoom.
 
         - It is suggested to annotate at least 50 frames, tracked by the 'Completed annotations'
-        counter. Each run starts from scratch: an existing `error_annotations.csv` is deleted
-        after you confirm.
+          counter. Each run starts from scratch: an existing `error_annotations.csv` is deleted
+          after you confirm.
 
         - Annotations will be automatically saved once you've completed at least 20 annotations.
         Each new annotation after that will trigger an auto-save of all your work.

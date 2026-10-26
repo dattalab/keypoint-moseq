@@ -64,7 +64,7 @@ Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the ra
 
     The following code reduces ``kappa`` by a factor of 10 (``decrease_kappa_factor``) before fitting the full model. You will need to recapitulate this step when fitting your own final model.
 
-    Model names are built from ``prefix`` and each kappa, so to rerun the scan on different data, use a new ``prefix`` or delete the old model directories: ``fit_model`` will not continue a checkpoint that was saved from different data.
+    Model names are built from ``prefix`` and each kappa, so to rerun the scan on different data, use a new ``prefix`` or delete the old model directories: ``fit_model`` raises an error when a checkpoint for the model name was saved from different data.
     
 
 .. code-block:: python
@@ -244,6 +244,8 @@ Keypoint-MoSeq is probabilistic. So even once fitting is complete and the syllab
     # load data (e.g. from deeplabcut)
     data_path = 'path/to/data/' # can be a file, a directory, or a list of files
     coordinates, confidences, bodyparts = kpms.load_keypoints(data_path, 'deeplabcut')
+    coordinates, confidences = kpms.outlier_removal(
+        coordinates, confidences, project_dir, overwrite=False, **config())
     data, metadata = kpms.format_data(coordinates, confidences, **config())
 
     # compute the marginal probabilities of syllable labels
