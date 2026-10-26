@@ -1167,12 +1167,15 @@ def _print_colored_table(row_labels, col_labels, values):
             color = plt.get_cmap("Reds")(val * 0.8)
             return f"background-color: rgba({int(color[0]*255)}, {int(color[1]*255)}, {int(color[2]*255)}, {color[3]})"
 
-        colored_df = df.style.applymap(colorize).set_caption("Proportion of NaNs")
+        # pandas 2.1 renamed Styler.applymap to Styler.map, and pandas 3 removed
+        # applymap
+        style_map = getattr(df.style, "map", None) or df.style.applymap
+        colored_df = style_map(colorize).set_caption("Proportion of NaNs")
         display(colored_df)
         return colored_df
     else:
         print(title)
-        print(tabulate(df, headers="keys", tablefmt="simple_grid", showindex=True))
+        print(tabulate.tabulate(df, headers="keys", tablefmt="simple_grid", showindex=True))
 
 
 def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdown=False, **kwargs):
