@@ -8,9 +8,10 @@ import jax.numpy as jnp
 import warnings
 from textwrap import fill
 from datetime import datetime
+from itertools import zip_longest
 
 from keypoint_moseq.viz import plot_progress
-from keypoint_moseq.io import save_hdf5, extract_results, load_checkpoint
+from keypoint_moseq.io import save_hdf5, load_hdf5, extract_results, load_checkpoint
 from keypoint_moseq.util import get_recording_lengths
 from jax_moseq.models import allo_keypoint_slds, keypoint_slds
 from jax_moseq.models.arhmm import stateseq_marginals, marginal_log_likelihood
@@ -265,6 +266,87 @@ def init_model(
         ) from error
 
 
+def _check_checkpoint_data(checkpoint_path, model_name, data, metadata):
+    """Raise if an existing checkpoint was saved from data with other
+    recording names, segment bounds or array shapes than `data` and
+    `metadata`, listing each difference."""
+    with h5py.File(checkpoint_path, "r") as f:
+        if "data" not in f or "metadata" not in f:
+            return
+        saved_shapes = {k: tuple(f["data"][k].shape) for k in f["data"]}
+    saved_keys, saved_bounds = load_hdf5(checkpoint_path, "metadata")
+    keys, bounds = metadata
+
+    def listed(names):
+        names = sorted(names)
+        more = f", and {len(names) - 5} more" if len(names) > 5 else ""
+        return ", ".join(names[:5]) + more
+
+    def segment(s):
+        return "none" if s is None else f"{s[0]} [{s[1]}, {s[2]}]"
+
+    sections = []
+    saved_names, names = set(map(str, saved_keys)), set(map(str, keys))
+    if saved_names != names:
+        sections.append(
+            f"  Recording names (checkpoint: {len(saved_names)}, data: {len(names)})"
+        )
+        if saved_names - names:
+            sections.append(f"    only in checkpoint: {listed(saved_names - names)}")
+        if names - saved_names:
+            sections.append(f"    only in data: {listed(names - saved_names)}")
+
+    saved_segments = [
+        (str(k), *b) for k, b in zip(saved_keys, np.asarray(saved_bounds).tolist())
+    ]
+    segments = [(str(k), *b) for k, b in zip(keys, np.asarray(bounds).tolist())]
+    if saved_segments != segments:
+        i, (saved, current) = next(
+            (i, pair)
+            for i, pair in enumerate(zip_longest(saved_segments, segments))
+            if pair[0] != pair[1]
+        )
+        sections += [
+            f"  Segment bounds (checkpoint: {len(saved_segments)} segments, "
+            f"data: {len(segments)} segments)",
+            f"    first difference at segment {i}: checkpoint {segment(saved)}, "
+            f"data {segment(current)}",
+        ]
+
+    shapes = {k: tuple(v.shape) for k, v in data.items() if k in saved_shapes}
+    changed = [k for k in shapes if shapes[k] != saved_shapes[k]]
+    if changed:
+        width = max(len(k) for k in changed) + 1
+        sections.append("  Array shapes")
+        sections += [
+            f"    {(k + ':').ljust(width)} checkpoint {saved_shapes[k]}, data {shapes[k]}"
+            for k in changed
+        ]
+
+    if not sections:
+        return
+    wrap = lambda text: fill(text, break_long_words=False, break_on_hyphens=False)
+    lines = [
+        wrap(
+            f"fit_model was given model_name '{model_name}', and a checkpoint for "
+            f"that model already exists at {checkpoint_path}, saved from different "
+            "data. Continuing a checkpoint is only valid on the data it was fit "
+            "to, so fit_model checked the recording names, segment bounds and "
+            "array shapes saved in the checkpoint against the data passed in, and "
+            "found these differences:"
+        ),
+        "",
+        *sections,
+        "",
+        wrap(
+            f"To fit this data, delete {os.path.dirname(checkpoint_path)} and run "
+            "again, or pass a different model_name. To label new recordings with a "
+            "model that is already fit, use apply_model instead."
+        ),
+    ]
+    raise ValueError("\n".join(lines))
+
+
 def fit_model(
     model,
     data,
@@ -399,7 +481,9 @@ def fit_model(
                     "data": data,
                 },
             )
-        else:  # delete model snapshots later than start_iter
+        else:
+            _check_checkpoint_data(checkpoint_path, model_name, data, metadata)
+            # delete model snapshots later than start_iter
             with h5py.File(checkpoint_path, "a") as f:
                 for k in list(f["model_snapshots"].keys()):
                     if int(k) > start_iter:

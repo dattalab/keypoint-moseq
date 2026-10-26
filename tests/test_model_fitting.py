@@ -3,6 +3,7 @@ import re
 
 import h5py
 import numpy as np
+import pytest
 
 import keypoint_moseq as kpms
 from model_utils import assert_tree_equal, model_structure, plain
@@ -138,3 +139,81 @@ def test_tutorial_full_model_checkpoint(
         for filename in filenames
     )
     data_regression.check({"snapshots": snapshots, "files": files})
+
+
+def snapshot_iterations(checkpoint_path):
+    with h5py.File(checkpoint_path, "r") as f:
+        return sorted(int(i) for i in f["model_snapshots"])
+
+
+def test_fit_model_continues_a_checkpoint_on_the_same_data(one_recording, tmp_path):
+    config, data, metadata, models = one_recording
+    project_dir = str(tmp_path)
+
+    model, model_name = kpms.fit_model(
+        models[False], data, metadata, project_dir, ar_only=True, num_iters=1, **config
+    )
+    kpms.fit_model(
+        model,
+        data,
+        metadata,
+        project_dir,
+        model_name,
+        ar_only=True,
+        start_iter=1,
+        num_iters=2,
+        **config,
+    )
+
+    checkpoint_path = os.path.join(project_dir, model_name, "checkpoint.h5")
+    assert snapshot_iterations(checkpoint_path) == [0, 1, 2]
+
+
+def test_fit_model_rejects_a_checkpoint_saved_from_other_data(
+    one_recording, tutorial_formatted_data, tutorial_model, tmp_path
+):
+    """Fitting the whole tutorial dataset under the name of a model fit to
+    one of its recordings raises before the checkpoint is changed (#174)."""
+    config, data, metadata, models = one_recording
+    all_data, all_metadata = tutorial_formatted_data
+    project_dir = str(tmp_path)
+    _, model_name = kpms.fit_model(
+        models[False], data, metadata, project_dir, ar_only=True, num_iters=1, **config
+    )
+    model_dir = os.path.join(project_dir, model_name)
+    checkpoint_path = os.path.join(model_dir, "checkpoint.h5")
+
+    with pytest.raises(ValueError) as error:
+        kpms.fit_model(
+            tutorial_model,
+            all_data,
+            all_metadata,
+            project_dir,
+            model_name,
+            ar_only=True,
+            num_iters=1,
+            **config,
+        )
+
+    message = " ".join(str(error.value).split())
+    only_in_data = sorted(set(all_metadata[0]) - set(metadata[0]))
+    num_names = len(set(all_metadata[0]))
+    assert f"model_name '{model_name}'" in message
+    assert checkpoint_path in message
+    assert f"Recording names (checkpoint: 1, data: {num_names})" in message
+    assert (
+        f"only in data: {', '.join(only_in_data[:5])}, and {len(only_in_data) - 5} more"
+        in message
+    )
+    assert (
+        f"Segment bounds (checkpoint: {len(metadata[0])} segments, "
+        f"data: {len(all_metadata[0])} segments)" in message
+    )
+    for key in ["Y", "conf", "mask"]:
+        assert (
+            f"{key}: checkpoint {tuple(data[key].shape)}, "
+            f"data {tuple(all_data[key].shape)}" in message
+        )
+    assert f"delete {model_dir} and run again" in message
+    assert "use apply_model instead" in message
+    assert snapshot_iterations(checkpoint_path) == [0, 1]
