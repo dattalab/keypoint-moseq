@@ -1,6 +1,8 @@
 import numpy as np
 import tqdm
 import os
+import warnings
+import matplotlib
 from textwrap import fill
 from vidio.read import OpenCVReader
 from keypoint_moseq.io import update_config
@@ -430,6 +432,21 @@ def noise_calibration(
 
     dim = list(coordinates.values())[0].shape[-1]
     assert dim == 2, "Calibration is only supported for 2D keypoints."
+
+    # `%matplotlib widget` selects ipympl, which matplotlib reports as
+    # "widget" or "ipympl", or by module path in older versions
+    backend = matplotlib.get_backend()
+    if backend.lower() not in ("widget", "ipympl", "module://ipympl.backend_nbagg"):
+        warnings.warn(
+            fill(
+                "The calibration widget needs matplotlib's interactive ipympl "
+                f"backend, but the current backend is '{backend}', so the widget "
+                "will probably show a still image that ignores clicks. Put "
+                "`%matplotlib widget` at the top of the cell that calls "
+                "noise_calibration, as in the modeling notebook, and run the cell "
+                "again."
+            )
+        )
 
     # Check the videos before the prompt below, which deletes any existing
     # annotations.

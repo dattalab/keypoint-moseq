@@ -1,5 +1,7 @@
 import os
+import warnings
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -151,3 +153,47 @@ def test_noise_calibration_rejects_frame_indexes_missing_a_recording(calibration
 
     assert first in str(error.value)
     assert "video_frame_indexes" in str(error.value)
+
+
+class Checked(Exception):
+    """Raised by the stand-in check_videos, which noise_calibration calls
+    right after checking the matplotlib backend."""
+
+
+def start_calibration(tmp_path, monkeypatch):
+    def stop(*args, **kwargs):
+        raise Checked
+
+    monkeypatch.setattr(kpms.calibration, "check_videos", stop)
+    coordinates = {"mouseA": np.zeros((10, 4, 2))}
+    confidences = {"mouseA": np.ones((10, 4))}
+    with pytest.raises(Checked):
+        kpms.noise_calibration(
+            str(tmp_path),
+            coordinates,
+            confidences,
+            bodyparts=list("abcd"),
+            use_bodyparts=list("abcd"),
+            video_dir=str(tmp_path),
+        )
+
+
+def test_calibration_warns_without_the_ipympl_backend(tmp_path, monkeypatch):
+    monkeypatch.setattr(matplotlib, "get_backend", lambda: "agg")
+
+    with pytest.warns(UserWarning) as record:
+        start_calibration(tmp_path, monkeypatch)
+
+    messages = [" ".join(str(w.message).split()) for w in record]
+    message = next(m for m in messages if "ipympl" in m)
+    assert "'agg'" in message
+    assert "%matplotlib widget" in message
+
+
+@pytest.mark.parametrize("backend", ["widget", "ipympl", "module://ipympl.backend_nbagg"])
+def test_calibration_is_silent_with_the_ipympl_backend(tmp_path, monkeypatch, backend):
+    monkeypatch.setattr(matplotlib, "get_backend", lambda: backend)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        start_calibration(tmp_path, monkeypatch)
