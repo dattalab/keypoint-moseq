@@ -327,7 +327,8 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=None, sm
     model_name : str
         the name of the model directory
     results_dict : dict
-        dictionary of results from model fitting
+        dictionary of results from model fitting. If None, loaded from
+        `{project_dir}/{model_name}/results.h5`.
     fps: float, optional
         The frame rate of the recordings. By default, the `fps` in the
         project's config.yml.
@@ -623,6 +624,8 @@ def label_syllables(project_dir, model_name, moseq_df):
         the path to the project directory
     model_name : str
         the name of the model directory
+    moseq_df : pandas.DataFrame
+        the dataframe from `compute_moseq_df`
     """
 
     # construct the syllable info path
@@ -944,8 +947,6 @@ def compute_pvalues_for_group_pairs(
         Alpha threshold to consider syllable significant, by default 0.05
     mc_method : str, optional
         Multiple Corrections method to use, by default "fdr_bh"
-    verbose : bool, optional
-        indicates whether to print out the significant syllable results, by default False
 
     Returns
     -------
@@ -1003,10 +1004,12 @@ def run_kruskal(
     -------
     df_k_real : pandas.DataFrame
         DataFrame containing KW test results.
-    df_pval_corrected : pandas.DataFrame
-        DataFrame containing Dunn's test results with corrected p-values.
-    significant_syllables : list
-        List of corrected KW significant syllables (syllables with p-values < thresh).
+    dunn_results_df : pandas.DataFrame
+        Dunn's z statistic for each syllable and pair of groups (a syllable
+        column, then `group1`, `group2` and `value`).
+    significant_syllables : dict
+        Maps each pair of groups to the syllables whose corrected KW p-value
+        and corrected Dunn p-value are both below `thresh`.
     """
     rnd = np.random.RandomState(seed=seed)
     # get grouped mean data
@@ -1147,7 +1150,7 @@ def sort_syllables_by_stat_difference(
 
 
 def sort_syllables_by_stat(stats_df, stat="frequency"):
-    """Sort sylllabes by the stat and return the ordering and label mapping.
+    """Sort syllables by the stat and return the ordering and label mapping.
 
     Parameters
     ----------
@@ -1330,8 +1333,9 @@ def plot_syll_stats_with_sem(
         the project directory
     model_name : str
         the model directory name
-    save_dir : str
-        the path to save the analysis plots
+    save_dir : str, optional
+        directory to save the figure to, by default
+        `{project_dir}/{model_name}/figures`
     plot_sig : bool, optional
         whether to plot the significant syllables, by default True
     thresh : float, optional
@@ -1542,7 +1546,7 @@ def normalize_transition_matrix(init_matrix, normalize):
     Returns
     -------
     init_matrix : numpy.ndarray
-        the trnasition matrix normalized by the method specified
+        the transition matrix normalized by the method specified
     """
     if normalize is None or normalize not in ("bigram", "rows", "columns"):
         return init_matrix
@@ -1634,8 +1638,8 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize="bi
         the group labels for each recording
     group : list or np.ndarray
         the groups in the project
-    max_sylls : int
-        the maximum number of syllables to include
+    syll_include : array
+        the syllables to include
     normalize : str, optional
         the method to normalize the transition matrix, by default 'bigram'
 
@@ -1686,10 +1690,20 @@ def visualize_transition_bigram(
 
     Parameters
     ----------
+    project_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
     group : list or np.ndarray
         the groups in the project
     trans_mats : list
         the list of transition matrices for each group
+    syll_include : array
+        the syllables included in `trans_mats` (from
+        `generate_transition_matrices`)
+    save_dir : str, optional
+        directory to save the figure to, by default
+        `{project_dir}/{model_name}/figures`
     normalize : str, optional
         the method to normalize the transition matrix, by default 'bigram'
     figsize : tuple, optional
@@ -1741,19 +1755,31 @@ def visualize_transition_bigram(
 def generate_transition_matrices(
     project_dir, model_name, normalize="bigram", min_frequency=0.005
 ):
-    """Generate the transition matrices for each recording.
+    """Generate a transition matrix for each group.
 
     Parameters
     ----------
-    progress_paths : dict
-        the dictionary of paths to the files in the analysis progress
+    project_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
     normalize : str, optional
-        the method to normalize the transition matrix, by default 'bigram'
+        the method to normalize the transition matrix ("bigram", "rows" or
+        "columns"), by default 'bigram'
+    min_frequency : float, optional
+        syllables whose frequency is at or below this threshold are left out,
+        by default 0.005
 
     Returns
     -------
     trans_mats : list
-        the list of transition matrices for each group
+        the transition matrix of each group
+    usages : list
+        the syllable frequencies of each group
+    groups : list
+        the group names, in the same order
+    syll_include : ndarray
+        the syllables included in the matrices
     """
     trans_mats, usages = None, None
     # index file
@@ -1801,16 +1827,26 @@ def plot_transition_graph_group(
 
     Parameters
     ----------
+    project_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
     groups : list
         the list of groups to plot
     trans_mats : list
         the list of transition matrices for each group
     usages : list
         the list of syllable usage for each group
+    syll_include : array
+        the syllables included in `trans_mats` (from
+        `generate_transition_matrices`)
+    save_dir : str, optional
+        directory to save the figure to, by default
+        `{project_dir}/{model_name}/figures`
     layout : str, optional
         the layout of the graph, by default 'circular'
     node_scaling : int, optional
-        the scaling factor for the node size, by default 2000,
+        the scaling factor for the node size, by default 2000
     show_syllable_names : bool, optional
         whether to show just syllable indexes (False) or syllable indexes and
         names (True)
@@ -1893,12 +1929,22 @@ def plot_transition_graph_difference(
 
     Parameters
     ----------
+    project_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
     groups : list
         the list of groups to plot
     trans_mats : list
         the list of transition matrices for each group
     usages : list
         the list of syllable usage for each group
+    syll_include : array
+        the syllables included in `trans_mats` (from
+        `generate_transition_matrices`)
+    save_dir : str, optional
+        directory to save the figure to, by default
+        `{project_dir}/{model_name}/figures`
     layout : str, optional
         the layout of the graph, by default 'circular'
     node_scaling : int, optional

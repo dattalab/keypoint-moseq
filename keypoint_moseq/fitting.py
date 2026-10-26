@@ -218,7 +218,7 @@ def init_model(
         hyperparameters will be used.
 
     metadata : tuple (keys, bounds), default=None
-        Segment metadata from :py:func:`keypoint_moseq.format_data`. Used only
+        Segment metadata from :py:func:`keypoint_moseq.util.format_data`. Used only
         to report the number of frames if initialization runs out of memory.
 
     Returns
@@ -370,10 +370,11 @@ def fit_model(
     This method optionally:
         - saves checkpoints of the model and data at regular intervals
         - plots of the model's progress during fitting (see
-          :py:func:`jax_moseq.viz.plot_progress`)
+          :py:func:`keypoint_moseq.viz.plot_progress`)
 
-    Note that if a checkpoint file already exists, all model snapshots after
-    `start_iter` will be deleted.
+    If a checkpoint for `model_name` already exists, it must have been saved
+    from the same data (recording names, segment bounds and array shapes),
+    and all model snapshots after `start_iter` are deleted.
 
     Parameters
     ----------
@@ -382,21 +383,23 @@ def fit_model(
         prior, and random seed.
 
     data: dict
-        Data for model fitting (see :py:func:`keypoint_moseq.io.format_data`).
+        Data for model fitting (see :py:func:`keypoint_moseq.util.format_data`).
 
     metadata: tuple (keys, bounds)
         Recordings and start/end frames for the data (see
-        :py:func:`keypoint_moseq.io.format_data`).
+        :py:func:`keypoint_moseq.util.format_data`).
 
     project_dir : str, default=None
-        Project directory; required if `save_every_n_iters>0`.
+        Project directory; required unless `save_every_n_iters=None`.
 
     model_name : str, default=None
         Name of the model. If None, the model is named using the current date
         and time.
 
     num_iters : int, default=50
-        Number of Gibbs sampling iterations to run.
+        Index of the last iteration. Fitting runs iterations `start_iter`
+        through `num_iters`, so to continue a fit for N more iterations, pass
+        `num_iters=start_iter + N`.
 
     start_iter : int, default=0
         Index of the starting iteration, which is non-zero when continuing a
@@ -414,14 +417,14 @@ def fit_model(
 
     save_every_n_iters : int, default=25
         Save the current model every `save_every_n_iters`. To only save the
-        final model, set `save_every_n_iter=-1`. To save nothing, set
+        final model, set `save_every_n_iters=-1`. To save nothing, set
         `save_every_n_iters=None`.
 
     generate_progress_plots : bool, default=True
-        If True, generate plots of the model's progress during fitting. Plots
-        are saved to `{project_dir}/{model_name}/plots/`.
+        If True, generate plots of the model's progress during fitting. The latest
+        plot is saved to `{project_dir}/{model_name}/fitting_progress.pdf`.
 
-    parallel_message_passing : bool | string, default=None,
+    parallel_message_passing : bool | string, default=None
         Use parallel implementation of Kalman sampling, which can be faster but
         has a significantly longer jit time. If None, will be set automatically
         based on the backend (True for GPU, False for CPU). A warning will be
@@ -451,6 +454,15 @@ def fit_model(
 
     model_name : str
         Name of the model.
+
+    Raises
+    ------
+    ValueError
+        If a checkpoint for `model_name` exists and was saved from different
+        data.
+    MemoryError
+        If fitting runs out of memory. The message gives the data size and the
+        settings that reduce memory use.
     """
     if generate_progress_plots and save_every_n_iters == 0:
         warnings.warn(
@@ -566,11 +578,11 @@ def apply_model(
         prior, and random seed.
 
     data: dict
-        Data for model fitting (see :py:func:`keypoint_moseq.io.format_data`).
+        Data for model fitting (see :py:func:`keypoint_moseq.util.format_data`).
 
     metadata: tuple (keys, bounds)
         Recordings and start/end frames for the data (see
-        :py:func:`keypoint_moseq.io.format_data`).
+        :py:func:`keypoint_moseq.util.format_data`).
 
     project_dir : str, default=None
         Path to the project directory. Required if `save_results=True` and
@@ -598,7 +610,7 @@ def apply_model(
     results_path : str, default=None
         Optional path for saving model outputs.
 
-    parallel_message_passing : bool | string, default=None,
+    parallel_message_passing : bool | string, default=None
         Use parallel implementation of Kalman sampling, which can be faster
         but has a significantly longer jit time. If None, will be set
         automatically based on the backend (True for GPU, False for CPU). A
@@ -624,8 +636,10 @@ def apply_model(
     Returns
     -------
     results : dict
-        Dictionary of model outputs (for results format, see
-        :py:func:`keypoint_moseq.io.extract_results`).
+        Dictionary of model outputs for the recordings in `data` (for results
+        format, see :py:func:`keypoint_moseq.io.extract_results`). When saved,
+        they are added to the results file alongside any recordings already
+        there.
 
     model : dict
         Model dictionary containing states, parameters, hyperparameters, noise
@@ -721,11 +735,11 @@ def estimate_syllable_marginals(
         prior, and random seed.
 
     data: dict
-        Data for model fitting (see :py:func:`keypoint_moseq.io.format_data`).
+        Data for model fitting (see :py:func:`keypoint_moseq.util.format_data`).
 
     metadata: tuple (keys, bounds)
         Recordings and start/end frames for the data (see
-        :py:func:`keypoint_moseq.io.format_data`).
+        :py:func:`keypoint_moseq.util.format_data`).
 
     burn_in_iters : int, default=200
         Number of resampling iterations to run before collecting samples.
@@ -743,7 +757,7 @@ def estimate_syllable_marginals(
     verbose : bool, default=False
         Whether to print progress updates.
 
-    parallel_message_passing : bool | string, default=None,
+    parallel_message_passing : bool | string, default=None
         Use parallel implementation of Kalman sampling, which can be faster
         but has a significantly longer jit time. If None, will be set
         automatically based on the backend (True for GPU, False for CPU). A
@@ -761,7 +775,7 @@ def estimate_syllable_marginals(
     -------
     marginal_estimates : dict
         Estimated marginal distributions over syllables in the form of a
-        dictionary mapping recoriding names to arrays of shape
+        dictionary mapping recording names to arrays of shape
         ``(num_timepoints, num_syllables)``.
 
     samples : dict

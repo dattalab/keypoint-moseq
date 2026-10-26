@@ -104,9 +104,9 @@ def load_sampled_frames(
 
     Returns
     -------
-    sample_keys: dict
+    sample_images: dict
         Dictionary mapping elements from `sample_keys` to the
-        corresponding videos frames.
+        corresponding video frames.
     """
     keys = sorted(set([k[0] for k in sample_keys]))
     if video_paths is None:
@@ -171,7 +171,7 @@ def save_params(project_dir, estimator):
     Parameters
     ----------
     project_dir: str
-        Save parameters `{project_dir}/config.yml`
+        Save parameters to `{project_dir}/config.yml`
 
     estimator: dict
         Dictionary containing calibration parameters with keys:
@@ -382,9 +382,9 @@ def noise_calibration(
             - Click and drag the bottom-right shaded corner of the widget to adjust image size.
             - Use the toolbar to the left of the figure to pan and zoom.
 
-        - It is suggested to annotate at least 50 frames, tracked by the 'annotations' counter.
-        This counter includes saved annotations from previous sessions if you've run this
-        widget on this project before.
+        - It is suggested to annotate at least 50 frames, tracked by the 'Completed annotations'
+        counter. Each run starts from scratch: an existing `error_annotations.csv` is deleted
+        after you confirm.
 
         - Annotations will be automatically saved once you've completed at least 20 annotations.
         Each new annotation after that will trigger an auto-save of all your work.
@@ -423,11 +423,18 @@ def noise_calibration(
     conf_pseudocount: float, default=0.001
         Pseudocount added to confidence values to avoid log(0) errors.
 
-    video_frame_indexes: dict, default-None
+    video_frame_indexes: dict, default=None
         Dictionary mapping recording names to arrays of video frame indexes.
         This is useful when the original keypoint coordinates used for modeling
         corresponded to a subset of frames from each video (i.e. if videos were
         trimmed or coordinates were downsampled).
+
+    kwargs
+        Other config entries, normally passed with `**config()`.
+        `error_estimator` and `conf_threshold` are required. `fps`,
+        `recording_name_suffix` and `shared_videos` are passed to
+        :py:func:`keypoint_moseq.util.check_videos`, which runs first and
+        raises if the videos do not line up with the keypoints.
     """
 
     dim = list(coordinates.values())[0].shape[-1]

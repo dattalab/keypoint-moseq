@@ -88,7 +88,7 @@ def plot_scree(pca, savefig=True, project_dir=None, fig_size=(3, 2)):
     project_dir : str, default=None
         Path to the project directory. Required if `savefig` is True.
 
-    fig_size : tuple, (2.5,2)
+    fig_size : tuple, (3, 2)
         Size of the figure in inches.
 
     Returns
@@ -144,7 +144,7 @@ def plot_pcs(
         Fitted PCA model
 
     use_bodyparts : list of str
-        List of bodyparts to that are used in the model; used to index bodypart
+        List of bodyparts that are used in the model; used to index bodypart
         names in the skeleton.
 
     skeleton : list
@@ -161,13 +161,13 @@ def plot_pcs(
 
     savefig : bool, True
         Whether to save the figure to a file. If true, the figure is saved to
-        `{project_dir}/pcs-{xy/xz/yz}.pdf` (`xz` and `yz` are only included
-        for 3D data).
+        `{project_dir}/pcs-{xy/xz}.pdf` (`xz` is only included for 3D
+        data).
 
     project_dir : str, default=None
         Path to the project directory. Required if `savefig` is True.
 
-    scale : float, default=0.5
+    scale : float, default=1
         Scale factor for the perturbation of the mean pose.
 
     plot_n_pcs : int, default=10
@@ -299,7 +299,7 @@ def plot_syllable_frequencies(
     ----------
     results : dict, default=None
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`)
+        :py:func:`keypoint_moseq.io.extract_results`)
 
     model_name: str, default=None
         Name of the model. Required to load results if `results` is None and
@@ -355,7 +355,7 @@ def plot_duration_distribution(
     fps=None,
     show_median=True,
 ):
-    """Plot a histogram showing the frequency of each syllable.
+    """Plot a histogram of syllable durations.
 
     Caller must provide a results dictionary, a path to a results .h5, or a
     project directory and model name, in which case the results are loaded from
@@ -365,7 +365,7 @@ def plot_duration_distribution(
     ----------
     results : dict, default=None
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`)
+        :py:func:`keypoint_moseq.io.extract_results`)
 
     model_name: str, default=None
         Name of the model. Required to load results if `results` is None and
@@ -379,9 +379,9 @@ def plot_duration_distribution(
         Path to a results file. If None, results will be loaded from
         `{project_dir}/{model_name}/results.h5`.
 
-    lim: tuple, default=None
-        x-axis limits as a pair of ints (in units of frames). If None, the
-        limits are set to (0, 95th-percentile).
+    lim: int, default=None
+        Upper x-axis limit, in frames. If None, the 95th percentile of
+        durations.
 
     num_bins: int, default=30
         Number of bins in the histogram.
@@ -442,13 +442,16 @@ def plot_kappa_scan(kappas, project_dir, prefix, figsize=(8, 2.5)):
     Parameters
     ----------
     kappas : array-like of float
-        Kapppa values used in the scan.
+        Kappa values used in the scan.
 
     project_dir : str
         Path to the project directory.
 
     prefix : str
         Prefix for the kappa scan model names.
+
+    figsize : tuple of float, default=(8, 2.5)
+        Size of the figure in inches.
 
     Returns
     -------
@@ -546,10 +549,13 @@ def plot_progress(
     model_name : str, default=None
         Name of the model. Required if `savefig` is True.
 
+    path : str, default=None
+        Path to save the figure to.
+
     savefig : bool, default=True
         Whether to save the figure to a file. If true, the figure is either
-        saved to `path` or, to `{project_dir}/{model_name}-progress.pdf` if
-        `path` is None.
+        saved to `path` or, if `path` is None, to
+        `{project_dir}/{model_name}/fitting_progress.pdf`.
 
     fig_size : tuple of float, default=None
         Size of the figure in inches.
@@ -822,7 +828,7 @@ def grid_movie(
     instances: list of tuples `(key, start, end)`
         List of syllable instances to include in the grid movie, where each instance is
         specified as a tuple with the video name, start frame and end frame. The list
-        must have length `rows*cols`. The video names must also be keys in `videos`.
+        must have length `rows*cols`. The video names must also be keys in `video_paths`.
 
     rows: int, cols : int
         Number of rows and columns in the grid movie grid
@@ -879,9 +885,9 @@ def grid_movie(
         Dictionary of options to pass to `overlay_keypoints_on_image`. Used when
         `overlay_keypoints=True`.
 
-    use_dims: pair of ints, default=[0,1]
-        Dimensions to use for plotting keypoints. Only used when
-        `overlay_keypoints=True` and the keypoints are 3D.
+    use_dims: pair of ints, default=None
+        Dimensions to use for plotting 3D keypoints, e.g. [0, 1]. Required when
+        the keypoints are 3D.
 
     Returns
     -------
@@ -976,7 +982,7 @@ def get_grid_movie_window_size(
         Number of frames before/after syllable onset that are included
         in the grid movies.
 
-    pctl: int, default=95
+    pctl: int, default=90
         Percentile of frames in which the animal should be fully visible.
 
     fudge_factor: float, default=1.1
@@ -1056,7 +1062,8 @@ def generate_grid_movies(
     ----------
     results: dict
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`)
+        :py:func:`keypoint_moseq.io.extract_results`). If None, results are
+        loaded from `{project_dir}/{model_name}/results.h5`.
 
     project_dir: str, default=None
         Project directory. Required to save grid movies if `output_dir`
@@ -1072,8 +1079,10 @@ def generate_grid_movies(
 
     video_dir: str, default=None
         Directory containing videos of the modeled data (see
-        :py:func:`keypoint_moseq.io.find_matching_videos`). Either  `video_dir`
+        :py:func:`keypoint_moseq.util.find_matching_videos`). Either `video_dir`
         or `video_paths` must be provided unless `keypoints_only=True`.
+        Videos are matched using `recording_name_suffix` and `shared_videos`
+        from the config (see :py:func:`keypoint_moseq.util.check_videos`).
 
     video_paths: dict, default=None
         Dictionary mapping recording names to video paths. The recording
@@ -1151,7 +1160,7 @@ def generate_grid_movies(
         animal. If provided explicitly, `window_size` should be a
         multiple of 16 or imageio will complain.
 
-    max_video_size: int, default=4000
+    max_video_size: int, default=1920
         Maximum size of the grid movie in pixels. If the grid movie
         is larger than this, it will be downsampled.
 
@@ -1190,7 +1199,7 @@ def generate_grid_movies(
     Returns
     -------
     sampled_instances: dict
-        Dictionary mapping syllables to lists of instances shown in each in
+        Dictionary mapping syllables to lists of instances shown in each
         grid movie (in row-major order), where each instance is specified as a
         tuple with the video name, start frame and end frame.
     """
@@ -1416,7 +1425,7 @@ def get_limits(
         and height are multiples of `blocksize`. This is useful
         when they are used for generating cropped images for a video.
 
-    left, right, top, bottom: float, default=0.1
+    left, right, top, bottom: float, default=0.2
         Fraction of the axis range to pad on each side.
 
     Returns
@@ -1503,9 +1512,8 @@ def plot_trajectories(
         Determines the background color of the figure. If `True`,
         the background will be black.
 
-    keypoint_colormap : str or list
-        Name of a matplotlib colormap or a list of colors as (r,b,g)
-        tuples in the same order as as the keypoints.
+    keypoint_colormap : str
+        Name of a matplotlib colormap.
 
     keypoint_colors : array-like, shape=(num_keypoints,3), default=None
         Color for each keypoint. If None, the keypoint colormap is used.
@@ -1529,7 +1537,7 @@ def plot_trajectories(
     plot_width: int, default=4
         Width of each trajectory plot in inches. The height  is
         determined by the aspect ratio of `lims`. The final figure
-        width is `fig_width * min(n_cols, len(X))`.
+        width depends on the number of columns and on `overlap`.
 
     overlap: tuple of float, default=(0.2,0)
         Amount of overlap between each trajectory plot as a tuple
@@ -1538,7 +1546,7 @@ def plot_trajectories(
 
     return_rasters: bool, default=False
         Rasterize the matplotlib canvas after plotting each step of
-        the trajecory. This is used to generate an animated video/gif
+        the trajectory. This is used to generate an animated video/gif
         of the trajectory.
 
     Returns
@@ -1548,6 +1556,9 @@ def plot_trajectories(
 
     ax: matplotlib.axes.Axes
         Axis containing the trajectory plots.
+
+    rasters: list of ndarray
+        One image per time step when `return_rasters=True`, otherwise empty.
     """
     fill_color = "k" if invert else "w"
     if keypoint_colors is None:
@@ -1710,8 +1721,8 @@ def generate_trajectory_plots(
     """
     Generate trajectory plots for a modeled dataset.
 
-    Each trajectory plot shows a sequence of poses along the average
-    trajectory through latent space associated with a given syllable.
+    Each trajectory plot shows a sequence of poses along the median keypoint
+    trajectory, aligned to syllable onset, for a given syllable.
     A separate figure (and gif, optionally) is saved for each syllable,
     along with a single figure showing all syllables in a grid. The
     plots are saved to `{output_dir}` if it is provided, otherwise
@@ -1728,7 +1739,7 @@ def generate_trajectory_plots(
 
     results: dict
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`).
+        :py:func:`keypoint_moseq.io.extract_results`).
 
     project_dir: str, default=None
         Project directory. Required to save trajectory plots if
@@ -1764,7 +1775,7 @@ def generate_trajectory_plots(
 
     plot_options: dict, default={}
         Dictionary of options for trajectory plots (see
-        :py:func:`keypoint_moseq.util.plot_trajectories`).
+        :py:func:`keypoint_moseq.viz.plot_trajectories`).
 
     get_limits_pctl: float, default=0
         Percentile to use for determining the axis limits. Higher values lead
@@ -1801,7 +1812,7 @@ def generate_trajectory_plots(
         ignored for 2D data.
 
     interactive: bool, default=True
-        For 3D data, whether to create an visualization that can be
+        For 3D data, whether to create a visualization that can be
         rotated and zoomed. This argument is ignored for 2D data.
     """
 
@@ -2071,7 +2082,7 @@ def overlay_keypoints_on_video(
 
     plot_options: dict, default={}
         Additional keyword arguments to pass to
-        :py:func:`keypoint_moseq.viz.overlay_keypoints`.
+        :py:func:`keypoint_moseq.viz.overlay_keypoints_on_image`.
 
     video_frame_indexes: array, default=None
         Video frames corresponding to the entries of `coordinates`. If None, it is
@@ -2167,7 +2178,7 @@ def add_3D_pose_to_plotly_fig(
     line_width: float, default=3.0
         Width of skeleton edges.
 
-    visibility: bool, default=True
+    visible: bool, default=True
         Initial visibility state of the nodes and edges
 
     opacity: float, default=1
@@ -2259,7 +2270,7 @@ def plot_similarity_dendrogram(
 
     results: dict
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`).
+        :py:func:`keypoint_moseq.io.extract_results`).
 
     project_dir: str, default=None
         Project directory. Required to save figure if `save_path` is None.
@@ -2269,11 +2280,11 @@ def plot_similarity_dendrogram(
 
     save_path: str, default=None
         Path to save the dendrogram plot (do not include an extension).
-        If None, the plot will be saved  to
-        `{project_dir}/{name}/similarity_dendrogram.[pdf/png]`.
+        If None, the plot will be saved to
+        `{project_dir}/{model_name}/similarity_dendrogram.[pdf/png]`.
 
     metric: str, default='cosine'
-        Distance metric to use. See :py:func:`scipy.spatial.pdist` for options.
+        Distance metric to use. See :py:func:`scipy.spatial.distance.pdist` for options.
 
     before_onset_sec: float, default=0.167
         Time in seconds before syllable onset to include in each syllable's
@@ -2290,7 +2301,7 @@ def plot_similarity_dendrogram(
         the typical trajectory. This value will be converted to frames (at
         least 1) using the fps parameter.
 
-    figsize: tuple of float, default=(10,5)
+    figsize: tuple of float, default=(6, 3)
         Size of the dendrogram plot.
 
     fps: int, default=None
@@ -2408,7 +2419,7 @@ def add_3D_pose_to_fig(
     linewidth: float, default=3.0
         Width of skeleton edges.
 
-    visibility: bool, default=True
+    visible: bool, default=True
         Initial visibility state of the nodes and edges
 
     opacity: float, default=1
@@ -2480,9 +2491,9 @@ def plot_pcs_3D(
         Name of a matplotlib colormap to use for coloring the keypoints.
 
     project_dir : str, default=None
-        Path to the project directory. Required if `savefig` is True.
+        Path to the project directory. If given, the figure is saved there.
 
-    node_size : float, default=30.0
+    node_size : float, default=6
         Size of the keypoints in the figure.
 
     linewidth: float, default=2.0
@@ -2491,7 +2502,7 @@ def plot_pcs_3D(
     height : int, default=400
         Height of the figure in pixels.
 
-    mean_pose_opacity: float, default=0.4
+    mean_pose_opacity: float, default=0.2
         Opacity of the mean pose
     """
     fig = initialize_3D_plot(height)
@@ -2720,11 +2731,11 @@ def plot_confusion_matrix(
     ----------
     results1: dict
         Dictionary containing modeling results for the first model (see
-        :py:func:`keypoint_moseq.fitting.extract_results`).
+        :py:func:`keypoint_moseq.io.extract_results`).
 
     results2: dict
         Dictionary containing modeling results for the second model (see
-        :py:func:`keypoint_moseq.fitting.extract_results`).
+        :py:func:`keypoint_moseq.io.extract_results`).
 
     min_frequency: float, default=0.005
         Minimum frequency of a syllable to include in the confusion matrix.

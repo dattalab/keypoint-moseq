@@ -46,7 +46,7 @@ def _get_path(project_dir, model_name, path, filename, pathname_for_error_msg="p
 
 def generate_config(project_dir, **kwargs):
     """Generate a `config.yml` file with project settings. Default settings
-    will be used unless overriden by a keyword argument.
+    will be used unless overridden by a keyword argument.
 
     Parameters
     ----------
@@ -136,11 +136,11 @@ def generate_config(project_dir, **kwargs):
 
     comments = {
         "verbose": "whether to print progress messages during fitting",
-        "keypoint_colormap": "colormap used for visualization; see `matplotlib.cm.get_cmap` for options",
-        "added_noise_level": "upper bound of uniform noise added to the data during initial AR-HMM fitting; this is used to regularize the model",
+        "keypoint_colormap": "colormap used for visualization; see `matplotlib.colormaps` for options",
+        "added_noise_level": "upper bound of uniform noise added to the keypoint coordinates by `format_data`; this is used to regularize the model",
         "PCA_fitting_num_frames": "number of frames used to fit the PCA model during initialization",
-        "video_dir": "directory with videos from which keypoints were derived (used for crowd movies)",
-        "recording_name_suffix": "suffix used to match videos to recording names; this can usually be left empty (see `util.find_matching_videos` for details)",
+        "video_dir": "directory with videos from which keypoints were derived (used for calibration, grid movies and `check_videos`)",
+        "recording_name_suffix": "text that follows the video's filename in each recording name, such as 'DLC' for DeepLabCut output; when set, a video only matches recordings whose names start with its filename followed by this text (see `util.find_matching_videos`)",
         "shared_videos": "set to True if some videos hold more than one recording (e.g. several animals tracked in one video); silences the warning about videos matched to several recordings",
         "bodyparts": "used to access columns in the keypoint data",
         "skeleton": "used for visualization only",
@@ -156,7 +156,8 @@ def generate_config(project_dir, **kwargs):
         "kappa_scan_target_duration": "target median syllable duration (in frames) for choosing kappa",
         "whiten": "whether to whiten principal components; used to initialize the latent pose trajectory `x`",
         "conf_threshold": "used to define outliers for interpolation when the model is initialized",
-        "conf_pseudocount": "pseudocount used regularize neural network confidences",
+        "conf_pseudocount": "pseudocount used to regularize neural network confidences",
+        "outlier_scale_factor": "multiplier for the distance-to-medoid threshold used by `outlier_removal`; higher values remove fewer keypoints",
         "fix_heading": "whether to keep the heading angle fixed; this should only be True if the pose is constrained to a narrow range of angles, e.g. a headfixed mouse.",
         "fps": "frames per second of the video recordings",
     }
@@ -180,7 +181,7 @@ def check_config_validity(config):
           `config["bodyparts"]`
         - All the elements of `config["anterior_bodyparts"]` are also in
           `config["use_bodyparts"]`
-        - All the elements of `config["anterior_bodyparts"]` are also in
+        - All the elements of `config["posterior_bodyparts"]` are also in
           `config["use_bodyparts"]`
         - For each pair in `config["skeleton"]`, both elements also in
           `config["bodyparts"]`
@@ -312,7 +313,7 @@ def setup_project(
     **options,
 ):
     """
-    Setup a project directory with the following structure::
+    Set up a project directory with the following structure::
 
         project_dir
         └── config.yml
@@ -325,26 +326,26 @@ def setup_project(
     deeplabcut_config: str, default=None
         Path to a deeplabcut config file. Will be used to initialize
         `bodyparts`, `skeleton`, `use_bodyparts` and `video_dir` in the
-        keypoint MoSeq config (overrided by kwargs).
+        keypoint MoSeq config (overridden by kwargs).
 
     sleap_file: str, default=None
         Path to a .hdf5 or .slp file containing predictions for one video. Will
         be used to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in
-        the keypoint MoSeq config (overrided by kwargs).
+        the keypoint MoSeq config (overridden by kwargs).
 
     nwb_file: str, default=None
         Path to a .nwb file containing predictions for one video. Will be used
         to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in the
-        keypoint MoSeq config. (overrided by kwargs).
+        keypoint MoSeq config. (overridden by kwargs).
 
     freipose_config: str, default=None
         Path to a freipose skeleton config file. Will be used to initialize
         `bodyparts`, `skeleton`, and `use_bodyparts` in the keypoint MoSeq config
-        (overrided by kwargs).
+        (overridden by kwargs).
 
     dannce_config: str, default=None
         Path to a dannce config file. Will be used to initialize `bodyparts`,
-        `skeleton`, and `use_bodyparts` in the keypoint MoSeq config (overrided
+        `skeleton`, and `use_bodyparts` in the keypoint MoSeq config (overridden
         by kwargs).
 
     overwrite: bool, default=False
@@ -572,9 +573,9 @@ def reindex_syllables_in_checkpoint(
     path: str, default=None
 
     index: array of shape (num_states,), default=None
-        Permutation for syllable labels, where `index[i]` is relabled as `i`.
-        If None, syllables are relabled by frequency, with the most frequent
-        syllable relabled as 0, and so on.
+        Permutation for syllable labels, where `index[i]` is relabeled as `i`.
+        If None, syllables are relabeled by frequency, with the most frequent
+        syllable relabeled as 0, and so on.
 
     runlength: bool, default=True
         If True, frequencies are quantified using the number of non-consecutive
@@ -639,8 +640,8 @@ def extract_results(
 
     Model outputs are saved to disk as a .h5 file, either at `path`
     if it is specified, or at `{project_dir}/{model_name}/results.h5` if it is not.
-    If a .h5 file with the given path already exists, the outputs will be added
-    to it. The results have the following structure::
+    If a .h5 file with the given path already exists, the outputs are added to
+    it; recordings already in the file raise an error unless `overwrite=True`. The results have the following structure::
 
         results.h5
         ├──recording_name1
@@ -665,11 +666,11 @@ def extract_results(
 
     project_dir : str, default=None
         Path to the project directory. Required if `save_results=True` and
-        `results_path=None`.
+        `path=None`.
 
     model_name : str, default=None
         Name of the model. Required if `save_results=True` and
-        `results_path=None`.
+        `path=None`.
 
     path : str, default=None
         Optional path for saving model outputs.
@@ -701,7 +702,7 @@ def extract_results(
                     f"'{next(iter(overlap))}'. To overwrite existing "
                     f"results, set overwrite=True in apply_model. "
                     f"See https://keypoint-moseq.readthedocs.io/en/"
-                    f"latest/FAQs.html#detecting-existing-syllables"
+                    f"stable/FAQs.html#detecting-existing-syllables"
                     f"-in-new-data for more information."
                 ))
 
@@ -779,7 +780,7 @@ def save_results_as_csv(
         Optional path to the directory where the csv files will be saved.
 
     path_sep: str, default='-'
-        If a path separator ("/" or "\") is present in the recording name, it
+        If a path separator ("/" or "\\") is present in the recording name, it
         will be replaced with `path_sep` when saving the csv file.
     """
     save_dir = _get_path(project_dir, model_name, save_dir, "results", "save_dir")
@@ -843,7 +844,7 @@ def save_keypoints(
 
         "BODYPART1_x", "BODYPART1_y", "BODYPART1_conf", "BODYPART2_x", ...
 
-    Columns with confidence scores are ommitted if `confidences` is not provided.
+    Columns with confidence scores are omitted if `confidences` is not provided.
     Besides confidences, there can be 2 or 3 columns for each bodypart, depending
     on whether the keypoints are 2D or 3D.
 
@@ -868,10 +869,10 @@ def save_keypoints(
     bodyparts: list, default=None
         List of bodypart names, in the same order as the keypoints in the
         `coordinates` and `confidences` arrays. If None, the bodypart names
-        will be set to ["bodypart1", "bodypart2", ...].
+        will be set to ["bodypart0", "bodypart1", ...].
 
     path_sep: str, default='-'
-        If a path separator ("/" or "\") is present in the recording name, it
+        If a path separator ("/" or "\\") is present in the recording name, it
         will be replaced with `path_sep` when saving the csv file.
     """
     if not os.path.exists(save_dir):
@@ -926,14 +927,14 @@ def load_keypoints(
         .csv and .h5/.hdf5 files generated by deeplabcut. For single-animal
         tracking, each file yields a single key/value pair in the returned
         `coordinates` and `confidences` dictionaries. For multi-animal tracking,
-        a key/vaue pair will be generated for each tracked individual. For
+        a key/value pair will be generated for each tracked individual. For
         example the file `two_mice.h5` with individuals "mouseA" and "mouseB"
         will yield the pair of keys `'two_mice_mouseA', 'two_mice_mouseB'`.
 
     - sleap
         .slp and .h5/.hdf5 files generated by sleap. For single-animal tracking,
         each file yields a single key/value pair in the returned `coordinates`
-        and `confidences` dictionaries. For multi-animal tracking, a key/vaue
+        and `confidences` dictionaries. For multi-animal tracking, a key/value
         pair will be generated for each track. For example a single file called
         `two_mice.h5` will yield the pair of keys `'two_mice_track0',
         'two_mice_track1'`.
@@ -984,8 +985,8 @@ def load_keypoints(
     Parameters
     ----------
     filepath_pattern: str or list of str
-        Filepath pattern for a set of deeplabcut csv or hdf5 files, or a list
-        of such patterns. Filepath patterns can be:
+        Filepath pattern for a set of keypoint files, or a list of such
+        patterns. Filepath patterns can be:
 
         - single file (e.g. `/path/to/file.csv`)
         - single directory (e.g. `/path/to/dir/`)
@@ -994,7 +995,8 @@ def load_keypoints(
 
     format: str
         Format of the files to load. Must be one of `deeplabcut`, `sleap`,
-        `anipose`, or `sleap-anipose`.
+        `anipose`, `sleap-anipose`, `nwb`, `facemap`, `freipose` or
+        `dannce`.
 
     extension: str, default=None
         File extension to use when searching for files. If None, then the
@@ -1010,7 +1012,7 @@ def load_keypoints(
         - dannce: 'mat'
 
     recursive: bool, default=True
-        Whether to search recursively for deeplabcut csv or hdf5 files.
+        Whether to search directories recursively for keypoint files.
 
     path_in_name: bool, default=False
         Whether to name the tracking results from each file by the path to the
