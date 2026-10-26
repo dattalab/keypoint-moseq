@@ -1,4 +1,6 @@
+import html
 import os
+import re
 
 import pandas as pd
 import panel as pn
@@ -24,10 +26,11 @@ def test_group_setting_initial_index(
 def test_group_setting_widget(tutorial_groups_assigned):
     widget = tutorial_groups_assigned["widget"]
     table, column = widget.objects
-    (button,) = column.objects
+    button, status = column.objects
 
     assert isinstance(table, pn.widgets.Tabulator)
     assert isinstance(button, pn.widgets.Button)
+    assert isinstance(status, pn.pane.HTML)
     assert button.name == "Save group info"
     assert table.editors["name"] is None
     assert list(table.value["name"]) == list(tutorial_groups_assigned["initial_index"]["name"])
@@ -57,3 +60,33 @@ def test_group_setting_reopens_saved_index(
     pd.testing.assert_frame_equal(widget[0].value, tutorial_groups_assigned["saved_index"])
     with open(index_path(project_dir)) as f:
         assert f.read() == saved
+
+
+def test_group_setting_confirms_the_saved_groups(
+    tutorial_groups_assigned, tutorial_analysis_project
+):
+    project_dir, _ = tutorial_analysis_project
+    status = tutorial_groups_assigned["widget"][1][1]
+    counts = tutorial_groups_assigned["saved_index"]["group"].value_counts().sort_index()
+    groups = ", ".join(
+        f"{group} ({n} recording{'s' if n != 1 else ''})" for group, n in counts.items()
+    )
+
+    saved = re.fullmatch(r"Saved at \d\d:\d\d:\d\d to (.*)", status.object)
+    assert saved is not None, status.object
+    assert saved.group(1) == html.escape(f"{index_path(project_dir)}: {groups}")
+
+
+def test_group_setting_sends_a_confirmation_for_every_save(analysis_project_without_groups):
+    """The browser shows "Saving..." from the click until Python sends a
+    confirmation, so saving unchanged groups again must send one again."""
+    project_dir, model_name = analysis_project_without_groups
+    widget = kpms.interactive_group_setting(project_dir, model_name)
+    button, status = widget[1].objects
+    sent = []
+    status.param.watch(lambda event: sent.append(event.new), "object")
+
+    button.clicks += 1
+    button.clicks += 1
+
+    assert len([message for message in sent if message.startswith("Saved at")]) == 2

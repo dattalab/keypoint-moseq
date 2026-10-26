@@ -1,6 +1,8 @@
 from keypoint_moseq.util import filter_angle
 from keypoint_moseq.io import load_config, load_results
 from math import ceil
+from datetime import datetime
+import html
 from matplotlib.lines import Line2D
 from cytoolz import sliding_window
 import networkx as nx
@@ -212,6 +214,10 @@ def generate_index(project_dir, model_name, index_filepath):
 def interactive_group_setting(project_dir, model_name):
     """Start the interactive group setting widget.
 
+    Clicking "Save group info" writes the groups to
+    `{project_dir}/index.csv`. The message next to the button confirms the
+    save and shows how many recordings are in each group.
+
     Parameters
     ----------
     project_dir : str
@@ -258,6 +264,9 @@ def interactive_group_setting(project_dir, model_name):
         configuration=base_configuration,
     )
     button = pn.widgets.Button(name="Save group info", button_type="primary")
+    # The browser shows "Saving…" as soon as the button is clicked; Python
+    # replaces it once index.csv is saved and read back.
+    status = pn.pane.HTML("", width=300, styles={"overflow-wrap": "anywhere"})
 
     # call back function to save the index file
     def save_index(summary_data):
@@ -270,10 +279,36 @@ def interactive_group_setting(project_dir, model_name):
     # button click action
     def b(event, save=True):
         save_index(summary_data)
+        counts = _read_index_csv(index_filepath)["group"].value_counts().sort_index()
+        groups = ", ".join(
+            f"{group} ({n} recording{'s' if n != 1 else ''})"
+            for group, n in counts.items()
+        )
+        time = datetime.now().strftime("%H:%M:%S")
+        # cleared first, so that saving unchanged groups still sends a message
+        # that replaces "Saving…" in the browser
+        status.object = ""
+        status.object = html.escape(f"Saved at {time} to {index_filepath}: {groups}")
 
     button.on_click(b)
+    button.js_on_click(
+        args={"status": status},
+        code="""
+        const saving = "Saving…";
+        status.text = saving;
+        setTimeout(() => {
+          if (status.text === saving) {
+            status.text = "No reply from Python after 10 seconds, so the groups "
+              + "may not be saved. If another cell is still running, this will "
+              + "update when it finishes. Otherwise, the notebook front end may "
+              + "not be passing widget events to Python; JupyterLab is known "
+              + "to work.";
+          }
+        }, 10000);
+        """,
+    )
 
-    return pn.Row(summary_table, pn.Column(button))
+    return pn.Row(summary_table, pn.Column(button, status))
 
 
 def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=None, smooth_heading=True):
