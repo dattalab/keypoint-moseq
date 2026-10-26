@@ -322,6 +322,7 @@ def find_matching_videos(
     recursive=True,
     recording_name_suffix="",
     video_extension=None,
+    shared_videos=False,
 ):
     """
     Find video files for a set of recording names. The filename of each video
@@ -370,6 +371,11 @@ def find_matching_videos(
 
     recording_name_suffix: str, default=None
         Suffix to append to the video name when searching for a match.
+
+    shared_videos: bool, default=False
+        Whether some videos hold more than one recording, e.g. several
+        animals tracked in one video. If False, a warning lists the videos
+        matched to more than one recording.
 
     Returns
     -------
@@ -474,6 +480,44 @@ def find_matching_videos(
         for name in shared:
             lines.append(f"  {name}: {', '.join(paths_by_name[name])}. Using {videos_to_paths[name]}.")
         lines.append("Pass `video_extension` to choose which one is used.")
+        warnings.warn("\n".join(lines))
+
+    recordings_by_video = {}
+    for key in keys:
+        recordings_by_video.setdefault(video_paths[key], []).append(key)
+    multiple = sorted(
+        (os.path.basename(path), names)
+        for path, names in recordings_by_video.items()
+        if len(names) > 1
+    )
+    if multiple and not shared_videos:
+        lines = [
+            f"{len(multiple)} videos are each matched to more than one recording:"
+            if len(multiple) > 1
+            else "1 video is matched to more than one recording:"
+        ]
+        for video, names in multiple[:5]:
+            more = f", and {len(names) - 5} more" if len(names) > 5 else ""
+            lines.append(f"  {video}: {', '.join(names[:5])}{more}")
+        if len(multiple) > 5:
+            lines.append(f"  and {len(multiple) - 5} more videos")
+        lines += [
+            "",
+            fill(
+                "Sharing a video is expected when several animals were tracked in "
+                "one video, or when one session was split into several recordings. "
+                "If that is the case here, set `shared_videos` to True in the config "
+                "(kpms.update_config(project_dir, shared_videos=True)) to silence "
+                "this warning. Otherwise, some videos may be missing. A video matches "
+                "every recording whose name starts with the video's filename, so "
+                "mouse1.mp4 also matches mouse10DLC_resnet50 when mouse10.mp4 is "
+                "missing. Setting `recording_name_suffix` to the text that follows "
+                "the video's filename in every recording name (for example 'DLC' for "
+                "DeepLabCut output) prevents this: a video then matches a recording "
+                "only if that text comes right after the filename, so mouse1.mp4 no "
+                "longer matches mouse10DLC_resnet50."
+            ),
+        ]
         warnings.warn("\n".join(lines))
 
     if as_dict:
@@ -1772,6 +1816,8 @@ def check_videos(
     outside_frame_margin=0.02,
     outside_frame_threshold=0.01,
     fps=None,
+    recording_name_suffix="",
+    shared_videos=False,
     **kwargs,
 ):
     """Check that every recording has a readable video that lines up with its
@@ -1836,6 +1882,12 @@ def check_videos(
         report more frames than their keypoints have. Defaults to the frame
         rate the video reports.
 
+    recording_name_suffix: str, default=""
+        See :py:func:`keypoint_moseq.util.find_matching_videos`.
+
+    shared_videos: bool, default=False
+        See :py:func:`keypoint_moseq.util.find_matching_videos`.
+
     Returns
     -------
     video_paths: dict
@@ -1856,7 +1908,12 @@ def check_videos(
     keys = sorted(coordinates.keys())
     if video_paths is None:
         video_paths = find_matching_videos(
-            keys, video_dir, as_dict=True, video_extension=video_extension
+            keys,
+            video_dir,
+            as_dict=True,
+            video_extension=video_extension,
+            recording_name_suffix=recording_name_suffix,
+            shared_videos=shared_videos,
         )
     # Without `video_frame_indexes`, row i of the keypoints is video frame i,
     # so a video with more frames than rows may have a wrong frame count.

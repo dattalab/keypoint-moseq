@@ -74,6 +74,7 @@ def load_sampled_frames(
     video_dir,
     video_frame_indexes,
     video_extension=None,
+    video_paths=None,
 ):
     """Load sampled frames from a directory of videos.
 
@@ -95,6 +96,10 @@ def load_sampled_frames(
     video_extension: str, default=None
         Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
 
+    video_paths: dict, default=None
+        Dictionary mapping recording names to video paths. If None, videos
+        are matched to recordings in `video_dir`.
+
     Returns
     -------
     sample_keys: dict
@@ -102,7 +107,10 @@ def load_sampled_frames(
         corresponding videos frames.
     """
     keys = sorted(set([k[0] for k in sample_keys]))
-    videos = find_matching_videos(keys, video_dir, video_extension=video_extension)
+    if video_paths is None:
+        videos = find_matching_videos(keys, video_dir, video_extension=video_extension)
+    else:
+        videos = [video_paths[key] for key in keys]
     key_to_video = dict(zip(keys, videos))
     readers = {key: OpenCVReader(video) for key, video in zip(keys, videos)}
     pbar = tqdm.tqdm(
@@ -425,13 +433,15 @@ def noise_calibration(
 
     # Check the videos before the prompt below, which deletes any existing
     # annotations.
-    check_videos(
+    video_paths = check_videos(
         coordinates,
         video_dir=video_dir,
         video_frame_indexes=video_frame_indexes,
         video_extension=video_extension,
         print_table=False,
         fps=kwargs.get("fps"),
+        recording_name_suffix=kwargs.get("recording_name_suffix", ""),
+        shared_videos=kwargs.get("shared_videos", False),
     )
     if video_frame_indexes is None:
         video_frame_indexes = {k: np.arange(len(v)) for k, v in coordinates.items()}
@@ -453,6 +463,7 @@ def noise_calibration(
         video_dir,
         video_frame_indexes,
         video_extension,
+        video_paths=video_paths,
     )
 
     return _noise_calibration_widget(

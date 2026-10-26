@@ -412,3 +412,86 @@ def test_tutorial_videos_pass_check(
     out = capsys.readouterr().out
     for name in coordinates:
         assert name in out
+
+
+def test_recording_name_suffix_keeps_a_recording_off_another_video(video_dir):
+    # mouseAx has no video; without the suffix, mouseAx_dlc matches mouseA.avi
+    coordinates = {"mouseA_dlc": keypoints_inside(10), "mouseAx_dlc": keypoints_inside(10)}
+
+    with pytest.raises(ValueError) as error:
+        kpms.check_videos(coordinates, video_dir=video_dir, recording_name_suffix="_dlc")
+
+    message = str(error.value)
+    assert "No video found for 1 of 2 recordings" in message
+    assert "mouseAx_dlc" in message
+
+
+def test_shared_video_warns_unless_shared_videos_is_set(video_dir):
+    coordinates = {"mouseA_dlc": keypoints_inside(10), "mouseAx_dlc": keypoints_inside(10)}
+
+    with pytest.warns(UserWarning, match="more than one recording"):
+        kpms.check_videos(coordinates, video_dir=video_dir)
+    check_silently(coordinates, video_dir=video_dir, shared_videos=True)
+
+
+class Checked(Exception):
+    """Raised by the stand-in check_videos after its first call."""
+
+
+@pytest.fixture
+def check_videos_calls(monkeypatch):
+    """Keyword arguments of each call to check_videos from calibration and
+    grid movies, which raise `Checked` instead of checking."""
+    calls = []
+
+    def record(*args, **kwargs):
+        calls.append(kwargs)
+        raise Checked
+
+    monkeypatch.setattr(kpms.calibration, "check_videos", record)
+    monkeypatch.setattr(kpms.viz, "check_videos", record)
+    return calls
+
+
+MATCHING_SETTINGS = {"recording_name_suffix": "_dlc", "shared_videos": True}
+
+
+def test_noise_calibration_passes_video_matching_settings(check_videos_calls, tmp_path):
+    coordinates = {"mouseA_dlc": keypoints_inside(10)}
+    confidences = {"mouseA_dlc": np.ones((10, 4))}
+
+    with pytest.raises(Checked):
+        kpms.noise_calibration(
+            str(tmp_path),
+            coordinates,
+            confidences,
+            bodyparts=list("abcd"),
+            use_bodyparts=list("abcd"),
+            video_dir=str(tmp_path),
+            **MATCHING_SETTINGS,
+        )
+
+    assert {k: check_videos_calls[0].get(k) for k in MATCHING_SETTINGS} == MATCHING_SETTINGS
+
+
+def test_grid_movies_pass_video_matching_settings(check_videos_calls, tmp_path):
+    results = {
+        "mouseA_dlc": {
+            "syllable": np.zeros(10, dtype=int),
+            "centroid": np.zeros((10, 2)),
+            "heading": np.zeros(10),
+        }
+    }
+
+    with pytest.raises(Checked):
+        kpms.generate_grid_movies(
+            results,
+            str(tmp_path),
+            "model",
+            video_dir=str(tmp_path),
+            window_size=32,
+            fps=30,
+            **MATCHING_SETTINGS,
+        )
+
+    assert {k: check_videos_calls[0].get(k) for k in MATCHING_SETTINGS} == MATCHING_SETTINGS

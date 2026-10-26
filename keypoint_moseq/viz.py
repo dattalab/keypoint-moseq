@@ -1280,6 +1280,8 @@ def generate_grid_movies(
             video_extension=video_extension,
             print_table=False,
             fps=fps,
+            recording_name_suffix=kwargs.get("recording_name_suffix", ""),
+            shared_videos=kwargs.get("shared_videos", False),
         )
         if video_frame_indexes is None:
             video_frame_indexes = {k: np.arange(len(v)) for k, v in syllables.items()}

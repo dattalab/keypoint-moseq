@@ -40,6 +40,7 @@ posterior_bodyparts:
 posterior_idxs:
 - 0
 recording_name_suffix: ''
+shared_videos: false
 skeleton:
 - - tail
   - spine4

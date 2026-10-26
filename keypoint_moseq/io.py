@@ -106,6 +106,7 @@ def generate_config(project_dir, **kwargs):
         kwargs,
         {
             "recording_name_suffix": "",
+            "shared_videos": False,
             "verbose": False,
             "conf_pseudocount": 1e-3,
             "video_dir": "",
@@ -140,6 +141,7 @@ def generate_config(project_dir, **kwargs):
         "PCA_fitting_num_frames": "number of frames used to fit the PCA model during initialization",
         "video_dir": "directory with videos from which keypoints were derived (used for crowd movies)",
         "recording_name_suffix": "suffix used to match videos to recording names; this can usually be left empty (see `util.find_matching_videos` for details)",
+        "shared_videos": "set to True if some videos hold more than one recording (e.g. several animals tracked in one video); silences the warning about videos matched to several recordings",
         "bodyparts": "used to access columns in the keypoint data",
         "skeleton": "used for visualization only",
         "use_bodyparts": "determines the subset of bodyparts to use for modeling and the order in which they are represented",
