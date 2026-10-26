@@ -310,3 +310,45 @@ def test_run_kruskal_with_a_gap_in_the_syllables():
     assert list(kruskal["is_sig"]) == [False, False, True]
     assert sorted(set(dunn[("syllable", "")])) == [0, 1, 5]
     assert list(sig_pairs[("a", "b")]) == [5]
+
+
+def group_means(stats_df, group, stat):
+    return stats_df[stats_df["group"] == group].groupby("syllable")[stat].mean()
+
+
+def test_order_diff_sorts_by_exp_minus_ctrl(frozen_stats_df):
+    ordering = kpms.analysis.sort_syllables_by_stat_difference(
+        frozen_stats_df, CTRL_GROUP, EXP_GROUP, stat=STAT
+    )
+
+    difference = group_means(frozen_stats_df, EXP_GROUP, STAT) - group_means(
+        frozen_stats_df, CTRL_GROUP, STAT
+    )
+    assert sorted(ordering) == sorted(frozen_stats_df["syllable"].unique())
+    assert np.all(np.diff(difference.loc[ordering].to_numpy()) <= 0)
+
+
+@pytest.mark.parametrize("stat", ["duration", "velocity_px_s_mean"])
+def test_order_stat_sorts_other_stats_by_mean(frozen_stats_df, stat):
+    ordering, relabel_mapping = kpms.analysis.sort_syllables_by_stat(frozen_stats_df, stat=stat)
+
+    means = frozen_stats_df.groupby("syllable")[stat].mean()
+    assert sorted(ordering) == sorted(means.index)
+    assert np.all(np.diff(means.loc[ordering].to_numpy()) <= 0)
+    assert relabel_mapping == {syllable: i for i, syllable in enumerate(ordering)}
+
+
+def test_stats_plot_ordered_by_difference(frozen_stats_df, tmp_path):
+    fig, _ = kpms.plot_syll_stats_with_sem(
+        frozen_stats_df,
+        str(tmp_path),
+        "model",
+        plot_sig=False,
+        stat=STAT,
+        order="diff",
+        ctrl_group=CTRL_GROUP,
+        exp_group=EXP_GROUP,
+    )
+    plt.close("all")
+
+    assert fig is not None

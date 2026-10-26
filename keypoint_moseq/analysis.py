@@ -1130,19 +1130,8 @@ def sort_syllables_by_stat_difference(
         ordering list of syllables based on the difference in the stat between the control and experimental group
     """
 
-    # Prepare DataFrame
-    mutation_df = (
-        stats_df.drop(
-            [
-                col
-                for col, dtype in stats_df.dtypes.items()
-                if (dtype == "object" and col not in ["group", "syllable"])
-            ],
-            axis=1,
-        )
-        .groupby(["group", "syllable"])
-        .mean()
-    )
+    # mean of the stat for each group and syllable
+    mutation_df = stats_df.groupby(["group", "syllable"])[[stat]].mean()
 
     # Get groups to measure mutation by
     control_df = mutation_df.loc[ctrl_group]
@@ -1179,13 +1168,9 @@ def sort_syllables_by_stat(stats_df, stat="frequency"):
         ordering = sorted(stats_df.syllable.unique())
     else:
         ordering = (
-            stats_df.drop(
-                [col for col, dtype in stats_df.dtypes.items() if dtype == "object"],
-                axis=1,
-            )
-            .groupby("syllable")
+            stats_df.groupby("syllable")[stat]
             .mean()
-            .sort_values(by=stat, ascending=False)
+            .sort_values(ascending=False)
             .index
         )
 
