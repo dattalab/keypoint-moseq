@@ -114,23 +114,25 @@ def sampler_calls(monkeypatch):
 
 @pytest.mark.parametrize(
     "ar_only, num_iters, iterations_run, warns",
-    [(True, 5, 1, True), (True, 1, 1, False), (False, 2, 2, False)],
-    ids=["ar_only", "ar_only_one_iteration", "full_model"],
+    [(True, 5, 1, True), (True, 1, 1, False), (True, None, 1, False), (False, 2, 2, False)],
+    ids=["ar_only", "ar_only_one_iteration", "ar_only_default", "full_model"],
 )
 def test_ar_only_apply_model_runs_one_iteration(
     ar_only, num_iters, iterations_run, warns, one_recording, sampler_calls, recwarn
 ):
     """With `ar_only=True` each iteration draws the syllable labels
-    independently given the same pose trajectories, so one is enough."""
+    independently given the same pose trajectories, so one is enough.
+    `num_iters=None` leaves `num_iters` at its default."""
     config, data, metadata, models = one_recording
+    iterations = {} if num_iters is None else {"num_iters": num_iters}
 
     kpms.apply_model(
         models[False],
         data,
         metadata,
-        num_iters=num_iters,
         ar_only=ar_only,
         save_results=False,
+        **iterations,
         **config,
     )
 
@@ -143,3 +145,22 @@ def test_ar_only_apply_model_runs_one_iteration(
         assert "Set `num_iters=1` to silence this warning" in stopped[0]
     else:
         assert stopped == []
+
+
+def test_full_model_apply_model_runs_500_iterations_by_default(
+    one_recording, monkeypatch, recwarn
+):
+    config, data, metadata, models = one_recording
+    calls = []
+
+    def record(data, **kwargs):
+        """Count the iteration and return the model unchanged."""
+        calls.append(kwargs)
+        return {key: kwargs[key] for key in models[False]}
+
+    monkeypatch.setattr(kpms.fitting.keypoint_slds, "resample_model", record)
+    kpms.apply_model(models[False], data, metadata, save_results=False, **config)
+
+    assert len(calls) == 500
+    assert not any(call["ar_only"] for call in calls)
+    assert not any("Stopping after 1 iteration" in str(w.message) for w in recwarn)

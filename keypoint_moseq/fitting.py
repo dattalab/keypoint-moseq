@@ -558,7 +558,7 @@ def apply_model(
     metadata,
     project_dir=None,
     model_name=None,
-    num_iters=500,
+    num_iters=None,
     ar_only=False,
     save_results=True,
     verbose=False,
@@ -593,10 +593,10 @@ def apply_model(
         Name of the model. Required if `save_results=True` and
         `results_path=None`.
 
-    num_iters : int, default=500
-        Number of iterations to run the model. With `ar_only=True`, a single
-        iteration runs, since each one draws the syllable labels
-        independently given the same pose trajectories.
+    num_iters : int, default=None
+        Number of iterations to run the model, 500 if None. With
+        `ar_only=True`, a single iteration runs, since each one draws the
+        syllable labels independently given the same pose trajectories.
 
     ar_only : bool, default=False
         See :py:func:`keypoint_moseq.fitting.fit_model`.
@@ -672,7 +672,9 @@ def apply_model(
     else:
         resample_func = keypoint_slds.resample_model
 
-    if ar_only and num_iters > 1:
+    if num_iters is None:
+        num_iters = 1 if ar_only else 500
+    elif ar_only and num_iters > 1:
         warnings.warn(
             fill(
                 "With `ar_only=True`, `apply_model` only resamples syllable "
