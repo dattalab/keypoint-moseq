@@ -2364,8 +2364,8 @@ def matplotlib_colormap_to_plotly(cmap):
     h = 1.0 / (pl_entries - 1)
     pl_colorscale = []
     for k in range(pl_entries):
-        C = (np.array(cmap(k * h)[:3]) * 255).astype(np.uint8)
-        pl_colorscale.append([k * h, "rgb" + str((C[0], C[1], C[2]))])
+        r, g, b = (np.array(cmap(k * h)[:3]) * 255).astype(np.uint8)
+        pl_colorscale.append([k * h, f"rgb({r}, {g}, {b})"])
     return pl_colorscale
 
 

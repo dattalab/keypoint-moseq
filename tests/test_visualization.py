@@ -4,8 +4,10 @@ import struct
 import imageio
 import imageio_ffmpeg
 import numpy as np
+import plotly.graph_objects as go
 import pytest
 from PIL import Image
+from sklearn.decomposition import PCA
 
 import keypoint_moseq as kpms
 from keypoint_moseq.util import get_syllable_instances
@@ -284,7 +286,8 @@ def moving_keypoints(results, n_keypoints=4, seed=0):
     crops have a real extent."""
     rng = np.random.default_rng(seed)
     return {
-        name: r["centroid"][:, None, :] + rng.normal(scale=5, size=(len(r["centroid"]), n_keypoints, 2))
+        name: r["centroid"][:, None, :]
+        + rng.normal(scale=5, size=(len(r["centroid"]), n_keypoints, r["centroid"].shape[1]))
         for name, r in results.items()
     }
 
@@ -349,3 +352,74 @@ def test_overlay_keypoints_on_image_returns_the_drawn_image(copy):
     assert overlaid[10, 10].any() and overlaid[30, 30].any()
     if copy:
         assert not image.any()
+
+
+@pytest.fixture
+def shown_plotly_figures(monkeypatch):
+    """Plotly figures that kpms shows, captured instead of rendered."""
+    shown = []
+    monkeypatch.setattr(go.Figure, "show", lambda fig: shown.append(fig))
+    return shown
+
+
+def keypoint_colorscales(fig):
+    """Colorscale of each keypoint trace, as lists like those
+    `matplotlib_colormap_to_plotly` returns."""
+    return [
+        [list(entry) for entry in trace.marker.colorscale]
+        for trace in fig.data
+        if trace.mode == "markers"
+    ]
+
+
+def test_plotly_colorscale_matches_the_matplotlib_colormap():
+    colorscale = kpms.viz.matplotlib_colormap_to_plotly("autumn")
+
+    assert colorscale[0] == [0.0, "rgb(255, 0, 0)"]
+    assert colorscale[-1][1] == "rgb(255, 255, 0)"
+
+
+def test_3D_pc_plot(tmp_path, shown_plotly_figures):
+    use_bodyparts = ["nose", "head", "body", "tail"]
+    skeleton = [["nose", "head"], ["head", "body"], ["body", "tail"]]
+    rng = np.random.default_rng(0)
+    pca = PCA().fit(rng.normal(size=(100, (len(use_bodyparts) - 1) * 3)))
+
+    kpms.plot_pcs(
+        pca,
+        use_bodyparts=use_bodyparts,
+        skeleton=skeleton,
+        project_dir=str(tmp_path),
+        plot_n_pcs=3,
+    )
+
+    [fig] = shown_plotly_figures
+    colorscale = kpms.viz.matplotlib_colormap_to_plotly("autumn")
+    assert [step.label for step in fig.layout.sliders[0].steps] == ["PC 1", "PC 2", "PC 3"]
+    # a pose for each PC, and the mean pose
+    assert keypoint_colorscales(fig) == [colorscale] * 4
+    assert (tmp_path / "pcs.html").exists()
+
+
+def test_3D_trajectory_plot(tmp_path, shown_plotly_figures):
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    for recording in results.values():
+        recording["centroid"] = np.pad(recording["centroid"], ((0, 0), (0, 1)))
+    fps = 30
+
+    kpms.generate_trajectory_plots(
+        moving_keypoints(results),
+        results,
+        output_dir=str(tmp_path),
+        save_gifs=False,
+        fps=fps,
+    )
+
+    [fig] = shown_plotly_figures
+    titles = [f"Syllable{s}" for s in plotted_syllables(results, {"fps": fps})]
+    colorscale = kpms.viz.matplotlib_colormap_to_plotly("autumn")
+    assert titles
+    assert [step.label for step in fig.layout.sliders[0].steps] == titles
+    assert len(keypoint_colorscales(fig)) > 0
+    assert all(c == colorscale for c in keypoint_colorscales(fig))
+    assert (tmp_path / "all_trajectories.html").exists()
