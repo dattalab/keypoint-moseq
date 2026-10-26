@@ -498,7 +498,7 @@ There are two main causes of GPU out of memory (OOM) errors:
    This will split the data into 4 batches, which should reduce the memory requirements about 4-fold but also result in a 4-fold slow-down. The number of batches can be adjusted as needed.
 
 
-  - Use multiple GPUs if they are available. To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
+  - Use multiple GPUs if they are available (Linux only, including WSL2). To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
 
    .. code-block:: python
 

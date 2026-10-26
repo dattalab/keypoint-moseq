@@ -308,6 +308,9 @@ After this, the pipeline can be run as usual, except for steps that involve read
 
 .. code-block:: python
 
+    # Checking videos
+    kpms.check_videos(coordinates, video_frame_indexes=video_frame_indexes, **config())
+
     # Calibration step
     kpms.noise_calibration(..., video_frame_indexes=video_frame_indexes)
 
@@ -321,7 +324,7 @@ After this, the pipeline can be run as usual, except for steps that involve read
 Trimming inputs
 ---------------
 
-In some datasets, the animal is missing at the beginning and/or end of each video. In these cases, the easiest solution is to trim the videos before running keypoint detection. However, it's also possible to directly trim the inputs to keypoint-MoSeq. Let's assume that you already have a dictionary called ``bounds`` that has the same keys as ``coordinates`` and contains the desired start/end times for each recording. The next step would be to trim ``coordinates`` and ``confindences``
+In some datasets, the animal is missing at the beginning and/or end of each video. In these cases, the easiest solution is to trim the videos before running keypoint detection. However, it's also possible to directly trim the inputs to keypoint-MoSeq. Let's assume that you already have a dictionary called ``bounds`` that has the same keys as ``coordinates`` and contains the desired start/end times for each recording. The next step would be to trim ``coordinates`` and ``confidences``:
 
 .. code-block:: python
 
@@ -330,7 +333,7 @@ In some datasets, the animal is missing at the beginning and/or end of each vide
  
     
 
-You'll also need to generate a dictionary called ``video_frame_indexes`` that maps the timepoints of ``coordinates`` and ``confindences`` to frame indexes from the original videos.
+You'll also need to generate a dictionary called ``video_frame_indexes`` that maps the timepoints of ``coordinates`` and ``confidences`` to frame indexes from the original videos.
 
 .. code-block:: python
 
@@ -341,6 +344,9 @@ You'll also need to generate a dictionary called ``video_frame_indexes`` that ma
 After this, the pipeline can be run as usual, except for steps that involve reading the original videos, in which case ``video_frame_indexes`` should be passed as an additional argument.
 
 .. code-block:: python
+
+    # Checking videos
+    kpms.check_videos(coordinates, video_frame_indexes=video_frame_indexes, **config())
 
     # Calibration step
     kpms.noise_calibration(..., video_frame_indexes=video_frame_indexes)
