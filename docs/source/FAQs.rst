@@ -555,7 +555,7 @@ The following actions may help resolve NaNs during model fitting. If they don't,
     jax.config.read('jax_enable_x64')
 
 
-- Try increasing adjusting the `jitter` parameter, which controls the amount of regularization used to prevent singular matrices. The default value is 1e-3, but it may be necessary to increase this to 1e-2 or 1e-1 using the `jitter` keyword argument in `fit_model`.
+- Try increasing the `jitter` parameter, which controls the amount of regularization used to prevent singular matrices. The default value is 1e-3, but it may be necessary to increase this to 1e-2 or 1e-1 using the `jitter` keyword argument of the function that produced the NaNs (`fit_model`, `apply_model` or `estimate_syllable_marginals`). Jitter only affects the serial Kalman sampler, which is the default on CPU or when `parallel_message_passing=False`.
 
 - Enable parallel Kalman sampling. By default, it is only enabled when fittin with a GPU. You can override this, however, using the argument `parallel_message_passing=True` when running `fit_model`.
 
