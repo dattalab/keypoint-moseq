@@ -1409,7 +1409,7 @@ def plot_syll_stats_with_sem(
 
     fig, ax = plt.subplots(1, 1, figsize=figsize)
 
-    # plot each group's stat data separately, computes groupwise SEM, and orders data based on the stat/ordering parameters
+    # plot each group's stat data separately, computes groupwise 68% confidence intervals, and orders data based on the stat/ordering parameters
     hue = "group" if groups is not None else None
     ax = sns.pointplot(
         data=stats_df,

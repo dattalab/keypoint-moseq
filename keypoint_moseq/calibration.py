@@ -374,7 +374,7 @@ def noise_calibration(
 
     Follow these steps to use the widget:
         - Run the cell below. A widget should appear with a video frame.
-        The yellow marker denotes the automatically detected location of the bodypart.
+          The yellow marker denotes the automatically detected location of the bodypart.
 
         - Annotate each frame with the correct location of the labeled bodypart
             - Left click to specify the correct location - an "X" should appear.
@@ -387,8 +387,8 @@ def noise_calibration(
           after you confirm.
 
         - Annotations will be automatically saved once you've completed at least 20 annotations.
-        Each new annotation after that will trigger an auto-save of all your work.
-        The message at the top of the widget will indicate when your annotations are being saved.
+          Each new annotation after that will trigger an auto-save of all your work.
+          The message at the top of the widget will indicate when your annotations are being saved.
 
 
     Parameters

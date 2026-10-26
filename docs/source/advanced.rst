@@ -64,7 +64,7 @@ Keypoint-MoSeq includes a hyperparameter called ``kappa`` that determines the ra
 
     The following code reduces ``kappa`` by a factor of 10 (``decrease_kappa_factor``) before fitting the full model. You will need to recapitulate this step when fitting your own final model.
 
-    Model names are built from ``prefix`` and each kappa, so to rerun the scan on different data, use a new ``prefix`` or delete the old model directories: ``fit_model`` raises an error when a checkpoint for the model name was saved from different data.
+    Model names are built from ``prefix`` and each kappa, so to rerun the scan on different data, use a new ``prefix`` or delete the old model directories: ``fit_model`` raises an error when the checkpoint for a model name was saved from data with other recording names, segment bounds or array shapes. Other changes to the data are not detected.
     
 
 .. code-block:: python

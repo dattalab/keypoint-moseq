@@ -196,13 +196,12 @@ If you already trained a keypoint-MoSeq model, but would like to improve it usin
        coordinates, confidences, project_dir, overwrite=False, **config())
    data, metadata = kpms.format_data(coordinates, confidences, **config())
 
-   # load previously saved PCA and model checkpoint
-   pca = kpms.load_pca(project_dir)
+   # load the model checkpoint
    model = kpms.load_checkpoint(project_dir, model_name)[0]
 
    # initialize a new model using saved parameters
    model = kpms.init_model(
-      data, metadata=metadata, pca=pca, params=model['params'],
+      data, metadata=metadata, params=model['params'],
       hypparams=model['hypparams'], **config())
    
    # continue fitting, now with the new data

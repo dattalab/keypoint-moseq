@@ -162,6 +162,9 @@ def test_transition_graph_difference_plot(
             colors=sign_color,
         )
     data_regression.check({"titles": plot["titles"], "legend": plot["legend"]})
+    # blue where the first group of the panel title is higher, as drawn above
+    for label, color in zip(plot["legend"], plot["legend_colors"]):
+        assert color == to_rgb(sign_color(1 if "first group" in label else -1)), label
 
 
 def test_analysis_figures(

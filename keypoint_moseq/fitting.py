@@ -397,9 +397,10 @@ def fit_model(
         and time.
 
     num_iters : int, default=50
-        Index of the last iteration. Fitting runs iterations `start_iter`
-        through `num_iters` inclusive, so to continue a fit until its last
-        snapshot is N iterations later, pass `num_iters=start_iter + N`.
+        Index of the last iteration. Fitting runs `num_iters - start_iter + 1`
+        resampling steps and saves the last as snapshot `num_iters`, so to
+        continue a fit until its last snapshot is N iterations later, pass
+        `num_iters=start_iter + N`.
 
     start_iter : int, default=0
         Index of the starting iteration, which is non-zero when continuing a
@@ -411,9 +412,9 @@ def fit_model(
     ar_only : bool, default=False
         If True, fit an AR-HMM model using the latent trajectory defined by
         `model['states']['x']` (see
-        :py:func:`jax_moseq.models.arhmm.resample_model`).
+        :py:func:`jax_moseq.models.arhmm.gibbs.resample_model`).
         Otherwise fit a full keypoint-SLDS model (see
-        :py:func:`jax_moseq.models.keypoint_slds.resample_model`)
+        :py:func:`jax_moseq.models.keypoint_slds.gibbs.resample_model`)
 
     save_every_n_iters : int, default=25
         Save the current model every `save_every_n_iters`. To only save the

@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pooch
 import pytest
+from matplotlib.colors import to_rgb
 
 from analysis_utils import (
     bigram_plot_summary,
@@ -678,6 +679,10 @@ def tutorial_transition_graph_difference(
         "printed": printed.getvalue(),
         "titles": [ax.get_title() for ax in axes],
         "legend": [text.get_text() for text in axes[-1].get_legend().get_texts()],
+        "legend_colors": [
+            to_rgb(handle.get_markeredgecolor() if handle.get_marker() not in (None, "None") else handle.get_color())
+            for handle in axes[-1].get_legend().legend_handles
+        ],
         "graphs": [graph_plot_summary(ax) for ax in axes[: math.comb(len(groups), 2)]],
     }
     plt.close("all")
