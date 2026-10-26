@@ -13,6 +13,7 @@ from analysis_utils import (
     check_figure_files,
     graph_edge_weights,
     syllable_names,
+    synthetic_results,
 )
 
 MIN_FREQUENCY = 0.005  # `min_frequency` of the notebook's transition matrix cell
@@ -203,3 +204,31 @@ def test_transition_graph_difference_with_one_group(analysis_project_without_gro
     assert not os.path.exists(
         os.path.join(figures_dir(project_dir, model_name), "transition_graphs_diff.png")
     )
+
+
+def test_transition_matrices_when_a_group_never_uses_an_included_syllable(tmp_path):
+    group_of = {"rec_a1": "a", "rec_a2": "a", "rec_b1": "b", "rec_b2": "b"}
+    results = synthetic_results(list(group_of))
+    # group b never uses syllable 4, the highest included syllable
+    for name in ["rec_b1", "rec_b2"]:
+        syllables = results[name]["syllable"]
+        results[name]["syllable"] = np.where(syllables == 4, 3, syllables)
+    os.makedirs(tmp_path / "model")
+    kpms.save_hdf5(str(tmp_path / "model" / "results.h5"), results)
+    pd.DataFrame({"name": list(group_of), "group": list(group_of.values())}).to_csv(
+        tmp_path / "index.csv", index=False
+    )
+
+    trans_mats, usages, groups, syll_include = kpms.generate_transition_matrices(
+        str(tmp_path), "model"
+    )
+
+    assert groups == ["a", "b"]
+    np.testing.assert_array_equal(syll_include, np.arange(5))
+    for group, usage in zip(groups, usages):
+        sequences = [results[name]["syllable"] for name, g in group_of.items() if g == group]
+        np.testing.assert_array_equal(
+            usage, get_frequencies(sequences, num_states=5), err_msg=group
+        )
+    assert usages[1][4] == 0
+    assert not trans_mats[1][4].any() and not trans_mats[1][:, 4].any()

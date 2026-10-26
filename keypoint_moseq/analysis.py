@@ -1660,8 +1660,12 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize="bi
             ][:, syll_include]
         )
 
-        # Getting frequency information for node scaling
-        group_frequencies = get_frequencies(use_labels)[syll_include]
+        # Getting frequency information for node scaling. A group need not
+        # use every included syllable, so count up to the largest one.
+        num_states = max(syll_include, default=-1) + 1
+        group_frequencies = get_frequencies(use_labels, num_states=num_states)[
+            syll_include
+        ]
 
         frequencies.append(group_frequencies)
     return trans_mats, frequencies
