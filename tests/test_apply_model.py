@@ -95,3 +95,51 @@ def test_apply_model_to_training_recording_requires_overwrite(
     for name in training_results:
         if name != snapshot_recording:
             assert_tree_equal(saved[name], training_results[name], name)
+
+
+@pytest.fixture
+def sampler_calls(monkeypatch):
+    """Keyword arguments of each call to jax-moseq's keypoint-SLDS
+    resampling function, which still resamples."""
+    calls = []
+    resample_model = kpms.fitting.keypoint_slds.resample_model
+
+    def record(*args, **kwargs):
+        calls.append(kwargs)
+        return resample_model(*args, **kwargs)
+
+    monkeypatch.setattr(kpms.fitting.keypoint_slds, "resample_model", record)
+    return calls
+
+
+@pytest.mark.parametrize(
+    "ar_only, num_iters, iterations_run, warns",
+    [(True, 5, 1, True), (True, 1, 1, False), (False, 2, 2, False)],
+    ids=["ar_only", "ar_only_one_iteration", "full_model"],
+)
+def test_ar_only_apply_model_runs_one_iteration(
+    ar_only, num_iters, iterations_run, warns, one_recording, sampler_calls, recwarn
+):
+    """With `ar_only=True` each iteration draws the syllable labels
+    independently given the same pose trajectories, so one is enough."""
+    config, data, metadata, models = one_recording
+
+    kpms.apply_model(
+        models[False],
+        data,
+        metadata,
+        num_iters=num_iters,
+        ar_only=ar_only,
+        save_results=False,
+        **config,
+    )
+
+    messages = [" ".join(str(w.message).split()) for w in recwarn]
+    stopped = [m for m in messages if "Stopping after 1 iteration" in m]
+    assert len(sampler_calls) == iterations_run
+    if warns:
+        assert len(stopped) == 1
+        assert f"instead of running {num_iters}" in stopped[0]
+        assert "Set `num_iters=1` to silence this warning" in stopped[0]
+    else:
+        assert stopped == []

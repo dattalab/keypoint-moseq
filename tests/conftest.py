@@ -197,6 +197,29 @@ def tutorial_model(
 
 
 @pytest.fixture(scope="session")
+def one_recording(tutorial_outlier_removed, tutorial_pca, tutorial_sigmasq_loc):
+    """Config, data and metadata for one tutorial recording, and a
+    keypoint-SLDS and a location-aware model initialized on it, keyed by
+    `location_aware`."""
+    import keypoint_moseq as kpms
+
+    project_dir, coordinates, confidences = tutorial_outlier_removed
+    pca, _ = tutorial_pca
+    config = kpms.load_config(project_dir)
+    name = sorted(coordinates)[0]
+    data, metadata = kpms.format_data(
+        {name: coordinates[name]}, {name: confidences[name]}, **config
+    )
+    models = {
+        location_aware: kpms.init_model(
+            data, metadata=metadata, pca=pca, location_aware=location_aware, **config
+        )
+        for location_aware in [False, True]
+    }
+    return config, data, metadata, models
+
+
+@pytest.fixture(scope="session")
 def tutorial_arhmm(tutorial_outlier_removed, tutorial_formatted_data, tutorial_model):
     """Model, model name and iteration count from the modeling notebook's
     AR-HMM cell, run for 5 iterations instead of the notebook's 50."""

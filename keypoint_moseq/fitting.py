@@ -497,7 +497,9 @@ def apply_model(
         `results_path=None`.
 
     num_iters : int, default=500
-        Number of iterations to run the model.
+        Number of iterations to run the model. With `ar_only=True`, a single
+        iteration runs, since each one draws the syllable labels
+        independently given the same pose trajectories.
 
     ar_only : bool, default=False
         See :py:func:`keypoint_moseq.fitting.fit_model`.
@@ -570,6 +572,18 @@ def apply_model(
         resample_func = allo_keypoint_slds.resample_model
     else:
         resample_func = keypoint_slds.resample_model
+
+    if ar_only and num_iters > 1:
+        warnings.warn(
+            fill(
+                "With `ar_only=True`, `apply_model` only resamples syllable "
+                "labels, and each iteration draws them independently given the "
+                "same pose trajectories, so iterations after the first change "
+                "nothing. Stopping after 1 iteration instead of running "
+                f"{num_iters}. Set `num_iters=1` to silence this warning."
+            )
+        )
+        num_iters = 1
 
     with tqdm.trange(num_iters, desc="Applying model", ncols=72) as pbar:
         for iteration in pbar:

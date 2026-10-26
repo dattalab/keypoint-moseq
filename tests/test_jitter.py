@@ -39,26 +39,6 @@ def sampled_jitters(monkeypatch):
     return jitters
 
 
-@pytest.fixture(scope="module")
-def one_recording(tutorial_outlier_removed, tutorial_pca):
-    """Config, data, metadata and an initialized keypoint-SLDS and
-    location-aware model for one tutorial recording."""
-    project_dir, coordinates, confidences = tutorial_outlier_removed
-    pca, _ = tutorial_pca
-    config = kpms.load_config(project_dir)
-    name = sorted(coordinates)[0]
-    data, metadata = kpms.format_data(
-        {name: coordinates[name]}, {name: confidences[name]}, **config
-    )
-    models = {
-        location_aware: kpms.init_model(
-            data, metadata=metadata, pca=pca, location_aware=location_aware, **config
-        )
-        for location_aware in [False, True]
-    }
-    return config, data, metadata, models
-
-
 def fit(model, data, metadata, config, tmp_path, **kwargs):
     kpms.fit_model(model, data, metadata, str(tmp_path), num_iters=1, **kwargs)
 
