@@ -1991,14 +1991,14 @@ def plot_transition_graph_difference(
         sub_ax.axis("off")
     # add legend
     legend_elements = [
-        Line2D([0], [0], color="r", lw=2, label=f"Up-regulated transistion"),
-        Line2D([0], [0], color="b", lw=2, label=f"Down-regulated transistion"),
+        Line2D([0], [0], color="r", lw=2, label="Transition higher in second group"),
+        Line2D([0], [0], color="b", lw=2, label="Transition higher in first group"),
         Line2D(
             [0],
             [0],
             marker="o",
             color="w",
-            label=f"Up-regulated usage",
+            label="Usage higher in second group",
             markerfacecolor="w",
             markeredgecolor="r",
             markersize=10,
@@ -2008,7 +2008,7 @@ def plot_transition_graph_difference(
             [0],
             marker="o",
             color="w",
-            label=f"Down-regulated usage",
+            label="Usage higher in first group",
             markerfacecolor="w",
             markeredgecolor="b",
             markersize=10,
