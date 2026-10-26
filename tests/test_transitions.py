@@ -4,7 +4,6 @@ from itertools import combinations
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pytest
 from jax_moseq.utils import get_frequencies
 from matplotlib.colors import to_rgb
 
@@ -178,13 +177,7 @@ def test_analysis_figures(
     data_regression.check({"files": sorted(os.listdir(figures_dir(project_dir, model_name)))})
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ValueError,
-    reason="plot_transition_graph_difference makes a figure with zero rows "
-    "of axes when there is only one group, so no group pairs to plot",
-)
-def test_transition_graph_difference_with_one_group(analysis_project_without_groups):
+def test_transition_graph_difference_with_one_group(analysis_project_without_groups, capsys):
     project_dir, model_name = analysis_project_without_groups
     # Saving the group-setting widget without edits puts every recording in
     # the group "default".
@@ -195,9 +188,15 @@ def test_transition_graph_difference_with_one_group(analysis_project_without_gro
         project_dir, model_name, normalize="bigram", min_frequency=0.005
     )
     assert groups == ["default"]
-    try:
-        kpms.plot_transition_graph_difference(
-            project_dir, model_name, groups, trans_mats, usages, syll_include, layout="circular"
-        )
-    finally:
-        plt.close("all")
+    capsys.readouterr()
+    open_figures = plt.get_fignums()
+    kpms.plot_transition_graph_difference(
+        project_dir, model_name, groups, trans_mats, usages, syll_include, layout="circular"
+    )
+
+    printed = " ".join(capsys.readouterr().out.split())
+    assert "it needs at least two groups and got 1 (default)" in printed
+    assert plt.get_fignums() == open_figures
+    assert not os.path.exists(
+        os.path.join(figures_dir(project_dir, model_name), "transition_graphs_diff.png")
+    )

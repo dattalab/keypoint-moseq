@@ -1852,6 +1852,10 @@ def plot_transition_graph_difference(
 ):
     """Plot the difference of transition graph between groups.
 
+    Each pair of groups gets its own panel, so at least two groups are
+    needed. With fewer, the function prints a message and returns without
+    plotting.
+
     Parameters
     ----------
     groups : list
@@ -1868,6 +1872,19 @@ def plot_transition_graph_difference(
         whether to show just syllable indexes (False) or syllable indexes and
         names (True)
     """
+    if len(groups) < 2:
+        print(
+            fill(
+                "Skipping the transition graph difference plot, which compares "
+                "pairs of groups: it needs at least two groups and got "
+                f"{len(groups)} ({', '.join(groups) or 'none'}). To compare "
+                "groups, assign recordings to them with "
+                "`kpms.interactive_group_setting`, then rerun "
+                "`kpms.generate_transition_matrices`."
+            )
+        )
+        return
+
     if show_syllable_names:
         syll_names = get_syllable_names(project_dir, model_name, syll_include)
     else:
