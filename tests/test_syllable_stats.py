@@ -9,7 +9,7 @@ from scipy import stats
 
 import keypoint_moseq as kpms
 from keypoint_moseq.analysis import run_kruskal
-from analysis_utils import check_figure_files, syllable_names
+from analysis_utils import check_figure_files, plot_syll_stats, syllable_names
 
 # Arguments of the notebook's group comparison cell
 STAT, THRESH, CTRL_GROUP, EXP_GROUP = "frequency", 0.05, "a", "b"
@@ -19,10 +19,7 @@ TOLERANCE = dict(rtol=1e-10, atol=0)
 
 def marked_syllables(stats_df):
     """Significant syllables that `run_kruskal` reports for the notebook's
-    control and experimental groups. They are positions in the sorted
-    syllable order, which `plot_syll_stats_with_sem` looks up as syllable
-    indices; the two agree when the syllables are numbered from 0 without
-    gaps."""
+    control and experimental groups."""
     np.random.seed(0)
     _, _, sig_pairs = run_kruskal(stats_df, statistic=STAT, thresh=THRESH)
     if (CTRL_GROUP, EXP_GROUP) in sig_pairs:
@@ -131,13 +128,13 @@ def test_run_kruskal_structure(tutorial_stats_df, data_regression):
 
 
 def test_run_kruskal_statistics_per_syllable(tutorial_stats_df):
-    """Row i of the Kruskal-Wallis results is the test of the i-th syllable
-    in sorted order, comparing the groups' per-recording values, with zero
+    """The Kruskal-Wallis results, indexed by syllable, test each syllable by
+    comparing the groups' per-recording values, with zero
     for recordings that have no row for the syllable."""
     np.random.seed(0)
     kruskal, _, _ = run_kruskal(tutorial_stats_df, statistic=STAT, thresh=THRESH)
 
-    for i, syllable in enumerate(sorted(tutorial_stats_df["syllable"].unique())):
+    for syllable in sorted(tutorial_stats_df["syllable"].unique()):
         expected = stats.kruskal(
             *(
                 frequency_values(tutorial_stats_df, group, syllable)
@@ -145,7 +142,7 @@ def test_run_kruskal_statistics_per_syllable(tutorial_stats_df):
             )
         )
         np.testing.assert_allclose(
-            kruskal.loc[i, ["statistic", "pvalue"]].to_numpy(dtype=float),
+            kruskal.loc[syllable, ["statistic", "pvalue"]].to_numpy(dtype=float),
             [expected.statistic, expected.pvalue],
             rtol=1e-12,
             err_msg=f"syllable {syllable}",
@@ -242,3 +239,74 @@ def test_stats_plot_warns_when_every_recording_is_in_default(frozen_stats_df, tm
         plot_with_significance(frozen_stats_df.assign(group="default"), str(tmp_path))
 
     assert any("interactive_group_setting" in str(w.message) for w in record)
+
+
+def renumbered(syllable):
+    """Syllables 0, 1, 2, ... become 3, 5, 7, ...: the same order, but with
+    gaps and not starting at 0."""
+    return 2 * syllable + 3
+
+
+def renumber(stats_df):
+    stats_df = stats_df.copy()
+    stats_df["syllable"] = renumbered(stats_df["syllable"])
+    return stats_df
+
+
+def test_run_kruskal_reports_syllable_labels(frozen_stats_df, frozen_kruskal):
+    """Renumbering the syllables changes only the syllable labels in
+    `run_kruskal`'s outputs."""
+    kruskal, dunn, sig_pairs = frozen_kruskal
+    np.random.seed(0)
+    kruskal_new, dunn_new, sig_new = run_kruskal(
+        renumber(frozen_stats_df), statistic=STAT, thresh=THRESH
+    )
+
+    syllables = sorted(frozen_stats_df["syllable"].unique())
+    assert list(kruskal_new.index) == [renumbered(s) for s in syllables]
+    pd.testing.assert_frame_equal(
+        kruskal_new.reset_index(drop=True), kruskal.reset_index(drop=True)
+    )
+    assert list(dunn_new[("syllable", "")]) == [renumbered(s) for s in dunn[("syllable", "")]]
+    columns = ["group1", "group2", "value"]
+    pd.testing.assert_frame_equal(dunn_new[columns], dunn[columns])
+    assert sig_new.keys() == sig_pairs.keys()
+    assert any(len(syllables) for syllables in sig_pairs.values())
+    for pair, syllables in sig_pairs.items():
+        assert list(sig_new[pair]) == [renumbered(s) for s in syllables], pair
+
+
+def test_significance_stars_follow_renumbered_syllables(
+    frozen_syll_stats_plot, frozen_stats_df, tmp_path
+):
+    renumbered_plot = plot_syll_stats(
+        renumber(frozen_stats_df), str(tmp_path / "demo_project"), "frozen_model"
+    )
+
+    assert len(frozen_syll_stats_plot["stars"]) > 0
+    np.testing.assert_array_equal(renumbered_plot["stars"], frozen_syll_stats_plot["stars"])
+
+
+def test_run_kruskal_with_a_gap_in_the_syllables():
+    """Only syllable 5 differs between the groups, and syllables 2 to 4 are
+    absent."""
+    rng = np.random.default_rng(0)
+    rows = [
+        {
+            "group": group,
+            "name": f"{group}{i}",
+            "syllable": syllable,
+            STAT: 0.3 + rng.uniform(-0.02, 0.02) + (0.3 if group == "b" and syllable == 5 else 0),
+        }
+        for group in ("a", "b")
+        for i in range(8)
+        for syllable in (0, 1, 5)
+    ]
+
+    np.random.seed(0)
+    kruskal, dunn, sig_pairs = run_kruskal(pd.DataFrame(rows), statistic=STAT, thresh=THRESH)
+
+    assert list(kruskal.index) == [0, 1, 5]
+    assert list(kruskal["is_sig"]) == [False, False, True]
+    assert sorted(set(dunn[("syllable", "")])) == [0, 1, 5]
+    assert list(sig_pairs[("a", "b")]) == [5]

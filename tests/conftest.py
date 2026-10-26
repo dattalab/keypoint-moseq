@@ -15,6 +15,7 @@ from analysis_utils import (
     bigram_plot_summary,
     cohort_group,
     graph_plot_summary,
+    plot_syll_stats,
     read_syll_info,
     syll_stats_plot_summary,
     syllable_description,
@@ -565,34 +566,6 @@ def tutorial_syllables_labeled(tutorial_analysis_project, tutorial_moseq_df):
         "initial_syll_info": initial_syll_info,
         "saved_syll_info": read_syll_info(syll_info_path),
     }
-
-
-def plot_syll_stats(stats_df, project_dir, model_name):
-    """Figure summary and printed output of the analysis notebook's group
-    comparison cell run on `stats_df`. The global NumPy random state is
-    seeded because the Kruskal-Wallis check inside `run_kruskal` draws from
-    it."""
-    import keypoint_moseq as kpms
-
-    np.random.seed(0)
-    printed = io.StringIO()
-    with contextlib.redirect_stdout(printed):
-        fig, legend = kpms.plot_syll_stats_with_sem(
-            stats_df,
-            project_dir,
-            model_name,
-            plot_sig=True,
-            thresh=0.05,
-            stat="frequency",
-            order="stat",
-            ctrl_group="a",
-            exp_group="b",
-            figsize=(8, 4),
-            groups=stats_df["group"].unique(),
-        )
-    summary = syll_stats_plot_summary(fig, legend)
-    plt.close("all")
-    return {**summary, "printed": printed.getvalue()}
 
 
 @pytest.fixture(scope="session")

@@ -1003,16 +1003,14 @@ def run_kruskal(
     Returns
     -------
     df_k_real : pandas.DataFrame
-        DataFrame containing KW test results.
+        DataFrame containing KW test results, indexed by syllable.
     dunn_results_df : pandas.DataFrame
-        Dunn's z statistic for each syllable and pair of groups (a syllable
-        column, then `group1`, `group2` and `value`). Syllables are given as
-        positions among the sorted syllables of `stats_df`, which equal the
-        syllable labels only when those are 0, 1, 2, ...
+        Dunn's z statistic for each syllable and pair of groups, in the
+        columns `("syllable", "")`, `group1`, `group2` and `value`.
     significant_syllables : dict
         Maps each pair of groups to the syllables whose corrected KW p-value
-        and corrected Dunn p-value are both below `thresh`, as positions
-        among the sorted syllables of `stats_df`.
+        is at most `thresh` and whose corrected Dunn p-value is below
+        `thresh`.
     """
     rnd = np.random.RandomState(seed=seed)
     # get grouped mean data
@@ -1034,6 +1032,9 @@ def run_kruskal(
     # get all syllable usage data
     df_only_stats = grouped_data.drop(["group", "name"], axis=1)
     syllable_data = grouped_data.drop(["group", "name"], axis=1).values
+    # syllable label of each column of `syllable_data`; the tests below work
+    # by column position, and the results are labeled with these at the end
+    syllables = df_only_stats.columns.to_numpy()
 
     N_m, N_s = syllable_data.shape
     # Run KW and return H-stats
@@ -1087,7 +1088,7 @@ def run_kruskal(
     )
 
     # combine Dunn's test results into single DataFrame
-    df_z = pd.DataFrame(real_zs_within_group)
+    df_z = pd.DataFrame(real_zs_within_group, index=syllables)
     df_z.index = df_z.index.set_names("syllable")
     dunn_results_df = df_z.reset_index().melt(id_vars=[("syllable", "")])
     dunn_results_df.rename(
@@ -1097,10 +1098,11 @@ def run_kruskal(
     # Get intersecting significant syllables between
     intersect_sig_syllables = {}
     for pair in df_pair_corrected_pvalues.columns.tolist():
-        intersect_sig_syllables[pair] = np.where(
-            (df_pair_corrected_pvalues[pair] < thresh) & (df_k_real.is_sig)
-        )[0]
+        intersect_sig_syllables[pair] = syllables[
+            np.where((df_pair_corrected_pvalues[pair] < thresh) & (df_k_real.is_sig))[0]
+        ]
 
+    df_k_real.index = syllables
     return df_k_real, dunn_results_df, intersect_sig_syllables
 
 
