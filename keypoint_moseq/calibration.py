@@ -282,8 +282,8 @@ def _noise_calibration_widget(
         # Fit a line to the annotated data with confidence as the x-axis and error as the y-axis
         # scipy.stats.linregress might be a little more clear but this avoid another import
         slope, intercept = np.polyfit(confidences_annot, errors, 1)
-        error_estimator["slope"] = slope
-        error_estimator["intercept"] = intercept
+        error_estimator["slope"] = float(slope)
+        error_estimator["intercept"] = float(intercept)
 
         save_annotations(project_dir, annotations, video_frame_indexes)
         usr_msg.value = f"Annotations saved to {project_dir}/error_annotations.csv"

@@ -77,7 +77,8 @@ def test_noise_calibration_updates_a_held_config_to_match_config_yml(
     calibration_inputs, tutorial_pca
 ):
     """A config held in a variable, rather than reloaded with `config()`, is
-    passed to calibration and then to `init_model`."""
+    passed to calibration, then to `init_model`, and its `error_estimator` is
+    saved back to config.yml."""
     project_dir, coordinates, confidences = calibration_inputs
     config = kpms.load_config(project_dir)
     original_error_estimator = dict(config["error_estimator"])
@@ -96,6 +97,9 @@ def test_noise_calibration_updates_a_held_config_to_match_config_yml(
         {name: coordinates[name]}, {name: confidences[name]}, **config
     )
     kpms.init_model(data, metadata=metadata, pca=pca, **config)
+
+    kpms.update_config(project_dir, error_estimator=config["error_estimator"])
+    assert kpms.load_config(project_dir)["error_estimator"] == saved_error_estimator
 
 
 def test_noise_calibration_does_not_save_before_twenty_annotations(
