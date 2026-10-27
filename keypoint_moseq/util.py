@@ -1472,7 +1472,7 @@ def format_data(
     )
     Y = Y.astype(float)
 
-    conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
+    conf = batch(confidences, seg_length=seg_length, keys=keys)[0].astype(float)
     if np.min(conf) < 0:
         conf = np.maximum(conf, 0)
         warnings.warn(fill("Negative confidence values are not allowed and will be set to 0."))

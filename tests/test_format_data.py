@@ -48,3 +48,20 @@ def test_recording_lengths_from_metadata():
     # Consecutive segments overlap, so the mask counts some frames twice.
     assert data["mask"].sum() > sum(lengths.values())
     assert kpms.get_recording_lengths(metadata) == lengths
+
+
+def test_float32_keypoints_formatted_as_float64():
+    # DeepLabCut 3 and SLEAP .slp files load as float32, and jax-moseq's
+    # init_model rejects 32-bit arrays because keypoint-MoSeq runs JAX in
+    # 64-bit mode.
+    rng = np.random.default_rng(0)
+    coordinates = {"rec": rng.uniform(0, 50, (1000, 4, 2)).astype(np.float32)}
+    confidences = {"rec": rng.uniform(0, 1, (1000, 4)).astype(np.float32)}
+
+    data, _ = kpms.format_data(coordinates, confidences, seg_length=500)
+
+    assert {name: str(array.dtype) for name, array in data.items()} == {
+        "mask": "float64",
+        "Y": "float64",
+        "conf": "float64",
+    }
