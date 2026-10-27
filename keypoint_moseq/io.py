@@ -708,10 +708,13 @@ def extract_results(
 
     states = jax.device_get(model["states"])
 
-    # extract syllables; repeat first syllable an extra `nlags` times
+    # extract syllables, which start `nlags` frames into each segment; the
+    # previous segment covers those frames, and at the start of a recording
+    # the first syllable is repeated
     nlags = states["x"].shape[1] - states["z"].shape[1]
-    z = np.pad(states["z"], ((0, 0), (nlags, 0)), mode="edge")
-    syllables = unbatch(z, *metadata)
+    keys, bounds = metadata
+    syllables = unbatch(states["z"], keys, bounds + np.array([nlags, 0]))
+    syllables = {k: np.pad(v[nlags:], (nlags, 0), mode="edge") for k, v in syllables.items()}
 
     # extract latent state, centroid, and heading
     latent_state = unbatch(states["x"], *metadata)
