@@ -68,11 +68,9 @@ def runs(labels):
 
 def bigram_counts(labels, num_labels=100):
     """Counts of transitions between consecutive runs of `labels` below
-    `num_labels`. Like `get_transitions`, the sequence of runs starts at the
-    second run, so the transition out of the first run is not counted."""
+    `num_labels`."""
     run_labels, _ = runs(labels)
-    transitions = run_labels[1:]
-    pairs = np.stack([transitions[:-1], transitions[1:]], axis=1)
+    pairs = np.stack([run_labels[:-1], run_labels[1:]], axis=1)
     pairs = pairs[(pairs < num_labels).all(axis=1)]
     counts = np.zeros((num_labels, num_labels))
     np.add.at(counts, (pairs[:, 0], pairs[:, 1]), 1)

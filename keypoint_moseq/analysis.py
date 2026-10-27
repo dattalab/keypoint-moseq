@@ -1590,12 +1590,10 @@ def get_transition_matrix(
         init_matrix = []
 
         for v in labels:
-            # Get syllable transitions
-            transitions = get_transitions(v)[0]
+            # the syllable of each run, starting with the first
+            runs = np.concatenate([np.asarray(v)[:1], get_transitions(v)[0]])
 
-            trans_mat = n_gram_transition_matrix(
-                transitions, n=2, max_label=max_syllable
-            )
+            trans_mat = n_gram_transition_matrix(runs, n=2, max_label=max_syllable)
             init_matrix.append(trans_mat)
 
         init_matrix = np.sum(init_matrix, axis=0) + smoothing
@@ -1604,12 +1602,11 @@ def get_transition_matrix(
         # Compute a transition matrix for each recording label list
         all_mats = []
         for v in labels:
-            # Get syllable transitions
-            transitions = get_transitions(v)[0]
+            # the syllable of each run, starting with the first
+            runs = np.concatenate([np.asarray(v)[:1], get_transitions(v)[0]])
 
             trans_mat = (
-                n_gram_transition_matrix(transitions, n=2, max_label=max_syllable)
-                + smoothing
+                n_gram_transition_matrix(runs, n=2, max_label=max_syllable) + smoothing
             )
 
             # Normalize matrix

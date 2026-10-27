@@ -4,6 +4,7 @@ from itertools import combinations
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pytest
 from jax_moseq.utils import get_frequencies
 from matplotlib.colors import to_rgb
 
@@ -232,3 +233,16 @@ def test_transition_matrices_when_a_group_never_uses_an_included_syllable(tmp_pa
         )
     assert usages[1][4] == 0
     assert not trans_mats[1][4].any() and not trans_mats[1][:, 4].any()
+
+
+@pytest.mark.parametrize("combine", [False, True], ids=["per_recording", "combined"])
+def test_transition_matrix_counts_the_transition_out_of_the_first_run(combine):
+    sequences = [np.array([0, 0, 1, 1, 2, 2]), np.array([2, 1, 1])]
+
+    matrices = kpms.get_transition_matrix(
+        sequences, max_syllable=3, normalize=None, combine=combine
+    )
+
+    expected = np.zeros((3, 3))
+    expected[0, 1] = expected[1, 2] = expected[2, 1] = 1
+    np.testing.assert_array_equal(matrices if combine else sum(matrices), expected)
