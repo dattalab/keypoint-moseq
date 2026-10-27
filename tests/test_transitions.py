@@ -271,3 +271,17 @@ def test_transition_matrices_with_syllables_numbered_100_or_higher(tmp_path):
         np.testing.assert_allclose(
             trans_mat, (counts / counts.sum())[included], rtol=1e-12, err_msg=group
         )
+
+
+@pytest.mark.parametrize("combine", [False, True], ids=["per_recording", "combined"])
+@pytest.mark.parametrize("as_type", [list, pd.Series], ids=["lists", "series"])
+def test_transition_matrix_of_recordings_given_as_lists_or_series(as_type, combine):
+    sequences = [as_type([0, 0, 1, 1, 2, 2]), as_type([2, 1, 1])]
+
+    matrices = kpms.get_transition_matrix(
+        sequences, max_syllable=3, normalize=None, combine=combine
+    )
+
+    expected = np.zeros((3, 3))
+    expected[0, 1] = expected[1, 2] = expected[2, 1] = 1
+    np.testing.assert_array_equal(matrices if combine else sum(matrices), expected)
