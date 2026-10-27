@@ -245,9 +245,10 @@ def test_syllable_marginal_samples_are_timepoints_by_samples(one_recording):
     ids=["default_nlags", "last_segment_shorter_than_nlags"],
 )
 def test_syllable_marginals_where_segments_overlap(nlags, num_frames, monkeypatch):
-    """Each segment's marginals put all weight on the frame's own index, so
-    the most likely syllable of each frame shows whether a segment inferred it
-    or it was copied. Segments start every 40 frames, so 84 frames leave a
+    """Each segment's marginals put all weight on the frame's own index, and
+    its sampled syllable is that index, so the most likely and the sampled
+    syllable of each frame show whether a segment inferred it or it was
+    copied. Segments start every 40 frames, so 84 frames leave a
     last segment of 4. Model setup and resampling are replaced, so only the
     reassembly of segments runs."""
     _, mask, metadata = batch({"rec": np.zeros((num_frames, 1))}, seg_length=40)
@@ -268,12 +269,19 @@ def test_syllable_marginals_where_segments_overlap(nlags, num_frames, monkeypatc
         lambda *args, **kwargs: np.eye(num_states)[model["states"]["z"]],
     )
 
-    marginals = kpms.estimate_syllable_marginals(
-        model, {"mask": mask}, metadata, burn_in_iters=0, num_samples=1, steps_per_sample=1
+    marginals, samples = kpms.estimate_syllable_marginals(
+        model,
+        {"mask": mask},
+        metadata,
+        burn_in_iters=0,
+        num_samples=1,
+        steps_per_sample=1,
+        return_samples=True,
     )
 
     expected = np.concatenate([np.repeat(nlags, nlags), np.arange(nlags, num_frames)])
     np.testing.assert_array_equal(marginals["rec"].argmax(axis=1), expected)
+    np.testing.assert_array_equal(samples["rec"][:, 0], expected)
 
 
 @pytest.fixture(scope="module")
