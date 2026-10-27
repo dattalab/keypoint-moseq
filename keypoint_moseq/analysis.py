@@ -1642,6 +1642,10 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize="bi
     trans_mats = []
     frequencies = []
 
+    # Matrices span syllables 0-99, or up to the highest included syllable if
+    # that is higher. Bigram normalization counts every syllable in the span.
+    max_syllable = max(100, max(syll_include, default=-1) + 1)
+
     # Computing transition matrices for each given group
     for plt_group in group:
         # list of syll labels in recordings in the group
@@ -1652,7 +1656,9 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize="bi
         # Get recordings to include in trans_mat
         # subset only syllable included
         trans_mats.append(
-            get_transition_matrix(use_labels, normalize=normalize, combine=True)[
+            get_transition_matrix(
+                use_labels, max_syllable=max_syllable, normalize=normalize, combine=True
+            )[
                 syll_include, :
             ][:, syll_include]
         )

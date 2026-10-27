@@ -246,3 +246,28 @@ def test_transition_matrix_counts_the_transition_out_of_the_first_run(combine):
     expected = np.zeros((3, 3))
     expected[0, 1] = expected[1, 2] = expected[2, 1] = 1
     np.testing.assert_array_equal(matrices if combine else sum(matrices), expected)
+
+
+def test_transition_matrices_with_syllables_numbered_100_or_higher(tmp_path):
+    group_of = {"rec_a": "a", "rec_b": "b"}
+    results = synthetic_results(list(group_of))
+    for recording in results.values():
+        recording["syllable"] = np.where(recording["syllable"] == 4, 119, recording["syllable"])
+    os.makedirs(tmp_path / "model")
+    kpms.save_hdf5(str(tmp_path / "model" / "results.h5"), results)
+    pd.DataFrame({"name": list(group_of), "group": list(group_of.values())}).to_csv(
+        tmp_path / "index.csv", index=False
+    )
+
+    trans_mats, _, groups, syll_include = kpms.generate_transition_matrices(
+        str(tmp_path), "model"
+    )
+
+    np.testing.assert_array_equal(syll_include, [0, 1, 2, 3, 119])
+    included = np.ix_(syll_include, syll_include)
+    for group, trans_mat in zip(groups, trans_mats):
+        [name] = [name for name, g in group_of.items() if g == group]
+        counts = bigram_counts(results[name]["syllable"], num_labels=120)
+        np.testing.assert_allclose(
+            trans_mat, (counts / counts.sum())[included], rtol=1e-12, err_msg=group
+        )
