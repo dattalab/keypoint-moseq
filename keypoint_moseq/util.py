@@ -2422,7 +2422,7 @@ def plot_medoid_distance_outliers(
         Whether or not to overwrite outlier interpolation QA plots
 
     **kwargs
-        Additional keyword arguments (ignored), usually overflow from **config().
+        Additional keyword arguments (ignored), usually overflow from `**config()`.
 
     Returns
     -------
