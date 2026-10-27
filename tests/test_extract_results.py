@@ -76,7 +76,6 @@ def test_results_match_model_states(tutorial_results):
         )
 
 
-
 def test_syllables_where_segments_overlap():
     """The syllable inferred for each frame is the frame's index, so each
     frame's result shows whether a segment inferred it or it was copied."""
@@ -95,6 +94,7 @@ def test_syllables_where_segments_overlap():
 
     expected = np.concatenate([np.repeat(nlags, nlags), np.arange(nlags, num_frames)])
     np.testing.assert_array_equal(results["rec"]["syllable"], expected)
+
 
 def test_results_syllables_in_range(tutorial_results):
     model, _, results = tutorial_results
