@@ -1414,6 +1414,12 @@ def format_data(
         Metadata for the rows of `Y`, `conf` and `mask`, as a tuple with an
         array of recording names and an array of (start,end) times. See
         :py:func:`jax_moseq.utils.utils.batch` for details.
+
+    Raises
+    ------
+    ValueError
+        If `ar_hypparams` is passed (as it is with `**config()`) and a
+        recording has no more frames than `ar_hypparams["nlags"]`.
     """
     _check_keypoint_dicts(coordinates, confidences)
     if keys is None:
@@ -1436,6 +1442,20 @@ def format_data(
             f"does not match the number of labels in `bodyparts` "
             f"({len(bodyparts)})"
         )
+
+    # a recording no longer than nlags has no frame the model can label
+    nlags = (kwargs.get("ar_hypparams") or {}).get("nlags")
+    too_short = [key for key in keys if nlags is not None and len(coordinates[key]) <= nlags]
+    if too_short:
+        lines = [f"Recording '{key}' has {len(coordinates[key])} frames." for key in too_short]
+        lines.append(
+            fill(
+                f"The model uses the {nlags} frames before each frame (`nlags`) "
+                f"to assign it a syllable, so every recording needs at least "
+                f"{nlags + 1} frames. Remove or merge the shorter recordings."
+            )
+        )
+        raise ValueError("\n".join(lines))
 
     if any(["/" in key for key in keys]):
         warnings.warn(

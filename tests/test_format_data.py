@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import keypoint_moseq as kpms
 
@@ -65,3 +66,23 @@ def test_float32_keypoints_formatted_as_float64():
         "Y": "float64",
         "conf": "float64",
     }
+
+
+def test_format_data_rejects_recordings_no_longer_than_nlags():
+    """A recording of `nlags` frames or fewer has no frame the model can
+    assign a syllable to."""
+    rng = np.random.default_rng(0)
+    lengths = {"long": 100, "short_a": 5, "short_b": 6, "just_long_enough": 7}
+    coordinates = {name: rng.uniform(0, 50, (n, 4, 2)) for name, n in lengths.items()}
+
+    with pytest.raises(ValueError) as error:
+        kpms.format_data(coordinates, ar_hypparams={"nlags": 6})
+
+    message = " ".join(str(error.value).split())
+    assert "Recording 'short_a' has 5 frames." in message
+    assert "Recording 'short_b' has 6 frames." in message
+    assert "'long'" not in message and "'just_long_enough'" not in message
+    assert "every recording needs at least 7 frames" in message
+
+    del coordinates["short_a"], coordinates["short_b"]
+    kpms.format_data(coordinates, ar_hypparams={"nlags": 6})
