@@ -338,7 +338,10 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=None, sm
     Returns
     -------
     moseq_df : pandas.DataFrame
-        the dataframe that contains kinematic data for each frame
+        the dataframe that contains kinematic data for each frame. `onset`
+        marks the first frame of each syllable instance. A recording's first
+        frame is never an onset, since its syllable may have started before
+        the recording did.
 
     Raises
     ------
@@ -442,15 +445,13 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=None, sm
     moseq_df["group"] = np.concatenate(s_group)
     moseq_df["fps"] = fps
 
-    # compute syllable onset
-    change = np.diff(moseq_df["syllable"]) != 0
-    indices = np.where(change)[0]
-    indices += 1
-    indices = np.concatenate(([0], indices))
-
-    onset = np.full(moseq_df.shape[0], False)
-    onset[indices] = True
-    moseq_df["onset"] = onset
+    # compute syllable onset; a recording's first frame is not an onset, since
+    # its syllable may have started before the recording did
+    labels = moseq_df["syllable"].to_numpy()
+    names = moseq_df["name"].to_numpy()
+    moseq_df["onset"] = np.concatenate(
+        [[False], (labels[1:] != labels[:-1]) & (names[1:] == names[:-1])]
+    )
     return moseq_df
 
 
@@ -479,7 +480,11 @@ def compute_stats_df(
     Returns
     -------
     stats_df : pandas.DataFrame
-        the summary statistics dataframe for syllable frequencies and kinematic values
+        the summary statistics dataframe for syllable frequencies and kinematic
+        values. `duration` is the mean length in seconds of the syllable's
+        instances, leaving out each recording's first and last instance, which
+        the start and end of the recording cut short. It is NaN when those are
+        the syllable's only instances.
 
     Raises
     ------
@@ -563,18 +568,31 @@ def compute_stats_df(
     features.columns = ["_".join(col).strip() for col in features.columns.values]
     features.reset_index(inplace=True)
 
-    # get durations
-    trials = filtered_df["onset"].cumsum()
-    trials.name = "trials"
-    durations = filtered_df.groupby(groupby + ["syllable"] + [trials])["onset"].count()
+    # get durations, leaving out each recording's first and last instance,
+    # which the start and end of the recording cut short
+    durations = []
+    for name, recording_syllables in syllables.items():
+        onsets = np.flatnonzero(np.diff(recording_syllables)) + 1
+        durations.append(
+            pd.DataFrame(
+                {
+                    "name": name,
+                    "group": group_of[name],
+                    "syllable": recording_syllables[onsets[:-1]],
+                    "frames": np.diff(onsets),
+                }
+            )
+        )
+    durations = pd.concat(durations)
+    durations = durations[durations["syllable"].isin(syll_include)]
     # average duration in seconds
-    durations = durations.groupby(groupby + ["syllable"]).mean() / fps
+    durations = durations.groupby(groupby + ["syllable"])["frames"].mean() / fps
     durations.name = "duration"
-    # only keep the columns we need
-    durations = durations.fillna(0).reset_index()[groupby + ["syllable", "duration"]]
+    durations = durations.reset_index()
 
     stats_df = pd.merge(features, frequency_df, on=groupby + ["syllable"])
-    stats_df = pd.merge(stats_df, durations, on=groupby + ["syllable"])
+    # syllables with no complete instance get a NaN duration
+    stats_df = pd.merge(stats_df, durations, on=groupby + ["syllable"], how="left")
     return stats_df
 
 

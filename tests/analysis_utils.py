@@ -66,6 +66,17 @@ def runs(labels):
     return labels[starts], lengths
 
 
+def mean_complete_run_lengths(labels, syllables):
+    """Mean length of each syllable's runs in `labels`, leaving out the first
+    and last run, which the edges of the recording cut short. NaN for a
+    syllable with no other run."""
+    run_labels, run_lengths = runs(labels)
+    run_labels, run_lengths = run_labels[1:-1], run_lengths[1:-1]
+    return np.array(
+        [run_lengths[run_labels == s].mean() if (run_labels == s).any() else np.nan for s in syllables]
+    )
+
+
 def bigram_counts(labels, num_labels=100):
     """Counts of transitions between consecutive runs of `labels` below
     `num_labels`."""
