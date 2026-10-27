@@ -217,3 +217,21 @@ def test_fit_model_rejects_a_checkpoint_saved_from_other_data(
     assert f"delete {model_dir} and run again" in message
     assert "use apply_model instead" in message
     assert snapshot_iterations(checkpoint_path) == [0, 1]
+
+
+def test_syllable_marginal_samples_are_timepoints_by_samples(one_recording):
+    config, data, metadata, models = one_recording
+
+    marginals, samples = kpms.estimate_syllable_marginals(
+        models[False],
+        data,
+        metadata,
+        burn_in_iters=1,
+        num_samples=2,
+        steps_per_sample=1,
+        return_samples=True,
+        **config,
+    )
+
+    for name, recording_marginals in marginals.items():
+        assert samples[name].shape == (len(recording_marginals), 2), name

@@ -783,7 +783,7 @@ def estimate_syllable_marginals(
 
     samples : dict
         Sampled syllable sequences in the form of a dictionary mapping
-        recording names to arrays of shape ``(num_samples, num_timepoints)``.
+        recording names to arrays of shape ``(num_timepoints, num_samples)``.
         Only returned if `return_samples=True`.
     """
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
