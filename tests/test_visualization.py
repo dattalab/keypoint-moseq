@@ -3,6 +3,7 @@ import struct
 
 import imageio
 import imageio_ffmpeg
+import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
 import pytest
@@ -408,6 +409,29 @@ def test_trajectory_plot_mp4s_span_the_syllable_window(tmp_path, save_gifs):
     for name in mp4s:
         _, seconds = imageio_ffmpeg.count_frames_and_secs(str(tmp_path / name))
         assert seconds == pytest.approx(window, abs=0.05), name
+
+
+@pytest.mark.parametrize("num_kappas", [1, 3], ids=["one_kappa", "three_kappas"])
+def test_kappa_scan_plot(tmp_path, num_kappas):
+    kappas = [10.0**k for k in range(4, 4 + num_kappas)]
+    mask = np.ones((1, 12))
+    for i, kappa in enumerate(kappas):
+        # syllables last 2, 3, 4 frames for successive kappas
+        z = (np.arange(12) // (i + 2))[None]
+        os.makedirs(tmp_path / f"scan-{kappa}")
+        kpms.save_hdf5(
+            str(tmp_path / f"scan-{kappa}" / "checkpoint.h5"),
+            {
+                "data": {"mask": mask},
+                "model_snapshots": {"0": {"states": {"z": z}}, "10": {"states": {"z": z}}},
+            },
+        )
+
+    fig, final_median_durations = kpms.plot_kappa_scan(kappas, str(tmp_path), "scan")
+
+    assert list(final_median_durations) == [2, 3, 4][:num_kappas]
+    assert len(fig.axes[0].lines) == num_kappas
+    plt.close(fig)
 
 
 @pytest.mark.parametrize("copy", [False, True])

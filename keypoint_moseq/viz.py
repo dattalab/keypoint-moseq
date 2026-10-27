@@ -482,7 +482,7 @@ def plot_kappa_scan(kappas, project_dir, prefix, figsize=(8, 2.5)):
 
     fig, axs = plt.subplots(1, 2)
     for i, (kappa, history) in enumerate(zip(kappas, median_dur_histories)):
-        color = plt.cm.viridis(i / (len(kappas) - 1))
+        color = plt.cm.viridis(i / max(len(kappas) - 1, 1))
         label = "{:.1e}".format(kappa)
         axs[0].plot(*zip(*history.items()), color=color, label=label)
     axs[0].legend(loc="center left", bbox_to_anchor=(1, 0.5))
