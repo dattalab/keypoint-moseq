@@ -5,6 +5,8 @@ import h5py
 import numpy as np
 import pytest
 
+from jax_moseq.utils import batch
+
 import keypoint_moseq as kpms
 from model_utils import assert_tree_equal, model_structure, plain
 
@@ -235,3 +237,40 @@ def test_syllable_marginal_samples_are_timepoints_by_samples(one_recording):
 
     for name, recording_marginals in marginals.items():
         assert samples[name].shape == (len(recording_marginals), 2), name
+
+
+@pytest.mark.parametrize(
+    "nlags, num_frames",
+    [(3, 100), (5, 84)],
+    ids=["default_nlags", "last_segment_shorter_than_nlags"],
+)
+def test_syllable_marginals_where_segments_overlap(nlags, num_frames, monkeypatch):
+    """Each segment's marginals put all weight on the frame's own index, so
+    the most likely syllable of each frame shows whether a segment inferred it
+    or it was copied. Segments start every 40 frames, so 84 frames leave a
+    last segment of 4. Model setup and resampling are replaced, so only the
+    reassembly of segments runs."""
+    _, mask, metadata = batch({"rec": np.zeros((num_frames, 1))}, seg_length=40)
+    _, bounds = metadata
+    frame_indexes = bounds[:, :1] + np.arange(mask.shape[1])
+    num_states = frame_indexes.max() + 1
+    model = {
+        "seed": 0,
+        "params": {"Ab": np.zeros((num_states, 2, 2 * nlags + 1))},
+        "hypparams": {"trans_hypparams": {"num_states": num_states}},
+        "states": {"z": frame_indexes[:, nlags:], "x": np.zeros((*mask.shape, 2))},
+    }
+    monkeypatch.setattr(kpms.fitting, "init_model", lambda **kwargs: model)
+    monkeypatch.setattr(kpms.fitting, "_wrapped_resample", lambda *args, **kwargs: model)
+    monkeypatch.setattr(
+        kpms.fitting,
+        "stateseq_marginals",
+        lambda *args, **kwargs: np.eye(num_states)[model["states"]["z"]],
+    )
+
+    marginals = kpms.estimate_syllable_marginals(
+        model, {"mask": mask}, metadata, burn_in_iters=0, num_samples=1, steps_per_sample=1
+    )
+
+    expected = np.concatenate([np.repeat(nlags, nlags), np.arange(nlags, num_frames)])
+    np.testing.assert_array_equal(marginals["rec"].argmax(axis=1), expected)

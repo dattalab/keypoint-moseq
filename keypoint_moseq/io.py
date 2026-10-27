@@ -713,7 +713,9 @@ def extract_results(
     # the first syllable is repeated
     nlags = states["x"].shape[1] - states["z"].shape[1]
     keys, bounds = metadata
-    syllables = unbatch(states["z"], keys, bounds + np.array([nlags, 0]))
+    # a segment no longer than nlags has no syllables of its own
+    starts = np.minimum(bounds[:, 0] + nlags, bounds[:, 1])
+    syllables = unbatch(states["z"], keys, np.stack([starts, bounds[:, 1]], axis=1))
     syllables = {k: np.pad(v[nlags:], (nlags, 0), mode="edge") for k, v in syllables.items()}
 
     # extract latent state, centroid, and heading

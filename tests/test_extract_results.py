@@ -76,10 +76,15 @@ def test_results_match_model_states(tutorial_results):
         )
 
 
-def test_syllables_where_segments_overlap():
+@pytest.mark.parametrize(
+    "nlags, num_frames",
+    [(3, 100), (5, 84)],
+    ids=["default_nlags", "last_segment_shorter_than_nlags"],
+)
+def test_syllables_where_segments_overlap(nlags, num_frames):
     """The syllable inferred for each frame is the frame's index, so each
-    frame's result shows whether a segment inferred it or it was copied."""
-    nlags, num_frames = 3, 100
+    frame's result shows whether a segment inferred it or it was copied.
+    Segments start every 40 frames, so 84 frames leave a last segment of 4."""
     _, mask, metadata = batch({"rec": np.zeros((num_frames, 1))}, seg_length=40)
     _, bounds = metadata
     frame_indexes = bounds[:, :1] + np.arange(mask.shape[1])

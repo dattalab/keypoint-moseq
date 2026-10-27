@@ -841,7 +841,9 @@ def estimate_syllable_marginals(
 
     nlags = get_nlags(model["params"]["Ab"])
     keys, bounds = metadata
-    bounds = bounds + np.array([nlags, 0])
+    # a segment no longer than nlags has no syllables of its own
+    starts = np.minimum(bounds[:, 0] + nlags, bounds[:, 1])
+    bounds = np.stack([starts, bounds[:, 1]], axis=1)
     marginal_estimates = unbatch(marginal_estimates / num_samples, keys, bounds)
     marginal_estimates = {
         k: np.pad(v[nlags:], ((nlags, 0), (0, 0)), mode="edge")
