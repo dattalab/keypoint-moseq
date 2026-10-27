@@ -179,7 +179,7 @@ def save_annotations(project_dir, annotations, video_frame_indexes):
     open(path, "w").write("\n".join(output))
 
 
-def save_params(project_dir, estimator):
+def save_params(project_dir, slope, intercept, conf_threshold):
     """Save config parameters learned via calibration.
 
     Parameters
@@ -187,17 +187,20 @@ def save_params(project_dir, estimator):
     project_dir: str
         Save parameters to `{project_dir}/config.yml`
 
-    estimator: dict
-        Dictionary containing calibration parameters with keys:
-        - conf_threshold: float, confidence threshold for outlier detection
-        - slope: float, slope of error vs confidence regression line
-        - intercept: float, intercept of error vs confidence regression line
+    slope: float
+        Slope of error vs confidence regression line
+
+    intercept: float
+        Intercept of error vs confidence regression line
+
+    conf_threshold: float
+        Confidence threshold for outlier detection
     """
     update_config(
         project_dir,
-        conf_threshold=float(estimator["conf_threshold"]),
-        slope=float(estimator["slope"]),
-        intercept=float(estimator["intercept"]),
+        conf_threshold=float(conf_threshold),
+        slope=float(slope),
+        intercept=float(intercept),
     )
 
 
@@ -281,11 +284,10 @@ def _noise_calibration_widget(
         slope, intercept = np.polyfit(confidences_annot, errors, 1)
         error_estimator["slope"] = slope
         error_estimator["intercept"] = intercept
-        error_estimator["conf_threshold"] = conf_threshold
 
         save_annotations(project_dir, annotations, video_frame_indexes)
         usr_msg.value = f"Annotations saved to {project_dir}/error_annotations.csv"
-        save_params(project_dir, error_estimator)
+        save_params(project_dir, slope, intercept, conf_threshold)
 
     def onclick(event):
         if event.xdata is not None and event.ydata is not None:

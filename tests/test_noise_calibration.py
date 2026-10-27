@@ -73,6 +73,31 @@ def test_noise_calibration(calibration_inputs, dataframe_regression, num_regress
     )
 
 
+def test_noise_calibration_updates_a_held_config_to_match_config_yml(
+    calibration_inputs, tutorial_pca
+):
+    """A config held in a variable, rather than reloaded with `config()`, is
+    passed to calibration and then to `init_model`."""
+    project_dir, coordinates, confidences = calibration_inputs
+    config = kpms.load_config(project_dir)
+    original_error_estimator = dict(config["error_estimator"])
+    pca, _ = tutorial_pca
+
+    np.random.seed(0)
+    widget = kpms.noise_calibration(project_dir, coordinates, confidences, **config)
+    annotate(widget, NUM_ANNOTATIONS)
+
+    saved_error_estimator = kpms.load_config(project_dir)["error_estimator"]
+    assert saved_error_estimator != original_error_estimator
+    assert config["error_estimator"] == saved_error_estimator
+
+    name = sorted(coordinates)[0]
+    data, metadata = kpms.format_data(
+        {name: coordinates[name]}, {name: confidences[name]}, **config
+    )
+    kpms.init_model(data, metadata=metadata, pca=pca, **config)
+
+
 def test_noise_calibration_does_not_save_before_twenty_annotations(
     calibration_inputs,
 ):
