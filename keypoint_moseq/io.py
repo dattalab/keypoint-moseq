@@ -259,6 +259,9 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
     with open(config_path, "r") as stream:
         config = yaml.safe_load(stream)
 
+    if not "skeleton" in config or config["skeleton"] is None:
+        config["skeleton"] = []
+
     if check_if_valid:
         check_config_validity(config)
 
@@ -269,9 +272,6 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
         config["posterior_idxs"] = jnp.array(
             [config["use_bodyparts"].index(bp) for bp in config["posterior_bodyparts"]]
         )
-
-    if not "skeleton" in config or config["skeleton"] is None:
-        config["skeleton"] = []
 
     return config
 

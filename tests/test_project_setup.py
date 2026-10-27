@@ -1,6 +1,7 @@
 import os
 
 import pytest
+import yaml
 
 import keypoint_moseq as kpms
 
@@ -138,3 +139,22 @@ def test_rerunning_setup_keeps_existing_config(
     kpms.setup_project(project_dir, fps=120, bodyparts=["a", "b"])
 
     assert plain_config(config()) == original
+
+
+@pytest.mark.parametrize("skeleton", ["empty", "removed"])
+def test_config_without_a_skeleton(project_dir, tutorial_config_edits, skeleton, capsys):
+    """`skeleton:` left empty in config.yml (YAML null), or the line removed,
+    loads as a skeleton with no edges."""
+    setup_tutorial_project(project_dir, tutorial_config_edits)
+    path = os.path.join(project_dir, "config.yml")
+    with open(path) as f:
+        edited = yaml.safe_load(f)
+    if skeleton == "empty":
+        edited["skeleton"] = None
+    else:
+        del edited["skeleton"]
+    with open(path, "w") as f:
+        yaml.safe_dump(edited, f)
+
+    assert kpms.load_config(project_dir)["skeleton"] == []
+    assert "ACTION REQUIRED" not in capsys.readouterr().out
