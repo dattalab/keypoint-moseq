@@ -622,8 +622,9 @@ def apply_model(
         Whether to return the model after fitting.
 
     location_aware : bool, default=False
-        If True, the model will be fit using the location-aware version of the
-        keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
+        If True, apply the location-aware version of the keypoint-SLDS model
+        (`jax_moseq.models.allo_keypoint_slds`). Set this to the value the
+        model was fit with.
 
     overwrite : bool, default=False
         If True, overwrite existing results for recordings that are
@@ -769,8 +770,10 @@ def estimate_syllable_marginals(
         CPU-bound. Set to 'force' to skip this check.
 
     location_aware : bool, default=False
-        If True, the model will be fit using the location-aware version of the
-        keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
+        If True, use the location-aware version of the keypoint-SLDS model
+        (`jax_moseq.models.allo_keypoint_slds`), whose marginals include
+        heading and centroid dynamics. Set this to the value the model was
+        fit with.
 
     jitter : float, default=0.001
         See :py:func:`keypoint_moseq.fitting.fit_model`.
