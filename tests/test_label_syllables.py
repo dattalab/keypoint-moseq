@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pandas as pd
 import panel as pn
 
 import keypoint_moseq as kpms
@@ -88,3 +89,22 @@ def test_label_syllables_saves_stripped_labels(
     ]
     assert (saved.loc[without_movies, ["label", "short_description"]] == "").all(axis=None)
     assert saved["movie_path"].sort_index().equals(initial["movie_path"])
+
+
+def test_syllable_names_without_a_syll_info_row(tmp_path):
+    """syll_info.csv gets a row for each syllable in results.h5 when it is
+    created, so a syllable first used later (for example by recordings added
+    with `apply_model`) has no row."""
+    os.makedirs(tmp_path / "model")
+    pd.DataFrame(
+        {
+            "syllable": [0, 1, 2],
+            "label": ["", "rear", ""],
+            "short_description": ["", "", ""],
+            "movie_path": ["", "", ""],
+        }
+    ).to_csv(tmp_path / "model" / "syll_info.csv", index=False)
+
+    names = kpms.get_syllable_names(str(tmp_path), "model", [0, 1, 5])
+
+    assert names == ["0", "1 (rear)", "5"]
