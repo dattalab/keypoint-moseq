@@ -5,7 +5,7 @@ from jax_moseq.utils import get_frequencies
 
 import keypoint_moseq as kpms
 from keypoint_moseq.util import filter_angle
-from analysis_utils import FPS, cohort_group, runs, synthetic_results
+from analysis_utils import FPS, cohort_group, mean_complete_run_lengths, synthetic_results
 
 MIN_FREQUENCY = 0.005  # `min_frequency` of the notebook's stats_df cell
 KINEMATICS = ["heading", "angular_velocity", "velocity_px_s"]
@@ -82,21 +82,101 @@ def test_moseq_df_kinematics(tutorial_moseq_df, tutorial_analysis_project):
         np.testing.assert_array_equal(rows["heading"], heading, err_msg=name)
         np.testing.assert_allclose(
             rows["angular_velocity"],
-            np.concatenate([[0], np.diff(smoothed_heading) * FPS]),
+            np.concatenate([[0], np.angle(np.exp(1j * np.diff(smoothed_heading))) * FPS]),
             rtol=1e-12,
             err_msg=name,
         )
 
 
-def test_moseq_df_onsets(tutorial_moseq_df):
-    syllables = tutorial_moseq_df["syllable"].to_numpy()
-
-    # Onsets are found across the concatenated recordings, so a recording's
-    # first frame is not an onset when the previous recording ends in the
-    # same syllable.
-    np.testing.assert_array_equal(
-        tutorial_moseq_df["onset"], np.concatenate([[True], syllables[1:] != syllables[:-1]])
+def test_angular_velocity_where_the_heading_wraps(tmp_path):
+    """A heading turning at a constant 0.1 rad per frame wraps from π to -π
+    about every 63 frames."""
+    results = synthetic_results(["rec_a"])
+    results["rec_a"]["heading"] = np.angle(np.exp(1j * 0.1 * np.arange(300)))
+    moseq_df = kpms.compute_moseq_df(
+        str(tmp_path), "model", results_dict=results, fps=FPS, smooth_heading=False
     )
+
+    # leaves out the frames near each end, where smoothing pads the heading
+    np.testing.assert_allclose(moseq_df["angular_velocity"][20:-20], 0.1 * FPS)
+
+
+def test_moseq_df_onsets(tutorial_moseq_df, tutorial_analysis_project):
+    project_dir, model_name = tutorial_analysis_project
+    results = kpms.load_results(project_dir, model_name)
+
+    for name, rows in recording_rows(tutorial_moseq_df, results).items():
+        syllables = results[name]["syllable"]
+        np.testing.assert_array_equal(
+            rows["onset"], np.concatenate([[False], syllables[1:] != syllables[:-1]]), err_msg=name
+        )
+
+
+def edge_runs_results(n_frames=18):
+    """Two recordings whose first and last runs are the only runs of
+    syllables 0 and 7. rec_b starts with the syllable rec_a ends with."""
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=n_frames)
+    results["rec_a"]["syllable"] = np.repeat([0, 1, 2, 7], [5, 3, 4, 6])
+    results["rec_b"]["syllable"] = np.repeat([7, 1, 2, 0], [6, 5, 2, 5])
+    return results
+
+
+def test_a_recordings_first_frame_is_not_an_onset(tmp_path):
+    results = edge_runs_results()
+    moseq_df = kpms.compute_moseq_df(str(tmp_path), "model", results_dict=results, fps=FPS)
+
+    for name, rows in recording_rows(moseq_df, results).items():
+        np.testing.assert_array_equal(
+            rows["frame_index"][rows["onset"]],
+            np.flatnonzero(np.diff(results[name]["syllable"])) + 1,
+            err_msg=name,
+        )
+
+
+@pytest.mark.parametrize(
+    "groupby, durations",
+    [
+        (
+            ["group", "name"],
+            {
+                ("rec_a", 0): np.nan,
+                ("rec_a", 1): 3,
+                ("rec_a", 2): 4,
+                ("rec_a", 7): np.nan,
+                ("rec_b", 0): np.nan,
+                ("rec_b", 1): 5,
+                ("rec_b", 2): 2,
+                ("rec_b", 7): np.nan,
+            },
+        ),
+        (["group"], {0: np.nan, 1: 4, 2: 3, 7: np.nan}),
+    ],
+)
+def test_stats_df_durations_leave_out_each_recordings_first_and_last_runs(
+    tmp_path, groupby, durations
+):
+    """The first and last runs of a recording are cut short by its edges, so
+    syllables 0 and 7 have no duration. Their frequencies still count them."""
+    results = edge_runs_results()
+    moseq_df = kpms.compute_moseq_df(str(tmp_path), "model", results_dict=results, fps=FPS)
+
+    stats_df = kpms.compute_stats_df(moseq_df, min_frequency=0.0, groupby=groupby)
+
+    # stats_df keeps a row per recording even when grouped by group only
+    keys = ["name", "syllable"] if "name" in groupby else ["syllable"]
+    duration = stats_df.drop_duplicates(keys).set_index(keys)["duration"]
+    assert sorted(duration.index) == sorted(durations)
+    np.testing.assert_allclose(
+        duration.loc[list(durations)],
+        np.array(list(durations.values()), dtype=float) / FPS,
+        rtol=1e-12,
+    )
+    if "name" in groupby:
+        frequency = stats_df.set_index(keys)["frequency"]
+        for name, syllable in durations:
+            assert frequency.loc[(name, syllable)] == pytest.approx(
+                get_frequencies(results[name]["syllable"])[syllable]
+            )
 
 
 def test_moseq_df_without_index_uses_default_group(analysis_project_without_groups):
@@ -164,8 +244,7 @@ def test_stats_df_frequency_and_duration(tutorial_stats_df, tutorial_analysis_pr
 
     for name, rows in recording_rows(tutorial_stats_df, results).items():
         syllables = rows["syllable"].to_numpy()
-        run_syllables, run_lengths = runs(results[name]["syllable"])
-        mean_run_lengths = [run_lengths[run_syllables == s].mean() for s in syllables]
+        mean_run_lengths = mean_complete_run_lengths(results[name]["syllable"], syllables)
 
         np.testing.assert_array_equal(
             rows["frequency"],
@@ -173,7 +252,7 @@ def test_stats_df_frequency_and_duration(tutorial_stats_df, tutorial_analysis_pr
             err_msg=name,
         )
         np.testing.assert_allclose(
-            rows["duration"], np.array(mean_run_lengths) / FPS, rtol=1e-12, err_msg=name
+            rows["duration"], mean_run_lengths / FPS, rtol=1e-12, err_msg=name
         )
 
 

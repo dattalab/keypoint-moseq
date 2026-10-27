@@ -14,6 +14,7 @@ from analysis_utils import (
     check_figure_files,
     graph_edge_weights,
     syllable_names,
+    synthetic_results,
 )
 
 MIN_FREQUENCY = 0.005  # `min_frequency` of the notebook's transition matrix cell
@@ -163,6 +164,9 @@ def test_transition_graph_difference_plot(
             colors=sign_color,
         )
     data_regression.check({"titles": plot["titles"], "legend": plot["legend"]})
+    # blue where the first group of the panel title is higher, as drawn above
+    for label, color in zip(plot["legend"], plot["legend_colors"]):
+        assert color == to_rgb(sign_color(1 if "first group" in label else -1)), label
 
 
 def test_analysis_figures(
@@ -178,13 +182,7 @@ def test_analysis_figures(
     data_regression.check({"files": sorted(os.listdir(figures_dir(project_dir, model_name)))})
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ValueError,
-    reason="plot_transition_graph_difference makes a figure with zero rows "
-    "of axes when there is only one group, so no group pairs to plot",
-)
-def test_transition_graph_difference_with_one_group(analysis_project_without_groups):
+def test_transition_graph_difference_with_one_group(analysis_project_without_groups, capsys):
     project_dir, model_name = analysis_project_without_groups
     # Saving the group-setting widget without edits puts every recording in
     # the group "default".
@@ -195,9 +193,95 @@ def test_transition_graph_difference_with_one_group(analysis_project_without_gro
         project_dir, model_name, normalize="bigram", min_frequency=0.005
     )
     assert groups == ["default"]
-    try:
-        kpms.plot_transition_graph_difference(
-            project_dir, model_name, groups, trans_mats, usages, syll_include, layout="circular"
+    capsys.readouterr()
+    open_figures = plt.get_fignums()
+    kpms.plot_transition_graph_difference(
+        project_dir, model_name, groups, trans_mats, usages, syll_include, layout="circular"
+    )
+
+    printed = " ".join(capsys.readouterr().out.split())
+    assert "it needs at least two groups and got 1 (default)" in printed
+    assert plt.get_fignums() == open_figures
+    assert not os.path.exists(
+        os.path.join(figures_dir(project_dir, model_name), "transition_graphs_diff.png")
+    )
+
+
+def test_transition_matrices_when_a_group_never_uses_an_included_syllable(tmp_path):
+    group_of = {"rec_a1": "a", "rec_a2": "a", "rec_b1": "b", "rec_b2": "b"}
+    results = synthetic_results(list(group_of))
+    # group b never uses syllable 4, the highest included syllable
+    for name in ["rec_b1", "rec_b2"]:
+        syllables = results[name]["syllable"]
+        results[name]["syllable"] = np.where(syllables == 4, 3, syllables)
+    os.makedirs(tmp_path / "model")
+    kpms.save_hdf5(str(tmp_path / "model" / "results.h5"), results)
+    pd.DataFrame({"name": list(group_of), "group": list(group_of.values())}).to_csv(
+        tmp_path / "index.csv", index=False
+    )
+
+    trans_mats, usages, groups, syll_include = kpms.generate_transition_matrices(
+        str(tmp_path), "model"
+    )
+
+    assert groups == ["a", "b"]
+    np.testing.assert_array_equal(syll_include, np.arange(5))
+    for group, usage in zip(groups, usages):
+        sequences = [results[name]["syllable"] for name, g in group_of.items() if g == group]
+        np.testing.assert_array_equal(
+            usage, get_frequencies(sequences, num_states=5), err_msg=group
         )
-    finally:
-        plt.close("all")
+    assert usages[1][4] == 0
+    assert not trans_mats[1][4].any() and not trans_mats[1][:, 4].any()
+
+
+@pytest.mark.parametrize("combine", [False, True], ids=["per_recording", "combined"])
+def test_transition_matrix_counts_the_transition_out_of_the_first_run(combine):
+    sequences = [np.array([0, 0, 1, 1, 2, 2]), np.array([2, 1, 1])]
+
+    matrices = kpms.get_transition_matrix(
+        sequences, max_syllable=3, normalize=None, combine=combine
+    )
+
+    expected = np.zeros((3, 3))
+    expected[0, 1] = expected[1, 2] = expected[2, 1] = 1
+    np.testing.assert_array_equal(matrices if combine else sum(matrices), expected)
+
+
+def test_transition_matrices_with_syllables_numbered_100_or_higher(tmp_path):
+    group_of = {"rec_a": "a", "rec_b": "b"}
+    results = synthetic_results(list(group_of))
+    for recording in results.values():
+        recording["syllable"] = np.where(recording["syllable"] == 4, 119, recording["syllable"])
+    os.makedirs(tmp_path / "model")
+    kpms.save_hdf5(str(tmp_path / "model" / "results.h5"), results)
+    pd.DataFrame({"name": list(group_of), "group": list(group_of.values())}).to_csv(
+        tmp_path / "index.csv", index=False
+    )
+
+    trans_mats, _, groups, syll_include = kpms.generate_transition_matrices(
+        str(tmp_path), "model"
+    )
+
+    np.testing.assert_array_equal(syll_include, [0, 1, 2, 3, 119])
+    included = np.ix_(syll_include, syll_include)
+    for group, trans_mat in zip(groups, trans_mats):
+        [name] = [name for name, g in group_of.items() if g == group]
+        counts = bigram_counts(results[name]["syllable"], num_labels=120)
+        np.testing.assert_allclose(
+            trans_mat, (counts / counts.sum())[included], rtol=1e-12, err_msg=group
+        )
+
+
+@pytest.mark.parametrize("combine", [False, True], ids=["per_recording", "combined"])
+@pytest.mark.parametrize("as_type", [list, pd.Series], ids=["lists", "series"])
+def test_transition_matrix_of_recordings_given_as_lists_or_series(as_type, combine):
+    sequences = [as_type([0, 0, 1, 1, 2, 2]), as_type([2, 1, 1])]
+
+    matrices = kpms.get_transition_matrix(
+        sequences, max_syllable=3, normalize=None, combine=combine
+    )
+
+    expected = np.zeros((3, 3))
+    expected[0, 1] = expected[1, 2] = expected[2, 1] = 1
+    np.testing.assert_array_equal(matrices if combine else sum(matrices), expected)

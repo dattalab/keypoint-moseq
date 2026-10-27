@@ -10,11 +10,13 @@ import numpy as np
 import pandas as pd
 import pooch
 import pytest
+from matplotlib.colors import to_rgb
 
 from analysis_utils import (
     bigram_plot_summary,
     cohort_group,
     graph_plot_summary,
+    plot_syll_stats,
     read_syll_info,
     syll_stats_plot_summary,
     syllable_description,
@@ -194,6 +196,29 @@ def tutorial_model(
     pca, _ = tutorial_pca
     config = lambda: kpms.load_config(project_dir)
     return kpms.init_model(data, metadata=metadata, pca=pca, **config())
+
+
+@pytest.fixture(scope="session")
+def one_recording(tutorial_outlier_removed, tutorial_pca, tutorial_sigmasq_loc):
+    """Config, data and metadata for one tutorial recording, and a
+    keypoint-SLDS and a location-aware model initialized on it, keyed by
+    `location_aware`."""
+    import keypoint_moseq as kpms
+
+    project_dir, coordinates, confidences = tutorial_outlier_removed
+    pca, _ = tutorial_pca
+    config = kpms.load_config(project_dir)
+    name = sorted(coordinates)[0]
+    data, metadata = kpms.format_data(
+        {name: coordinates[name]}, {name: confidences[name]}, **config
+    )
+    models = {
+        location_aware: kpms.init_model(
+            data, metadata=metadata, pca=pca, location_aware=location_aware, **config
+        )
+        for location_aware in [False, True]
+    }
+    return config, data, metadata, models
 
 
 @pytest.fixture(scope="session")
@@ -544,34 +569,6 @@ def tutorial_syllables_labeled(tutorial_analysis_project, tutorial_moseq_df):
     }
 
 
-def plot_syll_stats(stats_df, project_dir, model_name):
-    """Figure summary and printed output of the analysis notebook's group
-    comparison cell run on `stats_df`. The global NumPy random state is
-    seeded because the Kruskal-Wallis check inside `run_kruskal` draws from
-    it."""
-    import keypoint_moseq as kpms
-
-    np.random.seed(0)
-    printed = io.StringIO()
-    with contextlib.redirect_stdout(printed):
-        fig, legend = kpms.plot_syll_stats_with_sem(
-            stats_df,
-            project_dir,
-            model_name,
-            plot_sig=True,
-            thresh=0.05,
-            stat="frequency",
-            order="stat",
-            ctrl_group="a",
-            exp_group="b",
-            figsize=(8, 4),
-            groups=stats_df["group"].unique(),
-        )
-    summary = syll_stats_plot_summary(fig, legend)
-    plt.close("all")
-    return {**summary, "printed": printed.getvalue()}
-
-
 @pytest.fixture(scope="session")
 def tutorial_syll_stats_plot(
     tutorial_analysis_project, tutorial_stats_df, tutorial_syllables_labeled
@@ -682,6 +679,10 @@ def tutorial_transition_graph_difference(
         "printed": printed.getvalue(),
         "titles": [ax.get_title() for ax in axes],
         "legend": [text.get_text() for text in axes[-1].get_legend().get_texts()],
+        "legend_colors": [
+            to_rgb(handle.get_markeredgecolor() if handle.get_marker() not in (None, "None") else handle.get_color())
+            for handle in axes[-1].get_legend().legend_handles
+        ],
         "graphs": [graph_plot_summary(ax) for ax in axes[: math.comb(len(groups), 2)]],
     }
     plt.close("all")

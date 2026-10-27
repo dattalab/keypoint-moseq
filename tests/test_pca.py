@@ -40,7 +40,7 @@ def test_tutorial_pca_dims_match_notebook_latent_dim(
     project_dir, _, _ = tutorial_outlier_removed
     config = lambda: kpms.load_config(project_dir)
 
-    assert printed == ">=90.0% of variance exlained by 4 components.\n"
+    assert printed == ">=90.0% of variance explained by 4 components.\n"
     assert config()["ar_hypparams"]["latent_dim"] == 4
 
 

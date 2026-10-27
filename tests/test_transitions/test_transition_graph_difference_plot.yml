@@ -1,8 +1,8 @@
 legend:
-- Up-regulated transistion
-- Down-regulated transistion
-- Up-regulated usage
-- Down-regulated usage
+- Transition higher in first group
+- Transition higher in second group
+- Usage higher in first group
+- Usage higher in second group
 titles:
 - a - b
 - ''

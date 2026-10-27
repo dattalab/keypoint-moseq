@@ -84,4 +84,4 @@ The documentation's notebook links and the Colab links point at the `stable` bra
 
 ## Reporting problems
 
-Open an issue at https://github.com/dattalab/keypoint-moseq/issues. Include the keypoint-MoSeq version, your Python version, your operating system, your GPU and CUDA version if you use one, and the full error message.
+Open an issue at https://github.com/dattalab/keypoint-moseq/issues. Include the output of `kpms.check_installation()`, which lists the keypoint-MoSeq, JAX and Python versions and the devices JAX can use, along with your operating system and the full error message.

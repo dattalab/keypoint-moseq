@@ -1,6 +1,8 @@
 import numpy as np
 import tqdm
 import os
+import warnings
+import matplotlib
 from textwrap import fill
 from vidio.read import OpenCVReader
 from keypoint_moseq.io import update_config
@@ -74,6 +76,9 @@ def load_sampled_frames(
     video_dir,
     video_frame_indexes,
     video_extension=None,
+    video_paths=None,
+    recording_name_suffix="",
+    shared_videos=False,
 ):
     """Load sampled frames from a directory of videos.
 
@@ -95,14 +100,33 @@ def load_sampled_frames(
     video_extension: str, default=None
         Preferred video extension (passed to :py:func:`keypoint_moseq.util.find_matching_videos`)
 
+    video_paths: dict, default=None
+        Dictionary mapping recording names to video paths. If None, videos
+        are matched to recordings in `video_dir`.
+
+    recording_name_suffix: str, default=""
+        See :py:func:`keypoint_moseq.util.find_matching_videos`.
+
+    shared_videos: bool, default=False
+        See :py:func:`keypoint_moseq.util.find_matching_videos`.
+
     Returns
     -------
-    sample_keys: dict
+    sample_images: dict
         Dictionary mapping elements from `sample_keys` to the
-        corresponding videos frames.
+        corresponding video frames.
     """
     keys = sorted(set([k[0] for k in sample_keys]))
-    videos = find_matching_videos(keys, video_dir, video_extension=video_extension)
+    if video_paths is None:
+        videos = find_matching_videos(
+            keys,
+            video_dir,
+            video_extension=video_extension,
+            recording_name_suffix=recording_name_suffix,
+            shared_videos=shared_videos,
+        )
+    else:
+        videos = [video_paths[key] for key in keys]
     key_to_video = dict(zip(keys, videos))
     readers = {key: OpenCVReader(video) for key, video in zip(keys, videos)}
     pbar = tqdm.tqdm(
@@ -155,25 +179,28 @@ def save_annotations(project_dir, annotations, video_frame_indexes):
     open(path, "w").write("\n".join(output))
 
 
-def save_params(project_dir, estimator):
+def save_params(project_dir, slope, intercept, conf_threshold):
     """Save config parameters learned via calibration.
 
     Parameters
     ----------
     project_dir: str
-        Save parameters `{project_dir}/config.yml`
+        Save parameters to `{project_dir}/config.yml`
 
-    estimator: dict
-        Dictionary containing calibration parameters with keys:
-        - conf_threshold: float, confidence threshold for outlier detection
-        - slope: float, slope of error vs confidence regression line
-        - intercept: float, intercept of error vs confidence regression line
+    slope: float
+        Slope of error vs confidence regression line
+
+    intercept: float
+        Intercept of error vs confidence regression line
+
+    conf_threshold: float
+        Confidence threshold for outlier detection
     """
     update_config(
         project_dir,
-        conf_threshold=float(estimator["conf_threshold"]),
-        slope=float(estimator["slope"]),
-        intercept=float(estimator["intercept"]),
+        conf_threshold=float(conf_threshold),
+        slope=float(slope),
+        intercept=float(intercept),
     )
 
 
@@ -255,13 +282,12 @@ def _noise_calibration_widget(
         # Fit a line to the annotated data with confidence as the x-axis and error as the y-axis
         # scipy.stats.linregress might be a little more clear but this avoid another import
         slope, intercept = np.polyfit(confidences_annot, errors, 1)
-        error_estimator["slope"] = slope
-        error_estimator["intercept"] = intercept
-        error_estimator["conf_threshold"] = conf_threshold
+        error_estimator["slope"] = float(slope)
+        error_estimator["intercept"] = float(intercept)
 
         save_annotations(project_dir, annotations, video_frame_indexes)
         usr_msg.value = f"Annotations saved to {project_dir}/error_annotations.csv"
-        save_params(project_dir, error_estimator)
+        save_params(project_dir, slope, intercept, conf_threshold)
 
     def onclick(event):
         if event.xdata is not None and event.ydata is not None:
@@ -364,7 +390,7 @@ def noise_calibration(
 
     Follow these steps to use the widget:
         - Run the cell below. A widget should appear with a video frame.
-        The yellow marker denotes the automatically detected location of the bodypart.
+          The yellow marker denotes the automatically detected location of the bodypart.
 
         - Annotate each frame with the correct location of the labeled bodypart
             - Left click to specify the correct location - an "X" should appear.
@@ -372,13 +398,13 @@ def noise_calibration(
             - Click and drag the bottom-right shaded corner of the widget to adjust image size.
             - Use the toolbar to the left of the figure to pan and zoom.
 
-        - It is suggested to annotate at least 50 frames, tracked by the 'annotations' counter.
-        This counter includes saved annotations from previous sessions if you've run this
-        widget on this project before.
+        - It is suggested to annotate at least 50 frames, tracked by the 'Completed annotations'
+          counter. Each run starts from scratch: an existing `error_annotations.csv` is deleted
+          after you confirm.
 
         - Annotations will be automatically saved once you've completed at least 20 annotations.
-        Each new annotation after that will trigger an auto-save of all your work.
-        The message at the top of the widget will indicate when your annotations are being saved.
+          Each new annotation after that will trigger an auto-save of all your work.
+          The message at the top of the widget will indicate when your annotations are being saved.
 
 
     Parameters
@@ -413,25 +439,49 @@ def noise_calibration(
     conf_pseudocount: float, default=0.001
         Pseudocount added to confidence values to avoid log(0) errors.
 
-    video_frame_indexes: dict, default-None
+    video_frame_indexes: dict, default=None
         Dictionary mapping recording names to arrays of video frame indexes.
         This is useful when the original keypoint coordinates used for modeling
         corresponded to a subset of frames from each video (i.e. if videos were
         trimmed or coordinates were downsampled).
+
+    kwargs
+        Other config entries, normally passed with `**config()`.
+        `error_estimator` and `conf_threshold` are required. `fps`,
+        `recording_name_suffix` and `shared_videos` are passed to
+        :py:func:`keypoint_moseq.util.check_videos`, which runs first and
+        raises if the videos do not line up with the keypoints.
     """
 
     dim = list(coordinates.values())[0].shape[-1]
     assert dim == 2, "Calibration is only supported for 2D keypoints."
 
+    # `%matplotlib widget` selects ipympl, which matplotlib reports as
+    # "widget" or "ipympl", or by module path in older versions
+    backend = matplotlib.get_backend()
+    if backend.lower() not in ("widget", "ipympl", "module://ipympl.backend_nbagg"):
+        warnings.warn(
+            fill(
+                "The calibration widget needs matplotlib's interactive ipympl "
+                f"backend, but the current backend is '{backend}', so the widget "
+                "will probably show a still image that ignores clicks. Put "
+                "`%matplotlib widget` at the top of the cell that calls "
+                "noise_calibration, as in the modeling notebook, and run the cell "
+                "again."
+            )
+        )
+
     # Check the videos before the prompt below, which deletes any existing
     # annotations.
-    check_videos(
+    video_paths = check_videos(
         coordinates,
         video_dir=video_dir,
         video_frame_indexes=video_frame_indexes,
         video_extension=video_extension,
         print_table=False,
         fps=kwargs.get("fps"),
+        recording_name_suffix=kwargs.get("recording_name_suffix", ""),
+        shared_videos=kwargs.get("shared_videos", False),
     )
     if video_frame_indexes is None:
         video_frame_indexes = {k: np.arange(len(v)) for k, v in coordinates.items()}
@@ -453,6 +503,7 @@ def noise_calibration(
         video_dir,
         video_frame_indexes,
         video_extension,
+        video_paths=video_paths,
     )
 
     return _noise_calibration_widget(

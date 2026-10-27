@@ -14,7 +14,7 @@ import pytest
 from jax_moseq.utils import get_durations
 
 import keypoint_moseq as kpms
-from analysis_utils import runs, synthetic_results
+from analysis_utils import mean_complete_run_lengths, synthetic_results
 
 NAMES = ["rec_a", "rec_b"]
 
@@ -79,8 +79,7 @@ def test_stats_df_durations_use_the_moseq_df_frame_rate(tmp_path):
     stats_df = kpms.compute_stats_df(moseq_df, min_frequency=0.0)
 
     rows = stats_df[stats_df["name"] == "rec_a"]
-    run_syllables, run_lengths = runs(results["rec_a"]["syllable"])
-    expected = [run_lengths[run_syllables == s].mean() / 60 for s in rows["syllable"]]
+    expected = mean_complete_run_lengths(results["rec_a"]["syllable"], rows["syllable"]) / 60
     np.testing.assert_allclose(rows["duration"], expected)
 
 

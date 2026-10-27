@@ -1,5 +1,9 @@
 """Helpers for testing the analysis notebook's outputs."""
 
+import contextlib
+import io
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.collections import LineCollection, PathCollection
@@ -62,13 +66,22 @@ def runs(labels):
     return labels[starts], lengths
 
 
+def mean_complete_run_lengths(labels, syllables):
+    """Mean length of each syllable's runs in `labels`, leaving out the first
+    and last run, which the edges of the recording cut short. NaN for a
+    syllable with no other run."""
+    run_labels, run_lengths = runs(labels)
+    run_labels, run_lengths = run_labels[1:-1], run_lengths[1:-1]
+    return np.array(
+        [run_lengths[run_labels == s].mean() if (run_labels == s).any() else np.nan for s in syllables]
+    )
+
+
 def bigram_counts(labels, num_labels=100):
     """Counts of transitions between consecutive runs of `labels` below
-    `num_labels`. Like `get_transitions`, the sequence of runs starts at the
-    second run, so the transition out of the first run is not counted."""
+    `num_labels`."""
     run_labels, _ = runs(labels)
-    transitions = run_labels[1:]
-    pairs = np.stack([transitions[:-1], transitions[1:]], axis=1)
+    pairs = np.stack([run_labels[:-1], run_labels[1:]], axis=1)
     pairs = pairs[(pairs < num_labels).all(axis=1)]
     counts = np.zeros((num_labels, num_labels))
     np.add.at(counts, (pairs[:, 0], pairs[:, 1]), 1)
@@ -156,3 +169,31 @@ def graph_plot_summary(ax):
         "edge_widths": np.asarray(edges.get_linewidths()),
         "edge_colors": rgb(edges.get_edgecolor(), len(segments)),
     }
+
+
+def plot_syll_stats(stats_df, project_dir, model_name):
+    """Figure summary and printed output of the analysis notebook's group
+    comparison cell run on `stats_df`. The global NumPy random state is
+    seeded because the Kruskal-Wallis check inside `run_kruskal` draws from
+    it."""
+    import keypoint_moseq as kpms
+
+    np.random.seed(0)
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        fig, legend = kpms.plot_syll_stats_with_sem(
+            stats_df,
+            project_dir,
+            model_name,
+            plot_sig=True,
+            thresh=0.05,
+            stat="frequency",
+            order="stat",
+            ctrl_group="a",
+            exp_group="b",
+            figsize=(8, 4),
+            groups=stats_df["group"].unique(),
+        )
+    summary = syll_stats_plot_summary(fig, legend)
+    plt.close("all")
+    return {**summary, "printed": printed.getvalue()}

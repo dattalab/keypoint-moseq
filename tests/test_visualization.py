@@ -3,9 +3,12 @@ import struct
 
 import imageio
 import imageio_ffmpeg
+import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 import pytest
 from PIL import Image
+from sklearn.decomposition import PCA
 
 import keypoint_moseq as kpms
 from keypoint_moseq.util import get_syllable_instances
@@ -284,7 +287,8 @@ def moving_keypoints(results, n_keypoints=4, seed=0):
     crops have a real extent."""
     rng = np.random.default_rng(seed)
     return {
-        name: r["centroid"][:, None, :] + rng.normal(scale=5, size=(len(r["centroid"]), n_keypoints, 2))
+        name: r["centroid"][:, None, :]
+        + rng.normal(scale=5, size=(len(r["centroid"]), n_keypoints, r["centroid"].shape[1]))
         for name, r in results.items()
     }
 
@@ -311,3 +315,264 @@ def test_min_instance_duration_is_in_seconds(tmp_path):
     durations = [end - start for instances in sampled.values() for _, start, end in instances]
     assert durations
     assert min(durations) >= 10
+
+
+def test_grid_movies_with_a_window_size_do_not_need_coordinates(tmp_path):
+    results = synthetic_results(["rec_a", "rec_b"])
+    for recording in results.values():
+        recording["centroid"] = np.clip(recording["centroid"] + 64, 16, 112)
+    video_paths = {}
+    for name, recording in results.items():
+        video_paths[name] = str(tmp_path / f"{name}.mp4")
+        with imageio.get_writer(video_paths[name], fps=30) as writer:
+            for _ in range(len(recording["syllable"])):
+                writer.append_data(np.zeros((128, 128, 3), dtype=np.uint8))
+    output_dir = tmp_path / "grid_movies"
+
+    sampled = kpms.generate_grid_movies(
+        results,
+        output_dir=str(output_dir),
+        video_paths=video_paths,
+        window_size=32,
+        rows=1,
+        cols=2,
+        fps=30,
+        before_onset_sec=0.1,
+        after_onset_sec=0.2,
+    )
+
+    assert sampled
+    assert set(os.listdir(output_dir)) == {f"syllable{s}.mp4" for s in sampled}
+    for name in os.listdir(output_dir):
+        with imageio.get_reader(str(output_dir / name), "ffmpeg") as reader:
+            assert reader.get_meta_data()["size"] == (64, 32), name
+
+
+def test_density_sampled_grid_movies_of_syllables_with_few_instances(tmp_path):
+    results = synthetic_results(["rec_a", "rec_b"])
+    # At least the 5 frames before onset and 15 after that density sampling
+    # uses for each trajectory.
+    fps, pre, post = 30, 0.2, 0.5
+    instances = get_syllable_instances(
+        {name: recording["syllable"] for name, recording in results.items()},
+        before_onset_frames=round(pre * fps),
+        after_onset_frames=round(post * fps),
+        min_instance_duration_frames=3,
+        min_frequency=0.005,
+        min_instances=2,
+    )
+    # enough instances for a 1 x 2 grid, but fewer than the 50 neighbors
+    # density sampling uses by default
+    assert instances and all(len(v) < 50 for v in instances.values())
+
+    sampled = kpms.generate_grid_movies(
+        results,
+        output_dir=str(tmp_path),
+        coordinates=moving_keypoints(results),
+        keypoints_only=True,
+        sampling_options={"mode": "density"},
+        rows=1,
+        cols=2,
+        fps=fps,
+        before_onset_sec=pre,
+        after_onset_sec=post,
+    )
+
+    assert sorted(sampled) == sorted(instances)
+    for syllable, sampled_instances in sampled.items():
+        assert len(set(sampled_instances)) == 2, syllable
+        assert set(sampled_instances) <= set(instances[syllable]), syllable
+    assert set(os.listdir(tmp_path)) == {f"syllable{s}.mp4" for s in sampled}
+
+
+@pytest.mark.parametrize("save_gifs", [False, True], ids=["mp4_only", "mp4_and_gif"])
+def test_trajectory_plot_mp4s_span_the_syllable_window(tmp_path, save_gifs):
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    fps, pre, post = 30, 0.167, 0.5  # the default window: 5 frames before onset, 15 after
+
+    kpms.generate_trajectory_plots(
+        moving_keypoints(results),
+        results,
+        output_dir=str(tmp_path),
+        save_gifs=save_gifs,
+        save_mp4s=True,
+        fps=fps,
+        before_onset_sec=pre,
+        after_onset_sec=post,
+        min_frequency=0.0,
+    )
+
+    mp4s = sorted(p for p in os.listdir(tmp_path) if p.endswith(".mp4"))
+    assert mp4s
+    assert any(p.endswith(".gif") for p in os.listdir(tmp_path)) == save_gifs
+    window = (round(pre * fps) + round(post * fps)) / fps
+    for name in mp4s:
+        _, seconds = imageio_ffmpeg.count_frames_and_secs(str(tmp_path / name))
+        assert seconds == pytest.approx(window, abs=0.05), name
+
+
+@pytest.mark.parametrize("num_kappas", [1, 3], ids=["one_kappa", "three_kappas"])
+def test_kappa_scan_plot(tmp_path, num_kappas):
+    kappas = [10.0**k for k in range(4, 4 + num_kappas)]
+    mask = np.ones((1, 12))
+    for i, kappa in enumerate(kappas):
+        # syllables last 2, 3, 4 frames for successive kappas
+        z = (np.arange(12) // (i + 2))[None]
+        os.makedirs(tmp_path / f"scan-{kappa}")
+        kpms.save_hdf5(
+            str(tmp_path / f"scan-{kappa}" / "checkpoint.h5"),
+            {
+                "data": {"mask": mask},
+                "model_snapshots": {"0": {"states": {"z": z}}, "10": {"states": {"z": z}}},
+            },
+        )
+
+    fig, final_median_durations = kpms.plot_kappa_scan(kappas, str(tmp_path), "scan")
+
+    assert list(final_median_durations) == [2, 3, 4][:num_kappas]
+    assert len(fig.axes[0].lines) == num_kappas
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("with_video", [False, True], ids=["keypoints_only", "video"])
+def test_grid_movie_dot_shows_on_the_syllable_frames_only(tmp_path, with_video):
+    """A syllable on frames 10 to 12 (`end` is exclusive), shown from 2
+    frames before its onset to 6 after."""
+    num_frames = 40
+    if with_video:
+        video_paths = {"r": str(tmp_path / "r.mp4")}
+        with imageio.get_writer(video_paths["r"], fps=30) as writer:
+            for _ in range(num_frames):
+                writer.append_data(np.zeros((128, 128, 3), dtype=np.uint8))
+        video_frame_indexes = {"r": np.arange(num_frames)}
+    else:
+        video_paths = video_frame_indexes = None
+    coordinates = {"r": np.tile([[64.0, 64.0], [69.0, 64.0], [59.0, 64.0]], (num_frames, 1, 1))}
+
+    frames = kpms.grid_movie(
+        [("r", 10, 13)],
+        1,
+        1,
+        video_paths,
+        {"r": np.full((num_frames, 2), 64.0)},
+        {"r": np.zeros(num_frames)},
+        32,
+        video_frame_indexes,
+        dot_color=(0, 255, 0),
+        dot_radius=2,
+        before_onset_frames=2,
+        after_onset_frames=6,
+        overlay_keypoints=not with_video,
+        coordinates=coordinates,
+        plot_options={"keypoint_colors": [[1.0, 0.0, 0.0]] * 3, "node_size": 1},
+    )
+
+    frames_with_dot = [8 + i for i, frame in enumerate(frames) if (frame[..., 1] > 200).any()]
+    assert frames_with_dot == [10, 11, 12]
+
+
+@pytest.mark.parametrize("copy", [False, True])
+def test_overlay_keypoints_on_image_returns_the_drawn_image(copy):
+    image = np.zeros((40, 40, 3), dtype=np.uint8)
+    coordinates = np.array([[10.0, 10.0], [30.0, 30.0]])
+
+    overlaid = kpms.overlay_keypoints_on_image(image, coordinates, copy=copy)
+
+    assert overlaid[10, 10].any() and overlaid[30, 30].any()
+    if copy:
+        assert not image.any()
+
+
+@pytest.fixture
+def shown_plotly_figures(monkeypatch):
+    """Plotly figures that kpms shows, captured instead of rendered."""
+    shown = []
+    monkeypatch.setattr(go.Figure, "show", lambda fig: shown.append(fig))
+    return shown
+
+
+def keypoint_colorscales(fig):
+    """Colorscale of each keypoint trace, as lists like those
+    `matplotlib_colormap_to_plotly` returns."""
+    return [
+        [list(entry) for entry in trace.marker.colorscale]
+        for trace in fig.data
+        if trace.mode == "markers"
+    ]
+
+
+def test_plotly_colorscale_matches_the_matplotlib_colormap():
+    colorscale = kpms.viz.matplotlib_colormap_to_plotly("autumn")
+
+    assert colorscale[0] == [0.0, "rgb(255, 0, 0)"]
+    assert colorscale[-1][1] == "rgb(255, 255, 0)"
+
+
+def test_3D_pc_plot(tmp_path, shown_plotly_figures):
+    use_bodyparts = ["nose", "head", "body", "tail"]
+    skeleton = [["nose", "head"], ["head", "body"], ["body", "tail"]]
+    rng = np.random.default_rng(0)
+    pca = PCA().fit(rng.normal(size=(100, (len(use_bodyparts) - 1) * 3)))
+
+    kpms.plot_pcs(
+        pca,
+        use_bodyparts=use_bodyparts,
+        skeleton=skeleton,
+        project_dir=str(tmp_path),
+        plot_n_pcs=3,
+    )
+
+    [fig] = shown_plotly_figures
+    colorscale = kpms.viz.matplotlib_colormap_to_plotly("autumn")
+    assert [step.label for step in fig.layout.sliders[0].steps] == ["PC 1", "PC 2", "PC 3"]
+    # a pose for each PC, and the mean pose
+    assert keypoint_colorscales(fig) == [colorscale] * 4
+    assert (tmp_path / "pcs.html").exists()
+
+
+def test_3D_trajectory_plot(tmp_path, shown_plotly_figures):
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    for recording in results.values():
+        recording["centroid"] = np.pad(recording["centroid"], ((0, 0), (0, 1)))
+    fps = 30
+
+    kpms.generate_trajectory_plots(
+        moving_keypoints(results),
+        results,
+        output_dir=str(tmp_path),
+        save_gifs=False,
+        fps=fps,
+    )
+
+    [fig] = shown_plotly_figures
+    titles = [f"Syllable{s}" for s in plotted_syllables(results, {"fps": fps})]
+    colorscale = kpms.viz.matplotlib_colormap_to_plotly("autumn")
+    assert titles
+    assert [step.label for step in fig.layout.sliders[0].steps] == titles
+    assert len(keypoint_colorscales(fig)) > 0
+    assert all(c == colorscale for c in keypoint_colorscales(fig))
+    assert (tmp_path / "all_trajectories.html").exists()
+
+
+@pytest.mark.parametrize("n_syllables", [1, 3], ids=["one_syllable", "three_syllables"])
+def test_3D_trajectory_slider_shows_one_syllable_at_a_time(
+    n_syllables, tmp_path, shown_plotly_figures
+):
+    # generate_trajectory_plots draws one syllable when only one passes its
+    # frequency and instance filters.
+    n_frames, edges = 20, [[0, 1], [1, 2], [2, 3]]
+    Xs = np.random.default_rng(0).normal(size=(n_syllables, n_frames, 4, 3))
+    titles = [f"Syllable{s}" for s in range(n_syllables)]
+
+    kpms.plot_trajectories_3D(Xs, titles, edges, str(tmp_path))
+
+    [fig] = shown_plotly_figures
+    steps = fig.layout.sliders[0].steps
+    traces = n_frames * (len(edges) + 1)  # each frame's keypoints, then its edges
+    assert len(fig.data) == n_syllables * traces
+    assert [step.label for step in steps] == titles
+    for i, step in enumerate(steps):
+        visible = np.zeros(len(fig.data), dtype=bool)
+        visible[i * traces : (i + 1) * traces] = True
+        np.testing.assert_array_equal(step.args[0]["visible"], visible, err_msg=step.label)
+    assert (tmp_path / "all_trajectories.html").exists()

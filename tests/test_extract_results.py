@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from jax_moseq.utils import batch
+
 import keypoint_moseq as kpms
 from model_utils import assert_tree_equal, structure
 
@@ -54,14 +56,49 @@ def test_results_match_model_states(tutorial_results):
                 states[state_key][segment, :length],
                 err_msg=f"{name} {result_key} segment {segment}",
             )
-        # The first syllable of each segment is repeated for the first
-        # `nlags` frames, which have no syllable of their own.
-        padded_z = np.pad(states["z"][segment], (nlags, 0), mode="edge")
+        # A segment has no syllables for its first `nlags` frames. The
+        # previous segment supplies them, and at the start of a recording the
+        # first syllable is repeated.
         np.testing.assert_array_equal(
-            results[name]["syllable"][start:stop],
-            padded_z[:length],
+            results[name]["syllable"][start + nlags : stop],
+            states["z"][segment, : length - nlags],
             err_msg=f"{name} syllable segment {segment}",
         )
+        if start == 0:
+            first_syllables = np.repeat(states["z"][segment, 0], nlags)
+        else:
+            offset = start - bounds[segment - 1, 0] - nlags
+            first_syllables = states["z"][segment - 1, offset : offset + nlags]
+        np.testing.assert_array_equal(
+            results[name]["syllable"][start : start + nlags],
+            first_syllables,
+            err_msg=f"{name} first syllables of segment {segment}",
+        )
+
+
+@pytest.mark.parametrize(
+    "nlags, num_frames",
+    [(3, 100), (5, 84)],
+    ids=["default_nlags", "last_segment_shorter_than_nlags"],
+)
+def test_syllables_where_segments_overlap(nlags, num_frames):
+    """The syllable inferred for each frame is the frame's index, so each
+    frame's result shows whether a segment inferred it or it was copied.
+    Segments start every 40 frames, so 84 frames leave a last segment of 4."""
+    _, mask, metadata = batch({"rec": np.zeros((num_frames, 1))}, seg_length=40)
+    _, bounds = metadata
+    frame_indexes = bounds[:, :1] + np.arange(mask.shape[1])
+    states = {
+        "z": frame_indexes[:, nlags:],
+        "x": np.zeros((*mask.shape, 2)),
+        "v": np.zeros((*mask.shape, 2)),
+        "h": np.zeros(mask.shape),
+    }
+
+    results = kpms.extract_results({"states": states}, metadata, save_results=False)
+
+    expected = np.concatenate([np.repeat(nlags, nlags), np.arange(nlags, num_frames)])
+    np.testing.assert_array_equal(results["rec"]["syllable"], expected)
 
 
 def test_results_syllables_in_range(tutorial_results):

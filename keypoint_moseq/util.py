@@ -37,8 +37,8 @@ def np_io(fn):
 
 
 def print_dims_to_explain_variance(pca, f):
-    """Print the number of principal components requred to explain a given
-    fraction of  variance.
+    """Print the number of principal components required to explain a given
+    fraction of variance.
 
     Parameters
     ----------
@@ -49,17 +49,17 @@ def print_dims_to_explain_variance(pca, f):
     if cs[-1] < f:
         print(f"All components together only explain {cs[-1]*100}% of variance.")
     else:
-        print(f">={f*100}% of variance exlained by {(cs>f).nonzero()[0].min()+1} components.")
+        print(f">={f*100}% of variance explained by {(cs>f).nonzero()[0].min()+1} components.")
 
 
 def list_files_with_exts(filepath_pattern, ext_list, recursive=True):
-    """This function lists all the files matching a pattern and with a an
+    """This function lists all the files matching a pattern and with an
     extension in a list of extensions.
 
     Parameters
     ----------
     filepath_pattern : str or list
-        A filepath pattern or a list thereof. Filepath patterns can be be a
+        A filepath pattern or a list thereof. Filepath patterns can be a
         single file, a directory, or a path with wildcards (e.g.,
         '/path/to/dir/prefix*').
 
@@ -322,6 +322,7 @@ def find_matching_videos(
     recursive=True,
     recording_name_suffix="",
     video_extension=None,
+    shared_videos=False,
 ):
     """
     Find video files for a set of recording names. The filename of each video
@@ -340,7 +341,7 @@ def find_matching_videos(
         >>> find_matching_videos(keys, video_dir, as_dict=True)
 
         {'videoname1blahblah': 'video_dir/videoname1.avi',
-         'videoname2blahblah': 'video_dir/videoname2.avi'}
+         'videoname2yadayada': 'video_dir/videoname2.avi'}
 
     A suffix can also be specified, in which case the recording name is assumed
     to have the form `{video_name}{suffix}{more_text}`.
@@ -368,8 +369,15 @@ def find_matching_videos(
         Determines whether to return a dict mapping recording names to video
         paths, or a list of paths in the same order as `keys`.
 
-    recording_name_suffix: str, default=None
-        Suffix to append to the video name when searching for a match.
+    recording_name_suffix: str, default=""
+        Text that must follow the video's filename in the recording name. With
+        `recording_name_suffix="DLC"`, `mouse1.mp4` matches `mouse1DLC_resnet50`
+        but not `mouse10DLC_resnet50`.
+
+    shared_videos: bool, default=False
+        Whether some videos hold more than one recording, e.g. several
+        animals tracked in one video. If False, a warning lists the videos
+        matched to more than one recording.
 
     Returns
     -------
@@ -476,6 +484,44 @@ def find_matching_videos(
         lines.append("Pass `video_extension` to choose which one is used.")
         warnings.warn("\n".join(lines))
 
+    recordings_by_video = {}
+    for key in keys:
+        recordings_by_video.setdefault(video_paths[key], []).append(key)
+    multiple = sorted(
+        (os.path.basename(path), names)
+        for path, names in recordings_by_video.items()
+        if len(names) > 1
+    )
+    if multiple and not shared_videos:
+        lines = [
+            f"{len(multiple)} videos are each matched to more than one recording:"
+            if len(multiple) > 1
+            else "1 video is matched to more than one recording:"
+        ]
+        for video, names in multiple[:5]:
+            more = f", and {len(names) - 5} more" if len(names) > 5 else ""
+            lines.append(f"  {video}: {', '.join(names[:5])}{more}")
+        if len(multiple) > 5:
+            lines.append(f"  and {len(multiple) - 5} more videos")
+        lines += [
+            "",
+            fill(
+                "Sharing a video is expected when several animals were tracked in "
+                "one video, or when one session was split into several recordings. "
+                "If that is the case here, set `shared_videos` to True in the config "
+                "(kpms.update_config(project_dir, shared_videos=True)) to silence "
+                "this warning. Otherwise, some videos may be missing. A video matches "
+                "every recording whose name starts with the video's filename, so "
+                "mouse1.mp4 also matches mouse10DLC_resnet50 when mouse10.mp4 is "
+                "missing. Setting `recording_name_suffix` to the text that follows "
+                "the video's filename in every recording name (for example 'DLC' for "
+                "DeepLabCut output) prevents this: a video then matches a recording "
+                "only if that text comes right after the filename, so mouse1.mp4 no "
+                "longer matches mouse10DLC_resnet50."
+            ),
+        ]
+        warnings.warn("\n".join(lines))
+
     if as_dict:
         return video_paths
     return [video_paths[key] for key in keys]
@@ -578,7 +624,7 @@ def get_centroids_headings(
         when the latter is specified).
 
     posterior_idxs: array-like of int
-        Indices of anterior bodyparts (after reindexing by `use_bodyparts`
+        Indices of posterior bodyparts (after reindexing by `use_bodyparts`
         when the latter is specified).
 
     bodyparts: list of str, default=None
@@ -647,7 +693,7 @@ def get_syllable_instances(
     min_frequency=0,
     min_instances=0,
 ):
-    """Map each syllable to a list of instances when it occured. Only include
+    """Map each syllable to a list of instances when it occurred. Only include
     instances that meet the criteria specified by `before_onset_frames`,
     `after_onset_frames`, and `min_instance_duration_frames`. Only include
     syllables that meet the criteria specified by
@@ -659,7 +705,7 @@ def get_syllable_instances(
         Dictionary mapping names to syllable sequences
 
     min_instance_duration_frames: int, default=3
-        Mininum duration, in frames, for inclusion of a syllable instance
+        Minimum duration, in frames, for inclusion of a syllable instance
 
     before_onset_frames: int, default=30
         Syllable instances that start before this frame of the state
@@ -669,7 +715,7 @@ def get_syllable_instances(
         Syllable instances that start within this many frames of the end of
         the state sequence will be excluded
 
-    min_frequency: int, default=0
+    min_frequency: float, default=0
         Minimum allowed frequency (across all state sequences) for inclusion of
         a syllable
 
@@ -719,7 +765,7 @@ def get_edges(use_bodyparts, skeleton):
     Returns
     -------
     edges: list
-        Pairs of indexes representing the enties of `skeleton`
+        Pairs of indexes representing the entries of `skeleton`
     """
     edges = []
     if len(skeleton) > 0:
@@ -874,7 +920,7 @@ def sample_instances(
         is a tuple of the form (name,start,end)
 
     num_samples: int
-        Number of samples return for each syllable
+        Number of samples to return for each syllable
 
     mode: str, {'random', 'density'}, default='random'
         Sampling method to use. Options are:
@@ -894,12 +940,12 @@ def sample_instances(
         Number of principal components to use for density estimation (used when
         `mode='density'`)
 
-    n_neighbors: int, defualt=50
+    n_neighbors: int, default=50
         Number of neighbors to use for density estimation and for sampling the
-        neighbors of the examplar syllable instance (used when
-        `mode='density'`)
+        neighbors of the exemplar syllable instance (used when
+        `mode='density'`). Syllables with fewer instances use all of them.
 
-    coordinates, before_onset_frames, after_onset_frames, centroids, heading, smoothing_filter_frames
+    coordinates, before_onset_frames, after_onset_frames, centroids, headings, smoothing_filter_frames
         Passed to :py:func:`keypoint_moseq.util.get_instance_trajectories`
 
     Returns
@@ -954,12 +1000,14 @@ def sample_instances(
         sampled_instances = {}
 
         for syllable, X in trajectories.items():
+            # a syllable with fewer than `n_neighbors` instances uses all of them
+            k = min(n_neighbors, len(X))
             Xpca = pca.transform(X.reshape(X.shape[0], -1))
-            nbrs = NearestNeighbors(n_neighbors=n_neighbors).fit(Xpca)
+            nbrs = NearestNeighbors(n_neighbors=k).fit(Xpca)
             distances, indices = nbrs.kneighbors(Xpca)
             local_density = 1 / distances.mean(1)
 
-            distances, _ = all_nbrs.kneighbors(Xpca)
+            distances, _ = all_nbrs.kneighbors(Xpca, n_neighbors=k)
             global_density = 1 / distances.mean(1)
             exemplar = np.argmax(local_density / global_density)
             samples = np.random.choice(indices[exemplar], num_samples, replace=False)
@@ -1121,12 +1169,15 @@ def _print_colored_table(row_labels, col_labels, values):
             color = plt.get_cmap("Reds")(val * 0.8)
             return f"background-color: rgba({int(color[0]*255)}, {int(color[1]*255)}, {int(color[2]*255)}, {color[3]})"
 
-        colored_df = df.style.applymap(colorize).set_caption("Proportion of NaNs")
+        # pandas 2.1 renamed Styler.applymap to Styler.map, and pandas 3 removed
+        # applymap
+        style_map = getattr(df.style, "map", None) or df.style.applymap
+        colored_df = style_map(colorize).set_caption("Proportion of NaNs")
         display(colored_df)
         return colored_df
     else:
         print(title)
-        print(tabulate(df, headers="keys", tablefmt="simple_grid", showindex=True))
+        print(tabulate.tabulate(df, headers="keys", tablefmt="simple_grid", showindex=True))
 
 
 def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdown=False, **kwargs):
@@ -1173,7 +1224,7 @@ def check_nan_proportions(coordinates, bodyparts, warning_threshold=0.5, breakdo
 def _get_percent_padding(sequence_lengths, seg_length):
     """
     Calculate the percentage of padding required when batching sequences of the specified
-    lengths (see :py:func:`keypoint_moseq.util.batch`)
+    lengths (see :py:func:`jax_moseq.utils.utils.batch`)
 
     Parameters
     ----------
@@ -1209,7 +1260,7 @@ def _find_optimal_segment_length(
     max_percent_padding=50,
     min_fragment_length=4,
 ):
-    """Find a segment length to use for batching (see :py:func:`keypoint_moseq.util.batch`).
+    """Find a segment length to use for batching (see :py:func:`jax_moseq.utils.utils.batch`).
 
     Parameters
     ----------
@@ -1285,10 +1336,10 @@ def format_data(
 
     Data are transformed as follows:
         1. Coordinates and confidences are each merged into a single array
-           using :py:func:`keypoint_moseq.util.batch`. Each row of the merged
+           using :py:func:`jax_moseq.utils.utils.batch`. Each row of the merged
            arrays is a segment from one recording.
         2. The keypoints axis is reindexed according to the order of elements
-           in `use_bodyparts` with respect to their initial orer in
+           in `use_bodyparts` with respect to their initial order in
            `bodyparts`.
         3. Uniform noise proportional to `added_noise_level` is added to the
            keypoint coordinates to prevent degenerate solutions during fitting.
@@ -1309,7 +1360,7 @@ def format_data(
         numpy arrays of shape (T,K).
 
     keys: list of str, default=None
-        (See :py:func:`keypoint_moseq.util.batch`)
+        (See :py:func:`jax_moseq.utils.utils.batch`)
 
     bodyparts: list, default=None
         Label for each keypoint represented in `coordinates`. Required to
@@ -1322,21 +1373,25 @@ def format_data(
     conf_pseudocount: float, default=1e-3
         Pseudocount used to augment keypoint confidences.
 
+    added_noise_level: float, default=0.1
+        Upper bound of the uniform noise added to the keypoint coordinates
+        (step 3 above).
+
     seg_length: int, default=None
         Force a specific segment length for batching instead of determining one algorithmically.
         If provided, 'max_seg_length', and 'max_percent_padding' are ignored.
         'min_fragment_length' is still enforced to prevent downstream runtime errors.
 
     max_seg_length: int, default=10,000
-        Maximim allowed segment length for batching (see :py:func:`keypoint_moseq.util.batch`).
+        Maximum allowed segment length for batching (see :py:func:`jax_moseq.utils.utils.batch`).
         Ignored if `seg_length` is provided.
 
     max_percent_padding: float, default=50
         Maximum allowed padding as a percentage of the total sequence length when data are batched
-        (see :py:func:`keypoint_moseq.util.batch`). Ignored if `seg_length` is provided.
+        (see :py:func:`jax_moseq.utils.utils.batch`). Ignored if `seg_length` is provided.
 
     min_fragment_length: int, default=4
-        Minimum allowed sequence length after batching (see :py:func:`keypoint_moseq.util.batch`).
+        Minimum allowed sequence length after batching (see :py:func:`jax_moseq.utils.utils.batch`).
 
     Returns
     -------
@@ -1348,17 +1403,23 @@ def format_data(
 
         conf: jax array with shape (n_segs, seg_length, K)
             Confidences from all recordings broken into fixed-length segments.
-            If no input is provided for `confidences`, then
-            `data["conf"]=None`.
+            If no input is provided for `confidences`, every confidence is 1
+            (0 for NaN keypoints), plus `conf_pseudocount`.
 
         mask: jax array with shape (n_segs, seg_length)
             Binary array where 0 indicates areas of padding
-            (see :py:func:`keypoint_moseq.util.batch`).
+            (see :py:func:`jax_moseq.utils.utils.batch`).
 
     metadata: tuple (keys, bounds)
-        Metadata for the rows of `Y`, `conf` and `mask`, as a tuple with a
+        Metadata for the rows of `Y`, `conf` and `mask`, as a tuple with an
         array of recording names and an array of (start,end) times. See
-        :py:func:`jax_moseq.utils.batch` for details.
+        :py:func:`jax_moseq.utils.utils.batch` for details.
+
+    Raises
+    ------
+    ValueError
+        If `ar_hypparams` is passed (as it is with `**config()`) and a
+        recording has no more frames than `ar_hypparams["nlags"]`.
     """
     _check_keypoint_dicts(coordinates, confidences)
     if keys is None:
@@ -1381,6 +1442,20 @@ def format_data(
             f"does not match the number of labels in `bodyparts` "
             f"({len(bodyparts)})"
         )
+
+    # a recording no longer than nlags has no frame the model can label
+    nlags = (kwargs.get("ar_hypparams") or {}).get("nlags")
+    too_short = [key for key in keys if nlags is not None and len(coordinates[key]) <= nlags]
+    if too_short:
+        lines = [f"Recording '{key}' has {len(coordinates[key])} frames." for key in too_short]
+        lines.append(
+            fill(
+                f"The model uses the {nlags} frames before each frame (`nlags`) "
+                f"to assign it a syllable, so every recording needs at least "
+                f"{nlags + 1} frames. Remove or merge the shorter recordings."
+            )
+        )
+        raise ValueError("\n".join(lines))
 
     if any(["/" in key for key in keys]):
         warnings.warn(
@@ -1417,7 +1492,7 @@ def format_data(
     )
     Y = Y.astype(float)
 
-    conf = batch(confidences, seg_length=seg_length, keys=keys)[0]
+    conf = batch(confidences, seg_length=seg_length, keys=keys)[0].astype(float)
     if np.min(conf) < 0:
         conf = np.maximum(conf, 0)
         warnings.warn(fill("Negative confidence values are not allowed and will be set to 0."))
@@ -1448,7 +1523,7 @@ def _check_coordinates_match_results(coordinates, results):
 
     results: dict
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`).
+        :py:func:`keypoint_moseq.io.extract_results`).
 
     Raises
     ------
@@ -1512,7 +1587,7 @@ def get_typical_trajectories(
 
     results: dict
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`).
+        :py:func:`keypoint_moseq.io.extract_results`).
 
     before_onset_frames: int, default=5, after_onset_frames: int, default=15
         Defines the temporal window, in frames, around syllable onset for
@@ -1520,7 +1595,7 @@ def get_typical_trajectories(
         of the actual duration of the syllable.
 
     min_frequency: float, default=0.005
-        Minimum frequency of a syllable to plotted.
+        Minimum frequency of a syllable to be plotted.
 
     min_instance_duration_frames: int, default=3
         Minimum duration, in frames, of a syllable instance to be included in
@@ -1536,7 +1611,7 @@ def get_typical_trajectories(
     density_sample : bool, default=True
         Whether to use density sampling when generating trajectories. If True,
         the trajectory is based on the most exemplary syllable instances,
-        rather than being average across all instances.
+        rather than the median across all instances.
 
     sampling_options: dict, default={'n_neighbors':50}
         Dictionary of options for sampling syllable instances (see
@@ -1572,7 +1647,7 @@ def get_typical_trajectories(
         raise ValueError(
             fill(
                 "No syllables with sufficient instances to generate a trajectory. "
-                "This usually occurs when there is not enough inut data or when "
+                "This usually occurs when there is not enough input data or when "
                 "all frames have the same syllable label (use "
                 "`plot_syllable_frequencies` to check if this is the case)"
             )
@@ -1631,13 +1706,13 @@ def syllable_similarity(
     Parameters
     ----------
     metric: str, default='cosine'
-        Distance metric to use. See :py:func:`scipy.spatial.pdist` for options.
+        Distance metric to use. See :py:func:`scipy.spatial.distance.pdist` for options.
 
     Returns
     -------
     distances : ndarray of shape (n_syllables, n_syllables)
         Pairwise distances between the typical trajectories associated with
-        each syllable. Only syllables with sufficient frequency of occurence
+        each syllable. Only syllables with sufficient frequency of occurrence
         are included.
 
     syllable_ixs : array of int
@@ -1772,6 +1847,8 @@ def check_videos(
     outside_frame_margin=0.02,
     outside_frame_threshold=0.01,
     fps=None,
+    recording_name_suffix="",
+    shared_videos=False,
     **kwargs,
 ):
     """Check that every recording has a readable video that lines up with its
@@ -1836,6 +1913,12 @@ def check_videos(
         report more frames than their keypoints have. Defaults to the frame
         rate the video reports.
 
+    recording_name_suffix: str, default=""
+        See :py:func:`keypoint_moseq.util.find_matching_videos`.
+
+    shared_videos: bool, default=False
+        See :py:func:`keypoint_moseq.util.find_matching_videos`.
+
     Returns
     -------
     video_paths: dict
@@ -1856,7 +1939,12 @@ def check_videos(
     keys = sorted(coordinates.keys())
     if video_paths is None:
         video_paths = find_matching_videos(
-            keys, video_dir, as_dict=True, video_extension=video_extension
+            keys,
+            video_dir,
+            as_dict=True,
+            video_extension=video_extension,
+            recording_name_suffix=recording_name_suffix,
+            shared_videos=shared_videos,
         )
     # Without `video_frame_indexes`, row i of the keypoints is video frame i,
     # so a video with more frames than rows may have a wrong frame count.
@@ -2027,7 +2115,7 @@ def generate_syllable_mapping(results: dict, syllable_grouping: list[list[int]],
     ----------
     results: dict
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`).
+        :py:func:`keypoint_moseq.io.extract_results`).
 
     syllable_grouping: list[list[int]]
         List of lists representing groups of syllables that should be mapped to a single index.
@@ -2085,7 +2173,7 @@ def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
     ----------
     results: dict
         Dictionary containing modeling results for a dataset (see
-        :py:func:`keypoint_moseq.fitting.extract_results`).
+        :py:func:`keypoint_moseq.io.extract_results`).
 
     mapping: dict[int, int]
         A dictionary mapping each original syllable index to a new syllable index.
@@ -2093,7 +2181,7 @@ def apply_syllable_mapping(results: dict, mapping: dict[int, int]) -> dict:
     Returns
     -------
     remapped_results: dict
-        A dictionary with the same structure as `results`, but with relabled syllables.
+        A dictionary with the same structure as `results`, but with relabeled syllables.
     """
     new_results = {}
     for key, value in results.items():
@@ -2148,9 +2236,6 @@ def find_medoid_distance_outliers(
     outlier_scale_factor: float, default=6.0
         Multiplier used to set the upper distance threshold. Higher values
         produce a higher threshold, so fewer points are removed.
-
-    **kwargs
-        Additional keyword arguments (ignored), usually overflow from **config().
 
     Returns
     -------
@@ -2337,7 +2422,7 @@ def plot_medoid_distance_outliers(
         Whether or not to overwrite outlier interpolation QA plots
 
     **kwargs
-        Additional keyword arguments (ignored), usually overflow from **config().
+        Additional keyword arguments (ignored), usually overflow from `**config()`.
 
     Returns
     -------
@@ -2464,7 +2549,7 @@ def estimate_sigmasq_loc(Y: jnp.ndarray, mask: jnp.ndarray, filter_size: int = 3
     Returns
     -------
     float
-        Mean of the squared distances between consecutive smoothed centroids.
+        Square of the mean distance between consecutive smoothed centroids.
     """
     masked_centroids = np.where(mask[:, :, None], np.median(Y, axis=2), np.nan)
     smoothed_centroids = median_filter(masked_centroids, (1, filter_size, 1))

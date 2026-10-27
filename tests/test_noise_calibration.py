@@ -1,5 +1,7 @@
 import os
+import warnings
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -69,6 +71,35 @@ def test_noise_calibration(calibration_inputs, dataframe_regression, num_regress
         },
         basename="test_noise_calibration_config",
     )
+
+
+def test_noise_calibration_updates_a_held_config_to_match_config_yml(
+    calibration_inputs, tutorial_pca
+):
+    """A config held in a variable, rather than reloaded with `config()`, is
+    passed to calibration, then to `init_model`, and its `error_estimator` is
+    saved back to config.yml."""
+    project_dir, coordinates, confidences = calibration_inputs
+    config = kpms.load_config(project_dir)
+    original_error_estimator = dict(config["error_estimator"])
+    pca, _ = tutorial_pca
+
+    np.random.seed(0)
+    widget = kpms.noise_calibration(project_dir, coordinates, confidences, **config)
+    annotate(widget, NUM_ANNOTATIONS)
+
+    saved_error_estimator = kpms.load_config(project_dir)["error_estimator"]
+    assert saved_error_estimator != original_error_estimator
+    assert config["error_estimator"] == saved_error_estimator
+
+    name = sorted(coordinates)[0]
+    data, metadata = kpms.format_data(
+        {name: coordinates[name]}, {name: confidences[name]}, **config
+    )
+    kpms.init_model(data, metadata=metadata, pca=pca, **config)
+
+    kpms.update_config(project_dir, error_estimator=config["error_estimator"])
+    assert kpms.load_config(project_dir)["error_estimator"] == saved_error_estimator
 
 
 def test_noise_calibration_does_not_save_before_twenty_annotations(
@@ -151,3 +182,47 @@ def test_noise_calibration_rejects_frame_indexes_missing_a_recording(calibration
 
     assert first in str(error.value)
     assert "video_frame_indexes" in str(error.value)
+
+
+class Checked(Exception):
+    """Raised by the stand-in check_videos, which noise_calibration calls
+    right after checking the matplotlib backend."""
+
+
+def start_calibration(tmp_path, monkeypatch):
+    def stop(*args, **kwargs):
+        raise Checked
+
+    monkeypatch.setattr(kpms.calibration, "check_videos", stop)
+    coordinates = {"mouseA": np.zeros((10, 4, 2))}
+    confidences = {"mouseA": np.ones((10, 4))}
+    with pytest.raises(Checked):
+        kpms.noise_calibration(
+            str(tmp_path),
+            coordinates,
+            confidences,
+            bodyparts=list("abcd"),
+            use_bodyparts=list("abcd"),
+            video_dir=str(tmp_path),
+        )
+
+
+def test_calibration_warns_without_the_ipympl_backend(tmp_path, monkeypatch):
+    monkeypatch.setattr(matplotlib, "get_backend", lambda: "agg")
+
+    with pytest.warns(UserWarning) as record:
+        start_calibration(tmp_path, monkeypatch)
+
+    messages = [" ".join(str(w.message).split()) for w in record]
+    message = next(m for m in messages if "ipympl" in m)
+    assert "'agg'" in message
+    assert "%matplotlib widget" in message
+
+
+@pytest.mark.parametrize("backend", ["widget", "ipympl", "module://ipympl.backend_nbagg"])
+def test_calibration_is_silent_with_the_ipympl_backend(tmp_path, monkeypatch, backend):
+    monkeypatch.setattr(matplotlib, "get_backend", lambda: backend)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        start_calibration(tmp_path, monkeypatch)

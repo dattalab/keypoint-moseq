@@ -36,6 +36,7 @@ outlier_scale_factor: 6.0
 posterior_bodyparts:
 - BODYPART3
 recording_name_suffix: ''
+shared_videos: false
 skeleton:
 - - tail
   - spine4
