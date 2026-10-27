@@ -796,6 +796,7 @@ def estimate_syllable_marginals(
         seed=model["seed"],
         params=model["params"],
         hypparams=model["hypparams"],
+        location_aware=location_aware,
         **kwargs,
     )
 
@@ -805,8 +806,10 @@ def estimate_syllable_marginals(
 
     if location_aware:
         resample_func = allo_keypoint_slds.resample_model
+        marginals_func = allo_keypoint_slds.stateseq_marginals
     else:
         resample_func = keypoint_slds.resample_model
+        marginals_func = stateseq_marginals
 
     total_iters = burn_in_iters + num_samples * steps_per_sample
     with tqdm.trange(total_iters, desc="Applying model", ncols=72) as pbar:
@@ -832,8 +835,8 @@ def estimate_syllable_marginals(
                 and (iteration - burn_in_iters) % steps_per_sample == 0
             ):
                 marginal_estimates += np.array(
-                    stateseq_marginals(
-                        model["states"]["x"], data["mask"], **model["params"]
+                    marginals_func(
+                        mask=data["mask"], **model["states"], **model["params"]
                     )
                 )
                 if return_samples:
