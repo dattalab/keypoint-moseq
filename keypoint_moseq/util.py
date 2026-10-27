@@ -943,7 +943,7 @@ def sample_instances(
     n_neighbors: int, default=50
         Number of neighbors to use for density estimation and for sampling the
         neighbors of the exemplar syllable instance (used when
-        `mode='density'`)
+        `mode='density'`). Syllables with fewer instances use all of them.
 
     coordinates, before_onset_frames, after_onset_frames, centroids, headings, smoothing_filter_frames
         Passed to :py:func:`keypoint_moseq.util.get_instance_trajectories`
@@ -1000,12 +1000,14 @@ def sample_instances(
         sampled_instances = {}
 
         for syllable, X in trajectories.items():
+            # a syllable with fewer than `n_neighbors` instances uses all of them
+            k = min(n_neighbors, len(X))
             Xpca = pca.transform(X.reshape(X.shape[0], -1))
-            nbrs = NearestNeighbors(n_neighbors=n_neighbors).fit(Xpca)
+            nbrs = NearestNeighbors(n_neighbors=k).fit(Xpca)
             distances, indices = nbrs.kneighbors(Xpca)
             local_density = 1 / distances.mean(1)
 
-            distances, _ = all_nbrs.kneighbors(Xpca)
+            distances, _ = all_nbrs.kneighbors(Xpca, n_neighbors=k)
             global_density = 1 / distances.mean(1)
             exemplar = np.argmax(local_density / global_density)
             samples = np.random.choice(indices[exemplar], num_samples, replace=False)

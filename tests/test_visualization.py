@@ -347,6 +347,43 @@ def test_grid_movies_with_a_window_size_do_not_need_coordinates(tmp_path):
             assert reader.get_meta_data()["size"] == (64, 32), name
 
 
+def test_density_sampled_grid_movies_of_syllables_with_few_instances(tmp_path):
+    results = synthetic_results(["rec_a", "rec_b"])
+    # At least the 5 frames before onset and 15 after that density sampling
+    # uses for each trajectory.
+    fps, pre, post = 30, 0.2, 0.5
+    instances = get_syllable_instances(
+        {name: recording["syllable"] for name, recording in results.items()},
+        before_onset_frames=round(pre * fps),
+        after_onset_frames=round(post * fps),
+        min_instance_duration_frames=3,
+        min_frequency=0.005,
+        min_instances=2,
+    )
+    # enough instances for a 1 x 2 grid, but fewer than the 50 neighbors
+    # density sampling uses by default
+    assert instances and all(len(v) < 50 for v in instances.values())
+
+    sampled = kpms.generate_grid_movies(
+        results,
+        output_dir=str(tmp_path),
+        coordinates=moving_keypoints(results),
+        keypoints_only=True,
+        sampling_options={"mode": "density"},
+        rows=1,
+        cols=2,
+        fps=fps,
+        before_onset_sec=pre,
+        after_onset_sec=post,
+    )
+
+    assert sorted(sampled) == sorted(instances)
+    for syllable, sampled_instances in sampled.items():
+        assert len(set(sampled_instances)) == 2, syllable
+        assert set(sampled_instances) <= set(instances[syllable]), syllable
+    assert set(os.listdir(tmp_path)) == {f"syllable{s}.mp4" for s in sampled}
+
+
 @pytest.mark.parametrize("save_gifs", [False, True], ids=["mp4_only", "mp4_and_gif"])
 def test_trajectory_plot_mp4s_span_the_syllable_window(tmp_path, save_gifs):
     results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
