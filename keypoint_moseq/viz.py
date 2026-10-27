@@ -726,7 +726,8 @@ def _grid_movie_tile(
     cs = centroids[key][clip_frames]
     h, c = headings[key][start], cs[before_onset_frames]
     r = np.float32([[np.cos(h), np.sin(h)], [-np.sin(h), np.cos(h)]])
-    syllable_coordinates = coordinates[key][clip_frames].copy()
+    if overlay_keypoints:
+        syllable_coordinates = coordinates[key][clip_frames].copy()
 
     keypoint_dimension = next(iter(centroids.values())).shape[-1]
 

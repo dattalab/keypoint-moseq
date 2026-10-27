@@ -316,6 +316,37 @@ def test_min_instance_duration_is_in_seconds(tmp_path):
     assert min(durations) >= 10
 
 
+def test_grid_movies_with_a_window_size_do_not_need_coordinates(tmp_path):
+    results = synthetic_results(["rec_a", "rec_b"])
+    for recording in results.values():
+        recording["centroid"] = np.clip(recording["centroid"] + 64, 16, 112)
+    video_paths = {}
+    for name, recording in results.items():
+        video_paths[name] = str(tmp_path / f"{name}.mp4")
+        with imageio.get_writer(video_paths[name], fps=30) as writer:
+            for _ in range(len(recording["syllable"])):
+                writer.append_data(np.zeros((128, 128, 3), dtype=np.uint8))
+    output_dir = tmp_path / "grid_movies"
+
+    sampled = kpms.generate_grid_movies(
+        results,
+        output_dir=str(output_dir),
+        video_paths=video_paths,
+        window_size=32,
+        rows=1,
+        cols=2,
+        fps=30,
+        before_onset_sec=0.1,
+        after_onset_sec=0.2,
+    )
+
+    assert sampled
+    assert set(os.listdir(output_dir)) == {f"syllable{s}.mp4" for s in sampled}
+    for name in os.listdir(output_dir):
+        with imageio.get_reader(str(output_dir / name), "ffmpeg") as reader:
+            assert reader.get_meta_data()["size"] == (64, 32), name
+
+
 @pytest.mark.parametrize("save_gifs", [False, True], ids=["mp4_only", "mp4_and_gif"])
 def test_trajectory_plot_mp4s_span_the_syllable_window(tmp_path, save_gifs):
     results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
