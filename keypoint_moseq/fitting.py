@@ -678,10 +678,11 @@ def apply_model(
         warnings.warn(
             fill(
                 "With `ar_only=True`, `apply_model` only resamples syllable "
-                "labels, and each iteration draws them independently given the "
-                "same pose trajectories, so iterations after the first change "
-                "nothing. Stopping after 1 iteration instead of running "
-                f"{num_iters}. Set `num_iters=1` to silence this warning."
+                "labels, and each iteration redraws them independently from the "
+                "same distribution given the same pose trajectories, so more "
+                "iterations do not improve them. Stopping after 1 iteration "
+                f"instead of running {num_iters}. Set `num_iters=1` to silence "
+                "this warning."
             )
         )
         num_iters = 1
