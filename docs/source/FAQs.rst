@@ -425,7 +425,7 @@ The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syl
 
 **Post-hoc.** For each syllable, a Dunn's z-test is run on every pair of groups, again with empirical p-values from the same permutations. These are BH-adjusted within each syllable, across pairs — one correction family of size *N_pairs*, applied independently for each syllable. There is no joint correction across the full (syllable × pair) grid. For two-group experiments this post-hoc correction is a no-op (only one pair).
 
-**What the red stars mean.** A syllable is starred for a given pair of groups only if **both** its omnibus FDR-adjusted p-value (corrected across syllables) and its FDR-adjusted Dunn's pairwise p-value (corrected across pairs within that syllable) are below the significance threshold (default ``0.05``).
+**What the red stars mean.** A syllable is starred for a given pair of groups only if its omnibus FDR-adjusted p-value (corrected across syllables) is at or below the significance threshold (default ``0.05``) **and** its FDR-adjusted Dunn's pairwise p-value (corrected across pairs within that syllable) is below it.
 
 **Error bars are not from this test.** The error bars are 68% bootstrap confidence intervals on each group's mean across recordings. They reflect uncertainty in the group mean, not the significance test.
 
