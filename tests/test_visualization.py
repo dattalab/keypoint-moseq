@@ -434,6 +434,43 @@ def test_kappa_scan_plot(tmp_path, num_kappas):
     plt.close(fig)
 
 
+@pytest.mark.parametrize("with_video", [False, True], ids=["keypoints_only", "video"])
+def test_grid_movie_dot_shows_on_the_syllable_frames_only(tmp_path, with_video):
+    """A syllable on frames 10 to 12 (`end` is exclusive), shown from 2
+    frames before its onset to 6 after."""
+    num_frames = 40
+    if with_video:
+        video_paths = {"r": str(tmp_path / "r.mp4")}
+        with imageio.get_writer(video_paths["r"], fps=30) as writer:
+            for _ in range(num_frames):
+                writer.append_data(np.zeros((128, 128, 3), dtype=np.uint8))
+        video_frame_indexes = {"r": np.arange(num_frames)}
+    else:
+        video_paths = video_frame_indexes = None
+    coordinates = {"r": np.tile([[64.0, 64.0], [69.0, 64.0], [59.0, 64.0]], (num_frames, 1, 1))}
+
+    frames = kpms.grid_movie(
+        [("r", 10, 13)],
+        1,
+        1,
+        video_paths,
+        {"r": np.full((num_frames, 2), 64.0)},
+        {"r": np.zeros(num_frames)},
+        32,
+        video_frame_indexes,
+        dot_color=(0, 255, 0),
+        dot_radius=2,
+        before_onset_frames=2,
+        after_onset_frames=6,
+        overlay_keypoints=not with_video,
+        coordinates=coordinates,
+        plot_options={"keypoint_colors": [[1.0, 0.0, 0.0]] * 3, "node_size": 1},
+    )
+
+    frames_with_dot = [8 + i for i, frame in enumerate(frames) if (frame[..., 1] > 200).any()]
+    assert frames_with_dot == [10, 11, 12]
+
+
 @pytest.mark.parametrize("copy", [False, True])
 def test_overlay_keypoints_on_image_returns_the_drawn_image(copy):
     image = np.zeros((40, 40, 3), dtype=np.uint8)

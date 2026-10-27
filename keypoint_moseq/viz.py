@@ -770,7 +770,7 @@ def _grid_movie_tile(
 
             frame = cv2.warpAffine(frame, np.float32(M), (window_size, window_size))
             frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
-            if 0 <= ii - before_onset_frames <= end - start and dot_radius > 0:
+            if 0 <= ii - before_onset_frames < end - start and dot_radius > 0:
                 pos = tuple([int(x) for x in M @ np.append(c, 1) * scale_factor])
                 cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
             tile.append(frame)
@@ -790,7 +790,7 @@ def _grid_movie_tile(
             frame = overlay_keypoints_on_image(
                 background.copy(), uvs, edges=edges, **plot_options
             )
-            if 0 <= ii - before_onset_frames <= end - start and dot_radius > 0:
+            if 0 <= ii - before_onset_frames < end - start and dot_radius > 0:
                 pos = (int(c[0]), int(c[1]))
                 cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
             tile.append(frame)
