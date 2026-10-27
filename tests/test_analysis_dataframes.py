@@ -82,10 +82,23 @@ def test_moseq_df_kinematics(tutorial_moseq_df, tutorial_analysis_project):
         np.testing.assert_array_equal(rows["heading"], heading, err_msg=name)
         np.testing.assert_allclose(
             rows["angular_velocity"],
-            np.concatenate([[0], np.diff(smoothed_heading) * FPS]),
+            np.concatenate([[0], np.angle(np.exp(1j * np.diff(smoothed_heading))) * FPS]),
             rtol=1e-12,
             err_msg=name,
         )
+
+
+def test_angular_velocity_where_the_heading_wraps(tmp_path):
+    """A heading turning at a constant 0.1 rad per frame wraps from π to -π
+    about every 63 frames."""
+    results = synthetic_results(["rec_a"])
+    results["rec_a"]["heading"] = np.angle(np.exp(1j * 0.1 * np.arange(300)))
+    moseq_df = kpms.compute_moseq_df(
+        str(tmp_path), "model", results_dict=results, fps=FPS, smooth_heading=False
+    )
+
+    # leaves out the frames near each end, where smoothing pads the heading
+    np.testing.assert_allclose(moseq_df["angular_velocity"][20:-20], 0.1 * FPS)
 
 
 def test_moseq_df_onsets(tutorial_moseq_df):

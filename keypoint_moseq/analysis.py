@@ -413,9 +413,9 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=None, sm
         gaussian_smoothed_heading = filter_angle(
             recording_heading, size=3, method="gaussian"
         )
-        angular_velocity.append(
-            np.concatenate(([0], np.diff(gaussian_smoothed_heading) * fps))
-        )
+        # wrap each change in heading to (-pi, pi], so crossing ±pi is a small turn
+        heading_change = np.angle(np.exp(1j * np.diff(gaussian_smoothed_heading)))
+        angular_velocity.append(np.concatenate(([0], heading_change * fps)))
 
         # add syllable data
         syllables.append(v["syllable"])
