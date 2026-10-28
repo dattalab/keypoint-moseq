@@ -334,6 +334,44 @@ def test_slp_with_repeated_video_names_raises(tmp_path):
         kpms.load_keypoints(str(path), "sleap")
 
 
+def test_untracked_slp_loads_the_best_instance_in_each_frame(tmp_path):
+    # A multi-instance model run without SLEAP's tracker can add a false
+    # positive detection to some frames of a single-animal recording.
+    skeleton = sleap_io.Skeleton(["nose", "tail"])
+    video = sleap_io.Video(str(tmp_path / "session.mp4"), open_backend=False)
+
+    def predicted(points, score):
+        return sleap_io.PredictedInstance.from_numpy(
+            np.array(points, dtype=float), skeleton, point_scores=np.full(2, score), score=score
+        )
+
+    user = sleap_io.Instance.from_numpy(np.array([[7.0, 7.0], [8.0, 8.0]]), skeleton)
+    frames = [
+        sleap_io.LabeledFrame(video=video, frame_idx=0, instances=[predicted([[1, 1], [2, 2]], 0.9)]),
+        sleap_io.LabeledFrame(
+            video=video,
+            frame_idx=1,
+            instances=[predicted([[50, 50], [60, 60]], 0.2), predicted([[3, 3], [4, 4]], 0.8)],
+        ),
+        sleap_io.LabeledFrame(
+            video=video, frame_idx=2, instances=[predicted([[5, 5], [6, 6]], 0.3), user]
+        ),
+    ]
+    path = tmp_path / "session.predictions.slp"
+    sleap_io.save_slp(sleap_io.Labels(frames, videos=[video], skeletons=[skeleton]), str(path))
+
+    coordinates, confidences, _ = kpms.load_keypoints(str(path), "sleap")
+
+    assert list(coordinates) == ["session.predictions"]
+    np.testing.assert_array_equal(
+        coordinates["session.predictions"],
+        [[[1, 1], [2, 2]], [[3, 3], [4, 4]], [[7, 7], [8, 8]]],
+    )
+    np.testing.assert_allclose(
+        confidences["session.predictions"], [[0.9, 0.9], [0.8, 0.8], [1, 1]], rtol=1e-6
+    )
+
+
 @pytest.mark.parametrize(
     "export",
     [
