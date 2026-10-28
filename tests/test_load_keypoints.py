@@ -1,4 +1,5 @@
 import os
+import shutil
 from itertools import islice
 
 import numpy as np
@@ -171,6 +172,23 @@ def test_deeplabcut_layout_file_matches_its_named_columns(tracker_outputs_dir, p
     for key in expected_coordinates:
         np.testing.assert_array_equal(coordinates[key], expected_coordinates[key])
         np.testing.assert_array_equal(confidences[key], expected_confidences[key])
+
+
+def test_hdf5_extension_loads_like_h5(tracker_outputs_dir, tmp_path):
+    source = os.path.join(tracker_outputs_dir, f"{DLC3_SINGLE}.h5")
+    shutil.copy(source, tmp_path / "recording.hdf5")
+    expected_coordinates, expected_confidences, expected_bodyparts = kpms.load_keypoints(
+        source, "deeplabcut"
+    )
+
+    coordinates, confidences, bodyparts = kpms.load_keypoints(
+        str(tmp_path / "recording.hdf5"), "deeplabcut"
+    )
+
+    assert bodyparts == expected_bodyparts
+    name = os.path.basename(DLC3_SINGLE)
+    np.testing.assert_array_equal(coordinates["recording"], expected_coordinates[name])
+    np.testing.assert_array_equal(confidences["recording"], expected_confidences[name])
 
 
 def test_superanimal_empty_slots_load_as_missing(tracker_outputs_dir):

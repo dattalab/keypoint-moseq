@@ -1147,7 +1147,7 @@ def _is_lightning_pose_metrics(filepath):
 def _deeplabcut_loader(filepath, name, exclude_individuals=["single"]):
     """Load tracking results from deeplabcut csv or hdf5 files."""
     ext = os.path.splitext(filepath)[1]
-    if ext == ".h5":
+    if ext in (".h5", ".hdf5"):
         df = pd.read_hdf(filepath)
     if ext == ".csv":
         with open(filepath) as f:
