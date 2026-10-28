@@ -1172,7 +1172,14 @@ def _deeplabcut_arrays(df):
     )
     bodyparts = x.columns.get_level_values("bodyparts").tolist()
     coordinates = np.stack([x.to_numpy(), y.to_numpy()], axis=-1)
-    return coordinates, likelihood.to_numpy(), bodyparts
+    confidences = likelihood.to_numpy(copy=True)
+
+    # deeplabcut 3 fills x, y and likelihood with -1 for an animal it did not
+    # detect, e.g. the empty slots in SuperAnimal output
+    padded = (coordinates == -1).all(axis=-1) & (confidences == -1)
+    coordinates[padded] = np.nan
+    confidences[padded] = np.nan
+    return coordinates, confidences, bodyparts
 
 
 def _sleap_loader(filepath, name):

@@ -37,7 +37,8 @@ def read_deeplabcut_columns(filepath, name, exclude_individuals=("single",)):
     """Coordinates, confidences and bodyparts of a file in DeepLabCut's
     layout, taken from the x, y and likelihood columns of each bodypart by
     name, with bodyparts in file order and recordings named the way
-    `load_keypoints` names them."""
+    `load_keypoints` names them. Keypoints whose x, y and likelihood are all
+    -1, which DeepLabCut 3 writes for undetected animals, are missing."""
     if filepath.endswith(".h5"):
         df = pd.read_hdf(filepath)
     else:
@@ -64,6 +65,9 @@ def read_deeplabcut_columns(filepath, name, exclude_individuals=("single",)):
         confidences[key] = np.stack(
             [part[bp]["likelihood"].to_numpy() for bp in bodyparts], axis=1
         )
+        padded = (coordinates[key] == -1).all(axis=-1) & (confidences[key] == -1)
+        coordinates[key][padded] = np.nan
+        confidences[key][padded] = np.nan
     return coordinates, confidences, bodyparts
 
 
@@ -163,6 +167,25 @@ def test_deeplabcut_layout_file_matches_its_named_columns(tracker_outputs_dir, p
     for key in expected_coordinates:
         np.testing.assert_array_equal(coordinates[key], expected_coordinates[key])
         np.testing.assert_array_equal(confidences[key], expected_confidences[key])
+
+
+def test_superanimal_empty_slots_load_as_missing(tracker_outputs_dir):
+    # SuperAnimal output has a fixed number of slots per frame, and DeepLabCut
+    # 3 fills each slot with no detection with -1 in x, y and likelihood.
+    filepath = os.path.join(tracker_outputs_dir, SUPERANIMAL)
+    name = os.path.splitext(os.path.basename(filepath))[0]
+    likelihood = pd.read_hdf(filepath).xs("likelihood", axis=1, level="coords")
+
+    coordinates, confidences, _ = kpms.load_keypoints(filepath, "deeplabcut")
+
+    n_padded = sum(
+        int((likelihood.xs(key.removeprefix(f"{name}_"), axis=1, level="individuals") == -1).to_numpy().sum())
+        for key in confidences
+    )
+    assert n_padded > 0
+    assert sum(int(np.isnan(c).sum()) for c in confidences.values()) == n_padded
+    assert sum(int(np.isnan(c).all(-1).sum()) for c in coordinates.values()) == n_padded
+    assert not any(np.any(c == -1) for c in [*coordinates.values(), *confidences.values()])
 
 
 @pytest.mark.parametrize(
