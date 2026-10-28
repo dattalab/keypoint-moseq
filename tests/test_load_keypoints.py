@@ -39,7 +39,8 @@ def read_deeplabcut_columns(filepath, name, exclude_individuals=("single",)):
     layout, taken from the x, y and likelihood columns of each bodypart by
     name, with bodyparts in file order and recordings named the way
     `load_keypoints` names them. Keypoints whose x, y and likelihood are all
-    -1, which DeepLabCut 3 writes for undetected animals, are missing."""
+    -1, which DeepLabCut 3 writes for undetected animals, are missing, and
+    recordings with no keypoints in any frame are left out."""
     if filepath.endswith(".h5"):
         df = pd.read_hdf(filepath)
     else:
@@ -69,6 +70,8 @@ def read_deeplabcut_columns(filepath, name, exclude_individuals=("single",)):
         padded = (coordinates[key] == -1).all(axis=-1) & (confidences[key] == -1)
         coordinates[key][padded] = np.nan
         confidences[key][padded] = np.nan
+        if np.isnan(coordinates[key]).all():
+            del coordinates[key], confidences[key]
     return coordinates, confidences, bodyparts
 
 
@@ -187,6 +190,25 @@ def test_superanimal_empty_slots_load_as_missing(tracker_outputs_dir):
     assert sum(int(np.isnan(c).sum()) for c in confidences.values()) == n_padded
     assert sum(int(np.isnan(c).all(-1).sum()) for c in coordinates.values()) == n_padded
     assert not any(np.any(c == -1) for c in [*coordinates.values(), *confidences.values()])
+
+
+def test_recordings_without_keypoints_are_not_loaded(tracker_outputs_dir):
+    # Most of the 10 SuperAnimal slots never hold a detection in this video.
+    filepath = os.path.join(tracker_outputs_dir, SUPERANIMAL)
+    name = os.path.splitext(os.path.basename(filepath))[0]
+    likelihood = pd.read_hdf(filepath).xs("likelihood", axis=1, level="coords")
+    individuals = likelihood.columns.get_level_values("individuals").unique()
+    detected = [
+        f"{name}_{ind}"
+        for ind in individuals
+        if (likelihood.xs(ind, axis=1, level="individuals") != -1).to_numpy().any()
+    ]
+
+    coordinates, confidences, _ = kpms.load_keypoints(filepath, "deeplabcut")
+
+    assert 0 < len(detected) < len(individuals)
+    assert sorted(coordinates) == sorted(detected)
+    assert sorted(confidences) == sorted(detected)
 
 
 def test_lightning_pose_metric_files_are_not_loaded(tracker_outputs_dir):

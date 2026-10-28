@@ -1048,7 +1048,8 @@ def load_keypoints(
     -------
     coordinates: dict
         Dictionary mapping filenames to keypoint coordinates as ndarrays of
-        shape (n_frames, n_bodyparts, 2[or 3])
+        shape (n_frames, n_bodyparts, 2[or 3]). Recordings with no keypoints
+        in any frame are left out.
 
     confidences: dict
         Dictionary mapping filenames to `likelihood` scores as ndarrays of
@@ -1120,6 +1121,11 @@ def load_keypoints(
 
         coordinates.update(new_coordinates)
         confidences.update(new_confidences)
+
+    # leave out recordings with no keypoints in any frame, such as an
+    # individual slot that the tracker never filled
+    for key in [k for k, v in coordinates.items() if np.isnan(v).all()]:
+        del coordinates[key], confidences[key]
 
     # check for valid results
     assert len(coordinates) > 0, fill(f"No valid results found for {filepath_pattern}")
