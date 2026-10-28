@@ -29,6 +29,13 @@ OPEN_FIELD_2D_URL = (
 OPEN_FIELD_2D_HASH = "md5:22ec317b33039875cb21c76dca027017"
 OPEN_FIELD_2D_DLC_PROJECT = "22_12_11_pipeline_dev/keypoint-moseq/testing/dlc_project"
 
+TRACKER_OUTPUTS_URL = (
+    "https://keypoint-moseq-fixtures.s3.amazonaws.com/v1/tracker-outputs.tar.gz"
+)
+TRACKER_OUTPUTS_HASH = (
+    "sha256:e8c198b57720b51eecba6e6475534c945f426e54a1b24556dbf103dffb47c47a"
+)
+
 
 @pytest.fixture(scope="session")
 def dlc_project_dir():
@@ -51,6 +58,25 @@ def dlc_project_dir():
             archive_file.extractall(extract_dir)
         open(extracted_marker, "w").close()
     return os.path.join(extract_dir, OPEN_FIELD_2D_DLC_PROJECT)
+
+
+@pytest.fixture(scope="session")
+def tracker_outputs_dir():
+    """Real DeepLabCut, SLEAP and Lightning Pose output, covering each file
+    type keypoint-MoSeq loads from the tracker version its loader was written
+    for and the current one, downloaded and unpacked once per machine.
+    `manifest.csv` in the returned directory gives each file's tracker,
+    version, source and license."""
+    members = pooch.retrieve(
+        TRACKER_OUTPUTS_URL,
+        known_hash=TRACKER_OUTPUTS_HASH,
+        fname="tracker-outputs.tar.gz",
+        path=pooch.os_cache("keypoint-moseq"),
+        processor=pooch.Untar(),
+        progressbar=False,
+    )
+    manifest = next(m for m in members if os.path.basename(m) == "manifest.csv")
+    return os.path.dirname(manifest)
 
 
 @pytest.fixture(scope="session")

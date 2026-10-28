@@ -46,6 +46,12 @@ jobs:
           path: ~/.cache/keypoint-moseq/open_field_2D.zip
           key: open-field-2d-22ec317b33039875cb21c76dca027017
 
+      - name: Restore tracker output fixtures
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/keypoint-moseq/tracker-outputs.tar.gz
+          key: tracker-outputs-e8c198b57720b51eecba6e6475534c945f426e54a1b24556dbf103dffb47c47a
+
       - name: Run tests
         run: uvx nox -s tests-${{ matrix.python }}
 

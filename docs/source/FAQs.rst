@@ -86,6 +86,8 @@ Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detec
    coordinates, confidences, bodyparts = kpms.load_keypoints(keypoint_data_path, 'deeplabcut')
 
 
+- For multi-animal data, each DeepLabCut individual or SLEAP track becomes its own recording and is treated as one animal followed through the whole file, so load tracked output, such as DeepLabCut's ``_el.h5``. Per-frame detections that were never tracked, such as DeepLabCut's SuperAnimal output, don't follow one animal.
+
 - If writing your own data loader, the output should be a ``coordinates`` dictionary that maps recording names to arrays of shape ``(num_frames, num_keypoints, num_dimensions)``, where ``num_dimensions`` is 2 or 3. The keypoint axis should correspond to the `bodyparts` list in the config. You can also include a ``confidences`` dictionary that maps recording names to arrays of shape ``(num_frames, num_keypoints)``. If your loader applies to a commonly used keypoint inference method, please let us know! We'd love to add it for others to use.
 
 - We are also happy to help write a loader for your data. Just open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and describe the method you used for keypoint tracking and the format of the data, including the file format, how it is organized into directories, and how the output files are typically named (especially in relation to the corresponding videos). If possible, also send one or more example files to calebsw@gmail.com. 
