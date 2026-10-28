@@ -174,6 +174,26 @@ def test_deeplabcut_layout_file_matches_its_named_columns(tracker_outputs_dir, p
         np.testing.assert_array_equal(confidences[key], expected_confidences[key])
 
 
+@pytest.mark.parametrize("stem", [DLC3_SINGLE, DLC3_MULTI, DLC2_MULTI], ids=os.path.basename)
+def test_raw_predictions_load_without_their_filtered_copies(tracker_outputs_dir, stem):
+    # DeepLabCut's filterpredictions writes <stem>_filtered.h5 next to
+    # <stem>.h5, and keypoint-MoSeq is meant for unfiltered keypoints.
+    filepath = os.path.join(tracker_outputs_dir, f"{stem}.h5")
+    raw = kpms.load_keypoints(filepath, "deeplabcut")[0]
+
+    coordinates = kpms.load_keypoints(os.path.dirname(filepath), "deeplabcut", extension=".h5")[0]
+
+    assert sorted(coordinates) == sorted(raw)
+
+
+def test_filtered_predictions_load_when_selected(tracker_outputs_dir):
+    folder = os.path.dirname(os.path.join(tracker_outputs_dir, DLC3_SINGLE))
+
+    coordinates = kpms.load_keypoints(os.path.join(folder, "*_filtered.h5"), "deeplabcut")[0]
+
+    assert sorted(coordinates) == [f"{os.path.basename(DLC3_SINGLE)}_filtered"]
+
+
 def test_hdf5_extension_loads_like_h5(tracker_outputs_dir, tmp_path):
     source = os.path.join(tracker_outputs_dir, f"{DLC3_SINGLE}.h5")
     shutil.copy(source, tmp_path / "recording.hdf5")
