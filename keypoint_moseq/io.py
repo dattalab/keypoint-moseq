@@ -1144,26 +1144,35 @@ def _deeplabcut_loader(filepath, name, exclude_individuals=["single"]):
                 )
             else:
                 ind_df = df.xs(ind, axis=1, level="individuals")
-                bps = ind_df.columns.get_level_values("bodyparts").unique().tolist()
-                ind_bodyparts[ind] = bps
+                (
+                    coordinates[f"{name}_{ind}"],
+                    confidences[f"{name}_{ind}"],
+                    ind_bodyparts[ind],
+                ) = _deeplabcut_arrays(ind_df)
 
-                arr = ind_df.to_numpy().reshape(len(ind_df), -1, 3)
-                coordinates[f"{name}_{ind}"] = arr[:, :, :-1]
-                confidences[f"{name}_{ind}"] = arr[:, :, -1]
-
-        bodyparts = set(ind_bodyparts[list(ind_bodyparts.keys())[0]])
-        assert all([set(bps) == bodyparts for bps in ind_bodyparts.values()]), (
+        bodyparts = ind_bodyparts[list(ind_bodyparts.keys())[0]]
+        assert all([bps == bodyparts for bps in ind_bodyparts.values()]), (
             f"Bodyparts are not consistent across individuals. The following bodyparts "
             f"were found for each individual: {ind_bodyparts}. Use `exclude_individuals`"
             "to exclude specific individuals."
         )
     else:
-        bodyparts = df.columns.get_level_values("bodyparts").unique().tolist()
-        arr = df.to_numpy().reshape(len(df), -1, 3)
-        coordinates[name] = arr[:, :, :-1]
-        confidences[name] = arr[:, :, -1]
+        coordinates[name], confidences[name], bodyparts = _deeplabcut_arrays(df)
 
     return coordinates, confidences, bodyparts
+
+
+def _deeplabcut_arrays(df):
+    """Coordinates, confidences and bodyparts from a dataframe in deeplabcut's
+    column layout. The x, y and likelihood columns are selected by name
+    because some tools write others, such as the ensemble statistics that
+    Lightning Pose's EKS smoother adds after each likelihood."""
+    x, y, likelihood = (
+        df.xs(coord, axis=1, level="coords") for coord in ["x", "y", "likelihood"]
+    )
+    bodyparts = x.columns.get_level_values("bodyparts").tolist()
+    coordinates = np.stack([x.to_numpy(), y.to_numpy()], axis=-1)
+    return coordinates, likelihood.to_numpy(), bodyparts
 
 
 def _sleap_loader(filepath, name):

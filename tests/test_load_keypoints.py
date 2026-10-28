@@ -1,10 +1,69 @@
 import os
+from itertools import islice
 
 import numpy as np
 import pandas as pd
+import pytest
 
 import keypoint_moseq as kpms
 from keypoint_moseq.util import list_files_with_exts
+
+# Files in the tracker output archive (`tracker_outputs_dir`) that DeepLabCut,
+# Lightning Pose and Lightning Pose's EKS smoother write in DeepLabCut's
+# layout.
+DLC3_SINGLE = "generated/dlc-3.0.2/single-animal/analyzed/one_mouse_clip300DLC_Resnet50_syntheticNov11shuffle1_snapshot_1"
+DLC3_MULTI = "generated/dlc-3.0.2/multi-animal/analyzed/one_mouse_clip300DLC_Resnet50_syntheticNov11shuffle1_snapshot_1_el"
+SUPERANIMAL = "generated/dlc-3.0.2/superanimal/one_mouse_clip300_superanimal_topviewmouse_hrnet_w32_fasterrcnn_resnet50_fpn_v2.h5"
+DLC2_MULTI = "generated/dlc-2.3.11/kpms_fixture_ma-kpms-2026-10-27/videos/one_mouse_clip300DLC_dlcrnetms5_kpms_fixture_maOct27shuffle1_5_el"
+DEEPLABCUT_LAYOUT_FILES = [
+    # DeepLabCut 3.0.2
+    *[f"{stem}{suffix}" for stem in [DLC3_SINGLE, DLC3_MULTI] for suffix in [".h5", ".csv", "_filtered.h5", "_filtered.csv"]],
+    SUPERANIMAL,
+    # DeepLabCut 2.x
+    *[f"{DLC2_MULTI}{suffix}" for suffix in [".h5", ".csv", "_filtered.h5", "_filtered.csv"]],
+    "public/movement/poses/DLC_single-wasp.predictions.h5",
+    "public/movement/poses/DLC_single-wasp.predictions.csv",
+    # Lightning Pose and EKS
+    "generated/lightning-pose-2.4.3/models/seed0/video_preds/test_vid.csv",
+    "public/eks/data/mirror-mouse-separate/180607_004.train_frames=75.rng=0.top.csv",
+    "public/eks/data/mirror-mouse-separate/180607_004.train_frames=75.rng=0.bot.csv",
+    "generated/lightning-pose-2.4.3/eks/output/eks_singlecam.csv",
+    "public/movement/poses/EKS_IBL-paw_multicam_left.predictions.csv",
+]
+
+
+def read_deeplabcut_columns(filepath, name, exclude_individuals=("single",)):
+    """Coordinates, confidences and bodyparts of a file in DeepLabCut's
+    layout, taken from the x, y and likelihood columns of each bodypart by
+    name, with bodyparts in file order and recordings named the way
+    `load_keypoints` names them."""
+    if filepath.endswith(".h5"):
+        df = pd.read_hdf(filepath)
+    else:
+        with open(filepath) as f:
+            first_cells = [line.split(",")[0] for line in islice(f, 4)]
+        n_header = sum(c in ("scorer", "individuals", "bodyparts", "coords") for c in first_cells)
+        df = pd.read_csv(filepath, header=list(range(n_header)), index_col=0)
+
+    if "individuals" in df.columns.names:
+        parts = {
+            f"{name}_{ind}": df.xs(ind, axis=1, level="individuals")
+            for ind in df.columns.get_level_values("individuals").unique()
+            if ind not in exclude_individuals
+        }
+    else:
+        parts = {name: df}
+    coordinates, confidences = {}, {}
+    for key, part in parts.items():
+        part = part.droplevel("scorer", axis=1)
+        bodyparts = part.columns.get_level_values("bodyparts").unique().tolist()
+        coordinates[key] = np.stack(
+            [part[bp][["x", "y"]].to_numpy() for bp in bodyparts], axis=1
+        )
+        confidences[key] = np.stack(
+            [part[bp]["likelihood"].to_numpy() for bp in bodyparts], axis=1
+        )
+    return coordinates, confidences, bodyparts
 
 
 def test_directory_listing_is_sorted(dlc_project_dir, tmp_path):
@@ -84,3 +143,22 @@ def test_float32_deeplabcut_file_reaches_init_model(tmp_path):
     data, metadata = kpms.format_data(coordinates, confidences, **config)
     pca = kpms.fit_pca(**data, **config)
     kpms.init_model(data, metadata=metadata, pca=pca, **config)
+
+
+@pytest.mark.parametrize("path", DEEPLABCUT_LAYOUT_FILES, ids=os.path.basename)
+def test_deeplabcut_layout_file_matches_its_named_columns(tracker_outputs_dir, path):
+    # EKS writes nine columns per bodypart (x, y, likelihood, then ensemble
+    # medians and variances), so values must be picked by column name.
+    filepath = os.path.join(tracker_outputs_dir, path)
+    name = os.path.splitext(os.path.basename(filepath))[0]
+    expected_coordinates, expected_confidences, expected_bodyparts = (
+        read_deeplabcut_columns(filepath, name)
+    )
+
+    coordinates, confidences, bodyparts = kpms.load_keypoints(filepath, "deeplabcut")
+
+    assert bodyparts == expected_bodyparts
+    assert sorted(coordinates) == sorted(expected_coordinates)
+    for key in expected_coordinates:
+        np.testing.assert_array_equal(coordinates[key], expected_coordinates[key])
+        np.testing.assert_array_equal(confidences[key], expected_confidences[key])
