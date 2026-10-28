@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -108,3 +109,38 @@ def test_syllable_names_without_a_syll_info_row(tmp_path):
     names = kpms.get_syllable_names(str(tmp_path), "model", [0, 1, 5])
 
     assert names == ["0", "1 (rear)", "5"]
+
+
+def test_syllable_names_from_a_syll_info_with_blank_columns(tmp_path):
+    """Every new syll_info.csv has entirely blank columns."""
+    os.makedirs(tmp_path / "model")
+    pd.DataFrame(
+        {
+            "syllable": [0, 1, 2],
+            "label": ["", "", ""],
+            "short_description": ["", "", ""],
+            "movie_path": ["a.mp4", "b.mp4", "c.mp4"],
+        }
+    ).to_csv(tmp_path / "model" / "syll_info.csv", index=False)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        names = kpms.get_syllable_names(str(tmp_path), "model", [0, 1, 2])
+
+    assert names == ["0", "1", "2"]
+
+
+def test_syllable_labeled_na_keeps_its_label(tmp_path):
+    os.makedirs(tmp_path / "model")
+    pd.DataFrame(
+        {
+            "syllable": [0, 1],
+            "label": ["NA", "None"],
+            "short_description": ["", ""],
+            "movie_path": ["a.mp4", "b.mp4"],
+        }
+    ).to_csv(tmp_path / "model" / "syll_info.csv", index=False)
+
+    names = kpms.get_syllable_names(str(tmp_path), "model", [0, 1])
+
+    assert names == ["0 (NA)", "1 (None)"]

@@ -46,7 +46,9 @@ def get_syllable_names(project_dir, model_name, syllable_ixs):
     labels = {ix: f"{ix}" for ix in syllable_ixs}
     syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
     if os.path.exists(syll_info_path):
-        syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
+        syll_info_df = pd.read_csv(
+            syll_info_path, index_col=False, keep_default_na=False
+        )
 
         for ix in syllable_ixs:
             # a syllable without a row keeps its bare index
@@ -662,7 +664,9 @@ def label_syllables(project_dir, model_name, moseq_df):
     )
 
     # load syll_info
-    syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
+    syll_info_df = pd.read_csv(
+        syll_info_path, index_col=False, keep_default_na=False
+    )
     # split into with movie and without movie
     syll_info_df_with_movie = syll_info_df[
         syll_info_df.movie_path.str.contains(".mp4")

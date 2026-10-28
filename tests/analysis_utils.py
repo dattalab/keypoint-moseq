@@ -48,7 +48,7 @@ def syllable_description(syllable):
 
 def read_syll_info(path):
     """`syll_info.csv` read the way kpms reads it."""
-    return pd.read_csv(path, index_col=False).fillna("")
+    return pd.read_csv(path, index_col=False, keep_default_na=False)
 
 
 def syllable_names(syll_info, syllables):
