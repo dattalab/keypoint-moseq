@@ -188,6 +188,18 @@ def test_superanimal_empty_slots_load_as_missing(tracker_outputs_dir):
     assert not any(np.any(c == -1) for c in [*coordinates.values(), *confidences.values()])
 
 
+def test_lightning_pose_metric_files_are_not_loaded(tracker_outputs_dir):
+    # Lightning Pose writes per-keypoint metrics as CSVs next to each
+    # prediction file.
+    video_preds = os.path.join(
+        tracker_outputs_dir, "generated/lightning-pose-2.4.3/models/seed0/video_preds"
+    )
+
+    coordinates, _, _ = kpms.load_keypoints(video_preds, "deeplabcut")
+
+    assert sorted(coordinates) == ["test_vid"]
+
+
 @pytest.mark.parametrize(
     "export",
     [
