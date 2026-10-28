@@ -30,6 +30,7 @@ DEEPLABCUT_LAYOUT_FILES = [
     "generated/lightning-pose-2.4.3/eks/output/eks_singlecam.csv",
     "public/movement/poses/EKS_IBL-paw_multicam_left.predictions.csv",
 ]
+SLEAP_RUNS = ["generated/sleap-1.6.6/single_instance", "generated/sleap-1.6.6/topdown_tracked"]
 
 
 def read_deeplabcut_columns(filepath, name, exclude_individuals=("single",)):
@@ -162,3 +163,77 @@ def test_deeplabcut_layout_file_matches_its_named_columns(tracker_outputs_dir, p
     for key in expected_coordinates:
         np.testing.assert_array_equal(coordinates[key], expected_coordinates[key])
         np.testing.assert_array_equal(confidences[key], expected_confidences[key])
+
+
+@pytest.mark.parametrize(
+    "export",
+    [
+        # SLEAP's default analysis export
+        "one_mouse_clip300.000_one_mouse_clip300.analysis.h5",
+        # sleap_io.save_analysis_h5(..., preset="standard")
+        "one_mouse_clip300.predictions.standard.analysis.h5",
+    ],
+)
+@pytest.mark.parametrize("run", SLEAP_RUNS)
+def test_sleap_analysis_file_matches_its_slp(tracker_outputs_dir, run, export):
+    # Both analysis files were exported from the .slp with sleap-io 0.9.5.
+    # The "standard" preset stores `tracks` as (frame, track, node, xy) where
+    # the default stores (track, xy, node, frame).
+    run_dir = os.path.join(tracker_outputs_dir, run)
+    slp_name = "one_mouse_clip300.predictions"
+    export_name = os.path.splitext(export)[0]
+    slp = kpms.load_keypoints(os.path.join(run_dir, f"{slp_name}.slp"), "sleap")
+    analysis = kpms.load_keypoints(os.path.join(run_dir, export), "sleap")
+
+    assert analysis[2] == slp[2]
+    slp_tracks = {key.removeprefix(slp_name): key for key in slp[0]}
+    analysis_tracks = {key.removeprefix(export_name): key for key in analysis[0]}
+    assert sorted(analysis_tracks) == sorted(slp_tracks)
+    for track, key in slp_tracks.items():
+        np.testing.assert_array_equal(analysis[0][analysis_tracks[track]], slp[0][key])
+        np.testing.assert_array_equal(analysis[1][analysis_tracks[track]], slp[1][key])
+
+
+@pytest.mark.parametrize(
+    "path, n_recordings, n_frames, bodyparts",
+    [
+        (
+            # SLEAP 1.2.7
+            "public/sleap_io/tests/data/slp/predictions_1.2.7_provenance_and_tracking.slp",
+            2,
+            101,
+            ["head", "thorax", "abdomen", "wingL", "wingR", "forelegL4", "forelegR4",
+             "midlegL4", "midlegR4", "hindlegL4", "hindlegR4", "eyeL", "eyeR"],
+        ),
+        ("public/sleap/tests/data/tracks/clip.predictions.slp", 2, 1500, ["head", "thorax"]),
+        (
+            # user labels mixed with predictions
+            "public/movement/poses/SLEAP_three-mice_Aeon_mixed-labels.predictions.slp",
+            3,
+            601,
+            ["centroid"],
+        ),
+        (
+            # SLEAP 1.3.1's analysis export
+            "public/movement/poses/SLEAP_single-mouse_EPM.analysis.h5",
+            1,
+            18485,
+            ["snout", "left_ear", "right_ear", "centre", "tail_base", "tail_end"],
+        ),
+        (
+            "public/sleap/tests/data/hdf5_format_v1/small_robot.000_small_robot_3_frame.analysis.h5",
+            1,
+            3,
+            ["top", "front", "rear"],
+        ),
+    ],
+)
+def test_older_sleap_file_loads(tracker_outputs_dir, path, n_recordings, n_frames, bodyparts):
+    coordinates, confidences, loaded_bodyparts = kpms.load_keypoints(
+        os.path.join(tracker_outputs_dir, path), "sleap"
+    )
+
+    assert loaded_bodyparts == bodyparts
+    assert len(coordinates) == n_recordings
+    assert {v.shape for v in coordinates.values()} == {(n_frames, len(bodyparts), 2)}
+    assert {v.shape for v in confidences.values()} == {(n_frames, len(bodyparts))}

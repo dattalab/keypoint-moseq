@@ -1192,8 +1192,14 @@ def _sleap_loader(filepath, name):
         confs = arr[:, :, :, -1].transpose((1, 0, 2))
     else:
         with h5py.File(filepath, "r") as f:
-            coords = f["tracks"][()].transpose((0, 3, 2, 1))
-            confs = f["point_scores"][()].transpose((0, 2, 1))
+            # sleap-io records each dataset's axis order in a `dims`
+            # attribute; files without one use SLEAP's default "matlab" order
+            coords = _read_sleap_dataset(
+                f["tracks"], ["track", "xy", "node", "frame"], ["track", "frame", "node", "xy"]
+            )
+            confs = _read_sleap_dataset(
+                f["point_scores"], ["track", "node", "frame"], ["track", "frame", "node"]
+            )
             bodyparts = [name.decode("utf-8") for name in f["node_names"]]
 
     if coords.shape[0] == 1:
@@ -1203,6 +1209,13 @@ def _sleap_loader(filepath, name):
         coordinates = {f"{name}_track{i}": coords[i] for i in range(coords.shape[0])}
         confidences = {f"{name}_track{i}": confs[i] for i in range(coords.shape[0])}
     return coordinates, confidences, bodyparts
+
+
+def _read_sleap_dataset(dataset, default_dims, dims):
+    """Read a dataset from a sleap analysis file with its axes in `dims`
+    order."""
+    stored_dims = json.loads(dataset.attrs.get("dims", json.dumps(default_dims)))
+    return dataset[()].transpose([stored_dims.index(d) for d in dims])
 
 
 def _anipose_loader(filepath, name):
