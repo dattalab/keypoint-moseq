@@ -4,6 +4,7 @@ from itertools import islice
 import numpy as np
 import pandas as pd
 import pytest
+import sleap_io
 
 import keypoint_moseq as kpms
 from keypoint_moseq.util import list_files_with_exts
@@ -198,6 +199,56 @@ def test_lightning_pose_metric_files_are_not_loaded(tracker_outputs_dir):
     coordinates, _, _ = kpms.load_keypoints(video_preds, "deeplabcut")
 
     assert sorted(coordinates) == ["test_vid"]
+
+
+def test_slp_with_several_videos_loads_every_video(tracker_outputs_dir):
+    # Recordings are named after their video's file, so that check_videos and
+    # grid movies find the video.
+    filepath = os.path.join(tracker_outputs_dir, "public/sleap_io/tests/data/slp/multiview.slp")
+    labels = sleap_io.load_slp(filepath)
+    expected = {}
+    for video in labels.videos:
+        video_name = os.path.splitext(os.path.basename(video.filename))[0]
+        tracks = labels.numpy(video=video, return_confidence=True).transpose((1, 0, 2, 3))
+        if len(tracks) == 1:
+            expected[video_name] = tracks[0]
+        else:
+            for i, track in enumerate(tracks):
+                expected[f"{video_name}_track{i}"] = track
+    assert len(labels.videos) > 1
+
+    coordinates, confidences, _ = kpms.load_keypoints(filepath, "sleap")
+
+    assert sorted(coordinates) == sorted(expected)
+    for key, track in expected.items():
+        np.testing.assert_array_equal(coordinates[key], track[..., :2])
+        np.testing.assert_array_equal(confidences[key], track[..., 2])
+
+
+def test_slp_with_repeated_video_names_raises(tmp_path):
+    # Two cameras whose videos have the same file name in different folders
+    skeleton = sleap_io.Skeleton(["nose", "tail"])
+    videos = [
+        sleap_io.Video(str(tmp_path / camera / "session.mp4"), open_backend=False)
+        for camera in ["cam1", "cam2"]
+    ]
+    frames = [
+        sleap_io.LabeledFrame(
+            video=video,
+            frame_idx=0,
+            instances=[
+                sleap_io.PredictedInstance.from_numpy(
+                    np.array([[1.0, 2.0], [3.0, 4.0]]), skeleton, point_scores=np.ones(2)
+                )
+            ],
+        )
+        for video in videos
+    ]
+    path = tmp_path / "two_cameras.slp"
+    sleap_io.save_slp(sleap_io.Labels(frames, videos=videos, skeletons=[skeleton]), str(path))
+
+    with pytest.raises(ValueError, match="more than one video named session"):
+        kpms.load_keypoints(str(path), "sleap")
 
 
 @pytest.mark.parametrize(
