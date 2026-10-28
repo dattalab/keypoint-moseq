@@ -1125,9 +1125,12 @@ def load_keypoints(
                 f"{set(new_coordinates.keys()) & set(coordinates.keys())}"
                 f"\n\nThis may be caused by repeated filenames with "
                 "different extensions. If so, please set the extension "
-                "explicitly via the `extension` argument. Another possible"
-                " cause is commonly-named files in different directories. "
-                "if that is the case, then set `path_in_name=True`."
+                "explicitly via the `extension` argument. Another possible "
+                "cause is files with the same name in different directories. "
+                "Recording names must be unique, so rename the files, e.g. by "
+                "adding the directory name to each. Setting `path_in_name=True` "
+                "also loads them, but keypoint-MoSeq then can't find their "
+                "videos for check_videos, calibration or grid movies."
             )
 
         coordinates.update(new_coordinates)

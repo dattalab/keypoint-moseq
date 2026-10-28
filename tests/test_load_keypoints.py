@@ -372,6 +372,18 @@ def test_untracked_slp_loads_the_best_instance_in_each_frame(tmp_path):
     )
 
 
+def test_same_named_files_in_different_folders_raise_with_advice(tracker_outputs_dir, tmp_path):
+    # Recordings named by their path (path_in_name=True) are never matched to
+    # a video, so the error recommends renaming the files.
+    source = os.path.join(tracker_outputs_dir, f"{DLC3_SINGLE}.h5")
+    for mouse in ["mouse1", "mouse2"]:
+        (tmp_path / mouse).mkdir()
+        shutil.copy(source, tmp_path / mouse / "session.h5")
+
+    with pytest.raises(ValueError, match="rename the files"):
+        kpms.load_keypoints(str(tmp_path), "deeplabcut")
+
+
 @pytest.mark.parametrize(
     "export",
     [
