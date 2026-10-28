@@ -191,6 +191,29 @@ def test_hdf5_extension_loads_like_h5(tracker_outputs_dir, tmp_path):
     np.testing.assert_array_equal(confidences["recording"], expected_confidences[name])
 
 
+@pytest.mark.parametrize("extension", [".h5", ".csv"])
+def test_deeplabcut_3d_file_loads_as_3d(tmp_path, extension):
+    # DeepLabCut's triangulation writes x, y and z for each bodypart and no
+    # likelihood.
+    bodyparts = ["nose", "spine", "tail"]
+    xyz = np.random.default_rng(0).normal(0, 10, (50, len(bodyparts), 3))
+    columns = pd.MultiIndex.from_product(
+        [["DLC_3D"], bodyparts, ["x", "y", "z"]], names=["scorer", "bodyparts", "coords"]
+    )
+    df = pd.DataFrame(xyz.reshape(len(xyz), -1), columns=columns)
+    path = tmp_path / f"mouseDLC_3D{extension}"
+    if extension == ".h5":
+        df.to_hdf(path, key="df_with_missing", format="table", mode="w")
+    else:
+        df.to_csv(path)
+
+    coordinates, confidences, loaded_bodyparts = kpms.load_keypoints(str(path), "deeplabcut")
+
+    assert loaded_bodyparts == bodyparts
+    np.testing.assert_allclose(coordinates["mouseDLC_3D"], xyz)
+    np.testing.assert_array_equal(confidences["mouseDLC_3D"], np.ones(xyz.shape[:2]))
+
+
 def test_superanimal_empty_slots_load_as_missing(tracker_outputs_dir):
     # SuperAnimal output has a fixed number of slots per frame, and DeepLabCut
     # 3 fills each slot with no detection with -1 in x, y and likelihood.
