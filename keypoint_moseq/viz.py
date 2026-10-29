@@ -2092,7 +2092,7 @@ def overlay_keypoints_on_video(
 
     video_frame_indexes: array, default=None
         Video frames corresponding to the entries of `coordinates`. If None, it is
-        assumed that the i'th entry of `coordinate` corresponds to the i'th video frame.
+        assumed that the i'th entry of `coordinates` corresponds to the i'th video frame.
     """
     if output_path is None:
         output_path = os.path.splitext(video_path)[0] + "_keypoints.mp4"
@@ -2118,7 +2118,7 @@ def overlay_keypoints_on_video(
     reader = OpenCVReader(video_path)
     fps = reader.fps
     if frames is None:
-        frames = np.arange(len(reader))
+        frames = np.arange(len(coordinates))
 
     if video_frame_indexes is None:
         video_frame_indexes = np.arange(len(coordinates))
@@ -2126,9 +2126,11 @@ def overlay_keypoints_on_video(
     with imageio.get_writer(
         output_path, pixelformat="yuv420p", fps=fps, quality=quality
     ) as writer:
+        # `frame` indexes rows of `coordinates`; each is drawn on its video frame
         for frame in tqdm.tqdm(frames, ncols=72):
+            video_frame = video_frame_indexes[frame]
             image = overlay_keypoints_on_image(
-                reader[frame], coordinates[frame], edges=edges, **plot_options
+                reader[video_frame], coordinates[frame], edges=edges, **plot_options
             )
 
             if crop_size is not None:
@@ -2137,7 +2139,7 @@ def overlay_keypoints_on_video(
             if show_frame_numbers:
                 image = cv2.putText(
                     image,
-                    f"Frame {frame}",
+                    f"Frame {video_frame}",
                     (10, 20),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,

@@ -629,3 +629,37 @@ def test_density_sampling_window_is_in_seconds(tmp_path, monkeypatch):
 
     # 0.167 s before onset and 0.5 s after, at 120 fps
     assert windows == [(20, 60)]
+
+
+def gray_ramp_video(path, n_frames=20, size=64):
+    """A video whose frame k is uniformly gray at level 10 * k."""
+    with imageio.get_writer(path, fps=30) as writer:
+        for k in range(n_frames):
+            writer.append_data(np.full((size, size, 3), 10 * k, dtype=np.uint8))
+
+
+@pytest.mark.parametrize("crop_size", [None, 32])
+def test_overlay_draws_each_keypoint_row_on_its_video_frame(tmp_path, crop_size):
+    video = str(tmp_path / "video.mp4")
+    gray_ramp_video(video)
+    video_frame_indexes = np.arange(0, 20, 2)
+    # two keypoints in opposite corners, so the frame center (and the crop
+    # center, their median) shows only the video
+    coordinates = np.tile([[10.0, 10.0], [54.0, 54.0]], (10, 1, 1))
+    output = str(tmp_path / "overlay.mp4")
+
+    kpms.overlay_keypoints_on_video(
+        video,
+        coordinates,
+        output_path=output,
+        show_frame_numbers=False,
+        crop_size=crop_size,
+        video_frame_indexes=video_frame_indexes,
+    )
+
+    with imageio.get_reader(output, "ffmpeg") as reader:
+        frames = [frame for frame in reader]
+    assert len(frames) == 10
+    for i, frame in enumerate(frames):
+        center = frame[frame.shape[0] // 2, frame.shape[1] // 2].mean()
+        assert abs(center - 10 * video_frame_indexes[i]) <= 4, i
