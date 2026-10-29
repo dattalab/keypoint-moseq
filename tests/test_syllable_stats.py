@@ -359,3 +359,92 @@ def test_stats_plot_ordered_by_difference(frozen_stats_df, tmp_path):
         frozen_stats_df, CTRL_GROUP, EXP_GROUP, stat=STAT
     )
     assert ticks == [str(syllable) for syllable in expected]
+
+
+def duration_stats_df():
+    """Durations for 5 recordings in each of two groups. Syllable 1 is missing
+    one recording per group, syllable 2 has a single recording in group b, and
+    syllable 3 none."""
+    rng = np.random.default_rng(0)
+    rows = []
+    for group in ["a", "b"]:
+        for r in range(5):
+            for syllable in [0, 1, 2, 3]:
+                rows.append(
+                    {
+                        "group": group,
+                        "name": f"{group}{r}",
+                        "syllable": syllable,
+                        "frequency": rng.uniform(0, 0.3),
+                        "duration": rng.uniform(0.2, 0.6) + (0.2 if group == "b" else 0),
+                    }
+                )
+    df = pd.DataFrame(rows)
+    df.loc[(df["syllable"] == 1) & df["name"].isin(["a0", "b0"]), "duration"] = np.nan
+    in_b = df["group"] == "b"
+    df.loc[(df["syllable"] == 2) & in_b & (df["name"] != "b4"), "duration"] = np.nan
+    df.loc[(df["syllable"] == 3) & in_b, "duration"] = np.nan
+    return df
+
+
+def test_run_kruskal_leaves_out_missing_values():
+    df = duration_stats_df()
+
+    kw, _, _ = run_kruskal(df, statistic="duration", n_perm=1000)
+
+    values = df[df["syllable"] == 1].dropna(subset=["duration"])
+    expected = stats.kruskal(*[g["duration"] for _, g in values.groupby("group")])
+    assert kw.loc[1, "statistic"] == pytest.approx(expected.statistic)
+    assert kw.loc[1, "pvalue"] == pytest.approx(expected.pvalue)
+
+
+def test_run_kruskal_skips_syllables_a_group_has_no_values_for():
+    kw, dunn, significant = run_kruskal(duration_stats_df(), statistic="duration", n_perm=1000)
+
+    assert list(kw.index) == [0, 1, 2, 3]
+    assert kw.loc[3, ["statistic", "pvalue", "p_adj"]].isna().all()
+    assert not kw.loc[3, "is_sig"]
+    assert dunn.loc[dunn[("syllable", "")] == 3, "value"].isna().all()
+    assert all(3 not in syllables for syllables in significant.values())
+    # syllable 2 has a single recording with a value in group b
+    assert kw.loc[[0, 1, 2], "pvalue"].notna().all()
+
+
+def test_run_kruskal_warns_about_syllables_with_small_groups():
+    with pytest.warns(UserWarning, match=r"For `duration`, 2 of 4 syllables have a group with fewer than 3"):
+        run_kruskal(duration_stats_df(), statistic="duration", n_perm=1000)
+
+
+def test_run_kruskal_stars_a_syllable_with_missing_values():
+    # 8 recordings per group; syllable 1 is missing one recording per group
+    # and is the only syllable whose groups differ
+    rows = []
+    for group in ["a", "b"]:
+        for r in range(8):
+            for syllable in [0, 1, 2]:
+                duration = 0.1 * (r + 1)
+                if syllable == 1 and group == "b":
+                    duration += 1
+                rows.append(
+                    {"group": group, "name": f"{group}{r}", "syllable": syllable, "duration": duration}
+                )
+    df = pd.DataFrame(rows)
+    df.loc[(df["syllable"] == 1) & df["name"].isin(["a0", "b0"]), "duration"] = np.nan
+
+    kw, _, significant = run_kruskal(df, statistic="duration", n_perm=1000)
+
+    assert list(kw["is_sig"]) == [False, True, False]
+    assert list(significant[("a", "b")]) == [1]
+
+
+def test_run_kruskal_with_no_syllable_to_test():
+    df = duration_stats_df()
+    df.loc[df["group"] == "b", "duration"] = np.nan
+
+    kw, dunn, significant = run_kruskal(df, statistic="duration", n_perm=1000)
+
+    assert list(kw.index) == [0, 1, 2, 3]
+    assert kw["pvalue"].isna().all()
+    assert not kw["is_sig"].any()
+    assert dunn["value"].isna().all()
+    assert all(len(syllables) == 0 for syllables in significant.values())

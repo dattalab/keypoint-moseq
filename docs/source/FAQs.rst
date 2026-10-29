@@ -435,6 +435,8 @@ The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syl
 
 - The tests are nonparametric and rank-based, so they do not assume normality.
 
+- For ``duration`` and the kinematic statistics, a recording that never used a syllable has no value for it and is left out of that syllable's test. A syllable is not tested, and never starred, when a group has no recordings with a value.
+
 - To change the threshold, number of permutations, or multiple-comparisons method, call :py:func:`keypoint_moseq.analysis.run_kruskal` directly:
 
    .. code-block:: python

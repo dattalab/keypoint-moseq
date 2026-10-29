@@ -1030,6 +1030,60 @@ def compute_pvalues_for_group_pairs(
     return df_pval_corrected, ((df_pval_corrected[df_k_real.is_sig] < thresh).sum(0))
 
 
+def _kruskal_and_dunn(grouped_data, rnd, n_perm, seed):
+    """Kruskal-Wallis H statistics and Dunn's z statistics, real and permuted,
+    for each syllable column of `grouped_data`, whose rows are recordings
+    sorted by group with a value for every syllable.
+
+    Returns
+    -------
+    h_all : np.array
+        Permuted H statistics, shape = (n_perm, n_syllables).
+    df_k_real : pandas.DataFrame
+        Kruskal-Wallis statistic and p-value for each syllable.
+    null_zs_within_group, real_zs_within_group : dict
+        See :py:func:`dunns_z_test_permute_within_group_pairs`.
+    """
+    vc = grouped_data.group.value_counts().loc[grouped_data.group.unique()]
+    n_per_group = vc.values
+    group_names = vc.index
+    cum_group_idx = np.insert(np.cumsum(n_per_group), 0, 0)
+
+    df_only_stats = grouped_data.drop(["group", "name"], axis=1)
+    syllable_data = df_only_stats.values
+    N_m, N_s = syllable_data.shape
+
+    # Run KW and return H-stats
+    h_all, real_ranks, X_ties = run_manual_KW_test(
+        df_usage=df_only_stats,
+        merged_usages_all=syllable_data,
+        num_groups=len(group_names),
+        n_per_group=n_per_group,
+        cum_group_idx=cum_group_idx,
+        n_perm=n_perm,
+        seed=seed,
+    )
+
+    # find the real k_real
+    df_k_real = pd.DataFrame(
+        [
+            stats.kruskal(
+                *np.array_split(syllable_data[:, s_i], np.cumsum(n_per_group[:-1]))
+            )
+            for s_i in range(N_s)
+        ]
+    )
+
+    # Run Dunn's z-test statistics
+    (
+        null_zs_within_group,
+        real_zs_within_group,
+    ) = dunns_z_test_permute_within_group_pairs(
+        grouped_data, vc, real_ranks, X_ties, N_m, group_names, rnd, n_perm
+    )
+    return h_all, df_k_real, null_zs_within_group, real_zs_within_group
+
+
 def run_kruskal(
     stats_df,
     statistic="frequency",
@@ -1039,6 +1093,12 @@ def run_kruskal(
     mc_method="fdr_bh",
 ):
     """Run Kruskal-Wallis test on syllable usage data.
+
+    A recording without a row for a syllable has a frequency of 0. Other
+    missing values are left out: each syllable is tested on the recordings
+    that have a value for `statistic`, and a syllable is not tested when a
+    group has no recordings with a value. A warning gives the number of
+    syllables where a group has fewer than 3 recordings with a value.
 
     Parameters
     ----------
@@ -1058,80 +1118,105 @@ def run_kruskal(
     Returns
     -------
     df_k_real : pandas.DataFrame
-        DataFrame containing KW test results, indexed by syllable.
+        DataFrame containing KW test results, indexed by syllable. A syllable
+        that wasn't tested has NaN `statistic`, `pvalue` and `p_adj`, and
+        `is_sig` False.
     dunn_results_df : pandas.DataFrame
         Dunn's z statistic for each syllable and pair of groups, in the
-        columns `("syllable", "")`, `group1`, `group2` and `value`.
+        columns `("syllable", "")`, `group1`, `group2` and `value`. `value`
+        is NaN for a syllable that wasn't tested.
     significant_syllables : dict
         Maps each pair of groups to the syllables whose corrected KW p-value
         is at most `thresh` and whose corrected Dunn p-value is below
         `thresh`.
     """
     rnd = np.random.RandomState(seed=seed)
-    # get grouped mean data
-    grouped_data = (
-        stats_df.pivot_table(
-            index=["group", "name"], columns="syllable", values=statistic
-        )
-        .replace(np.nan, 0)
-        .reset_index()
+    # one row per recording, sorted by group; a recording without a value for
+    # a syllable, such as a duration for a syllable it never used, has NaN,
+    # except that a recording without a row for a syllable never used it, so
+    # its frequency is 0
+    grouped_data = stats_df.pivot_table(
+        index=["group", "name"], columns="syllable", values=statistic
     )
-    # compute KW constants
-    vc = grouped_data.group.value_counts().loc[grouped_data.group.unique()]
-    n_per_group = vc.values
-    group_names = vc.index
-
-    cum_group_idx = np.insert(np.cumsum(n_per_group), 0, 0)
-    num_groups = len(group_names)
-
-    # get all syllable usage data
-    df_only_stats = grouped_data.drop(["group", "name"], axis=1)
-    syllable_data = grouped_data.drop(["group", "name"], axis=1).values
-    # syllable label of each column of `syllable_data`; the tests below work
-    # by column position, and the results are labeled with these at the end
-    # the pivoted columns mixed names and syllables, so their Index has dtype
-    # object; listing them recovers the syllables' own dtype
-    syllables = np.asarray(df_only_stats.columns.tolist())
-
-    N_m, N_s = syllable_data.shape
-    # Run KW and return H-stats
-    h_all, real_ranks, X_ties = run_manual_KW_test(
-        df_usage=df_only_stats,
-        merged_usages_all=syllable_data,
-        num_groups=num_groups,
-        n_per_group=n_per_group,
-        cum_group_idx=cum_group_idx,
-        n_perm=n_perm,
-        seed=seed,
+    if statistic == "frequency":
+        grouped_data = grouped_data.replace(np.nan, 0)
+    grouped_data = grouped_data.reset_index()
+    # every group, in the pivot's sorted order; a group is missing from the
+    # pivot when none of its recordings has a value
+    group_names = pd.Index(sorted(stats_df["group"].unique()))
+    # syllable label of each column; the pivoted columns mixed names and
+    # syllables, so their Index has dtype object, and listing them recovers
+    # the syllables' own dtype
+    syllables = np.asarray(
+        grouped_data.drop(["group", "name"], axis=1).columns.tolist()
     )
 
-    # find the real k_real
-    df_k_real = pd.DataFrame(
-        [
-            stats.kruskal(
-                *np.array_split(syllable_data[:, s_i], np.cumsum(n_per_group[:-1]))
+    # recordings with a value for each syllable, in each group
+    counts = (
+        grouped_data.groupby("group")[list(syllables)]
+        .count()
+        .reindex(group_names, fill_value=0)
+    )
+    small = (counts < MIN_RECORDINGS_PER_GROUP).any()
+    if small.any():
+        warnings.warn(
+            fill(
+                f"For `{statistic}`, {small.sum()} of {len(syllables)} syllables "
+                f"have a group with fewer than {MIN_RECORDINGS_PER_GROUP} "
+                "recordings that have a value, so their significance results "
+                "are unreliable. A syllable is not tested when a group has no "
+                "recordings with a value."
             )
-            for s_i in range(N_s)
-        ]
+        )
+
+    # syllables with a value in every recording are tested together; each
+    # other syllable is tested on the recordings that have a value, unless a
+    # group has none
+    testable = (counts > 0).all()
+    complete = [
+        s for s in syllables if testable[s] and grouped_data[s].notna().all()
+    ]
+    blocks = []
+    if complete:
+        blocks.append(grouped_data[["group", "name", *complete]])
+    for syllable in syllables:
+        if syllable in complete or not testable[syllable]:
+            continue
+        rows = grouped_data[grouped_data[syllable].notna()]
+        blocks.append(rows[["group", "name", syllable]])
+    tested = np.asarray(
+        [s for block in blocks for s in block.columns.tolist()[2:]],
+        dtype=syllables.dtype,
     )
 
-    # multiple test correction
-    df_k_real["p_adj"] = multipletests(
-        ((h_all > df_k_real.statistic.values).sum(0) + 1) / n_perm,
-        alpha=thresh,
-        method=mc_method,
-    )[1]
+    pairs = list(combinations(group_names, 2))
+    results = [_kruskal_and_dunn(block, rnd, n_perm, seed) for block in blocks]
+    if results:
+        h_all = np.concatenate([r[0] for r in results], axis=1)
+        df_k_real = pd.concat([r[1] for r in results], ignore_index=True)
+        null_zs_within_group = {
+            pair: np.concatenate([r[2][pair] for r in results], axis=1)
+            for pair in pairs
+        }
+        real_zs_within_group = {
+            pair: np.concatenate([r[3][pair] for r in results]) for pair in pairs
+        }
+    else:
+        h_all = np.zeros((n_perm, 0))
+        df_k_real = pd.DataFrame({"statistic": [], "pvalue": []})
+        null_zs_within_group = {pair: np.zeros((n_perm, 0)) for pair in pairs}
+        real_zs_within_group = {pair: np.zeros(0) for pair in pairs}
+
+    # multiple test correction over the tested syllables
+    empirical_pvalues = ((h_all > df_k_real.statistic.values).sum(0) + 1) / n_perm
+    df_k_real["p_adj"] = (
+        multipletests(empirical_pvalues, alpha=thresh, method=mc_method)[1]
+        if len(empirical_pvalues) > 0
+        else []
+    )
 
     # return significant syllables based on the threshold
     df_k_real["is_sig"] = df_k_real["p_adj"] <= thresh
-
-    # Run Dunn's z-test statistics
-    (
-        null_zs_within_group,
-        real_zs_within_group,
-    ) = dunns_z_test_permute_within_group_pairs(
-        grouped_data, vc, real_ranks, X_ties, N_m, group_names, rnd, n_perm
-    )
 
     # Compute p-values from Dunn's z-score statistics
     df_pair_corrected_pvalues, _ = compute_pvalues_for_group_pairs(
@@ -1145,7 +1230,7 @@ def run_kruskal(
     )
 
     # combine Dunn's test results into single DataFrame
-    df_z = pd.DataFrame(real_zs_within_group, index=syllables)
+    df_z = pd.DataFrame(real_zs_within_group, index=tested).reindex(syllables)
     df_z.index = df_z.index.set_names("syllable")
     dunn_results_df = df_z.reset_index().melt(id_vars=[("syllable", "")])
     dunn_results_df.rename(
@@ -1155,11 +1240,14 @@ def run_kruskal(
     # Get intersecting significant syllables between
     intersect_sig_syllables = {}
     for pair in df_pair_corrected_pvalues.columns.tolist():
-        intersect_sig_syllables[pair] = syllables[
-            np.where((df_pair_corrected_pvalues[pair] < thresh) & (df_k_real.is_sig))[0]
-        ]
+        is_sig = (df_pair_corrected_pvalues[pair] < thresh) & df_k_real.is_sig
+        significant = tested[is_sig.to_numpy()]
+        intersect_sig_syllables[pair] = syllables[np.isin(syllables, significant)]
 
-    df_k_real.index = syllables
+    # syllables that weren't tested have NaN statistics and are not significant
+    df_k_real.index = tested
+    df_k_real = df_k_real.reindex(syllables)
+    df_k_real["is_sig"] = df_k_real["is_sig"].eq(True)
     return df_k_real, dunn_results_df, intersect_sig_syllables
 
 
