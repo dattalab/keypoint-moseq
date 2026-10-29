@@ -22,13 +22,25 @@ from jax_moseq.utils import get_frequencies, unbatch
 from scipy.io import loadmat
 
 
+def _plain(value):
+    """`value` with numpy scalars and arrays as Python numbers and lists, and
+    tuples as lists, so that `yaml.safe_load` can read it back."""
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    if isinstance(value, (np.generic, np.ndarray)):
+        return value.tolist()
+    return value
+
+
 def _build_yaml(sections, comments):
     text_blocks = []
     for title, data in sections:
         centered_title = f" {title} ".center(50, "=")
         text_blocks.append(f"\n\n{'#'}{centered_title}{'#'}")
         for key, value in data.items():
-            text = yaml.dump({key: value}).strip("\n")
+            text = yaml.dump({key: _plain(value)}).strip("\n")
             if key in comments:
                 text = f"\n{'#'} {comments[key]}\n{text}"
             text_blocks.append(text)

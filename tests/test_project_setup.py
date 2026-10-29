@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 import pytest
 import yaml
 
@@ -190,3 +191,23 @@ def test_update_config_with_a_loaded_config(tmp_path):
     config = kpms.load_config(project_dir, check_if_valid=False, build_indexes=False)
     assert "anterior_idxs" not in config
     assert "posterior_idxs" not in config
+
+
+def test_update_config_with_numpy_values(tmp_path):
+    """Values computed with numpy are written as plain numbers and lists."""
+    project_dir = str(tmp_path)
+    kpms.generate_config(project_dir)
+
+    kpms.update_config(
+        project_dir,
+        kappa=np.float64(1e6),
+        fps=np.int64(120),
+        my_custom_key=np.float64(2.0),
+        my_custom_list=np.array([1, 2]),
+    )
+
+    config = kpms.load_config(project_dir, check_if_valid=False, build_indexes=False)
+    assert config["trans_hypparams"]["kappa"] == 1e6
+    assert config["fps"] == 120
+    assert config["my_custom_key"] == 2.0
+    assert config["my_custom_list"] == [1, 2]
