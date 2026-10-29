@@ -2127,9 +2127,24 @@ def overlay_keypoints_on_video(
     fps = reader.fps
     if frames is None:
         frames = np.arange(len(coordinates))
+    frames = np.array(list(frames), dtype=int)
 
     if video_frame_indexes is None:
         video_frame_indexes = np.arange(len(coordinates))
+
+    # check the last video frame needed before writing anything; OpenCV's
+    # frame count comes from the video header and can be one short, so the
+    # frame is decoded rather than compared with the count
+    if len(frames) > 0:
+        last_frame = int(np.max(np.asarray(video_frame_indexes)[frames]))
+        try:
+            reader[last_frame]
+        except ValueError:
+            raise ValueError(
+                f"The keypoints need video frames up to {last_frame}, but "
+                f"`{video_path}` has {reader.nframes} frames. Check that "
+                "`coordinates` and `video_frame_indexes` belong to this video."
+            ) from None
 
     with imageio.get_writer(
         output_path, pixelformat="yuv420p", fps=fps, quality=quality

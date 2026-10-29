@@ -701,3 +701,15 @@ def test_overlay_refuses_the_dict_of_every_recording(tmp_path):
             output_path=str(tmp_path / "overlay.mp4"),
             video_frame_indexes={"rec": np.arange(10)},
         )
+
+
+def test_overlay_refuses_keypoints_past_the_end_of_the_video(tmp_path):
+    video = str(tmp_path / "video.mp4")
+    gray_ramp_video(video, n_frames=20)
+    coordinates = np.tile([[10.0, 10.0], [54.0, 54.0]], (22, 1, 1))
+    output = tmp_path / "overlay.mp4"
+
+    with pytest.raises(ValueError, match=r"need video frames up to 21, but .* has 20 frames"):
+        kpms.overlay_keypoints_on_video(video, coordinates, output_path=str(output))
+
+    assert not output.exists()
