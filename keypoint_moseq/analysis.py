@@ -1011,13 +1011,14 @@ def compute_pvalues_for_group_pairs(
         List of corrected KW significant syllables (syllables with p-values < thresh).
     """
 
-    # do empirical p-val calculation for all group permutation
+    # empirical p-values for each pair of groups: the share of shuffles at
+    # least as extreme as the real data, counting the real data as a shuffle
 
     p_vals_allperm = {}
     for pair in combinations(group_names, 2):
         p_vals_allperm[pair] = (
-            (null_zs[pair] > real_zs_within_group[pair]).sum(0) + 1
-        ) / n_perm
+            (null_zs[pair] >= real_zs_within_group[pair]).sum(0) + 1
+        ) / (n_perm + 1)
 
     # summarize into df
     df_pval = pd.DataFrame(p_vals_allperm)
@@ -1207,8 +1208,14 @@ def run_kruskal(
         null_zs_within_group = {pair: np.zeros((n_perm, 0)) for pair in pairs}
         real_zs_within_group = {pair: np.zeros(0) for pair in pairs}
 
+    # empirical p-values: the share of shuffles at least as extreme as the
+    # real data, counting the real data as a shuffle; with small groups, many
+    # shuffles reproduce the real split and tie it exactly
+    empirical_pvalues = ((h_all >= df_k_real.statistic.values).sum(0) + 1) / (
+        n_perm + 1
+    )
+
     # multiple test correction over the tested syllables
-    empirical_pvalues = ((h_all > df_k_real.statistic.values).sum(0) + 1) / n_perm
     df_k_real["p_adj"] = (
         multipletests(empirical_pvalues, alpha=thresh, method=mc_method)[1]
         if len(empirical_pvalues) > 0

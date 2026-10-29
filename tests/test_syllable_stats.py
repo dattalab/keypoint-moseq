@@ -8,8 +8,8 @@ import pytest
 from scipy import stats
 
 import keypoint_moseq as kpms
-from keypoint_moseq.analysis import run_kruskal
-from analysis_utils import check_figure_files, plot_syll_stats, syllable_names
+from keypoint_moseq.analysis import compute_pvalues_for_group_pairs, run_kruskal
+from analysis_utils import FROZEN_THRESH, check_figure_files, plot_syll_stats, syllable_names
 
 # Arguments of the notebook's group comparison cell
 STAT, THRESH, CTRL_GROUP, EXP_GROUP = "frequency", 0.05, "a", "b"
@@ -17,22 +17,22 @@ STAR_HEIGHT = -0.05  # y position of the significance stars
 TOLERANCE = dict(rtol=1e-10, atol=0)
 
 
-def marked_syllables(stats_df):
+def marked_syllables(stats_df, thresh=THRESH):
     """Significant syllables that `run_kruskal` reports for the notebook's
     control and experimental groups."""
     np.random.seed(0)
-    _, _, sig_pairs = run_kruskal(stats_df, statistic=STAT, thresh=THRESH)
+    _, _, sig_pairs = run_kruskal(stats_df, statistic=STAT, thresh=thresh)
     if (CTRL_GROUP, EXP_GROUP) in sig_pairs:
         return list(sig_pairs[(CTRL_GROUP, EXP_GROUP)])
     return list(sig_pairs[(EXP_GROUP, CTRL_GROUP)])
 
 
-def star_positions(stats_df):
+def star_positions(stats_df, thresh=THRESH):
     """x positions where `plot_syll_stats_with_sem` draws the significance
     stars: the position in the syllable order of each marked syllable that
     appears there."""
     ordering = sorted(stats_df["syllable"].unique())
-    return [ordering.index(s) for s in marked_syllables(stats_df) if s in ordering]
+    return [ordering.index(s) for s in marked_syllables(stats_df, thresh) if s in ordering]
 
 
 def frequency_values(stats_df, group, syllable):
@@ -45,10 +45,11 @@ def frequency_values(stats_df, group, syllable):
 
 @pytest.fixture(scope="module")
 def frozen_kruskal(frozen_stats_df):
-    """`run_kruskal` outputs for the frozen `stats_df`. The global NumPy
-    random state is seeded because its Kruskal-Wallis check draws from it."""
+    """`run_kruskal` outputs for the frozen `stats_df` at `FROZEN_THRESH`. The
+    global NumPy random state is seeded because its Kruskal-Wallis check
+    draws from it."""
     np.random.seed(0)
-    return run_kruskal(frozen_stats_df, statistic=STAT, thresh=THRESH)
+    return run_kruskal(frozen_stats_df, statistic=STAT, thresh=FROZEN_THRESH)
 
 
 def test_syll_stats_plot_files(tutorial_syll_stats_plot, tutorial_analysis_project):
@@ -86,11 +87,11 @@ def test_syll_stats_plot_group_means(tutorial_syll_stats_plot, tutorial_stats_df
 def test_syll_stats_plot_significance_stars(
     plot, tutorial_syll_stats_plot, tutorial_stats_df, frozen_syll_stats_plot, frozen_stats_df
 ):
-    summary, stats_df = {
-        "tutorial": (tutorial_syll_stats_plot, tutorial_stats_df),
-        "frozen": (frozen_syll_stats_plot, frozen_stats_df),
+    summary, stats_df, thresh = {
+        "tutorial": (tutorial_syll_stats_plot, tutorial_stats_df, THRESH),
+        "frozen": (frozen_syll_stats_plot, frozen_stats_df, FROZEN_THRESH),
     }[plot]
-    positions = star_positions(stats_df)
+    positions = star_positions(stats_df, thresh)
 
     np.testing.assert_array_equal(summary["stars"][:, 0], positions)
     assert (summary["stars"][:, 1] == STAR_HEIGHT).all()
@@ -259,7 +260,7 @@ def test_run_kruskal_reports_syllable_labels(frozen_stats_df, frozen_kruskal):
     kruskal, dunn, sig_pairs = frozen_kruskal
     np.random.seed(0)
     kruskal_new, dunn_new, sig_new = run_kruskal(
-        renumber(frozen_stats_df), statistic=STAT, thresh=THRESH
+        renumber(frozen_stats_df), statistic=STAT, thresh=FROZEN_THRESH
     )
 
     syllables = sorted(frozen_stats_df["syllable"].unique())
@@ -280,7 +281,10 @@ def test_significance_stars_follow_renumbered_syllables(
     frozen_syll_stats_plot, frozen_stats_df, tmp_path
 ):
     renumbered_plot = plot_syll_stats(
-        renumber(frozen_stats_df), str(tmp_path / "demo_project"), "frozen_model"
+        renumber(frozen_stats_df),
+        str(tmp_path / "demo_project"),
+        "frozen_model",
+        thresh=FROZEN_THRESH,
     )
 
     assert len(frozen_syll_stats_plot["stars"]) > 0
@@ -448,3 +452,34 @@ def test_run_kruskal_with_no_syllable_to_test():
     assert not kw["is_sig"].any()
     assert dunn["value"].isna().all()
     assert all(len(syllables) == 0 for syllables in significant.values())
+
+
+def test_run_kruskal_counts_shuffles_that_tie_the_real_result():
+    # every value in group a is below every value in group b, but with 2
+    # recordings per group a third of all splits are this extreme
+    rows = [
+        {"group": group, "name": f"{group}{r}", "syllable": 0, "frequency": value}
+        for group, values in [("a", [0.1, 0.2]), ("b", [0.3, 0.4])]
+        for r, value in enumerate(values)
+    ]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # groups have fewer than 3 recordings
+        kw, _, significant = run_kruskal(pd.DataFrame(rows), statistic="frequency", n_perm=1000)
+
+    assert kw.loc[0, "p_adj"] == pytest.approx(1 / 3, abs=0.05)
+    assert not kw.loc[0, "is_sig"]
+    assert len(significant[("a", "b")]) == 0
+
+
+def test_dunn_pvalues_count_shuffles_that_tie_the_real_result():
+    # every shuffle ties the real z statistic, so the p-value is 1
+    pair = ("a", "b")
+    real_zs = {pair: np.array([2.0])}
+    null_zs = {pair: np.full((1000, 1), 2.0)}
+
+    pvalues, _ = compute_pvalues_for_group_pairs(
+        real_zs, null_zs, pd.DataFrame({"is_sig": [True]}), pd.Index(["a", "b"]), n_perm=1000
+    )
+
+    assert pvalues[pair].iloc[0] == pytest.approx(1)

@@ -437,6 +437,8 @@ The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syl
 
 - For ``duration`` and the kinematic statistics, a recording that never used a syllable has no value for it and is left out of that syllable's test. A syllable is not tested, and never starred, when a group has no recordings with a value.
 
+- The p-values come from shuffling recordings between groups, so small groups limit how low they can go. With two groups of 3 recordings there are only 20 ways to split them, so no p-value is below 0.1 and nothing is starred. ``run_kruskal`` warns when a group has fewer than 3 recordings with a value.
+
 - To change the threshold, number of permutations, or multiple-comparisons method, call :py:func:`keypoint_moseq.analysis.run_kruskal` directly:
 
    .. code-block:: python
