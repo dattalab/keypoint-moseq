@@ -2263,6 +2263,25 @@ def find_medoid_distance_outliers(
     return {"mask": outlier_mask, "thresholds": outlier_thresholds}
 
 
+def _minmax_indexes(trace, n_points=2000):
+    """Indexes of at most `n_points` frames of `trace` that draw the same line
+    at plot resolution: the lowest and highest value in each of `n_points // 2`
+    bins of consecutive frames, so every spike is kept."""
+    n = len(trace)
+    if n <= n_points:
+        return np.arange(n)
+    size = -(-n // (n_points // 2))
+    n_bins = -(-n // size)
+    bins = np.full(n_bins * size, np.nan)
+    bins[:n] = trace
+    bins = bins.reshape(n_bins, size)
+    lowest = np.where(np.isnan(bins), np.inf, bins).argmin(axis=1)
+    highest = np.where(np.isnan(bins), -np.inf, bins).argmax(axis=1)
+    indexes = np.sort(np.stack([lowest, highest], axis=1), axis=1)
+    indexes += np.arange(n_bins)[:, None] * size
+    return np.unique(np.minimum(indexes.ravel(), n - 1))
+
+
 def _shade_runs(ax, mask):
     """Shade each run of consecutive True frames in `mask` as one band of
     `ax`, all in one collection, since a patch per frame is slow to draw."""
@@ -2363,7 +2382,8 @@ def plot_keypoint_traces(
 
         for line_idx, trace_array in enumerate(traces):
             label = line_labels[line_idx] if line_labels else f"Line {line_idx}"
-            ax.plot(trace_array[:, keypoint_idx], label=label)
+            frames = _minmax_indexes(trace_array[:, keypoint_idx])
+            ax.plot(frames, trace_array[frames, keypoint_idx], label=label)
 
         if thresholds is not None:
             threshold_value = thresholds[keypoint_idx]

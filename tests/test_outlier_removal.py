@@ -100,6 +100,19 @@ def test_outlier_plot_shades_each_run_of_interpolated_frames_once():
     plt.close(fig)
 
 
+def test_outlier_plot_draws_long_traces_from_2000_points_keeping_spikes():
+    trace = np.zeros((100_000, 1))
+    trace[54_321] = 10.0
+
+    fig = util.plot_keypoint_traces([trace], bodyparts=["tail"])
+
+    line = fig.axes[0].get_lines()[0]
+    assert len(line.get_xdata()) <= 2000
+    assert 54_321 in line.get_xdata()
+    assert line.get_ydata().max() == 10.0
+    plt.close(fig)
+
+
 def test_outlier_removal_interpolates_missing_and_outlier_points(
     monkeypatch, tmp_path
 ):
