@@ -393,7 +393,7 @@ def setup_project(
             assert len(slp_file.skeletons) == 1, fill(
                 f"{sleap_file} contains more than one skeleton. "
                 "This is not currently supported. Please "
-                "open a github issue or email calebsw@gmail.com"
+                "open an issue at https://github.com/dattalab/keypoint-moseq/issues"
             )
             skeleton = slp_file.skeletons[0]
             node_names = skeleton.node_names
@@ -1242,7 +1242,7 @@ def _sleap_loader(filepath, name):
         assert len(slp_file.skeletons) == 1, fill(
             f"{filepath} contains more than one skeleton. "
             "This is not currently supported. Please "
-            "open a github issue or email calebsw@gmail.com"
+            "open an issue at https://github.com/dattalab/keypoint-moseq/issues"
         )
 
         bodyparts = slp_file.skeletons[0].node_names
