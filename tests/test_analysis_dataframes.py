@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from jax_moseq.utils import get_frequencies
+from scipy import stats
 
 import keypoint_moseq as kpms
 from keypoint_moseq.util import filter_angle
@@ -276,6 +277,11 @@ def test_stats_df_kinematics(tutorial_stats_df, tutorial_moseq_df, tutorial_anal
                 "min": values.min(axis=0),
                 "max": values.max(axis=0),
             }
+            # heading is an angle, so its mean and std are circular
+            heading = values[:, KINEMATICS.index("heading")]
+            expected["mean"][0] = stats.circmean(heading, high=np.pi, low=-np.pi)
+            if len(values) > 1:
+                expected["std"][0] = stats.circstd(heading, high=np.pi, low=-np.pi)
             for statistic, expected_values in expected.items():
                 columns = [f"{kinematic}_{statistic}" for kinematic in KINEMATICS]
                 np.testing.assert_allclose(
@@ -285,6 +291,24 @@ def test_stats_df_kinematics(tutorial_stats_df, tutorial_moseq_df, tutorial_anal
                     atol=1e-10,
                     err_msg=f"{name} syllable {row['syllable']} {statistic}",
                 )
+
+
+def test_stats_df_heading_wraps_around_pi(tmp_path):
+    results = synthetic_results(["rec_a"], n_frames=300)
+    syllables = results["rec_a"]["syllable"]
+    near_pi = np.where(np.arange(300) % 2 == 0, np.pi - 0.05, -np.pi + 0.05)
+    results["rec_a"]["heading"] = np.where(syllables == 0, near_pi, results["rec_a"]["heading"])
+    moseq_df = kpms.compute_moseq_df(
+        str(tmp_path), "model", results_dict=results, fps=FPS, smooth_heading=False
+    )
+
+    stats_df = kpms.compute_stats_df(moseq_df, min_frequency=0.0)
+
+    row = stats_df[stats_df["syllable"] == 0].iloc[0]
+    assert abs(row["heading_mean"]) > np.pi - 0.06
+    assert row["heading_std"] < 0.1
+    assert row["heading_min"] == pytest.approx(-np.pi + 0.05)
+    assert row["heading_max"] == pytest.approx(np.pi - 0.05)
 
 
 def test_stats_df_with_default_group(tutorial_moseq_df):

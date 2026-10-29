@@ -486,7 +486,10 @@ def compute_stats_df(
         values. `duration` is the mean length in seconds of the syllable's
         instances, leaving out each recording's first and last instance, which
         the start and end of the recording cut short. It is NaN when those are
-        the syllable's only instances.
+        the syllable's only instances. `heading_mean` and `heading_std` are the
+        circular mean and standard deviation of the heading, and
+        `heading_min` and `heading_max` are its smallest and largest values in
+        (-pi, pi].
 
     Raises
     ------
@@ -562,12 +565,26 @@ def compute_stats_df(
     # filter out syllables that are used less than threshold in all recordings
     filtered_df = moseq_df[moseq_df["syllable"].isin(syll_include)].copy()
 
-    # TODO: hard-coded heading for now, could add other scalars
-    features = filtered_df.groupby(groupby + ["syllable"])[
-        ["heading", "angular_velocity", "velocity_px_s"]
-    ].agg(["mean", "std", "min", "max"])
+    # heading is an angle in (-pi, pi], so its mean and std are circular; like
+    # the other std columns, its std is NaN for a single frame
+    def heading_mean(heading):
+        return stats.circmean(heading, high=np.pi, low=-np.pi)
 
-    features.columns = ["_".join(col).strip() for col in features.columns.values]
+    def heading_std(heading):
+        if len(heading) < 2:
+            return np.nan
+        return stats.circstd(heading, high=np.pi, low=-np.pi)
+
+    aggregations = {}
+    for kinematic in ["heading", "angular_velocity", "velocity_px_s"]:
+        if kinematic == "heading":
+            mean, std = heading_mean, heading_std
+        else:
+            mean, std = "mean", "std"
+        functions = {"mean": mean, "std": std, "min": "min", "max": "max"}
+        for statistic, function in functions.items():
+            aggregations[f"{kinematic}_{statistic}"] = (kinematic, function)
+    features = filtered_df.groupby(groupby + ["syllable"]).agg(**aggregations)
     features.reset_index(inplace=True)
 
     # get durations, leaving out each recording's first and last instance,
