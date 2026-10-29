@@ -77,6 +77,29 @@ def test_outlier_plot_labels_upper_distance_threshold():
     plt.close(fig)
 
 
+def shaded_regions(ax):
+    """The (start, end) frames of each shaded region in an outlier plot panel."""
+    regions = [(p.get_x(), p.get_x() + p.get_width()) for p in ax.patches]
+    for collection in ax.collections:
+        regions += [
+            (path.vertices[:, 0].min(), path.vertices[:, 0].max())
+            for path in collection.get_paths()
+        ]
+    return sorted(regions)
+
+
+def test_outlier_plot_shades_each_run_of_interpolated_frames_once():
+    traces = [np.ones((10, 1))]
+    mask = np.zeros((10, 1), dtype=bool)
+    mask[2:5] = True
+    mask[7] = True
+
+    fig = util.plot_keypoint_traces(traces, bodyparts=["tail"], shading_mask=mask)
+
+    assert shaded_regions(fig.axes[0]) == [(1.5, 4.5), (6.5, 7.5)]
+    plt.close(fig)
+
+
 def test_outlier_removal_interpolates_missing_and_outlier_points(
     monkeypatch, tmp_path
 ):

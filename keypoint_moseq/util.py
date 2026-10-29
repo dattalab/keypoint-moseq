@@ -14,6 +14,7 @@ from packaging.version import InvalidVersion as _InvalidVersion, Version as _Ver
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.collections import PolyCollection
 import jax, jax.numpy as jnp
 from textwrap import fill
 from scipy.ndimage import median_filter, convolve1d, gaussian_filter1d
@@ -2262,6 +2263,25 @@ def find_medoid_distance_outliers(
     return {"mask": outlier_mask, "thresholds": outlier_thresholds}
 
 
+def _shade_runs(ax, mask):
+    """Shade each run of consecutive True frames in `mask` as one band of
+    `ax`, all in one collection, since a patch per frame is slow to draw."""
+    edges = np.diff(np.concatenate([[0], mask.astype(int), [0]]))
+    starts = np.nonzero(edges == 1)[0] - 0.5
+    ends = np.nonzero(edges == -1)[0] - 0.5
+    bands = [[(s, 0), (s, 1), (e, 1), (e, 0)] for s, e in zip(starts, ends)]
+    ax.add_collection(
+        PolyCollection(
+            bands,
+            transform=ax.get_xaxis_transform(),
+            facecolor="grey",
+            edgecolor="none",
+            alpha=0.1,
+        ),
+        autolim=False,
+    )
+
+
 def plot_keypoint_traces(
     traces: list[np.ndarray],
     plot_title: Optional[str] = None,
@@ -2339,10 +2359,7 @@ def plot_keypoint_traces(
         ax = axes[keypoint_idx]
 
         if shading_mask is not None:
-            shaded_frames = np.where(shading_mask[:, keypoint_idx])[0]
-            if len(shaded_frames) > 0:
-                for frame in shaded_frames:
-                    ax.axvspan(frame - 0.5, frame + 0.5, alpha=0.1, color="grey")
+            _shade_runs(ax, shading_mask[:, keypoint_idx])
 
         for line_idx, trace_array in enumerate(traces):
             label = line_labels[line_idx] if line_labels else f"Line {line_idx}"
