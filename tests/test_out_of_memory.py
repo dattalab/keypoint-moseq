@@ -8,6 +8,7 @@ out-of-memory needs a GPU and a dataset too large for it.
 import pytest
 
 import keypoint_moseq as kpms
+from keypoint_moseq import fitting
 
 OUT_OF_MEMORY = "RESOURCE_EXHAUSTED: Out of memory while trying to allocate 91.03GiB."
 
@@ -25,12 +26,23 @@ def check_message(error, stage, data_text):
     assert stage in message
     assert "91.03GiB" in message
     assert data_text in message
-    assert "set_mixed_map_iters" in message
-    # mixed_map reads the setting when a function is first compiled, so it
-    # only applies to a fit started in a new kernel
-    assert "restart the kernel" in message
+    assert "apply_model" in message
     assert "FAQs.html#out-of-memory" in message
     assert isinstance(error.value.__cause__, RuntimeError)
+
+
+def test_message_reports_but_does_not_suggest_batching_or_message_passing():
+    """kpms chooses mixed_map_iters and the Kalman sampler itself, so the
+    message reports them for diagnosis but doesn't suggest changing them."""
+    error = fitting._out_of_memory_error(
+        RuntimeError(OUT_OF_MEMORY), "fitting", None, {}, parallel_message_passing=True
+    )
+
+    message = str(error)
+    assert "Settings: parallel_message_passing=True, mixed_map_iters=" in message
+    assert "set_mixed_map_iters" not in message
+    assert "parallel_message_passing=False" not in message
+    assert "apply_model" in message
 
 
 def test_fitting_out_of_memory_explains_settings(

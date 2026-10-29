@@ -38,8 +38,9 @@ def _out_of_memory_error(
     """Explain an XLA out-of-memory error in terms of the data and settings.
 
     XLA's message names only the allocation that failed. Users need to know
-    how much data they asked the device to hold and which settings reduce
-    memory use, and those settings live in jax-moseq, not in the fitting call.
+    how much data they asked the device to hold and what they can do about it.
+    The settings kpms chooses (the Kalman sampler and mixed_map's batches) are
+    reported for diagnosis, not suggested as changes.
 
     Parameters
     ----------
@@ -106,18 +107,6 @@ def _out_of_memory_error(
             "  - If another notebook or script is using this GPU, shut it down. JAX "
             "reserves 75% of GPU memory when keypoint_moseq is imported, so a "
             "second process has little left."
-        )
-    lines.append(
-        "  - Split the data into batches that are processed one after another: "
-        "restart the kernel, then run "
-        f"`from jax_moseq.utils import set_mixed_map_iters; set_mixed_map_iters({2 * iters})` "
-        "before fitting. Memory use falls roughly in proportion to the number "
-        "of batches, and fitting slows by about the same factor."
-    )
-    if parallel_message_passing:
-        lines.append(
-            "  - Pass `parallel_message_passing=False`, which uses 4-6 times less "
-            "memory and is slower by a similar factor."
         )
     if on_gpu:
         lines.append(
