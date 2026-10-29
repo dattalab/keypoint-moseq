@@ -2094,6 +2094,12 @@ def overlay_keypoints_on_video(
         Video frames corresponding to the entries of `coordinates`. If None, it is
         assumed that the i'th entry of `coordinates` corresponds to the i'th video frame.
     """
+    if isinstance(video_frame_indexes, dict):
+        raise TypeError(
+            "`video_frame_indexes` is a dict; pass the array for this recording, "
+            "e.g. `video_frame_indexes[name]`."
+        )
+
     if output_path is None:
         output_path = os.path.splitext(video_path)[0] + "_keypoints.mp4"
         print(f"Saving video to {output_path}")

@@ -663,3 +663,17 @@ def test_overlay_draws_each_keypoint_row_on_its_video_frame(tmp_path, crop_size)
     for i, frame in enumerate(frames):
         center = frame[frame.shape[0] // 2, frame.shape[1] // 2].mean()
         assert abs(center - 10 * video_frame_indexes[i]) <= 4, i
+
+
+def test_overlay_refuses_the_dict_of_every_recording(tmp_path):
+    video = str(tmp_path / "video.mp4")
+    gray_ramp_video(video)
+    coordinates = np.tile([[10.0, 10.0], [54.0, 54.0]], (10, 1, 1))
+
+    with pytest.raises(TypeError, match=r"video_frame_indexes\[name\]"):
+        kpms.overlay_keypoints_on_video(
+            video,
+            coordinates,
+            output_path=str(tmp_path / "overlay.mp4"),
+            video_frame_indexes={"rec": np.arange(10)},
+        )
