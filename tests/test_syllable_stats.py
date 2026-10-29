@@ -500,3 +500,16 @@ def test_dunn_pvalues_count_shuffles_that_tie_the_real_result():
     )
 
     assert pvalues[pair].iloc[0] == pytest.approx(1)
+
+
+def test_run_kruskal_with_categorical_groups(frozen_stats_df):
+    """Groups follow the category order, as in the pivot."""
+    stats_df = frozen_stats_df.assign(
+        group=pd.Categorical(frozen_stats_df["group"], categories=[EXP_GROUP, CTRL_GROUP])
+    )
+
+    np.random.seed(0)
+    kw, _, significant = run_kruskal(stats_df, statistic=STAT, thresh=FROZEN_THRESH)
+
+    assert list(significant) == [(EXP_GROUP, CTRL_GROUP)]
+    assert kw["pvalue"].notna().all()

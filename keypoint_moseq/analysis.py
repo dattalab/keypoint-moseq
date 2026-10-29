@@ -1147,9 +1147,10 @@ def run_kruskal(
     if statistic == "frequency":
         grouped_data = grouped_data.replace(np.nan, 0)
     grouped_data = grouped_data.reset_index()
-    # every group, in the pivot's sorted order; a group is missing from the
-    # pivot when none of its recordings has a value
-    group_names = pd.Index(sorted(stats_df["group"].unique()))
+    # every group, in the pivot's order (alphabetical, or the category order
+    # of a categorical column); a group is missing from the pivot when none
+    # of its recordings has a value
+    group_names = pd.Index(stats_df["group"].drop_duplicates().sort_values())
     # syllable label of each column; the pivoted columns mixed names and
     # syllables, so their Index has dtype object, and listing them recovers
     # the syllables' own dtype
@@ -1159,7 +1160,7 @@ def run_kruskal(
 
     # recordings with a value for each syllable, in each group
     counts = (
-        grouped_data.groupby("group")[list(syllables)]
+        grouped_data.groupby("group", observed=True)[list(syllables)]
         .count()
         .reindex(group_names, fill_value=0)
     )
