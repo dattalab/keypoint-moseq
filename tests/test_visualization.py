@@ -576,3 +576,25 @@ def test_3D_trajectory_slider_shows_one_syllable_at_a_time(
         visible[i * traces : (i + 1) * traces] = True
         np.testing.assert_array_equal(step.args[0]["visible"], visible, err_msg=step.label)
     assert (tmp_path / "all_trajectories.html").exists()
+
+
+def frequency_results():
+    # frequencies count instances: 2 of syllable 0, 5 of syllable 1, 3 of syllable 2
+    return {"rec": {"syllable": np.array([1, 2, 1, 2, 1, 2, 1, 0, 1, 0])}}
+
+
+def test_syllable_frequencies_are_plotted_by_rank():
+    fig, ax = kpms.plot_syllable_frequencies(
+        results=frequency_results(), min_frequency=0.0
+    )
+    heights = [bar.get_height() for bar in ax.patches]
+    np.testing.assert_allclose(heights, [0.5, 0.3, 0.2])
+    plt.close(fig)
+
+
+def test_syllable_frequencies_with_no_syllable_above_the_threshold():
+    fig, ax = kpms.plot_syllable_frequencies(
+        results=frequency_results(), min_frequency=0.9
+    )
+    assert len(ax.patches) == 0
+    plt.close(fig)

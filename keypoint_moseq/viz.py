@@ -332,8 +332,8 @@ def plot_syllable_frequencies(
 
     syllables = {k: res["syllable"] for k, res in results.items()}
     frequencies = get_frequencies(syllables)
-    frequencies = frequencies[frequencies > min_frequency]
-    xmax = max(minlength, np.max(np.nonzero(frequencies > min_frequency)[0]) + 1)
+    frequencies = np.sort(frequencies[frequencies > min_frequency])[::-1]
+    xmax = max(minlength, len(frequencies))
 
     fig, ax = plt.subplots()
     ax.bar(range(len(frequencies)), frequencies, width=1)
