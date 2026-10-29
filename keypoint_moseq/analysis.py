@@ -25,6 +25,14 @@ pn.extension("plotly", "tabulator")
 na = np.newaxis
 
 
+def _read_syll_info(syll_info_path):
+    """Read `syll_info.csv`, keeping blank cells as empty strings and leaving
+    out rows without a syllable, such as a blank row left by a spreadsheet."""
+    syll_info_df = pd.read_csv(syll_info_path, index_col=False, keep_default_na=False)
+    has_syllable = syll_info_df["syllable"].astype(str).str.strip() != ""
+    return syll_info_df[has_syllable].astype({"syllable": int}).reset_index(drop=True)
+
+
 def get_syllable_names(project_dir, model_name, syllable_ixs):
     """Get syllable names from syll_info.csv file. Labels consist of the
     syllable index, followed by the syllable label, if it exists.
@@ -46,9 +54,7 @@ def get_syllable_names(project_dir, model_name, syllable_ixs):
     labels = {ix: f"{ix}" for ix in syllable_ixs}
     syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
     if os.path.exists(syll_info_path):
-        syll_info_df = pd.read_csv(
-            syll_info_path, index_col=False, keep_default_na=False
-        )
+        syll_info_df = _read_syll_info(syll_info_path)
 
         for ix in syllable_ixs:
             # a syllable without a row keeps its bare index
@@ -697,9 +703,7 @@ def label_syllables(project_dir, model_name, moseq_df):
     )
 
     # load syll_info
-    syll_info_df = pd.read_csv(
-        syll_info_path, index_col=False, keep_default_na=False
-    )
+    syll_info_df = _read_syll_info(syll_info_path)
     # split into with movie and without movie
     syll_info_df_with_movie = syll_info_df[
         syll_info_df.movie_path.str.contains(".mp4")

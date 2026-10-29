@@ -144,3 +144,40 @@ def test_syllable_labeled_na_keeps_its_label(tmp_path):
     names = kpms.get_syllable_names(str(tmp_path), "model", [0, 1])
 
     assert names == ["0 (NA)", "1 (None)"]
+
+
+def write_syll_info_with_a_blank_row(model_dir):
+    """A syll_info.csv with labels for syllables 0 and 1, and a blank row as
+    a spreadsheet can leave behind."""
+    os.makedirs(model_dir / "grid_movies")
+    for syllable in [0, 1]:
+        (model_dir / "grid_movies" / f"syllable{syllable}.mp4").touch()
+    rows = [
+        f"{syllable},{label},,{model_dir / 'grid_movies' / f'syllable{syllable}.mp4'}"
+        for syllable, label in [(0, "rear"), (1, "groom")]
+    ]
+    text = "syllable,label,short_description,movie_path\n" + "\n".join(rows) + "\n,,,\n"
+    (model_dir / "syll_info.csv").write_text(text)
+
+
+def test_syllable_names_from_a_syll_info_with_a_blank_row(tmp_path):
+    write_syll_info_with_a_blank_row(tmp_path / "model")
+
+    names = kpms.get_syllable_names(str(tmp_path), "model", [0, 1, 2])
+
+    assert names == ["0 (rear)", "1 (groom)", "2"]
+
+
+def test_label_syllables_with_a_blank_row_keeps_the_labels(tmp_path):
+    write_syll_info_with_a_blank_row(tmp_path / "model")
+    moseq_df = pd.DataFrame({"syllable": [0, 1, 0, 1]})
+
+    widget = kpms.label_syllables(str(tmp_path), "model", moseq_df)
+    (_, _), (table, column) = (part.objects for part in widget.objects)
+    (button,) = column.objects
+    assert list(table.value["label"]) == ["rear", "groom"]
+    button.clicks += 1
+
+    saved = pd.read_csv(tmp_path / "model" / "syll_info.csv", keep_default_na=False)
+    assert list(saved["syllable"]) == [0, 1]
+    assert list(saved["label"]) == ["rear", "groom"]
