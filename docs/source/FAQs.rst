@@ -480,32 +480,13 @@ There are two main causes of GPU out of memory (OOM) errors:
 
 2. **Large datasets.** 
 
-  Required GPU memory scales roughly linearly with the size of the dataset and the number of latent dimensions used. For example, a dataset with 4 latent dimensions will require roughly 3 MB of GPU memory for each 100 frames of data during model fitting. If your GPU isn't big enough, try one of the following:
+  Required GPU memory scales roughly linearly with the size of the dataset. With 4 latent dimensions and 100 states, model fitting needs roughly 0.2–0.3 MB of GPU memory per 100 frames of data, and more with more states. If your GPU isn't big enough, try one of the following:
 
   - Use `Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/stable/docs/keypoint_moseq_colab.ipynb>`_. 
 
     - Colab provides free access to GPUs with 16GB of VRAM.
     
     - Larger GPUs can be accessed using colab pro. 
-
-
-  - Disable parallel message passing. This results in a large (4-6 fold) reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fitting.fit_model`, :py:func:`keypoint_moseq.fitting.apply_model` or :py:func:`keypoint_moseq.fitting.estimate_syllable_marginals`. For example
-
-   .. code-block:: python
-
-      kpms.fit_model(
-         model, data, metadata, project_dir, 
-         model_name, parallel_message_passing=False)
-
-
-  - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
-
-   .. code-block:: python
-
-      from jax_moseq.utils import set_mixed_map_iters
-      set_mixed_map_iters(4)
-
-   This will split the data into 4 batches, which should reduce the memory requirements about 4-fold but also result in a 4-fold slow-down. The number of batches can be adjusted as needed.
 
 
   - Use multiple GPUs if they are available (Linux only, including WSL2). To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).

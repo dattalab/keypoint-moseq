@@ -246,8 +246,8 @@ def init_model(
     Raises
     ------
     MemoryError
-        If the device runs out of memory, with the data size and the
-        settings that reduce memory use.
+        If the device runs out of memory, with the data size, the settings in
+        effect and ways to fit within memory.
     """
     try:
         if location_aware:
@@ -479,8 +479,8 @@ def fit_model(
         If a checkpoint for `model_name` exists and was saved from different
         data.
     MemoryError
-        If fitting runs out of memory. The message gives the data size and the
-        settings that reduce memory use.
+        If fitting runs out of memory. The message gives the data size, the
+        settings in effect and ways to fit within memory.
     """
     if generate_progress_plots and save_every_n_iters == 0:
         warnings.warn(
