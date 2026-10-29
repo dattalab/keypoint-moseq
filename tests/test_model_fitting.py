@@ -372,3 +372,42 @@ def test_location_aware_sets_the_model_that_is_initialized(
 
     expected = "allo_keypoint_slds" if location_aware else "keypoint_slds"
     assert initialized_model_types == [expected]
+
+
+@pytest.fixture
+def allo_init_kwargs(monkeypatch):
+    """Keyword arguments of the jax-moseq location-aware init_model call."""
+    calls = []
+    monkeypatch.setattr(
+        kpms.fitting.allo_keypoint_slds,
+        "init_model",
+        lambda *args, **kwargs: calls.append(kwargs),
+    )
+    return calls
+
+
+def test_init_model_uses_the_allo_hypparams_passed_in(allo_init_kwargs):
+    kpms.init_model(
+        location_aware=True,
+        allo_hypparams={"beta0_v": 7.0},
+        trans_hypparams={"num_states": 10},
+    )
+
+    allo_hypparams = allo_init_kwargs[0]["allo_hypparams"]
+    assert allo_hypparams["beta0_v"] == 7.0
+    assert allo_hypparams["alpha0_v"] == 10
+    assert allo_hypparams["num_states"] == 10
+
+
+def test_init_model_default_allo_hypparams(allo_init_kwargs):
+    kpms.init_model(location_aware=True, trans_hypparams={"num_states": 10})
+
+    assert allo_init_kwargs[0]["allo_hypparams"] == {
+        "alpha0_v": 10,
+        "beta0_v": 0.1,
+        "lambda0_v": 1,
+        "alpha0_h": 10,
+        "beta0_h": 0.1,
+        "lambda0_h": 1,
+        "num_states": 10,
+    }

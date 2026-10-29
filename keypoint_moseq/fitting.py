@@ -214,8 +214,12 @@ def init_model(
         of the keypoint-SLDS model (`jax_moseq.models.allo_keypoint_slds`).
 
     allo_hypparams : dict, default=None
-        Hyperparameters for the `allo_keypoint_slds` model. If None, default
-        hyperparameters will be used.
+        Hyperparameters for the `allo_keypoint_slds` model. Keys left out take
+        their default values.
+
+    trans_hypparams : dict
+        Transition hyperparameters, required when `location_aware=True`
+        (usually passed with `**config()`).
 
     metadata : tuple (keys, bounds), default=None
         Segment metadata from :py:func:`keypoint_moseq.util.format_data`. Used only
@@ -244,6 +248,7 @@ def init_model(
                 "beta0_h": 0.1,
                 "lambda0_h": 1,
                 "num_states": num_states,
+                **(allo_hypparams or {}),
             }
 
             return allo_keypoint_slds.init_model(
