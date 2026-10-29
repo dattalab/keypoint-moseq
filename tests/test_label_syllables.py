@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -105,6 +106,8 @@ def test_syllable_names_without_a_syll_info_row(tmp_path):
         }
     ).to_csv(tmp_path / "model" / "syll_info.csv", index=False)
 
-    names = kpms.get_syllable_names(str(tmp_path), "model", [0, 1, 5])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        names = kpms.get_syllable_names(str(tmp_path), "model", [0, 1, 5])
 
     assert names == ["0", "1 (rear)", "5"]
