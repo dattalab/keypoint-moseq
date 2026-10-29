@@ -229,10 +229,11 @@ def test_stats_df_rows(tutorial_stats_df, tutorial_analysis_project):
             tutorial_stats_df["group"], tutorial_stats_df["name"], tutorial_stats_df["syllable"]
         )
     ]
+    # a syllable a recording never used still gets a row, with frequency 0
     expected = {
         (cohort_group(name), name, int(syllable))
-        for name, recording in results.items()
-        for syllable in np.intersect1d(included, recording["syllable"])
+        for name in results
+        for syllable in included
     }
 
     assert len(rows) == len(set(rows))
@@ -243,13 +244,15 @@ def test_stats_df_frequency_and_duration(tutorial_stats_df, tutorial_analysis_pr
     project_dir, model_name = tutorial_analysis_project
     results = kpms.load_results(project_dir, model_name)
 
+    num_states = max(r["syllable"].max() for r in results.values()) + 1
     for name, rows in recording_rows(tutorial_stats_df, results).items():
         syllables = rows["syllable"].to_numpy()
         mean_run_lengths = mean_complete_run_lengths(results[name]["syllable"], syllables)
 
+        # unused syllables have frequency 0 and a NaN duration
         np.testing.assert_array_equal(
             rows["frequency"],
-            get_frequencies(results[name]["syllable"])[syllables],
+            get_frequencies(results[name]["syllable"], num_states=num_states)[syllables],
             err_msg=name,
         )
         np.testing.assert_allclose(
@@ -266,6 +269,10 @@ def test_stats_df_kinematics(tutorial_stats_df, tutorial_moseq_df, tutorial_anal
         for _, row in rows.iterrows():
             values = frames[name].loc[frames[name]["syllable"] == row["syllable"], KINEMATICS]
             values = values.to_numpy()
+            if len(values) == 0:
+                columns = [c for c in row.index if c.startswith(tuple(KINEMATICS))]
+                assert row[columns].isna().all(), f"{name} syllable {row['syllable']}"
+                continue
             std = (
                 values.std(axis=0, ddof=1)
                 if len(values) > 1
@@ -309,6 +316,20 @@ def test_stats_df_heading_wraps_around_pi(tmp_path):
     assert row["heading_std"] < 0.1
     assert row["heading_min"] == pytest.approx(-np.pi + 0.05)
     assert row["heading_max"] == pytest.approx(np.pi - 0.05)
+
+
+def test_stats_df_has_a_row_for_a_syllable_a_recording_never_used(tmp_path):
+    results = synthetic_results(["rec_a", "rec_b"], num_syllables=3)
+    used = results["rec_b"]["syllable"]
+    results["rec_b"]["syllable"] = np.where(used == 1, 2, used)
+    moseq_df = kpms.compute_moseq_df(str(tmp_path), "model", results_dict=results, fps=FPS)
+
+    stats_df = kpms.compute_stats_df(moseq_df, min_frequency=0.0)
+
+    row = stats_df[(stats_df["name"] == "rec_b") & (stats_df["syllable"] == 1)]
+    assert len(row) == 1
+    assert row["frequency"].item() == 0
+    assert row[["duration", "heading_mean", "velocity_px_s_mean"]].isna().all(axis=None)
 
 
 def test_stats_df_with_default_group(tutorial_moseq_df):

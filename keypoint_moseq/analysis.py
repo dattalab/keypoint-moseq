@@ -489,7 +489,10 @@ def compute_stats_df(
         the syllable's only instances. `heading_mean` and `heading_std` are the
         circular mean and standard deviation of the heading, and
         `heading_min` and `heading_max` are its smallest and largest values in
-        (-pi, pi].
+        (-pi, pi]. Each recording has a row for every syllable that passes
+        `min_frequency`. Where the recording never used the syllable,
+        `frequency` is 0, and with 'name' in `groupby`, `duration` and the
+        kinematic columns are NaN.
 
     Raises
     ------
@@ -544,17 +547,18 @@ def compute_stats_df(
     frequencies = get_frequencies(syllables)
     syll_include = np.where(frequencies > min_frequency)[0]
 
-    # construct frequency dataframe
-    # syllable frequencies within one session add up to 1
+    # construct frequency dataframe, with a row for every included syllable in
+    # every recording (0 where the recording never used it); syllable
+    # frequencies are computed within each recording
     frequency_df = []
     for name, recording_syllables in syllables.items():
-        syll_freq = get_frequencies(recording_syllables)
+        syll_freq = get_frequencies(recording_syllables, num_states=len(frequencies))
         df = pd.DataFrame(
             {
                 "name": name,
                 "group": group_of[name],
-                "syllable": np.arange(len(syll_freq)),
-                "frequency": syll_freq,
+                "syllable": syll_include,
+                "frequency": syll_freq[syll_include],
             }
         )
         frequency_df.append(df)
@@ -609,7 +613,12 @@ def compute_stats_df(
     durations.name = "duration"
     durations = durations.reset_index()
 
-    stats_df = pd.merge(features, frequency_df, on=groupby + ["syllable"])
+    # with 'name' in groupby, a syllable the recording never used gets NaN
+    # kinematics
+    stats_df = pd.merge(features, frequency_df, on=groupby + ["syllable"], how="right")
+    stats_df = stats_df.sort_values(
+        groupby + ["syllable"], kind="stable", ignore_index=True
+    )
     # syllables with no complete instance get a NaN duration
     stats_df = pd.merge(stats_df, durations, on=groupby + ["syllable"], how="left")
     return stats_df
