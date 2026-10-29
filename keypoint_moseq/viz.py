@@ -1318,7 +1318,9 @@ def generate_grid_movies(
         )
         return
 
-    # density sampling compares instances over 0.167 s before onset and 0.5 s after
+    # density sampling compares instances over 0.167 s before onset and 0.5 s
+    # after, or over the grid window where that is shorter, since instances
+    # are only chosen where the grid window fits in the recording
     sampled_instances = sample_instances(
         syllable_instances,
         rows * cols,
@@ -1326,8 +1328,8 @@ def generate_grid_movies(
         centroids=centroids,
         headings=headings,
         **{
-            "before_onset_frames": round(0.167 * fps),
-            "after_onset_frames": round(0.5 * fps),
+            "before_onset_frames": min(round(0.167 * fps), before_onset_frames),
+            "after_onset_frames": min(round(0.5 * fps), after_onset_frames),
             **sampling_options,
         },
     )

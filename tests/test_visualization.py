@@ -631,6 +631,30 @@ def test_density_sampling_window_is_in_seconds(tmp_path, monkeypatch):
     assert windows == [(20, 60)]
 
 
+@pytest.mark.parametrize("before_onset_sec, after_onset_sec", [(0.1, 2.0), (1.0, 0.3)])
+def test_density_sampling_with_a_short_grid_window(tmp_path, before_onset_sec, after_onset_sec):
+    # at 120 fps, density sampling compares instances over 20 frames before
+    # onset and 60 after, more than these grid windows hold
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+
+    sampled = kpms.generate_grid_movies(
+        results,
+        output_dir=str(tmp_path),
+        coordinates=moving_keypoints(results),
+        keypoints_only=True,
+        fps=120,
+        before_onset_sec=before_onset_sec,
+        after_onset_sec=after_onset_sec,
+        min_instance_duration_sec=0.0,
+        min_frequency=0.0,
+        rows=1,
+        cols=2,
+        sampling_options={"mode": "density", "n_neighbors": 5},
+    )
+
+    assert len(sampled) > 0
+
+
 def gray_ramp_video(path, n_frames=20, size=64):
     """A video whose frame k is uniformly gray at level 10 * k."""
     with imageio.get_writer(path, fps=30) as writer:
