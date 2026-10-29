@@ -158,3 +158,35 @@ def test_config_without_a_skeleton(project_dir, tutorial_config_edits, skeleton,
 
     assert kpms.load_config(project_dir)["skeleton"] == []
     assert "ACTION REQUIRED" not in capsys.readouterr().out
+
+
+def test_update_config_keeps_keys_without_a_default(tmp_path):
+    project_dir = str(tmp_path)
+    kpms.generate_config(project_dir)
+    path = tmp_path / "config.yml"
+    config = yaml.safe_load(path.read_text())
+    config["save_every_n_iters"] = 25
+    config["my_custom_key"] = 3
+    config["ar_hypparams"]["my_ar_key"] = 4
+    path.write_text(yaml.safe_dump(config))
+
+    kpms.update_config(project_dir, fps=60, new_key="x")
+
+    updated = kpms.load_config(project_dir, check_if_valid=False, build_indexes=False)
+    assert updated["fps"] == 60
+    assert updated["save_every_n_iters"] == 25
+    assert updated["my_custom_key"] == 3
+    assert updated["new_key"] == "x"
+    assert updated["ar_hypparams"]["my_ar_key"] == 4
+
+
+def test_update_config_with_a_loaded_config(tmp_path):
+    """load_config adds index arrays that are not settings."""
+    project_dir = str(tmp_path)
+    kpms.generate_config(project_dir)
+
+    kpms.update_config(project_dir, **kpms.load_config(project_dir))
+
+    config = kpms.load_config(project_dir, check_if_valid=False, build_indexes=False)
+    assert "anterior_idxs" not in config
+    assert "posterior_idxs" not in config

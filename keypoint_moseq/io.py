@@ -134,6 +134,12 @@ def generate_config(project_dir, **kwargs):
         },
     )
 
+    # settings without a default (custom ones, or ones older versions wrote)
+    # go under OTHER; the index arrays load_config adds are not settings
+    known = {*anatomy, *fitting, *hypperams, *other, "anterior_idxs", "posterior_idxs"}
+    known.update(key for group in hypperams.values() for key in group)
+    other.update({k: v for k, v in kwargs.items() if k not in known})
+
     comments = {
         "verbose": "whether to print progress messages during fitting",
         "keypoint_colormap": "colormap used for visualization; see `matplotlib.colormaps` for options",
