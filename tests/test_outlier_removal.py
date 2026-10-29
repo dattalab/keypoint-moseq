@@ -5,6 +5,7 @@ import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from PIL import Image
 
 import keypoint_moseq as kpms
 import keypoint_moseq.io as io
@@ -111,6 +112,24 @@ def test_outlier_plot_draws_long_traces_from_2000_points_keeping_spikes():
     assert 54_321 in line.get_xdata()
     assert line.get_ydata().max() == 10.0
     plt.close(fig)
+
+
+def test_outlier_plot_is_saved_1920_pixels_wide(tmp_path):
+    coordinates = make_coordinates_with_missing_and_outlier()
+    mask = np.isnan(coordinates).any(axis=-1)
+
+    util.plot_medoid_distance_outliers(
+        tmp_path,
+        "recording",
+        coordinates,
+        coordinates,
+        mask,
+        np.ones(coordinates.shape[1]),
+        bodyparts=[f"keypoint{i}" for i in range(coordinates.shape[1])],
+    )
+
+    with Image.open(outlier_plot_path(tmp_path, "recording")) as image:
+        assert image.size == (1920, 5 * 3 * 120)
 
 
 def test_outlier_removal_interpolates_missing_and_outlier_points(

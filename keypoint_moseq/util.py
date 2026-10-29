@@ -2493,7 +2493,7 @@ def plot_medoid_distance_outliers(
         shading_mask=outlier_mask,
     )
 
-    fig.savefig(plot_path, dpi=300)
+    fig.savefig(plot_path, dpi=120)
     plt.close()
 
 
