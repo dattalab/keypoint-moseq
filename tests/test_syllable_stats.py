@@ -454,6 +454,23 @@ def test_run_kruskal_with_no_syllable_to_test():
     assert all(len(syllables) == 0 for syllables in significant.values())
 
 
+def test_run_kruskal_does_not_test_a_syllable_whose_values_are_all_identical():
+    df = duration_stats_df()
+    # every recording has the same duration for syllable 0, and every
+    # recording with a duration for syllable 1 has the same one
+    df.loc[df["syllable"] == 0, "duration"] = 0.5
+    df.loc[(df["syllable"] == 1) & df["duration"].notna(), "duration"] = 0.5
+
+    kw, dunn, significant = run_kruskal(df, statistic="duration", n_perm=1000)
+
+    for syllable in [0, 1]:
+        assert kw.loc[syllable, ["statistic", "pvalue", "p_adj"]].isna().all(), syllable
+        assert not kw.loc[syllable, "is_sig"], syllable
+        assert dunn.loc[dunn[("syllable", "")] == syllable, "value"].isna().all(), syllable
+        assert all(syllable not in syllables for syllables in significant.values())
+    assert pd.notna(kw.loc[2, "pvalue"])
+
+
 def test_run_kruskal_counts_shuffles_that_tie_the_real_result():
     # every value in group a is below every value in group b, but with 2
     # recordings per group a third of all splits are this extreme

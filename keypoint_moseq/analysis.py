@@ -1098,8 +1098,9 @@ def run_kruskal(
     A recording without a row for a syllable has a frequency of 0. Other
     missing values are left out: each syllable is tested on the recordings
     that have a value for `statistic`, and a syllable is not tested when a
-    group has no recordings with a value. A warning gives the number of
-    syllables where a group has fewer than 3 recordings with a value.
+    group has no recordings with a value, or when every value is the same. A
+    warning gives the number of syllables where a group has fewer than 3
+    recordings with a value.
 
     Parameters
     ----------
@@ -1172,8 +1173,8 @@ def run_kruskal(
 
     # syllables with a value in every recording are tested together; each
     # other syllable is tested on the recordings that have a value, unless a
-    # group has none
-    testable = (counts > 0).all()
+    # group has none, or every value is the same, which leaves nothing to rank
+    testable = (counts > 0).all() & (grouped_data[list(syllables)].nunique() > 1)
     complete = [
         s for s in syllables if testable[s] and grouped_data[s].notna().all()
     ]
