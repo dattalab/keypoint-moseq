@@ -598,3 +598,34 @@ def test_syllable_frequencies_with_no_syllable_above_the_threshold():
     )
     assert len(ax.patches) == 0
     plt.close(fig)
+
+
+class Sampled(Exception):
+    pass
+
+
+def test_density_sampling_window_is_in_seconds(tmp_path, monkeypatch):
+    windows = []
+
+    def record(*args, **kwargs):
+        windows.append((kwargs["before_onset_frames"], kwargs["after_onset_frames"]))
+        raise Sampled
+
+    monkeypatch.setattr(kpms.viz, "sample_instances", record)
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+
+    with pytest.raises(Sampled):
+        kpms.generate_grid_movies(
+            results,
+            output_dir=str(tmp_path),
+            coordinates=moving_keypoints(results),
+            keypoints_only=True,
+            fps=120,
+            min_frequency=0.0,
+            rows=1,
+            cols=2,
+            sampling_options={"mode": "density"},
+        )
+
+    # 0.167 s before onset and 0.5 s after, at 120 fps
+    assert windows == [(20, 60)]

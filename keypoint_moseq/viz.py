@@ -1318,13 +1318,18 @@ def generate_grid_movies(
         )
         return
 
+    # density sampling compares instances over 0.167 s before onset and 0.5 s after
     sampled_instances = sample_instances(
         syllable_instances,
         rows * cols,
         coordinates=coordinates,
         centroids=centroids,
         headings=headings,
-        **sampling_options,
+        **{
+            "before_onset_frames": round(0.167 * fps),
+            "after_onset_frames": round(0.5 * fps),
+            **sampling_options,
+        },
     )
 
     # determine window size for grid movies
