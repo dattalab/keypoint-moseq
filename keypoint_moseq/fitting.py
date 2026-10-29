@@ -871,6 +871,16 @@ def estimate_syllable_marginals(
         return marginal_estimates
 
 
+# hyperparameters that update_hypparams refuses, with the reason
+_HYPPARAMS_SET_AT_INITIALIZATION = {
+    "num_states": "it sets the size of the model's arrays",
+    "latent_dim": "it sets the size of the model's arrays",
+    "nlags": "it sets the size of the model's arrays",
+    "S_0_scale": "it is only read when the model is created",
+    "K_0_scale": "it is only read when the model is created",
+}
+
+
 def update_hypparams(model_dict, **kwargs):
     """Edit the hyperparameters of a model.
 
@@ -892,10 +902,30 @@ def update_hypparams(model_dict, **kwargs):
     -------
     model_dict : dict
         Model dictionary with updated hyperparameters.
+
+    Raises
+    ------
+    ValueError
+        If `num_states`, `latent_dim`, `nlags`, `S_0_scale` or `K_0_scale` is
+        passed. These are fixed when the model is created; change them in the
+        config and initialize a new model.
     """
     assert "hypparams" in model_dict, fill(
         "The inputted model/checkpoint does not contain any hyperparams"
     )
+
+    refused = [k for k in kwargs if k in _HYPPARAMS_SET_AT_INITIALIZATION]
+    if refused:
+        raise ValueError(
+            "\n".join(
+                fill(
+                    f"`{k}` can't be changed on an existing model, because "
+                    f"{_HYPPARAMS_SET_AT_INITIALIZATION[k]}. Change it in the "
+                    "config and initialize a new model with `kpms.init_model`."
+                )
+                for k in refused
+            )
+        )
 
     not_updated = list(kwargs.keys())
 
