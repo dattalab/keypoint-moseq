@@ -477,7 +477,14 @@ def compute_stats_df(
         syllables whose frequency across all recordings is at or below this
         threshold are left out, by default 0.005
     groupby : list, optional
-        the list of column names to group by, by default ['group', 'name']
+        columns that identify the rows of `stats_df`, by default ['group',
+        'name']. Statistics are meant to be per recording, so keep 'name' in
+        the list. Frequencies are always computed per recording: without
+        'name', `stats_df` still has a row for each recording and syllable,
+        with that recording's frequency, the duration and kinematic
+        statistics pooled over its group, and no 'name' column.
+        `run_kruskal` and the significance markers in
+        `plot_syll_stats_with_sem` need 'name'.
 
     Returns
     -------
