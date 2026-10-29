@@ -17,7 +17,7 @@ from jax_moseq.models import allo_keypoint_slds, keypoint_slds
 from jax_moseq.models.arhmm import stateseq_marginals, marginal_log_likelihood
 from jax_moseq.utils.autoregression import get_nlags
 from jax_moseq.utils import check_for_nans, device_put_as_scalar, unbatch
-from jax_moseq.utils import get_mixed_map_gpus, get_mixed_map_iters
+from jax_moseq.utils import get_mixed_map_gpus, get_mixed_map_iters, set_mixed_map_iters
 
 
 class StopResampling(Exception):
@@ -180,6 +180,28 @@ def _wrapped_resample(
     return model
 
 
+# jax-moseq's mixed_map splits the Kalman sampler's segments into this many
+# batches. The parallel sampler needs 6-9 times less memory in 32 batches at
+# the same speed; each batch of the sequential sampler costs time and saves
+# little memory.
+_MIXED_MAP_ITERS = {True: 32, False: 1}
+_kpms_mixed_map_iters = None  # the value kpms last set
+
+
+def _set_mixed_map_iters(parallel_message_passing):
+    """Set jax-moseq's mixed_map_iters for the Kalman sampler in use.
+
+    mixed_map reads the setting when a step is first compiled, so this runs
+    before any jax-moseq step. A value the user set with `set_mixed_map_iters`
+    is kept: kpms changes the value only while it is jax-moseq's default (1)
+    or the value kpms set last.
+    """
+    global _kpms_mixed_map_iters
+    if get_mixed_map_iters() in (1, _kpms_mixed_map_iters):
+        _kpms_mixed_map_iters = _MIXED_MAP_ITERS[bool(parallel_message_passing)]
+        set_mixed_map_iters(_kpms_mixed_map_iters)
+
+
 def _set_parallel_flag(parallel_message_passing):
     if parallel_message_passing == "force":
         parallel_message_passing = True
@@ -193,6 +215,7 @@ def _set_parallel_flag(parallel_message_passing):
                 '(To suppress this message, set parallel_message_passing="force")'
             )
         )
+    _set_mixed_map_iters(parallel_message_passing)
     return parallel_message_passing
 
 
@@ -986,6 +1009,7 @@ def expected_marginal_likelihoods(
     standard_errors : numpy array
         Standard error of the expected marginal likelihood score for each model.
     """
+    _set_mixed_map_iters(jax.default_backend() != "cpu")
     if checkpoint_paths is None:
         assert project_dir is not None and model_names is not None, fill(
             "Must provide either `checkpoint_paths` or `project_dir` and `model_names`"
