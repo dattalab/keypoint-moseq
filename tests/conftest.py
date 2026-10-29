@@ -13,6 +13,7 @@ import pytest
 from matplotlib.colors import to_rgb
 
 from analysis_utils import (
+    FROZEN_THRESH,
     bigram_plot_summary,
     cohort_group,
     graph_plot_summary,
@@ -611,18 +612,19 @@ def frozen_stats_df():
     from it can be snapshotted by value."""
     # Output of `compute_stats_df`, called as in the analysis notebook with
     # the cohort groups, for a full-scale fit of the tutorial dataset (model
-    # 2025_02_11-10_07_45 in the maintainers' test assets). The frequency of
-    # one syllable differs significantly between the groups.
+    # 2025_02_11-10_07_45 in the maintainers' test assets). The groups'
+    # frequencies of syllable 11 don't overlap; with 6 and 4 recordings, its
+    # corrected p-value is 0.19.
     return pd.read_csv(FROZEN_STATS_DF, float_precision="round_trip")
 
 
 @pytest.fixture(scope="session")
 def frozen_syll_stats_plot(tmp_path_factory, frozen_stats_df):
     """Figure summary and printed output of the analysis notebook's group
-    comparison cell run on the frozen `stats_df`, in a project without
-    syllable labels."""
+    comparison cell run on the frozen `stats_df` at `FROZEN_THRESH`, in a
+    project without syllable labels."""
     project_dir = str(tmp_path_factory.mktemp("frozen_stats") / "demo_project")
-    return plot_syll_stats(frozen_stats_df, project_dir, "frozen_model")
+    return plot_syll_stats(frozen_stats_df, project_dir, "frozen_model", thresh=FROZEN_THRESH)
 
 
 @pytest.fixture(scope="session")

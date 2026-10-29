@@ -423,7 +423,7 @@ What statistical test is used to flag significant syllables in the syllable stat
 
 The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syll_stats_with_sem` come from a permutation-based Kruskal–Wallis test followed by a Dunn's z-test post-hoc, with Benjamini–Hochberg (FDR) correction applied at two levels. The same procedure is used regardless of which statistic is plotted (``frequency``, ``duration``, ``velocity_px_s_mean``, etc.).
 
-**Omnibus test.** For each syllable, a Kruskal–Wallis H statistic compares the groups. Significance is established empirically by shuffling group labels 10,000 times and recomputing H. The resulting per-syllable p-values are BH-adjusted across syllables — one correction family of size *N_syllables*.
+**Omnibus test.** For each syllable, a Kruskal–Wallis H statistic compares the groups. Significance is established empirically by shuffling group labels 10,000 times and recomputing H. The resulting per-syllable p-values are BH-adjusted across the syllables that were tested, as one correction family.
 
 **Post-hoc.** For each syllable, a Dunn's z-test is run on every pair of groups, again with empirical p-values from the same permutations. These are BH-adjusted within each syllable, across pairs — one correction family of size *N_pairs*, applied independently for each syllable. There is no joint correction across the full (syllable × pair) grid. For two-group experiments this post-hoc correction is a no-op (only one pair).
 
@@ -434,6 +434,10 @@ The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syl
 **Notes.**
 
 - The tests are nonparametric and rank-based, so they do not assume normality.
+
+- For ``duration`` and the kinematic statistics, a recording that never used a syllable has no value for it and is left out of that syllable's test. A syllable is not tested, and never starred, when a group has no recordings with a value.
+
+- The p-values come from shuffling recordings between groups, so small groups limit how low they can go. With two groups of 3 recordings there are only 20 ways to split them, so no p-value is below 0.1 and nothing is starred. ``run_kruskal`` warns when a group has fewer than 3 recordings with a value.
 
 - To change the threshold, number of permutations, or multiple-comparisons method, call :py:func:`keypoint_moseq.analysis.run_kruskal` directly:
 

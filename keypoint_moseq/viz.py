@@ -332,8 +332,8 @@ def plot_syllable_frequencies(
 
     syllables = {k: res["syllable"] for k, res in results.items()}
     frequencies = get_frequencies(syllables)
-    frequencies = frequencies[frequencies > min_frequency]
-    xmax = max(minlength, np.max(np.nonzero(frequencies > min_frequency)[0]) + 1)
+    frequencies = np.sort(frequencies[frequencies > min_frequency])[::-1]
+    xmax = max(minlength, len(frequencies))
 
     fig, ax = plt.subplots()
     ax.bar(range(len(frequencies)), frequencies, width=1)
@@ -1318,13 +1318,20 @@ def generate_grid_movies(
         )
         return
 
+    # density sampling compares instances over 0.167 s before onset and 0.5 s
+    # after, or over the grid window where that is shorter, since instances
+    # are only chosen where the grid window fits in the recording
     sampled_instances = sample_instances(
         syllable_instances,
         rows * cols,
         coordinates=coordinates,
         centroids=centroids,
         headings=headings,
-        **sampling_options,
+        **{
+            "before_onset_frames": min(round(0.167 * fps), before_onset_frames),
+            "after_onset_frames": min(round(0.5 * fps), after_onset_frames),
+            **sampling_options,
+        },
     )
 
     # determine window size for grid movies
@@ -2087,8 +2094,14 @@ def overlay_keypoints_on_video(
 
     video_frame_indexes: array, default=None
         Video frames corresponding to the entries of `coordinates`. If None, it is
-        assumed that the i'th entry of `coordinate` corresponds to the i'th video frame.
+        assumed that the i'th entry of `coordinates` corresponds to the i'th video frame.
     """
+    if isinstance(video_frame_indexes, dict):
+        raise TypeError(
+            "`video_frame_indexes` is a dict; pass the array for this recording, "
+            "e.g. `video_frame_indexes[name]`."
+        )
+
     if output_path is None:
         output_path = os.path.splitext(video_path)[0] + "_keypoints.mp4"
         print(f"Saving video to {output_path}")
@@ -2113,17 +2126,34 @@ def overlay_keypoints_on_video(
     reader = OpenCVReader(video_path)
     fps = reader.fps
     if frames is None:
-        frames = np.arange(len(reader))
+        frames = np.arange(len(coordinates))
+    frames = np.array(list(frames), dtype=int)
 
     if video_frame_indexes is None:
         video_frame_indexes = np.arange(len(coordinates))
 
+    # check the last video frame needed before writing anything; OpenCV's
+    # frame count comes from the video header and can be one short, so the
+    # frame is decoded rather than compared with the count
+    if len(frames) > 0:
+        last_frame = int(np.max(np.asarray(video_frame_indexes)[frames]))
+        try:
+            reader[last_frame]
+        except ValueError:
+            raise ValueError(
+                f"The keypoints need video frames up to {last_frame}, but "
+                f"`{video_path}` has {reader.nframes} frames. Check that "
+                "`coordinates` and `video_frame_indexes` belong to this video."
+            ) from None
+
     with imageio.get_writer(
         output_path, pixelformat="yuv420p", fps=fps, quality=quality
     ) as writer:
+        # `frame` indexes rows of `coordinates`; each is drawn on its video frame
         for frame in tqdm.tqdm(frames, ncols=72):
+            video_frame = video_frame_indexes[frame]
             image = overlay_keypoints_on_image(
-                reader[frame], coordinates[frame], edges=edges, **plot_options
+                reader[video_frame], coordinates[frame], edges=edges, **plot_options
             )
 
             if crop_size is not None:
@@ -2132,7 +2162,7 @@ def overlay_keypoints_on_video(
             if show_frame_numbers:
                 image = cv2.putText(
                     image,
-                    f"Frame {frame}",
+                    f"Frame {video_frame}",
                     (10, 20),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,

@@ -576,3 +576,140 @@ def test_3D_trajectory_slider_shows_one_syllable_at_a_time(
         visible[i * traces : (i + 1) * traces] = True
         np.testing.assert_array_equal(step.args[0]["visible"], visible, err_msg=step.label)
     assert (tmp_path / "all_trajectories.html").exists()
+
+
+def frequency_results():
+    # frequencies count instances: 2 of syllable 0, 5 of syllable 1, 3 of syllable 2
+    return {"rec": {"syllable": np.array([1, 2, 1, 2, 1, 2, 1, 0, 1, 0])}}
+
+
+def test_syllable_frequencies_are_plotted_by_rank():
+    fig, ax = kpms.plot_syllable_frequencies(
+        results=frequency_results(), min_frequency=0.0
+    )
+    heights = [bar.get_height() for bar in ax.patches]
+    np.testing.assert_allclose(heights, [0.5, 0.3, 0.2])
+    plt.close(fig)
+
+
+def test_syllable_frequencies_with_no_syllable_above_the_threshold():
+    fig, ax = kpms.plot_syllable_frequencies(
+        results=frequency_results(), min_frequency=0.9
+    )
+    assert len(ax.patches) == 0
+    plt.close(fig)
+
+
+class Sampled(Exception):
+    pass
+
+
+def test_density_sampling_window_is_in_seconds(tmp_path, monkeypatch):
+    windows = []
+
+    def record(*args, **kwargs):
+        windows.append((kwargs["before_onset_frames"], kwargs["after_onset_frames"]))
+        raise Sampled
+
+    monkeypatch.setattr(kpms.viz, "sample_instances", record)
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+
+    with pytest.raises(Sampled):
+        kpms.generate_grid_movies(
+            results,
+            output_dir=str(tmp_path),
+            coordinates=moving_keypoints(results),
+            keypoints_only=True,
+            fps=120,
+            min_frequency=0.0,
+            rows=1,
+            cols=2,
+            sampling_options={"mode": "density"},
+        )
+
+    # 0.167 s before onset and 0.5 s after, at 120 fps
+    assert windows == [(20, 60)]
+
+
+@pytest.mark.parametrize("before_onset_sec, after_onset_sec", [(0.1, 2.0), (1.0, 0.3)])
+def test_density_sampling_with_a_short_grid_window(tmp_path, before_onset_sec, after_onset_sec):
+    # at 120 fps, density sampling compares instances over 20 frames before
+    # onset and 60 after, more than these grid windows hold
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+
+    sampled = kpms.generate_grid_movies(
+        results,
+        output_dir=str(tmp_path),
+        coordinates=moving_keypoints(results),
+        keypoints_only=True,
+        fps=120,
+        before_onset_sec=before_onset_sec,
+        after_onset_sec=after_onset_sec,
+        min_instance_duration_sec=0.0,
+        min_frequency=0.0,
+        rows=1,
+        cols=2,
+        sampling_options={"mode": "density", "n_neighbors": 5},
+    )
+
+    assert len(sampled) > 0
+
+
+def gray_ramp_video(path, n_frames=20, size=64):
+    """A video whose frame k is uniformly gray at level 10 * k."""
+    with imageio.get_writer(path, fps=30) as writer:
+        for k in range(n_frames):
+            writer.append_data(np.full((size, size, 3), 10 * k, dtype=np.uint8))
+
+
+@pytest.mark.parametrize("crop_size", [None, 32])
+def test_overlay_draws_each_keypoint_row_on_its_video_frame(tmp_path, crop_size):
+    video = str(tmp_path / "video.mp4")
+    gray_ramp_video(video)
+    video_frame_indexes = np.arange(0, 20, 2)
+    # two keypoints in opposite corners, so the frame center (and the crop
+    # center, their median) shows only the video
+    coordinates = np.tile([[10.0, 10.0], [54.0, 54.0]], (10, 1, 1))
+    output = str(tmp_path / "overlay.mp4")
+
+    kpms.overlay_keypoints_on_video(
+        video,
+        coordinates,
+        output_path=output,
+        show_frame_numbers=False,
+        crop_size=crop_size,
+        video_frame_indexes=video_frame_indexes,
+    )
+
+    with imageio.get_reader(output, "ffmpeg") as reader:
+        frames = [frame for frame in reader]
+    assert len(frames) == 10
+    for i, frame in enumerate(frames):
+        center = frame[frame.shape[0] // 2, frame.shape[1] // 2].mean()
+        assert abs(center - 10 * video_frame_indexes[i]) <= 4, i
+
+
+def test_overlay_refuses_the_dict_of_every_recording(tmp_path):
+    video = str(tmp_path / "video.mp4")
+    gray_ramp_video(video)
+    coordinates = np.tile([[10.0, 10.0], [54.0, 54.0]], (10, 1, 1))
+
+    with pytest.raises(TypeError, match=r"video_frame_indexes\[name\]"):
+        kpms.overlay_keypoints_on_video(
+            video,
+            coordinates,
+            output_path=str(tmp_path / "overlay.mp4"),
+            video_frame_indexes={"rec": np.arange(10)},
+        )
+
+
+def test_overlay_refuses_keypoints_past_the_end_of_the_video(tmp_path):
+    video = str(tmp_path / "video.mp4")
+    gray_ramp_video(video, n_frames=20)
+    coordinates = np.tile([[10.0, 10.0], [54.0, 54.0]], (22, 1, 1))
+    output = tmp_path / "overlay.mp4"
+
+    with pytest.raises(ValueError, match=r"need video frames up to 21, but .* has 20 frames"):
+        kpms.overlay_keypoints_on_video(video, coordinates, output_path=str(output))
+
+    assert not output.exists()

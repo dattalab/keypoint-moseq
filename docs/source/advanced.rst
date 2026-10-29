@@ -323,7 +323,7 @@ After this, the pipeline can be run as usual, except for steps that involve read
     kpms.generate_grid_movies(..., video_frame_indexes=video_frame_indexes)
 
     # Overlaying keypoints
-    kpms.overlay_keypoints_on_video(..., video_frame_indexes=video_frame_indexes)
+    kpms.overlay_keypoints_on_video(video_path, coordinates[name], ..., video_frame_indexes=video_frame_indexes[name])
 
 
 Trimming inputs
@@ -360,7 +360,7 @@ After this, the pipeline can be run as usual, except for steps that involve read
     kpms.generate_grid_movies(..., video_frame_indexes=video_frame_indexes)
 
     # Overlaying keypoints
-    kpms.overlay_keypoints_on_video(..., video_frame_indexes=video_frame_indexes)
+    kpms.overlay_keypoints_on_video(video_path, coordinates[name], ..., video_frame_indexes=video_frame_indexes[name])
 
 .. _merging-syllables:
 

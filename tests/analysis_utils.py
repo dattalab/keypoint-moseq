@@ -12,6 +12,9 @@ from PIL import Image
 FPS = 30  # frame rate assumed by the analysis notebook's dataframe cells
 PDF_SIGNATURE = b"%PDF"
 PNG_SIGNATURE = b"\x89PNG"
+# significance threshold for the frozen `stats_df`, whose one syllable with
+# non-overlapping groups (6 and 4 recordings) has a corrected p-value of 0.19
+FROZEN_THRESH = 0.2
 
 
 def synthetic_results(names, n_frames=300, num_syllables=5, seed=0):
@@ -48,7 +51,7 @@ def syllable_description(syllable):
 
 def read_syll_info(path):
     """`syll_info.csv` read the way kpms reads it."""
-    return pd.read_csv(path, index_col=False).fillna("")
+    return pd.read_csv(path, index_col=False, keep_default_na=False)
 
 
 def syllable_names(syll_info, syllables):
@@ -171,7 +174,7 @@ def graph_plot_summary(ax):
     }
 
 
-def plot_syll_stats(stats_df, project_dir, model_name):
+def plot_syll_stats(stats_df, project_dir, model_name, thresh=0.05):
     """Figure summary and printed output of the analysis notebook's group
     comparison cell run on `stats_df`. The global NumPy random state is
     seeded because the Kruskal-Wallis check inside `run_kruskal` draws from
@@ -186,7 +189,7 @@ def plot_syll_stats(stats_df, project_dir, model_name):
             project_dir,
             model_name,
             plot_sig=True,
-            thresh=0.05,
+            thresh=thresh,
             stat="frequency",
             order="stat",
             ctrl_group="a",
