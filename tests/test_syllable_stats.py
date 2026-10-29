@@ -471,6 +471,26 @@ def test_run_kruskal_does_not_test_a_syllable_whose_values_are_all_identical():
     assert pd.notna(kw.loc[2, "pvalue"])
 
 
+def test_run_kruskal_corrects_across_every_tested_syllable(monkeypatch):
+    """Syllables tested on their own are corrected together with the ones
+    tested as a block: syllable 0 has a value in every recording, syllables 1
+    and 2 don't, and syllable 3 isn't tested."""
+    real_multipletests = kpms.analysis.multipletests
+    corrected = []
+
+    def multipletests(pvals, *args, **kwargs):
+        corrected.append(len(pvals))
+        return real_multipletests(pvals, *args, **kwargs)
+
+    monkeypatch.setattr(kpms.analysis, "multipletests", multipletests)
+
+    run_kruskal(duration_stats_df(), statistic="duration", n_perm=1000)
+
+    # the first correction is across syllables; the others are across pairs
+    # of groups within each syllable
+    assert corrected[0] == 3
+
+
 def test_run_kruskal_counts_shuffles_that_tie_the_real_result():
     # every value in group a is below every value in group b, but with 2
     # recordings per group a third of all splits are this extreme

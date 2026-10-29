@@ -376,3 +376,18 @@ def test_stats_df_rejects_a_recording_with_several_groups(tmp_path):
     assert "KO" in message
     assert "default" in message
     assert "rec_b" not in message
+
+
+def test_stats_df_has_rows_for_syllables_above_a_recordings_highest_label(tmp_path):
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=300)
+    results["rec_a"]["syllable"] = results["rec_a"]["syllable"] % 3
+    assert set(results["rec_b"]["syllable"]) == {0, 1, 2, 3, 4}
+    moseq_df = kpms.compute_moseq_df(
+        str(tmp_path), "model", results_dict=results, fps=FPS, smooth_heading=False
+    )
+
+    stats_df = kpms.compute_stats_df(moseq_df, min_frequency=0.0)
+
+    rows = stats_df[stats_df["name"] == "rec_a"].set_index("syllable")
+    assert list(rows.index) == [0, 1, 2, 3, 4]
+    assert (rows.loc[[3, 4], "frequency"] == 0).all()
