@@ -10,7 +10,8 @@ chosen a cache directory, through ``JAX_COMPILATION_CACHE_DIR`` or
 Each test imports the keypoint_moseq under test in a new Python process, run
 from a temporary directory, with every location platformdirs reads (HOME,
 XDG_CACHE_HOME, LOCALAPPDATA) in a temporary directory, so the real cache is
-not touched.
+not touched. The test suite itself compiles with the persistent cache off
+(conftest.py).
 """
 
 import json
@@ -18,6 +19,7 @@ import os
 import subprocess
 import sys
 
+import jax
 import keypoint_moseq
 
 REPORT = """
@@ -85,6 +87,10 @@ def test_a_minimum_compile_time_set_in_jax_config_is_kept(tmp_path):
 
     assert report["cache_dir"] == os.path.join(report["user_cache_dir"], "jax")
     assert report["min_compile_time"] == 5
+
+
+def test_the_test_suite_compiles_without_the_persistent_cache():
+    assert not jax.config.jax_enable_compilation_cache
 
 
 def test_a_cache_directory_from_the_environment_is_left_alone(tmp_path):

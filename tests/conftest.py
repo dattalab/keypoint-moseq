@@ -5,12 +5,17 @@ import os
 import shutil
 import zipfile
 
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pooch
 import pytest
 from matplotlib.colors import to_rgb
+
+# Programs compiled by the tests stay out of the user's compilation cache,
+# which importing keypoint_moseq turns on.
+jax.config.update("jax_enable_compilation_cache", False)
 
 from analysis_utils import (
     FROZEN_THRESH,
