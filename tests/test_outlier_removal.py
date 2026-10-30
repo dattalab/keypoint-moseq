@@ -4,6 +4,7 @@ import warnings
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.figure import Figure
 import pytest
 from PIL import Image
 
@@ -130,6 +131,39 @@ def test_outlier_plot_is_saved_1920_pixels_wide(tmp_path):
 
     with Image.open(outlier_plot_path(tmp_path, "recording")) as image:
         assert image.size == (1920, 5 * 3 * 120)
+
+
+def save_outlier_plot(project_dir):
+    coordinates = make_coordinates_with_missing_and_outlier()
+    util.plot_medoid_distance_outliers(
+        project_dir,
+        "recording",
+        coordinates,
+        coordinates,
+        np.isnan(coordinates).any(axis=-1),
+        np.ones(coordinates.shape[1]),
+        bodyparts=[f"keypoint{i}" for i in range(coordinates.shape[1])],
+    )
+
+
+def test_outlier_plot_is_drawn_outside_pyplot(monkeypatch, tmp_path):
+    # Plots saved in a background thread must not close, or show under another
+    # cell, a pyplot figure the user is working on.
+    open_figures_at_save = []
+    savefig = Figure.savefig
+
+    def recording_savefig(fig, *args, **kwargs):
+        open_figures_at_save.append(plt.get_fignums())
+        return savefig(fig, *args, **kwargs)
+
+    monkeypatch.setattr(Figure, "savefig", recording_savefig)
+    user_figure = plt.figure()
+
+    save_outlier_plot(tmp_path)
+
+    assert open_figures_at_save == [[user_figure.number]]
+    assert plt.get_fignums() == [user_figure.number]
+    plt.close(user_figure)
 
 
 def test_outlier_removal_interpolates_missing_and_outlier_points(

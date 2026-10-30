@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
+from matplotlib.figure import Figure as _Figure
 import jax, jax.numpy as jnp
 from textwrap import fill
 from scipy.ndimage import median_filter, convolve1d, gaussian_filter1d
@@ -2349,7 +2350,28 @@ def plot_keypoint_traces(
     fig: matplotlib.figure.Figure
         The created figure with subplots for each keypoint.
     """
+    return _draw_keypoint_traces(
+        plt.figure,
+        traces,
+        plot_title,
+        bodyparts,
+        line_labels,
+        thresholds,
+        shading_mask,
+    )
 
+
+def _draw_keypoint_traces(
+    make_figure,
+    traces,
+    plot_title=None,
+    bodyparts=None,
+    line_labels=None,
+    thresholds=None,
+    shading_mask=None,
+):
+    """`plot_keypoint_traces` on a figure made by `make_figure`: `plt.figure`,
+    or `Figure` for a figure that pyplot never sees."""
     if not traces:
         raise ValueError("traces cannot be empty")
 
@@ -2374,7 +2396,8 @@ def plot_keypoint_traces(
                 f"Shading mask shape {shading_mask.shape} must match traces shape {traces[0].shape}"
             )
 
-    fig, axes = plt.subplots(n_keypoints, 1, figsize=(16, 3 * n_keypoints), constrained_layout=True)
+    fig = make_figure(figsize=(16, 3 * n_keypoints), constrained_layout=True)
+    axes = fig.subplots(n_keypoints, 1)
     if n_keypoints == 1:
         axes = [axes]  # Ensure axes is always a list
 
@@ -2488,7 +2511,8 @@ def plot_medoid_distance_outliers(
         interpolated_coordinates
     )  # (n_frames, n_keypoints)
 
-    fig = plot_keypoint_traces(
+    fig = _draw_keypoint_traces(
+        _Figure,
         traces=[original_distances, interpolated_distances],
         plot_title=recording_name,
         bodyparts=bodyparts,
@@ -2498,7 +2522,6 @@ def plot_medoid_distance_outliers(
     )
 
     fig.savefig(plot_path, dpi=120)
-    plt.close()
 
 
 def outlier_removal(
