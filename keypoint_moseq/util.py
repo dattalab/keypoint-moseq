@@ -2521,7 +2521,16 @@ def plot_medoid_distance_outliers(
         shading_mask=outlier_mask,
     )
 
-    fig.savefig(plot_path, dpi=120)
+    # Saved under another name and then renamed, so a save that fails or is
+    # interrupted (e.g. by a kernel restart) never leaves a partial plot
+    partial_path = plot_path + ".partial"
+    try:
+        with open(partial_path, "wb") as f:
+            fig.savefig(f, format="png", dpi=120)
+        os.replace(partial_path, plot_path)
+    finally:
+        if os.path.exists(partial_path):
+            os.remove(partial_path)
 
 
 def outlier_removal(

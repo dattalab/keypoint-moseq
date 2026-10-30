@@ -166,6 +166,24 @@ def test_outlier_plot_is_drawn_outside_pyplot(monkeypatch, tmp_path):
     plt.close(user_figure)
 
 
+def test_outlier_plot_that_fails_to_save_leaves_no_file(monkeypatch, tmp_path):
+    def failing_savefig(fig, fname, *args, **kwargs):
+        if hasattr(fname, "write"):
+            fname.write(PNG_SIGNATURE)
+        else:
+            with open(fname, "wb") as f:
+                f.write(PNG_SIGNATURE)
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(Figure, "savefig", failing_savefig)
+
+    with pytest.raises(OSError, match="No space left"):
+        save_outlier_plot(tmp_path)
+
+    plot_dir = os.path.dirname(outlier_plot_path(tmp_path, "recording"))
+    assert os.listdir(plot_dir) == []
+
+
 def test_outlier_removal_interpolates_missing_and_outlier_points(
     monkeypatch, tmp_path
 ):
