@@ -229,50 +229,50 @@ def test_calibration_is_silent_with_the_ipympl_backend(tmp_path, monkeypatch, ba
         start_calibration(tmp_path, monkeypatch)
 
 
-def reference_sample_error_frames(
-    confidences, bodyparts, use_bodyparts, num_bins=10, num_samples=100, conf_pseudocount=1e-3
-):
-    """sample_error_frames as it was written before it sampled indices with
-    numpy: one tuple per keypoint observation in each bin."""
+def confidence_bins(confidences, bodyparts, use_bodyparts, num_bins=10, conf_pseudocount=1e-3):
+    """The (recording, frame, bodypart) observations in each of
+    sample_error_frames' log-spaced confidence bins."""
     confidences = {k: v + conf_pseudocount for k, v in confidences.items()}
     all_confs = np.concatenate([v.flatten() for v in confidences.values()])
     min_conf, max_conf = np.nanmin(all_confs), np.nanmax(all_confs)
     thresholds = np.logspace(np.log10(min_conf), np.log10(max_conf), num_bins + 1)
     mask = np.array([bp in use_bodyparts for bp in bodyparts])[None, :]
-    sample_keys = []
-    for low, high in zip(thresholds[:-1], thresholds[1:]):
-        samples_in_bin = []
-        for key, confs in confidences.items():
-            for t, k in zip(*np.nonzero((confs >= low) * (confs < high) * mask)):
-                samples_in_bin.append((key, t, bodyparts[k]))
-        if len(samples_in_bin) > 0:
-            n = min(num_samples // num_bins, len(samples_in_bin))
-            for i in np.random.choice(len(samples_in_bin), n, replace=False):
-                sample_keys.append(samples_in_bin[i])
-    return [sample_keys[i] for i in np.random.permutation(len(sample_keys))]
+    return [
+        {
+            (key, t, bodyparts[k])
+            for key, confs in confidences.items()
+            for t, k in zip(*np.nonzero((confs >= low) * (confs < high) * mask))
+        }
+        for low, high in zip(thresholds[:-1], thresholds[1:])
+    ]
 
 
 @pytest.mark.parametrize("seed", [0, 1, 2])
-def test_sample_error_frames_draws_the_same_frames_as_before(seed):
+def test_sample_error_frames_draws_evenly_from_the_confidence_bins(seed):
     """Three recordings (one of a single frame), a bodypart left out of
-    use_bodyparts, NaN confidences, and confidences clustered so that some
-    bins hold fewer entries than they would sample."""
+    use_bodyparts, NaN confidences, and confidences clustered near 1 so that
+    the low bins hold fewer entries than they would sample. Each bin gives 10
+    distinct observations, or all of them when it has fewer, and the same
+    seed draws the same frames."""
     rng = np.random.default_rng(seed)
     bodyparts = ["a", "b", "c", "d", "e"]
     confidences = {
-        "rec0": rng.uniform(0, 1, (400, 5)) ** 4,
+        "rec0": rng.uniform(0, 1, (400, 5)) ** 0.25,
         "rec1": rng.uniform(0.9, 1, (1, 5)),
         "rec2": np.concatenate([rng.uniform(0.95, 1, (60, 5)), np.full((3, 5), np.nan)]),
     }
     use_bodyparts = ["a", "c", "d", "e"]
+    bins = confidence_bins(confidences, bodyparts, use_bodyparts)
+    assert min(len(b) for b in bins) < 10 < max(len(b) for b in bins)
 
     np.random.seed(seed)
     sampled = calibration.sample_error_frames(confidences, bodyparts, use_bodyparts)
-    np.random.seed(seed)
-    expected = reference_sample_error_frames(confidences, bodyparts, use_bodyparts)
 
-    assert sampled == expected
-    assert len(sampled) > 0
+    assert len(set(sampled)) == len(sampled)
+    assert [len(b.intersection(sampled)) for b in bins] == [min(10, len(b)) for b in bins]
+    assert len(sampled) == sum(min(10, len(b)) for b in bins)
+    np.random.seed(seed)
+    assert calibration.sample_error_frames(confidences, bodyparts, use_bodyparts) == sampled
 
 
 def open_widget(calibration_inputs, monkeypatch):

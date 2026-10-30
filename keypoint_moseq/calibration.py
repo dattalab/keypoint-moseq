@@ -9,6 +9,18 @@ from keypoint_moseq.io import update_config
 from keypoint_moseq.util import check_videos, find_matching_videos, get_edges
 
 
+def _draw_distinct(count, n):
+    """`n` distinct integers from range(count), drawn uniformly with numpy's
+    global random state by Floyd's algorithm. np.random.choice without
+    replacement shuffles all of range(count), which is slow for a bin of
+    millions of observations."""
+    drawn = []
+    for j in range(count - n, count):
+        i = np.random.randint(j + 1, dtype=np.int64)
+        drawn.append(j if i in drawn else i)
+    return drawn
+
+
 def sample_error_frames(
     confidences,
     bodyparts,
@@ -55,22 +67,35 @@ def sample_error_frames(
     thresholds = np.logspace(np.log10(min_conf), np.log10(max_conf), num_bins + 1)
     mask = np.array([bp in use_bodyparts for bp in bodyparts])[None, :]
 
+    # Every observation's bin, in one pass: bin b holds thresholds[b] <= conf
+    # < thresholds[b + 1]; num_bins marks none (out of range, NaN or an unused
+    # bodypart). Observations are ordered by recording, then frame and
+    # bodypart, which is how a position maps back to its keypoint.
     keys = list(confidences.keys())
-    sample_keys = []
-    for low, high in zip(thresholds[:-1], thresholds[1:]):
-        # (frame, keypoint) indices of each recording's observations in the
-        # bin, recordings in order; draws index into their concatenation
-        in_bin = [
-            np.nonzero((confs >= low) * (confs < high) * mask)
+    num_keypoints = len(bodyparts)
+    bins = np.concatenate(
+        [
+            (np.searchsorted(thresholds, confs, side="right") - 1).ravel()
             for confs in confidences.values()
         ]
-        starts = np.cumsum([0] + [len(t) for t, _ in in_bin])
+    )
+    used = np.tile(mask[0], len(bins) // num_keypoints)
+    bins = np.where(used & (bins >= 0) & (bins < num_bins), bins, num_bins)
+    # bins fit a small integer type, which numpy sorts by radix
+    order = np.argsort(bins.astype(np.min_scalar_type(num_bins)), kind="stable")
+    bin_starts = np.cumsum(np.bincount(bins, minlength=num_bins + 1))
+    recording_starts = np.cumsum([0] + [confs.size for confs in confidences.values()])
 
-        if starts[-1] > 0:
-            n = min(num_samples // num_bins, starts[-1])
-            for i in np.random.choice(starts[-1], n, replace=False):
-                r = np.searchsorted(starts, i, side="right") - 1
-                t, k = in_bin[r][0][i - starts[r]], in_bin[r][1][i - starts[r]]
+    sample_keys = []
+    for b in range(num_bins):
+        start = bin_starts[b - 1] if b > 0 else 0
+        count = bin_starts[b] - start
+        if count > 0:
+            n = min(num_samples // num_bins, count)
+            for i in _draw_distinct(count, n):
+                position = order[start + i]
+                r = np.searchsorted(recording_starts, position, side="right") - 1
+                t, k = divmod(position - recording_starts[r], num_keypoints)
                 sample_keys.append((keys[r], t, bodyparts[k]))
 
     sample_keys = [sample_keys[i] for i in np.random.permutation(len(sample_keys))]
