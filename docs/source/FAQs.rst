@@ -142,6 +142,11 @@ Number of model fitting iterations
 It may be necessary to re-run the fitting process a few times to choose a good value for the `kappa` hyperparameter. During these initial runs, fitting need only be run until the syllable durations stabilize. This typically takes fewer than 10 iterations for the initial (AR only) stage of fitting, and 10-50 iterations for the second (full model) stage. After setting ``kappa``, continue fitting until the syllable sequence stabilizes, e.g. 200-500 iterations. In our experience, the model fit improves somewhat from 200 to 500 iterations, but not after that.
 
 
+Why is the first iteration slow, and where is compiled code stored?
+-------------------------------------------------------------------
+In each session, JAX compiles every fitting step for your data's shapes the first time it runs, which takes up to a minute on a GPU. keypoint-moseq keeps the compiled programs in a cache, so later sessions with the same data shapes and the same versions of keypoint-moseq, jax-moseq and JAX load them in seconds. The cache is in ``~/.cache/keypoint_moseq/jax`` on Linux, ``~/Library/Caches/keypoint_moseq/jax`` on macOS and ``%LOCALAPPDATA%\keypoint_moseq\keypoint_moseq\Cache\jax`` on Windows. It takes a few megabytes per dataset, and you can delete it at any time. To keep it elsewhere, set the environment variable ``JAX_COMPILATION_CACHE_DIR`` before starting Python; keypoint-moseq then leaves JAX's cache settings as you set them.
+
+
 Detecting existing syllables in new data
 ----------------------------------------
 If you already have a trained MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function.
