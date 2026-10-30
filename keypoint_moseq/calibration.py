@@ -55,17 +55,23 @@ def sample_error_frames(
     thresholds = np.logspace(np.log10(min_conf), np.log10(max_conf), num_bins + 1)
     mask = np.array([bp in use_bodyparts for bp in bodyparts])[None, :]
 
+    keys = list(confidences.keys())
     sample_keys = []
     for low, high in zip(thresholds[:-1], thresholds[1:]):
-        samples_in_bin = []
-        for key, confs in confidences.items():
-            for t, k in zip(*np.nonzero((confs >= low) * (confs < high) * mask)):
-                samples_in_bin.append((key, t, bodyparts[k]))
+        # (frame, keypoint) indices of each recording's observations in the
+        # bin, recordings in order; draws index into their concatenation
+        in_bin = [
+            np.nonzero((confs >= low) * (confs < high) * mask)
+            for confs in confidences.values()
+        ]
+        starts = np.cumsum([0] + [len(t) for t, _ in in_bin])
 
-        if len(samples_in_bin) > 0:
-            n = min(num_samples // num_bins, len(samples_in_bin))
-            for i in np.random.choice(len(samples_in_bin), n, replace=False):
-                sample_keys.append(samples_in_bin[i])
+        if starts[-1] > 0:
+            n = min(num_samples // num_bins, starts[-1])
+            for i in np.random.choice(starts[-1], n, replace=False):
+                r = np.searchsorted(starts, i, side="right") - 1
+                t, k = in_bin[r][0][i - starts[r]], in_bin[r][1][i - starts[r]]
+                sample_keys.append((keys[r], t, bodyparts[k]))
 
     sample_keys = [sample_keys[i] for i in np.random.permutation(len(sample_keys))]
     return sample_keys

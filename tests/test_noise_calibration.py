@@ -9,6 +9,7 @@ import pytest
 from matplotlib.backend_bases import MouseButton, MouseEvent
 
 import keypoint_moseq as kpms
+from keypoint_moseq import calibration
 
 NUM_ANNOTATIONS = 25
 
@@ -226,3 +227,50 @@ def test_calibration_is_silent_with_the_ipympl_backend(tmp_path, monkeypatch, ba
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         start_calibration(tmp_path, monkeypatch)
+
+
+def reference_sample_error_frames(
+    confidences, bodyparts, use_bodyparts, num_bins=10, num_samples=100, conf_pseudocount=1e-3
+):
+    """sample_error_frames as it was written before it sampled indices with
+    numpy: one tuple per keypoint observation in each bin."""
+    confidences = {k: v + conf_pseudocount for k, v in confidences.items()}
+    all_confs = np.concatenate([v.flatten() for v in confidences.values()])
+    min_conf, max_conf = np.nanmin(all_confs), np.nanmax(all_confs)
+    thresholds = np.logspace(np.log10(min_conf), np.log10(max_conf), num_bins + 1)
+    mask = np.array([bp in use_bodyparts for bp in bodyparts])[None, :]
+    sample_keys = []
+    for low, high in zip(thresholds[:-1], thresholds[1:]):
+        samples_in_bin = []
+        for key, confs in confidences.items():
+            for t, k in zip(*np.nonzero((confs >= low) * (confs < high) * mask)):
+                samples_in_bin.append((key, t, bodyparts[k]))
+        if len(samples_in_bin) > 0:
+            n = min(num_samples // num_bins, len(samples_in_bin))
+            for i in np.random.choice(len(samples_in_bin), n, replace=False):
+                sample_keys.append(samples_in_bin[i])
+    return [sample_keys[i] for i in np.random.permutation(len(sample_keys))]
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_sample_error_frames_draws_the_same_frames_as_before(seed):
+    """Three recordings (one of a single frame), a bodypart left out of
+    use_bodyparts, NaN confidences, and confidences clustered so that some
+    bins hold fewer entries than they would sample."""
+    rng = np.random.default_rng(seed)
+    bodyparts = ["a", "b", "c", "d", "e"]
+    confidences = {
+        "rec0": rng.uniform(0, 1, (400, 5)) ** 4,
+        "rec1": rng.uniform(0.9, 1, (1, 5)),
+        "rec2": np.concatenate([rng.uniform(0.95, 1, (60, 5)), np.full((3, 5), np.nan)]),
+    }
+    use_bodyparts = ["a", "c", "d", "e"]
+
+    np.random.seed(seed)
+    sampled = calibration.sample_error_frames(confidences, bodyparts, use_bodyparts)
+    np.random.seed(seed)
+    expected = reference_sample_error_frames(confidences, bodyparts, use_bodyparts)
+
+    assert sampled == expected
+    assert len(sampled) > 0
+
