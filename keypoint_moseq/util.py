@@ -2315,6 +2315,10 @@ def plot_keypoint_traces(
     trace lines over time. Optional features include threshold lines, shaded regions,
     and custom labels.
 
+    Traces longer than 2,000 frames are drawn through the lowest and highest value
+    in each of 1,000 bins of consecutive frames, which looks the same at the plot's
+    resolution and keeps every spike.
+
     Parameters
     -------
     traces: list of ndarrays
