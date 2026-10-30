@@ -9,6 +9,7 @@ import joblib
 import tqdm
 import yaml
 import os
+import orjson
 import pandas as pd
 from textwrap import fill
 import sleap_io
@@ -825,15 +826,58 @@ def save_results_as_csv(
             column_names.append([f"latent_state {i}" for i in range(latent_dim)])
             data.append(results[key]["latent_state"])
 
-        dfs = [pd.DataFrame(arr, columns=cols) for arr, cols in zip(data, column_names)]
-        df = pd.concat(dfs, axis=1)
-
-        for col in df.select_dtypes(include=[np.floating]).columns:
-            df[col] = df[col].astype(float).round(4)
-
         save_name = key.replace(os.path.sep, path_sep)
         save_path = os.path.join(save_dir, save_name)
-        df.to_csv(f"{save_path}.csv", index=False)
+        _write_csv(f"{save_path}.csv", column_names, data)
+
+
+def _write_csv(path, column_names, data):
+    """Write 2D arrays of numbers side by side as a csv file, with floats
+    rounded to 4 decimals, as text identical to `pandas.DataFrame.to_csv`.
+
+    orjson formats the numbers, many times faster than pandas. It writes NaN
+    and infinity as `null` and values of 1e16 or more in another notation, so
+    a table with any of those is written with pandas.
+    """
+    rounded = [
+        np.round(arr.astype(float), 4) if np.issubdtype(arr.dtype, np.floating) else arr
+        for arr in data
+    ]
+    in_orjson_range = all(
+        np.all(np.abs(arr) < 1e16) for arr in rounded if arr.dtype.kind == "f"
+    ) and all(arr.dtype.kind in "iuf" for arr in rounded)
+
+    if not in_orjson_range:
+        dfs = [pd.DataFrame(arr, columns=cols) for arr, cols in zip(data, column_names)]
+        df = pd.concat(dfs, axis=1)
+        for col in df.select_dtypes(include=[np.floating]).columns:
+            df[col] = df[col].astype(float).round(4)
+        df.to_csv(path, index=False)
+        return
+
+    # neighboring arrays of one kind (int or float) are formatted together, so
+    # each row is joined from as few pieces as possible
+    blocks = []
+    for arr in rounded:
+        if blocks and blocks[-1][-1].dtype.kind == arr.dtype.kind:
+            blocks[-1].append(arr)
+        else:
+            blocks.append([arr])
+
+    newline = os.linesep.encode()
+    header = ",".join(name for cols in column_names for name in cols).encode()
+    num_rows = rounded[0].shape[0]
+    rows = None
+    for block in blocks:
+        arr = np.concatenate(block, axis=1)
+        # [[a,b],[c,d],...] split into the text of each row
+        text = orjson.dumps(np.ascontiguousarray(arr), option=orjson.OPT_SERIALIZE_NUMPY)
+        arr_rows = text[2:-2].split(b"],[") if num_rows > 0 else []
+        rows = arr_rows if rows is None else [a + b"," + b for a, b in zip(rows, arr_rows)]
+    with open(path, "wb") as f:
+        f.write(header + newline)
+        if rows:
+            f.write(newline.join(rows) + newline)
 
 
 def _name_from_path(filepath, path_in_name, path_sep, remove_extension):
