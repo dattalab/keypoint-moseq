@@ -1,6 +1,7 @@
 import numpy as np
 import tqdm
 import os
+import threading
 import warnings
 import matplotlib
 from textwrap import fill
@@ -174,6 +175,45 @@ def load_sampled_frames(
     return sampled_keys
 
 
+def _start_loading_frames(sample_keys, video_paths, video_frame_indexes):
+    """Read the first sampled frame, then start a thread that reads the rest
+    in order.
+
+    Returns a dict that fills in as frames are read, mapping each sample key
+    to its frame, or to a message saying why it could not be read, and the
+    thread.
+    """
+    readers = {}
+
+    def read(sample_key):
+        key, frame, _ = sample_key
+        frame_ix = video_frame_indexes[key][frame]
+        try:
+            if key not in readers:
+                readers[key] = OpenCVReader(video_paths[key])
+            return readers[key][frame_ix]
+        except Exception as error:
+            return (
+                f"Could not read video frame {frame_ix} of {video_paths[key]} "
+                f"(frame {frame} of the keypoints for recording {key}). "
+                f"{type(error).__name__}: {error}\n\n"
+                "This frame is skipped: press Next to go on. Please check this "
+                "video: a frame that cannot be read usually means the file is "
+                "damaged or was not fully copied, and other frames may be "
+                "affected too. Try opening it in a video player at that frame."
+            )
+
+    frames = {sample_keys[0]: read(sample_keys[0])}
+
+    def read_the_rest():
+        for sample_key in sample_keys[1:]:
+            frames[sample_key] = read(sample_key)
+
+    thread = threading.Thread(target=read_the_rest, daemon=True)
+    thread.start()
+    return frames, thread
+
+
 def save_annotations(project_dir, annotations, video_frame_indexes):
     """Save calibration annotations to a csv file.
 
@@ -266,10 +306,7 @@ def _noise_calibration_widget(
         f"Target bodypart = {current_img_key[0][2]} | Completed annotations = 0",
         layout={"margin": "0px"},
     )
-    usr_msg = Label(
-        f"Annotations not saved: complete {required_annotations} more annotations to start auto-saving",
-        layout={"margin": "0px"},
-    )
+    usr_msg = Label(layout={"margin": "0px"})
     output = Output(layout={"margin": "0px", "padding": "0px"})
 
     fig, ax = plt.subplots(figsize=(6, 5))
@@ -289,10 +326,22 @@ def _noise_calibration_widget(
     # the background, then add it, so a click only redraws the cross on top
     # of that background.
     ax.clear()
-    frame_image = ax.imshow(sample_images[current_img_key[0]])
+    frame_image = ax.imshow(np.full((1, 1, 3), 200, np.uint8))
     keypoint_marker = ax.scatter([], [], color="yellow", marker="o", facecolor="none")
     annotation_marker = ax.scatter([], [], color="red", marker="x", animated=True)
+    # shown over a gray frame while a frame is being read, or if it can't be
+    message = ax.text(0.5, 0.5, "", transform=ax.transAxes, ha="center", va="center")
     background = [None]
+
+    # Frames are read on a background thread. While the shown one is still
+    # being read, a timer checks for it on the main thread, which draws.
+    timer = fig.canvas.new_timer(interval=100)
+
+    def show_when_read():
+        if current_img_key[0] in sample_images:
+            show_image(current_img_key[0])
+
+    timer.add_callback(show_when_read)
 
     def on_draw(event):
         background[0] = fig.canvas.copy_from_bbox(fig.bbox)
@@ -309,6 +358,13 @@ def _noise_calibration_widget(
         info_label.value = (
             f"Target bodypart = {bodypart} | Completed annotations = {len(annotations)}"
         )
+
+    def show_save_status():
+        remaining = required_annotations - len(annotations)
+        if remaining > 0:
+            usr_msg.value = f"Annotations not saved: complete {remaining} more annotations to start auto-saving"
+        else:
+            usr_msg.value = f"Annotations saved to {project_dir}/error_annotations.csv"
 
     def save_annotations_data():
         # Get error and confidence values only for the coordinates that have been annotated
@@ -340,7 +396,8 @@ def _noise_calibration_widget(
         save_params(project_dir, slope, intercept, conf_threshold)
 
     def onclick(event):
-        if event.xdata is not None and event.ydata is not None:
+        shown = isinstance(sample_images.get(current_img_key[0]), np.ndarray)
+        if shown and event.xdata is not None and event.ydata is not None:
             annotations[current_img_key[0]] = (event.xdata, event.ydata)
             show_annotation(current_img_key[0])
             if background[0] is not None and fig.canvas.supports_blit:
@@ -355,28 +412,50 @@ def _noise_calibration_widget(
             if len(annotations) >= required_annotations:
                 save_annotations_data()
             else:
-                remaining = required_annotations - len(annotations)
-                usr_msg.value = f"Annotations not saved: complete {remaining} more annotations to start auto-saving"
+                show_save_status()
 
     fig.canvas.mpl_connect("button_press_event", onclick)
 
     def show_image(image_key):
         with output:
             output.clear_output(wait=True)
-            image = sample_images[image_key]
-            height, width = image.shape[:2]
-            frame_image.set_data(image)
-            if image.ndim == 2:
-                frame_image.autoscale()
-            # the whole frame, as imshow shows a new image, whatever the zoom
-            frame_image.set_extent((-0.5, width - 0.5, height - 0.5, -0.5))
-            ax.set_xlim(-0.5, width - 0.5)
-            ax.set_ylim(height - 0.5, -0.5)
+            if image_key in sample_images:
+                timer.stop()
+            else:
+                timer.start()
+            image = sample_images.get(image_key)
+            if isinstance(image, np.ndarray):
+                height, width = image.shape[:2]
+                frame_image.set_data(image)
+                if image.ndim == 2:
+                    frame_image.autoscale()
+                # the whole frame, as imshow shows a new image, whatever the zoom
+                frame_image.set_extent((-0.5, width - 0.5, height - 0.5, -0.5))
+                ax.set_xlim(-0.5, width - 0.5)
+                ax.set_ylim(height - 0.5, -0.5)
 
-            frame = image_key[1]
-            bodypart_idx = bodyparts.index(image_key[2])
-            keypoint_marker.set_offsets([coordinates[image_key[0]][frame, bodypart_idx, :2]])
-            show_annotation(image_key)
+                frame = image_key[1]
+                bodypart_idx = bodyparts.index(image_key[2])
+                keypoint_marker.set_offsets([coordinates[image_key[0]][frame, bodypart_idx, :2]])
+                show_annotation(image_key)
+                message.set_visible(False)
+                show_save_status()
+            else:
+                # a gray frame the size of the last one, so nothing moves
+                height, width = frame_image.get_array().shape[:2]
+                frame_image.set_data(np.full((height, width, 3), 200, np.uint8))
+                keypoint_marker.set_offsets(np.empty((0, 2)))
+                annotation_marker.set_offsets(np.empty((0, 2)))
+                message.set_visible(True)
+                if image is None:
+                    message.set_text("Loading frame…")
+                    show_save_status()
+                else:
+                    # wrapped to fit, breaking paths, and printed below to copy
+                    paragraphs = image.split("\n\n")
+                    message.set_text("\n\n".join(fill(p, 60, break_on_hyphens=False) for p in paragraphs))
+                    print(image)
+                    usr_msg.value = "Could not read this frame: see the message in the figure."
 
             fig.canvas.draw()
 
@@ -536,14 +615,7 @@ def noise_calibration(
 
     confidences = {k: v + conf_pseudocount for k, v in confidences.items()}
     sample_keys = sample_error_frames(confidences, bodyparts, use_bodyparts)
-
-    sample_images = load_sampled_frames(
-        sample_keys,
-        video_dir,
-        video_frame_indexes,
-        video_extension,
-        video_paths=video_paths,
-    )
+    sample_images, _ = _start_loading_frames(sample_keys, video_paths, video_frame_indexes)
 
     return _noise_calibration_widget(
         project_dir,

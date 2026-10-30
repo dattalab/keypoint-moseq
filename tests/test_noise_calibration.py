@@ -1,4 +1,5 @@
 import os
+import threading
 import warnings
 
 import matplotlib
@@ -6,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
-from matplotlib.backend_bases import MouseButton, MouseEvent
+from matplotlib.backend_bases import FigureCanvasBase, MouseButton, MouseEvent
 
 import keypoint_moseq as kpms
 from keypoint_moseq import calibration
@@ -25,6 +26,81 @@ def calibration_inputs(
     _, coordinates, confidences = tutorial_outlier_removed
     yield tutorial_project_dir, coordinates, confidences
     plt.close("all")
+
+
+@pytest.fixture
+def frames_loaded_up_front(monkeypatch):
+    """noise_calibration waits for its background thread to read every
+    frame, so a test can click through them all; the sample keys and frames
+    are recorded."""
+    loaded = {}
+    start_loading_frames = calibration._start_loading_frames
+
+    def start_and_wait(sample_keys, *args, **kwargs):
+        frames, thread = start_loading_frames(sample_keys, *args, **kwargs)
+        thread.join()
+        loaded.update(keys=list(sample_keys), images=frames)
+        return frames, thread
+
+    monkeypatch.setattr(calibration, "_start_loading_frames", start_and_wait)
+    return loaded
+
+
+def fake_reader(reads, failing=(), gate=None):
+    """A stand-in for OpenCVReader whose frame i is a 4 x 6 RGB image filled
+    with i % 256. Each read is recorded in `reads` as (path, frame index);
+    reads of the pairs in `failing` raise as OpenCVReader does on a frame it
+    cannot decode; and with a `gate`, every read after the first waits for
+    the gate to be set."""
+
+    class FakeReader:
+        def __init__(self, path):
+            self.path = path
+
+        def __getitem__(self, ix):
+            if gate is not None and reads:
+                gate.wait(timeout=60)
+            reads.append((self.path, ix))
+            if (self.path, ix) in failing:
+                raise ValueError(f"error decoding frame {ix} from video {self.path}")
+            return np.full((4, 6, 3), ix % 256, np.uint8)
+
+    return FakeReader
+
+
+class FakeTimer:
+    """A stand-in for the figure canvas's timer: tick() runs its callbacks
+    if it was started and not stopped since."""
+
+    def __init__(self):
+        self.callbacks, self.running = [], False
+
+    def add_callback(self, func, *args, **kwargs):
+        self.callbacks.append((func, args, kwargs))
+
+    def start(self, interval=None):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+    def tick(self):
+        if self.running:
+            for func, args, kwargs in self.callbacks:
+                func(*args, **kwargs)
+
+
+def fake_timers(monkeypatch):
+    """Make every canvas's new_timer return a FakeTimer, recorded in the
+    returned list."""
+    timers = []
+
+    def new_timer(self, *args, **kwargs):
+        timers.append(FakeTimer())
+        return timers[-1]
+
+    monkeypatch.setattr(FigureCanvasBase, "new_timer", new_timer)
+    return timers
 
 
 def click(fig, x, y):
@@ -49,6 +125,7 @@ def annotations_path(project_dir):
     return os.path.join(project_dir, "error_annotations.csv")
 
 
+@pytest.mark.usefixtures("frames_loaded_up_front")
 def test_noise_calibration(calibration_inputs, dataframe_regression, num_regression):
     project_dir, coordinates, confidences = calibration_inputs
     config = lambda: kpms.load_config(project_dir)
@@ -74,6 +151,7 @@ def test_noise_calibration(calibration_inputs, dataframe_regression, num_regress
     )
 
 
+@pytest.mark.usefixtures("frames_loaded_up_front")
 def test_noise_calibration_updates_a_held_config_to_match_config_yml(
     calibration_inputs, tutorial_pca
 ):
@@ -103,6 +181,7 @@ def test_noise_calibration_updates_a_held_config_to_match_config_yml(
     assert kpms.load_config(project_dir)["error_estimator"] == saved_error_estimator
 
 
+@pytest.mark.usefixtures("frames_loaded_up_front")
 def test_noise_calibration_does_not_save_before_twenty_annotations(
     calibration_inputs,
 ):
@@ -275,23 +354,14 @@ def test_sample_error_frames_draws_evenly_from_the_confidence_bins(seed):
     assert calibration.sample_error_frames(confidences, bodyparts, use_bodyparts) == sampled
 
 
-def open_widget(calibration_inputs, monkeypatch):
-    """The calibration widget on the tutorial data, with the frames it loaded
-    recorded in their display order."""
+def open_widget(calibration_inputs, frames_loaded_up_front):
+    """The calibration widget on the tutorial data, with every frame read and
+    the frames recorded in their display order."""
     project_dir, coordinates, confidences = calibration_inputs
     config = kpms.load_config(project_dir)
-    shown = {}
-    load_sampled_frames = calibration.load_sampled_frames
-
-    def record_frames(sample_keys, *args, **kwargs):
-        shown["keys"] = list(sample_keys)
-        shown["images"] = load_sampled_frames(sample_keys, *args, **kwargs)
-        return shown["images"]
-
-    monkeypatch.setattr(calibration, "load_sampled_frames", record_frames)
     np.random.seed(0)
     widget = kpms.noise_calibration(project_dir, coordinates, confidences, **config)
-    return widget, plt.gcf(), shown, coordinates, config["bodyparts"]
+    return widget, plt.gcf(), frames_loaded_up_front, coordinates, config["bodyparts"]
 
 
 def assert_shows(widget, fig, shown, coordinates, bodyparts, index, mark=None, completed=0):
@@ -332,9 +402,9 @@ def detected_point(fig):
 
 
 def test_widget_shows_each_frame_with_its_annotation_through_every_flow(
-    calibration_inputs, monkeypatch
+    calibration_inputs, frames_loaded_up_front
 ):
-    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, monkeypatch)
+    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, frames_loaded_up_front)
     prev_button, next_button = widget.children[0].children
     check = lambda index, mark=None, completed=0: assert_shows(  # noqa: E731
         widget, fig, shown, coordinates, bodyparts, index, mark, completed
@@ -369,8 +439,10 @@ def test_widget_shows_each_frame_with_its_annotation_through_every_flow(
     check(last, None, 2)
 
 
-def test_widget_shows_the_whole_frame_again_after_zooming(calibration_inputs, monkeypatch):
-    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, monkeypatch)
+def test_widget_shows_the_whole_frame_again_after_zooming(
+    calibration_inputs, frames_loaded_up_front
+):
+    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, frames_loaded_up_front)
     prev_button, next_button = widget.children[0].children
     ax = fig.axes[0]
     x, y = detected_point(fig)
@@ -412,11 +484,11 @@ def reference_drawing(image, detected, mark=None):
     return result
 
 
-def test_widget_draws_what_a_fresh_drawing_shows(calibration_inputs, monkeypatch):
+def test_widget_draws_what_a_fresh_drawing_shows(calibration_inputs, frames_loaded_up_front):
     """After each kind of update, the figure's pixels equal the frame drawn
     from scratch with the same circle and cross; a cross that was moved or
     shown with a blitted update leaves nothing behind."""
-    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, monkeypatch)
+    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, frames_loaded_up_front)
     prev_button, next_button = widget.children[0].children
 
     def expected(index, mark=None):
@@ -436,9 +508,9 @@ def test_widget_draws_what_a_fresh_drawing_shows(calibration_inputs, monkeypatch
 
 
 def test_widget_reuses_its_image_and_redraws_only_the_cross_on_a_click(
-    calibration_inputs, monkeypatch
+    calibration_inputs, frames_loaded_up_front
 ):
-    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, monkeypatch)
+    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, frames_loaded_up_front)
     prev_button, next_button = widget.children[0].children
     ax = fig.axes[0]
     image = ax.images[0]
@@ -454,3 +526,184 @@ def test_widget_reuses_its_image_and_redraws_only_the_cross_on_a_click(
     prev_button.click()
     assert list(ax.images) == [image]
     assert len(full_draws) == 2
+
+
+def test_noise_calibration_returns_once_the_first_frame_is_read(
+    calibration_inputs, monkeypatch
+):
+    """The first frame is read before noise_calibration returns and shown;
+    a background thread reads the rest afterwards, in display order."""
+    project_dir, coordinates, confidences = calibration_inputs
+    reads, gate = [], threading.Event()
+    monkeypatch.setattr(calibration, "OpenCVReader", fake_reader(reads, gate=gate))
+    started = {}
+    start_loading_frames = calibration._start_loading_frames
+
+    def record(sample_keys, *args, **kwargs):
+        started["keys"] = list(sample_keys)
+        started["frames"], started["thread"] = start_loading_frames(sample_keys, *args, **kwargs)
+        return started["frames"], started["thread"]
+
+    monkeypatch.setattr(calibration, "_start_loading_frames", record)
+    np.random.seed(0)
+    kpms.noise_calibration(project_dir, coordinates, confidences, **kpms.load_config(project_dir))
+
+    keys, frames = started["keys"], started["frames"]
+    assert list(frames) == keys[:1]
+    np.testing.assert_array_equal(plt.gcf().axes[0].images[0].get_array(), frames[keys[0]])
+
+    gate.set()
+    started["thread"].join(timeout=60)
+    assert list(frames) == keys
+    for recording, frame, bodypart in keys:
+        np.testing.assert_array_equal(
+            frames[(recording, frame, bodypart)], np.full((4, 6, 3), frame % 256, np.uint8)
+        )
+
+
+def test_a_frame_that_cannot_be_read_is_described_and_the_rest_are_read(monkeypatch):
+    """Reading fails for the first frame, read before the thread starts, and
+    for one the thread reads; each is replaced by a message naming the
+    recording, the video, both frame numbers and the error."""
+    reads = []
+    failing = {("videos/a.mp4", 2), ("videos/b.mp4", 7)}
+    monkeypatch.setattr(calibration, "OpenCVReader", fake_reader(reads, failing=failing))
+    sample_keys = [("recA", 2, "nose"), ("recB", 3, "tail"), ("recA", 5, "tail")]
+    video_paths = {"recA": "videos/a.mp4", "recB": "videos/b.mp4"}
+    video_frame_indexes = {"recA": np.arange(10), "recB": np.arange(10) + 4}
+
+    frames, thread = calibration._start_loading_frames(sample_keys, video_paths, video_frame_indexes)
+    thread.join(timeout=60)
+
+    assert list(frames) == sample_keys
+    for key, path, frame_ix in [
+        (sample_keys[0], "videos/a.mp4", 2),
+        (sample_keys[1], "videos/b.mp4", 7),
+    ]:
+        recording, frame, _ = key
+        message = frames[key]
+        assert isinstance(message, str)
+        assert f"video frame {frame_ix} of {path}" in message
+        assert f"frame {frame} of the keypoints for recording {recording}" in message
+        assert f"ValueError: error decoding frame {frame_ix} from video {path}" in message
+        assert "check this video" in message
+    np.testing.assert_array_equal(frames[sample_keys[2]], np.full((4, 6, 3), 5, np.uint8))
+
+
+SAMPLE_KEYS = [("rec", 0, "a"), ("rec", 1, "b"), ("rec", 2, "a")]
+
+
+def synthetic_widget(project_dir, frames):
+    """The calibration widget for three frames of one recording, showing the
+    frames read so far: `frames` maps sample keys to 40 x 60 images or to
+    read-error messages."""
+    coordinates = {"rec": np.tile([[10.0, 20.0], [30.0, 15.0]], (3, 1, 1))}
+    widget = calibration._noise_calibration_widget(
+        str(project_dir),
+        coordinates,
+        {"rec": np.ones((3, 2))},
+        SAMPLE_KEYS,
+        frames,
+        bodyparts=["a", "b"],
+        video_frame_indexes={"rec": np.arange(3)},
+        error_estimator={"slope": -0.5, "intercept": 0.25},
+        conf_threshold=0.5,
+    )
+    return widget, plt.gcf()
+
+
+def frame_image(value):
+    return np.full((40, 60, 3), value, np.uint8)
+
+
+def visible_texts(fig):
+    """The figure's visible texts without their whitespace, which wrapping
+    changes."""
+    return ["".join(t.get_text().split()) for t in fig.axes[0].texts if t.get_visible()]
+
+
+def assert_shows_message(widget, fig, message, bodypart, completed=0):
+    """The figure shows a uniform image the size of the frames before it,
+    the frame's limits, no markers and `message`, wrapped to at most 60
+    characters a line; the label names the bodypart."""
+    ax = fig.axes[0]
+    (image,) = [im for im in ax.images if im.get_visible()]
+    array = np.asarray(image.get_array())
+    assert array.shape[:2] == (40, 60)
+    assert (array == array.flat[0]).all()
+    assert ax.get_xlim() == (-0.5, 59.5)
+    assert ax.get_ylim() == (39.5, -0.5)
+    assert all(len(c.get_offsets()) == 0 for c in ax.collections if c.get_visible())
+    assert visible_texts(fig) == ["".join(message.split())]
+    (text,) = [t.get_text() for t in ax.texts if t.get_visible()]
+    assert max(len(line) for line in text.split("\n")) <= 60
+    info_label, _ = widget.children[1].children
+    assert info_label.value == f"Target bodypart = {bodypart} | Completed annotations = {completed}"
+
+
+def assert_shows_frame(fig, value, detected):
+    ax = fig.axes[0]
+    (image,) = [im for im in ax.images if im.get_visible()]
+    np.testing.assert_array_equal(image.get_array(), frame_image(value))
+    np.testing.assert_allclose(ax.collections[0].get_offsets(), [detected])
+    assert visible_texts(fig) == []
+
+
+def test_widget_shows_a_frame_once_it_has_been_read(tmp_path, monkeypatch):
+    """A frame still being read shows a placeholder and ignores clicks until
+    the timer finds it read. Leaving it stops the timer."""
+    timers = fake_timers(monkeypatch)
+    frames = {SAMPLE_KEYS[0]: frame_image(50)}
+    widget, fig = synthetic_widget(tmp_path, frames)
+    (timer,) = timers
+    prev_button, next_button = widget.children[0].children
+    assert_shows_frame(fig, 50, (10, 20))
+    assert not timer.running
+
+    next_button.click()
+    assert_shows_message(widget, fig, "Loading frame…", "b")
+    assert timer.running
+    click(fig, 30, 15)
+    assert_shows_message(widget, fig, "Loading frame…", "b")
+    timer.tick()
+    assert_shows_message(widget, fig, "Loading frame…", "b")
+
+    frames[SAMPLE_KEYS[1]] = frame_image(100)
+    timer.tick()
+    assert_shows_frame(fig, 100, (30, 15))
+    assert not timer.running
+    click(fig, 31, 16)
+    info_label, _ = widget.children[1].children
+    assert info_label.value.endswith("Completed annotations = 1")
+
+    next_button.click()
+    assert timer.running
+    prev_button.click()
+    assert_shows_frame(fig, 100, (30, 15))
+    assert not timer.running
+
+
+def test_widget_shows_a_read_error_and_goes_on_to_the_next_frame(tmp_path, monkeypatch, capsys):
+    """The error is shown in the figure, with a path longer than a line
+    broken across lines, and printed in full where it can be copied."""
+    fake_timers(monkeypatch)
+    path = "/data/" + "a_long_directory_name_without_spaces/" * 3 + "rec.mp4"
+    error = f"Could not read video frame 1 of {path} (frame 1 of the keypoints ...)"
+    frames = {SAMPLE_KEYS[0]: frame_image(50), SAMPLE_KEYS[1]: error, SAMPLE_KEYS[2]: frame_image(150)}
+    widget, fig = synthetic_widget(tmp_path, frames)
+    prev_button, next_button = widget.children[0].children
+    _, usr_msg = widget.children[1].children
+    saving = "Annotations not saved: complete 20 more annotations to start auto-saving"
+    assert usr_msg.value == saving
+
+    capsys.readouterr()
+    next_button.click()
+    assert_shows_message(widget, fig, error, "b")
+    assert error in capsys.readouterr().out
+    assert usr_msg.value == "Could not read this frame: see the message in the figure."
+    click(fig, 30, 15)
+    assert_shows_message(widget, fig, error, "b")
+
+    next_button.click()
+    assert_shows_frame(fig, 150, (10, 20))
+    assert usr_msg.value == saving
