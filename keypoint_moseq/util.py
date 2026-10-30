@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import tabulate
+import threading
 import tqdm
 import warnings
 # Private names, so that `from .util import *` does not add them to the
@@ -2438,6 +2439,14 @@ def _draw_keypoint_traces(
     return fig
 
 
+def _outlier_plot_dir(project_dir):
+    return os.path.join(project_dir, "QA", "plots", "keypoint_distance_outliers")
+
+
+def _outlier_plot_path(project_dir, recording_name):
+    return os.path.join(_outlier_plot_dir(project_dir), f"{recording_name}.png")
+
+
 def plot_medoid_distance_outliers(
     project_dir: str,
     recording_name: str,
@@ -2494,13 +2503,7 @@ def plot_medoid_distance_outliers(
         The plot is saved to 'QA/plots/keypoint_distance_outliers/{recording_name}.png'.
     """
 
-    plot_path = os.path.join(
-        project_dir,
-        "QA",
-        "plots",
-        "keypoint_distance_outliers",
-        f"{recording_name}.png",
-    )
+    plot_path = _outlier_plot_path(project_dir, recording_name)
     os.makedirs(os.path.dirname(plot_path), exist_ok=True)
 
     if os.path.exists(plot_path) and not overwrite:
@@ -2554,6 +2557,47 @@ def _recordings_to_plot(recording_names, plot_recordings):
     return set(plot_recordings)
 
 
+# The thread saving the QA plots of the last `outlier_removal` call in a notebook
+_outlier_plot_thread = None
+
+
+def _in_notebook():
+    """Whether this is running in a Jupyter kernel (Jupyter, VS Code, Colab)."""
+    try:
+        from IPython import get_ipython
+    except ImportError:
+        return False
+    shell = get_ipython()
+    return shell is not None and "IPKernelApp" in shell.config
+
+
+def _save_outlier_plots(plots, project_dir, bodyparts, overwrite, progress_bar, raise_errors):
+    """Save a QA plot for each item of `plots`, the arguments of
+    `plot_medoid_distance_outliers` after `project_dir`. Unless `raise_errors`,
+    a plot that fails is reported on `progress_bar` and the rest are saved."""
+    failed = []
+    try:
+        for recording_name, *plot_args in plots:
+            try:
+                plot_medoid_distance_outliers(
+                    project_dir,
+                    recording_name,
+                    *plot_args,
+                    bodyparts=bodyparts,
+                    overwrite=overwrite,
+                )
+            except Exception as error:
+                if raise_errors:
+                    raise
+                failed.append(recording_name)
+                progress_bar.set_postfix_str(f"failed for {', '.join(failed)}: {error}")
+                continue
+            progress_bar.update()
+    finally:
+        # A notebook bar left short of its total turns red
+        progress_bar.close()
+
+
 def outlier_removal(
     coordinates,
     confidences,
@@ -2571,11 +2615,15 @@ def outlier_removal(
     and missing keypoints, sets their confidences to 0, and generates
     diagnostic plots.
 
+    In a Jupyter notebook the plots are saved in a background thread, so the
+    function returns as soon as the outliers are interpolated, and a progress
+    bar under the cell shows the plots being saved.
+
     Parameters
     ----------
     coordinates: dict
         Dictionary mapping recording names to keypoint coordinates
-    confidences: dict  
+    confidences: dict
         Dictionary mapping recording names to keypoint confidences
     project_dir: str
         Path to project directory for saving plots
@@ -2601,8 +2649,14 @@ def outlier_removal(
     confidences: dict
         Updated confidences with outlier and missing values set to 0
     """
+    global _outlier_plot_thread
+    if _outlier_plot_thread is not None:
+        # The previous call's plots may still be saving to the same files
+        _outlier_plot_thread.join()
+
     _check_keypoint_dicts(coordinates, confidences)
     recordings_to_plot = _recordings_to_plot(coordinates, plot_recordings)
+    plots = []
     for recording_name in coordinates:
         raw_coords = coordinates[recording_name].copy()
         outliers = find_medoid_distance_outliers(
@@ -2621,17 +2675,38 @@ def outlier_removal(
         )
         if recording_name not in recordings_to_plot:
             continue
-        plot_medoid_distance_outliers(
-            project_dir,
-            recording_name,
-            raw_coords,
-            coordinates[recording_name],
-            interpolation_mask,
-            outliers["thresholds"],
-            bodyparts=bodyparts,
-            overwrite=overwrite,
-            **kwargs,
+        if overwrite or not os.path.exists(_outlier_plot_path(project_dir, recording_name)):
+            plots.append(
+                (
+                    recording_name,
+                    raw_coords,
+                    coordinates[recording_name],
+                    interpolation_mask,
+                    outliers["thresholds"],
+                )
+            )
+
+    if plots:
+        print(
+            f"Saving outlier QA plots for {len(plots)} of {len(coordinates)} "
+            f"recordings to {_outlier_plot_dir(project_dir)}"
         )
+        description = "Saving outlier QA plots"
+        if _in_notebook():
+            from tqdm.notebook import tqdm as notebook_tqdm
+
+            progress_bar = notebook_tqdm(total=len(plots), desc=description)
+            _outlier_plot_thread = threading.Thread(
+                target=_save_outlier_plots,
+                args=(plots, project_dir, bodyparts, overwrite, progress_bar, False),
+                daemon=True,
+            )
+            _outlier_plot_thread.start()
+        else:
+            progress_bar = tqdm.tqdm(total=len(plots), desc=description, ncols=72)
+            _save_outlier_plots(
+                plots, project_dir, bodyparts, overwrite, progress_bar, True
+            )
 
     return coordinates, confidences
 
