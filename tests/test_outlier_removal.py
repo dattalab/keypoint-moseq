@@ -184,6 +184,70 @@ def test_outlier_plot_that_fails_to_save_leaves_no_file(monkeypatch, tmp_path):
     assert os.listdir(plot_dir) == []
 
 
+def recordings(num_recordings):
+    """Coordinates and confidences for recordings named rec0, rec1, ..."""
+    coordinates = {
+        f"rec{i}": make_coordinates_with_missing_and_outlier()
+        for i in range(num_recordings)
+    }
+    confidences = {name: np.full(c.shape[:2], 0.9) for name, c in coordinates.items()}
+    return coordinates, confidences
+
+
+BODYPARTS = [f"keypoint{i}" for i in range(5)]
+
+
+def plotted_recordings(project_dir):
+    plot_dir = os.path.dirname(outlier_plot_path(project_dir, "recording"))
+    if not os.path.exists(plot_dir):
+        return []
+    return sorted(
+        name.removesuffix(".png") for name in os.listdir(plot_dir) if name.endswith(".png")
+    )
+
+
+def test_outlier_removal_plots_10_recordings_by_default_the_same_each_time(tmp_path):
+    coordinates, confidences = recordings(12)
+    _, cleaned_confidences = util.outlier_removal(
+        coordinates, confidences, tmp_path / "a", bodyparts=BODYPARTS
+    )
+    coordinates, confidences = recordings(12)
+    reordered = lambda d: dict(reversed(list(d.items())))
+    util.outlier_removal(
+        reordered(coordinates), reordered(confidences), tmp_path / "b", bodyparts=BODYPARTS
+    )
+
+    assert len(plotted_recordings(tmp_path / "a")) == 10
+    assert plotted_recordings(tmp_path / "a") == plotted_recordings(tmp_path / "b")
+    # Outliers are still removed from the recordings that are not plotted
+    for name, conf in cleaned_confidences.items():
+        assert conf[4, 4] == 0, name
+
+
+def test_outlier_removal_plots_every_recording_when_plot_recordings_is_None(tmp_path):
+    coordinates, confidences = recordings(12)
+    util.outlier_removal(
+        coordinates, confidences, tmp_path, bodyparts=BODYPARTS, plot_recordings=None
+    )
+    assert plotted_recordings(tmp_path) == sorted(coordinates)
+
+
+def test_outlier_removal_plots_the_recordings_named(tmp_path):
+    coordinates, confidences = recordings(12)
+    util.outlier_removal(
+        coordinates, confidences, tmp_path, bodyparts=BODYPARTS, plot_recordings=["rec7"]
+    )
+    assert plotted_recordings(tmp_path) == ["rec7"]
+
+
+def test_outlier_removal_rejects_plot_recordings_not_in_the_data(tmp_path):
+    coordinates, confidences = recordings(2)
+    with pytest.raises(ValueError, match="rec7"):
+        util.outlier_removal(
+            coordinates, confidences, tmp_path, bodyparts=BODYPARTS, plot_recordings=["rec7"]
+        )
+
+
 def test_outlier_removal_interpolates_missing_and_outlier_points(
     monkeypatch, tmp_path
 ):

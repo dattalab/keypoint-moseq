@@ -2533,6 +2533,27 @@ def plot_medoid_distance_outliers(
             os.remove(partial_path)
 
 
+def _recordings_to_plot(recording_names, plot_recordings):
+    """The recordings `outlier_removal` saves QA plots for (see its
+    `plot_recordings`)."""
+    if plot_recordings is None:
+        return set(recording_names)
+    if isinstance(plot_recordings, str):
+        plot_recordings = [plot_recordings]
+    if isinstance(plot_recordings, (int, np.integer)):
+        names = sorted(recording_names)
+        if plot_recordings >= len(names):
+            return set(names)
+        rng = np.random.default_rng(0)
+        return set(rng.choice(names, plot_recordings, replace=False).tolist())
+    unknown = [name for name in plot_recordings if name not in recording_names]
+    if unknown:
+        raise ValueError(
+            f"plot_recordings names recordings that are not in coordinates: {unknown}"
+        )
+    return set(plot_recordings)
+
+
 def outlier_removal(
     coordinates,
     confidences,
@@ -2540,6 +2561,7 @@ def outlier_removal(
     overwrite=False,
     outlier_scale_factor=6.0,
     bodyparts=None,
+    plot_recordings=10,
     **kwargs,
 ):
     """Remove outlier keypoints for all recordings in a dataset.
@@ -2564,6 +2586,11 @@ def outlier_removal(
         produce a higher threshold, so fewer points are removed.
     bodyparts: list of str, default=None
         Names of bodyparts for plot labels
+    plot_recordings: int, list of str or None, default=10
+        Recordings to save QA plots for: this many chosen at random (every
+        recording if there are fewer), the recordings named in a list, or every
+        recording if None. The random choice is the same each time for the same
+        recordings.
     **kwargs
         Additional configuration parameters (ignored)
 
@@ -2575,6 +2602,7 @@ def outlier_removal(
         Updated confidences with outlier and missing values set to 0
     """
     _check_keypoint_dicts(coordinates, confidences)
+    recordings_to_plot = _recordings_to_plot(coordinates, plot_recordings)
     for recording_name in coordinates:
         raw_coords = coordinates[recording_name].copy()
         outliers = find_medoid_distance_outliers(
@@ -2591,6 +2619,8 @@ def outlier_removal(
         confidences[recording_name] = np.where(
             interpolation_mask, 0, confidences[recording_name]
         )
+        if recording_name not in recordings_to_plot:
+            continue
         plot_medoid_distance_outliers(
             project_dir,
             recording_name,
