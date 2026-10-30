@@ -3,9 +3,9 @@
 Importing keypoint_moseq points JAX's compilation cache at a ``jax`` folder in
 the platform's user cache directory (``platformdirs.user_cache_dir
 ("keypoint_moseq")``) and caches every compiled program, however quick to
-compile. If the user has chosen a cache directory, through
-``JAX_COMPILATION_CACHE_DIR`` or ``jax.config``, kpms changes none of the
-cache settings.
+compile, unless the user has set a minimum compile time. If the user has
+chosen a cache directory, through ``JAX_COMPILATION_CACHE_DIR`` or
+``jax.config``, kpms changes none of the cache settings.
 
 Each test imports the keypoint_moseq under test in a new Python process, run
 from a temporary directory, with every location platformdirs reads (HOME,
@@ -70,6 +70,21 @@ def test_import_caches_every_compile_in_the_user_cache_directory(tmp_path):
     assert report["cache_dir"] == expected
     assert report["min_compile_time"] == 0
     assert os.listdir(expected)  # the program compiled after the import
+
+
+def test_a_minimum_compile_time_from_the_environment_is_kept(tmp_path):
+    report = import_kpms(tmp_path, JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS="5")
+
+    assert report["cache_dir"] == os.path.join(report["user_cache_dir"], "jax")
+    assert report["min_compile_time"] == 5
+
+
+def test_a_minimum_compile_time_set_in_jax_config_is_kept(tmp_path):
+    set_time = "jax.config.update('jax_persistent_cache_min_compile_time_secs', 5.0)"
+    report = import_kpms(tmp_path, before_import=set_time)
+
+    assert report["cache_dir"] == os.path.join(report["user_cache_dir"], "jax")
+    assert report["min_compile_time"] == 5
 
 
 def test_a_cache_directory_from_the_environment_is_left_alone(tmp_path):

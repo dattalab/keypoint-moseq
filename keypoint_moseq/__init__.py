@@ -6,9 +6,8 @@ config.update("jax_enable_x64", True)
 
 # Keep compiled programs between sessions in the user's cache directory,
 # unless the user has chosen a cache directory. Every program is cached,
-# since most of them compile in less than JAX's default threshold of 1 s.
-# This runs before anything is compiled, which is when JAX decides whether
-# to use the cache.
+# since most of them compile in less than JAX's default threshold of 1 s,
+# unless the user has set a threshold.
 def _use_persistent_compilation_cache():
     import os
     import platformdirs
@@ -19,7 +18,11 @@ def _use_persistent_compilation_cache():
     ):
         cache_dir = os.path.join(platformdirs.user_cache_dir("keypoint_moseq"), "jax")
         config.update("jax_compilation_cache_dir", cache_dir)
-        config.update("jax_persistent_cache_min_compile_time_secs", 0)
+        if (
+            config.jax_persistent_cache_min_compile_time_secs == 1.0  # JAX's default
+            and "JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS" not in os.environ
+        ):
+            config.update("jax_persistent_cache_min_compile_time_secs", 0)
 
 
 _use_persistent_compilation_cache()
