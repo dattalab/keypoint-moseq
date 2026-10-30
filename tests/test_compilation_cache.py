@@ -7,14 +7,18 @@ compile. If the user has chosen a cache directory, through
 ``JAX_COMPILATION_CACHE_DIR`` or ``jax.config``, kpms changes none of the
 cache settings.
 
-Each test imports keypoint_moseq in a new Python process whose HOME and
-XDG_CACHE_HOME are a temporary directory, so the real cache is not touched.
+Each test imports the keypoint_moseq under test in a new Python process, run
+from a temporary directory, with every location platformdirs reads (HOME,
+XDG_CACHE_HOME, LOCALAPPDATA) in a temporary directory, so the real cache is
+not touched.
 """
 
 import json
 import os
 import subprocess
 import sys
+
+import keypoint_moseq
 
 REPORT = """
 import json
@@ -30,27 +34,39 @@ print(json.dumps({{
     "cache_dir": jax.config.jax_compilation_cache_dir,
     "min_compile_time": jax.config.jax_persistent_cache_min_compile_time_secs,
     "user_cache_dir": platformdirs.user_cache_dir("keypoint_moseq"),
+    "kpms_file": keypoint_moseq.__file__,
 }}))
 """
 
 
 def import_kpms(tmp_path, before_import="", **env_vars):
-    env = dict(os.environ, HOME=str(tmp_path / "home"), XDG_CACHE_HOME=str(tmp_path / "cache"))
+    env = dict(
+        os.environ,
+        HOME=str(tmp_path / "home"),
+        XDG_CACHE_HOME=str(tmp_path / "cache"),
+        LOCALAPPDATA=str(tmp_path / "localappdata"),
+    )
     for name in ["JAX_COMPILATION_CACHE_DIR", "JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS"]:
         env.pop(name, None)
+    # the keypoint_moseq under test, wherever it is imported from
+    kpms_parent = os.path.dirname(os.path.dirname(keypoint_moseq.__file__))
+    env["PYTHONPATH"] = os.pathsep.join([kpms_parent, env.get("PYTHONPATH", "")])
     env.update(env_vars)
     script = REPORT.format(before_import=before_import)
     result = subprocess.run(
-        [sys.executable, "-c", script], env=env, capture_output=True, text=True, check=True
+        [sys.executable, "-c", script], env=env, cwd=tmp_path,
+        capture_output=True, text=True, check=True,
     )
-    return json.loads(result.stdout.strip().splitlines()[-1])
+    report = json.loads(result.stdout.strip().splitlines()[-1])
+    assert report["kpms_file"] == keypoint_moseq.__file__
+    assert report["user_cache_dir"].startswith(str(tmp_path))
+    return report
 
 
 def test_import_caches_every_compile_in_the_user_cache_directory(tmp_path):
     report = import_kpms(tmp_path)
 
-    expected = os.path.join(str(tmp_path / "cache"), "keypoint_moseq", "jax")
-    assert report["user_cache_dir"] == os.path.dirname(expected)
+    expected = os.path.join(report["user_cache_dir"], "jax")
     assert report["cache_dir"] == expected
     assert report["min_compile_time"] == 0
     assert os.listdir(expected)  # the program compiled after the import
@@ -62,7 +78,7 @@ def test_a_cache_directory_from_the_environment_is_left_alone(tmp_path):
 
     assert report["before"][0] == mine
     assert [report["cache_dir"], report["min_compile_time"]] == report["before"]
-    assert not (tmp_path / "cache" / "keypoint_moseq").exists()
+    assert not os.path.exists(report["user_cache_dir"])
 
 
 def test_a_cache_directory_set_in_jax_config_is_left_alone(tmp_path):
@@ -72,4 +88,4 @@ def test_a_cache_directory_set_in_jax_config_is_left_alone(tmp_path):
 
     assert report["before"][0] == mine
     assert [report["cache_dir"], report["min_compile_time"]] == report["before"]
-    assert not (tmp_path / "cache" / "keypoint_moseq").exists()
+    assert not os.path.exists(report["user_cache_dir"])
