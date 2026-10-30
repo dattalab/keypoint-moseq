@@ -578,9 +578,8 @@ def reindex_syllables_in_checkpoint(
     """Reindex syllable labels by their frequency in the most recent model
     snapshot in a checkpoint file.
 
-    This is an in-place operation: the checkpoint is loaded from disk, modified
-    and saved to disk again. The label permutation is applied to all model
-    snapshots in the checkpoint.
+    This is an in-place operation: the syllable labels and per-state parameters
+    of every snapshot are overwritten in the checkpoint.
 
     The checkpoint path can be specified directly via `path` or else it is
     assumed to be `{project_dir}/{model_name}/checkpoint.h5`.
@@ -594,7 +593,8 @@ def reindex_syllables_in_checkpoint(
     index: array of shape (num_states,), default=None
         Permutation for syllable labels, where `index[i]` is relabeled as `i`.
         If None, syllables are relabeled by frequency, with the most frequent
-        syllable relabeled as 0, and so on.
+        syllable relabeled as 0, and so on. Syllables with equal frequency keep
+        their order.
 
     runlength: bool, default=True
         If True, frequencies are quantified using the number of non-consecutive
