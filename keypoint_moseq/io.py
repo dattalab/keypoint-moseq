@@ -608,40 +608,33 @@ def reindex_syllables_in_checkpoint(
     """
     path = _get_path(project_dir, model_name, path, "checkpoint.h5")
 
-    with h5py.File(path, "r") as f:
-        saved_iterations = [int(i) for i in f["model_snapshots"]]
+    with h5py.File(path, "r+") as f:
+        snapshots = f["model_snapshots"]
+        saved_iterations = sorted(int(i) for i in snapshots)
 
-    if index is None:
-        with h5py.File(path, "r") as f:
-            last_iter = np.max(saved_iterations)
-            num_states = f[f"model_snapshots/{last_iter}/params/pi"].shape[0]
-            z = f[f"model_snapshots/{last_iter}/states/z"][()]
-            mask = f["data/mask"][()]
-        index = np.argsort(get_frequencies(z, mask, num_states, runlength))[::-1]
+        if index is None:
+            last = snapshots[str(saved_iterations[-1])]
+            num_states = last["params/pi"].shape[0]
+            frequencies = get_frequencies(
+                last["states/z"][()], f["data/mask"][()], num_states, runlength
+            )
+            # most frequent first; syllables seen equally often keep their order
+            index = np.argsort(-np.asarray(frequencies), kind="stable")
 
-    def _reindex(model):
-        model["params"]["betas"] = model["params"]["betas"][index]
-        model["params"]["pi"] = model["params"]["pi"][index, :][:, index]
-        model["params"]["Ab"] = model["params"]["Ab"][index]
-        model["params"]["Q"] = model["params"]["Q"][index]
-        # allocentric dynamics params (location-aware model) are also per-state
-        for key in ["delta_h", "sigmasq_h", "delta_v", "sigmasq_v"]:
-            if key in model["params"]:
-                model["params"][key] = model["params"][key][index]
-        model["states"]["z"] = np.argsort(index)[model["states"]["z"]]
-        return model
-
-    for iteration in tqdm.tqdm(
-        saved_iterations, desc="Reindexing", unit="model snapshot", ncols=72
-    ):
-        model = load_hdf5(path, f"model_snapshots/{iteration}")
-        save_hdf5(
-            path,
-            _reindex(model),
-            f"model_snapshots/{iteration}",
-            exist_ok=True,
-            overwrite=True,
-        )
+        # Only the labels and the per-state parameters change, so they are
+        # overwritten in place, which keeps the file from growing.
+        relabel = np.argsort(index)
+        for iteration in tqdm.tqdm(
+            saved_iterations, desc="Reindexing", unit="model snapshot", ncols=72
+        ):
+            params = snapshots[f"{iteration}/params"]
+            params["pi"][...] = params["pi"][()][index][:, index]
+            # the per-state parameters, with the location-aware model's allocentric ones
+            for key in ["betas", "Ab", "Q", "delta_h", "sigmasq_h", "delta_v", "sigmasq_v"]:
+                if key in params:
+                    params[key][...] = params[key][()][index]
+            z = snapshots[f"{iteration}/states/z"]
+            z[...] = relabel[z[()]]
     return index
 
 
