@@ -233,7 +233,6 @@ def _noise_calibration_widget(
     num_images = len(sample_keys)
     current_img_idx = [0]
     current_img_key = [sample_keys[current_img_idx[0]]]
-    current_annotation_marker = [None]
     annotations = {}
 
     next_button = Button(description="Next")
@@ -259,6 +258,26 @@ def _noise_calibration_widget(
     ax.set_position(
         [pos.x0 + right_shift, pos.y0, pos.width - right_shift, pos.height + pos.y0]
     )
+
+    # One image and two markers, updated for each frame. The annotation cross
+    # is animated: full redraws leave it out, save the rest of the figure as
+    # the background, then add it, so a click only redraws the cross on top
+    # of that background.
+    ax.clear()
+    frame_image = ax.imshow(sample_images[current_img_key[0]])
+    keypoint_marker = ax.scatter([], [], color="yellow", marker="o", facecolor="none")
+    annotation_marker = ax.scatter([], [], color="red", marker="x", animated=True)
+    background = [None]
+
+    def on_draw(event):
+        background[0] = fig.canvas.copy_from_bbox(fig.bbox)
+        ax.draw_artist(annotation_marker)
+
+    fig.canvas.mpl_connect("draw_event", on_draw)
+
+    def show_annotation(image_key):
+        xy = [annotations[image_key]] if image_key in annotations else np.empty((0, 2))
+        annotation_marker.set_offsets(xy)
 
     def update_info_label():
         bodypart = current_img_key[0][2]
@@ -297,16 +316,14 @@ def _noise_calibration_widget(
 
     def onclick(event):
         if event.xdata is not None and event.ydata is not None:
-            # Check for and remove existing annotation marker
-            if current_annotation_marker[0] is not None:
-                current_annotation_marker[0].remove()
-                current_annotation_marker[0] = None
-
             annotations[current_img_key[0]] = (event.xdata, event.ydata)
-            current_annotation_marker[0] = ax.scatter(
-                event.xdata, event.ydata, color="red", marker="x"
-            )
-            fig.canvas.draw()
+            show_annotation(current_img_key[0])
+            if background[0] is not None and fig.canvas.supports_blit:
+                fig.canvas.restore_region(background[0])
+                ax.draw_artist(annotation_marker)
+                fig.canvas.blit(fig.bbox)
+            else:
+                fig.canvas.draw()
             update_info_label()
 
             # Check if we have enough annotations to save
@@ -321,29 +338,20 @@ def _noise_calibration_widget(
     def show_image(image_key):
         with output:
             output.clear_output(wait=True)
-            ax.clear()
-            current_annotation_marker[0] = None
-            ax.imshow(sample_images[image_key])
+            image = sample_images[image_key]
+            height, width = image.shape[:2]
+            frame_image.set_data(image)
+            if image.ndim == 2:
+                frame_image.autoscale()
+            # the whole frame, as imshow shows a new image, whatever the zoom
+            frame_image.set_extent((-0.5, width - 0.5, height - 0.5, -0.5))
+            ax.set_xlim(-0.5, width - 0.5)
+            ax.set_ylim(height - 0.5, -0.5)
 
             frame = image_key[1]
             bodypart_idx = bodyparts.index(image_key[2])
-            video_coordinates = coordinates[image_key[0]]
-            ax.scatter(
-                video_coordinates[frame, bodypart_idx, 0],
-                video_coordinates[frame, bodypart_idx, 1],
-                color="yellow",
-                marker="o",
-                facecolor="none",
-            )
-
-            # If the user has already annotated this keypoint, plot it
-            if image_key in annotations:
-                current_annotation_marker[0] = ax.scatter(
-                    annotations[image_key][0],
-                    annotations[image_key][1],
-                    color="red",
-                    marker="x",
-                )
+            keypoint_marker.set_offsets([coordinates[image_key[0]][frame, bodypart_idx, :2]])
+            show_annotation(image_key)
 
             fig.canvas.draw()
 

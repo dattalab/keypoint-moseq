@@ -274,3 +274,183 @@ def test_sample_error_frames_draws_the_same_frames_as_before(seed):
     assert sampled == expected
     assert len(sampled) > 0
 
+
+def open_widget(calibration_inputs, monkeypatch):
+    """The calibration widget on the tutorial data, with the frames it loaded
+    recorded in their display order."""
+    project_dir, coordinates, confidences = calibration_inputs
+    config = kpms.load_config(project_dir)
+    shown = {}
+    load_sampled_frames = calibration.load_sampled_frames
+
+    def record_frames(sample_keys, *args, **kwargs):
+        shown["keys"] = list(sample_keys)
+        shown["images"] = load_sampled_frames(sample_keys, *args, **kwargs)
+        return shown["images"]
+
+    monkeypatch.setattr(calibration, "load_sampled_frames", record_frames)
+    np.random.seed(0)
+    widget = kpms.noise_calibration(project_dir, coordinates, confidences, **config)
+    return widget, plt.gcf(), shown, coordinates, config["bodyparts"]
+
+
+def assert_shows(widget, fig, shown, coordinates, bodyparts, index, mark=None, completed=0):
+    """The figure shows the index'th sampled frame in full, with the circle on
+    its detected keypoint and, when `mark` is given, one red cross there;
+    the label names its bodypart and the number of annotations."""
+    ax = fig.axes[0]
+    key = shown["keys"][index]
+    recording, frame, bodypart = key
+    image = shown["images"][key]
+    height, width = image.shape[:2]
+
+    images = [im for im in ax.images if im.get_visible()]
+    assert len(images) == 1
+    np.testing.assert_array_equal(images[0].get_array(), image)
+    assert ax.get_xlim() == (-0.5, width - 0.5)
+    assert ax.get_ylim() == (height - 0.5, -0.5)
+
+    circle, *others = ax.collections
+    np.testing.assert_allclose(
+        circle.get_offsets(), [coordinates[recording][frame, bodyparts.index(bodypart)]]
+    )
+    marks = [xy for c in others if c.get_visible() for xy in c.get_offsets()]
+    if mark is None:
+        assert len(marks) == 0
+    else:
+        assert len(marks) == 1
+        np.testing.assert_allclose(marks[0], mark)
+
+    info_label, _ = widget.children[1].children
+    assert info_label.value == (
+        f"Target bodypart = {bodypart} | Completed annotations = {completed}"
+    )
+
+
+def detected_point(fig):
+    return fig.axes[0].collections[0].get_offsets()[0]
+
+
+def test_widget_shows_each_frame_with_its_annotation_through_every_flow(
+    calibration_inputs, monkeypatch
+):
+    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, monkeypatch)
+    prev_button, next_button = widget.children[0].children
+    check = lambda index, mark=None, completed=0: assert_shows(  # noqa: E731
+        widget, fig, shown, coordinates, bodyparts, index, mark, completed
+    )
+    check(0)
+
+    x, y = detected_point(fig)
+    click(fig, x + 3, y)
+    check(0, (x + 3, y), 1)
+    click(fig, x - 2, y + 4)  # re-annotating replaces the cross
+    check(0, (x - 2, y + 4), 1)
+    prev_button.click()  # already on the first frame
+    check(0, (x - 2, y + 4), 1)
+
+    next_button.click()
+    check(1, None, 1)
+    x1, y1 = detected_point(fig)
+    click(fig, x1 + 5, y1)
+    check(1, (x1 + 5, y1), 2)
+    next_button.click()
+    check(2, None, 2)
+    prev_button.click()
+    check(1, (x1 + 5, y1), 2)
+    prev_button.click()
+    check(0, (x - 2, y + 4), 2)
+    click(fig, x + 1, y + 1)  # re-annotating after coming back
+    check(0, (x + 1, y + 1), 2)
+
+    last = len(shown["keys"]) - 1
+    for _ in range(last + 1):  # one press more than there are frames
+        next_button.click()
+    check(last, None, 2)
+
+
+def test_widget_shows_the_whole_frame_again_after_zooming(calibration_inputs, monkeypatch):
+    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, monkeypatch)
+    prev_button, next_button = widget.children[0].children
+    ax = fig.axes[0]
+    x, y = detected_point(fig)
+    ax.set_xlim(x - 40, x + 40)  # as the toolbar's zoom does
+    ax.set_ylim(y + 40, y - 40)
+    fig.canvas.draw()
+
+    click(fig, x + 3, y + 3)
+    assert ax.get_xlim() == (x - 40, x + 40)
+    next_button.click()
+    assert_shows(widget, fig, shown, coordinates, bodyparts, 1, None, 1)
+    prev_button.click()
+    assert_shows(widget, fig, shown, coordinates, bodyparts, 0, (x + 3, y + 3), 1)
+
+
+def pixels(fig):
+    return np.asarray(fig.canvas.buffer_rgba()).copy()
+
+
+def reference_drawing(image, detected, mark=None):
+    """The widget's figure drawn from scratch, as the widget drew every frame
+    before it reused its image and markers: the same figure and axes layout,
+    the axes cleared, the frame shown with imshow, a yellow circle on the
+    detected keypoint and a red cross on the annotation."""
+    fig, ax = plt.subplots(figsize=(6, 5))
+    plt.subplots_adjust(top=1, bottom=0.01, left=0.07, right=0.99)
+    ax.margins(y=0)
+    ax.set_frame_on(False)
+    pos = ax.get_position()
+    ax.set_position([pos.x0 + 0.1, pos.y0, pos.width - 0.1, pos.height + pos.y0])
+    ax.clear()
+    ax.imshow(image)
+    ax.scatter(*detected, color="yellow", marker="o", facecolor="none")
+    if mark is not None:
+        ax.scatter(*mark, color="red", marker="x")
+    fig.canvas.draw()
+    result = pixels(fig)
+    plt.close(fig)
+    return result
+
+
+def test_widget_draws_what_a_fresh_drawing_shows(calibration_inputs, monkeypatch):
+    """After each kind of update, the figure's pixels equal the frame drawn
+    from scratch with the same circle and cross; a cross that was moved or
+    shown with a blitted update leaves nothing behind."""
+    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, monkeypatch)
+    prev_button, next_button = widget.children[0].children
+
+    def expected(index, mark=None):
+        key = shown["keys"][index]
+        return reference_drawing(shown["images"][key], detected_point(fig), mark)
+
+    np.testing.assert_array_equal(pixels(fig), expected(0))
+    x, y = detected_point(fig)
+    click(fig, x + 6, y - 4)
+    np.testing.assert_array_equal(pixels(fig), expected(0, (x + 6, y - 4)))
+    click(fig, x - 5, y + 2)
+    np.testing.assert_array_equal(pixels(fig), expected(0, (x - 5, y + 2)))
+    next_button.click()
+    np.testing.assert_array_equal(pixels(fig), expected(1))
+    prev_button.click()
+    np.testing.assert_array_equal(pixels(fig), expected(0, (x - 5, y + 2)))
+
+
+def test_widget_reuses_its_image_and_redraws_only_the_cross_on_a_click(
+    calibration_inputs, monkeypatch
+):
+    widget, fig, shown, coordinates, bodyparts = open_widget(calibration_inputs, monkeypatch)
+    prev_button, next_button = widget.children[0].children
+    ax = fig.axes[0]
+    image = ax.images[0]
+    full_draws = []
+    fig.canvas.mpl_connect("draw_event", lambda event: full_draws.append(event))
+
+    x, y = detected_point(fig)
+    click(fig, x + 3, y)
+    click(fig, x + 4, y)
+    assert full_draws == []
+
+    next_button.click()
+    prev_button.click()
+    assert list(ax.images) == [image]
+    assert len(full_draws) == 2
