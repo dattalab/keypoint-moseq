@@ -983,3 +983,23 @@ def test_trajectory_edges_are_drawn_as_one_line_collection_per_step_and_color():
     assert len(collections) == 2 * 10
     assert all(len(c.get_segments()) == len(Xs) * len(edges) for c in collections)
     plt.close(fig)
+
+
+def test_gif_frames_are_quantized_with_fast_octree(tmp_path, monkeypatch):
+    # more than 256 colors per frame, so each frame needs an adaptive palette
+    frames = np.random.default_rng(0).integers(0, 256, (3, 32, 48, 3), dtype=np.uint8)
+    path = str(tmp_path / "frames.gif")
+    quantized = count_calls(monkeypatch, Image.Image, "quantize")
+
+    kpms.viz.save_gif(frames, path)
+    methods = [kwargs.get("method") for _, kwargs in quantized]
+
+    with Image.open(path) as gif:
+        decoded = []
+        for i in range(gif.n_frames):
+            gif.seek(i)
+            decoded.append(np.asarray(gif.convert("RGB")))
+    for frame, decoded_frame in zip(frames, decoded):
+        expected = Image.fromarray(frame).quantize(256, method=Image.Quantize.FASTOCTREE)
+        np.testing.assert_array_equal(decoded_frame, np.asarray(expected.convert("RGB")))
+    assert methods == [Image.Quantize.FASTOCTREE] * 3

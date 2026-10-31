@@ -1762,8 +1762,13 @@ def plot_trajectories(
 
 
 def save_gif(image_list, gif_filename, duration=0.5):
-    # Convert NumPy arrays to PIL Image objects
-    pil_images = [Image.fromarray(np.uint8(img)) for img in image_list]
+    # Convert NumPy arrays to PIL Images, each quantized to its own palette of
+    # 256 colors with Pillow's fast octree method (much faster than its
+    # default, median cut, on frames with thousands of colors)
+    pil_images = [
+        Image.fromarray(np.uint8(img)).quantize(256, method=Image.Quantize.FASTOCTREE)
+        for img in image_list
+    ]
 
     # Save the PIL Images as an animated GIF
     pil_images[0].save(
