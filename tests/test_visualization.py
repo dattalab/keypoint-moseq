@@ -1,5 +1,6 @@
 import os
 import struct
+import subprocess
 
 import imageio
 import imageio_ffmpeg
@@ -767,6 +768,20 @@ def test_grid_movie_frames_are_unchanged(tmp_path, case):
 
     assert frames.shape == expected.shape == (16, 64, 96, 3)
     np.testing.assert_array_equal(frames, expected)
+
+
+def test_write_video_clip_encodes_with_the_fastest_preset(tmp_path):
+    """The clip is H.264 in the Constrained Baseline profile, which x264
+    writes with its ultrafast preset."""
+    path = str(tmp_path / "clip.mp4")
+    frames = np.random.default_rng(0).integers(0, 256, (10, 64, 96, 3), dtype=np.uint8)
+
+    kpms.write_video_clip(frames, path)
+
+    info = subprocess.run(
+        [imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-i", path], capture_output=True, text=True
+    ).stderr
+    assert "h264 (Constrained Baseline)" in info
 
 
 def test_grid_movies_raise_an_error_from_writing_a_movie(tmp_path, monkeypatch):

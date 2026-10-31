@@ -695,8 +695,14 @@ def write_video_clip(frames, path, fps=30, quality=7):
     quality : int, default=7
         Quality of video encoding.
     """
+    # x264's fastest preset: at these qualities the files are larger, but they
+    # look the same and encode about 3 times faster
     with imageio.get_writer(
-        path, pixelformat="yuv420p", fps=fps, quality=quality
+        path,
+        pixelformat="yuv420p",
+        fps=fps,
+        quality=quality,
+        ffmpeg_params=["-preset", "ultrafast"],
     ) as writer:
         for frame in frames:
             writer.append_data(frame)
