@@ -1084,3 +1084,46 @@ def test_centroids_are_median_filtered_one_coordinate_at_a_time(monkeypatch):
     for name, centroid in centroids.items():
         np.testing.assert_array_equal(filtered_centroids[name], median_filter(centroid, (9, 1)))
     assert {args[0].ndim for args, _ in filters} == {1}
+
+
+def test_typical_trajectories_without_nans_use_the_plain_median(monkeypatch):
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    nanmedians = count_calls(monkeypatch, np, "nanmedian")
+
+    typical = kpms.util.get_typical_trajectories(
+        moving_keypoints(results), results, min_frequency=0.0, density_sample=False
+    )
+
+    assert len(typical) > 1
+    assert nanmedians == []
+
+
+def test_typical_trajectories_skip_missing_keypoints():
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    coordinates = moving_keypoints(results)
+    coordinates["rec_a"][100:400, 1] = np.nan
+    instances = get_syllable_instances(
+        {name: r["syllable"] for name, r in results.items()},
+        before_onset_frames=5,
+        after_onset_frames=15,
+        min_instance_duration_frames=3,
+        min_frequency=0.0,
+        min_instances=1,
+    )
+
+    typical = kpms.util.get_typical_trajectories(
+        coordinates, results, min_frequency=0.0, density_sample=False
+    )
+
+    for syllable, syllable_instances in instances.items():
+        trajectories = kpms.util.get_instance_trajectories(
+            syllable_instances,
+            coordinates,
+            before_onset_frames=5,
+            after_onset_frames=15,
+            centroids={name: r["centroid"] for name, r in results.items()},
+            headings={name: r["heading"] for name, r in results.items()},
+        )
+        assert np.isnan(trajectories).any(), syllable
+        assert not np.isnan(typical[syllable]).any(), syllable
+        np.testing.assert_array_equal(typical[syllable], np.nanmedian(trajectories, axis=0))

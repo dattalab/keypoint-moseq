@@ -1765,7 +1765,11 @@ def get_typical_trajectories(
         for syllable, instances in sampled_instances.items()
     }
 
-    return {s: np.nanmedian(ts, axis=0) for s, ts in trajectories.items()}
+    # np.median gives the same result as np.nanmedian without NaNs, and faster
+    return {
+        s: np.nanmedian(ts, axis=0) if np.isnan(ts).any() else np.median(ts, axis=0)
+        for s, ts in trajectories.items()
+    }
 
 
 def syllable_similarity(
