@@ -4,6 +4,7 @@ import tqdm
 import imageio
 import warnings
 import logging
+from concurrent.futures import ThreadPoolExecutor
 import h5py
 import numpy as np
 import plotly
@@ -701,6 +702,36 @@ def write_video_clip(frames, path, fps=30, quality=7):
             writer.append_data(frame)
 
 
+def _num_workers():
+    """The number of CPUs this process may run on."""
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+    return os.cpu_count() or 1
+
+
+def _video_frames(path, frame_ixs):
+    """Yield frames `frame_ixs` of the video at `path`, in BGR, seeking only
+    when a frame doesn't follow the one before. The video decodes on a single
+    FFmpeg thread, since grid-movie tiles are read in parallel."""
+    capture = None
+    if hasattr(cv2, "CAP_PROP_N_THREADS"):
+        capture = cv2.VideoCapture(path, cv2.CAP_FFMPEG, [cv2.CAP_PROP_N_THREADS, 1])
+    if capture is None or not capture.isOpened():
+        capture = cv2.VideoCapture(path)
+    try:
+        position = 0
+        for ix in frame_ixs:
+            if ix != position:
+                capture.set(cv2.CAP_PROP_POS_FRAMES, int(ix))
+            ok, frame = capture.read()
+            if not ok:
+                raise ValueError(f"error decoding frame {ix} from video {path}")
+            position = ix + 1
+            yield frame
+    finally:
+        capture.release()
+
+
 def _grid_movie_tile(
     key,
     start,
@@ -755,14 +786,14 @@ def _grid_movie_tile(
 
     if video_paths is not None:
         frame_ixs = video_frame_indexes[key][clip_frames]
-        reader = OpenCVReader(video_paths[key])
-        frames = [reader[ix] for ix in frame_ixs]
-        reader.close()
+        frames = _video_frames(video_paths[key], frame_ixs)
         c = r @ c - window_size // 2
         M = [[np.cos(h), np.sin(h), -c[0]], [-np.sin(h), np.cos(h), -c[1]]]
 
         for ii, (frame, c) in enumerate(zip(frames, cs)):
             if overlay_keypoints:
+                # the overlay's colors are RGB
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 coords = syllable_coordinates[ii]
                 frame = overlay_keypoints_on_image(
                     frame, coords, edges=edges, **plot_options
@@ -770,6 +801,9 @@ def _grid_movie_tile(
 
             frame = cv2.warpAffine(frame, np.float32(M), (window_size, window_size))
             frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
+            if not overlay_keypoints:
+                # converted at tile size rather than at full size
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             if 0 <= ii - before_onset_frames < end - start and dot_radius > 0:
                 pos = tuple([int(x) for x in M @ np.append(c, 1) * scale_factor])
                 cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
@@ -907,40 +941,43 @@ def grid_movie(
     if scaled_window_size is None:
         scaled_window_size = window_size
 
-    tiles = []
-    for key, start, end in instances:
-        tiles.append(
-            _grid_movie_tile(
-                key,
-                start,
-                end,
-                video_paths,
-                centroids,
-                headings,
-                dot_color,
-                window_size,
-                scaled_window_size,
-                before_onset_frames,
-                after_onset_frames,
-                dot_radius,
-                overlay_keypoints,
-                edges,
-                coordinates,
-                plot_options,
-                video_frame_indexes,
-                use_dims,
-            )
-        )
-
-    tiles = np.stack(tiles).reshape(
-        rows,
-        cols,
-        after_onset_frames + before_onset_frames,
-        scaled_window_size,
-        scaled_window_size,
-        3,
+    tile_args = dict(
+        video_paths=video_paths,
+        centroids=centroids,
+        headings=headings,
+        dot_color=dot_color,
+        window_size=window_size,
+        scaled_window_size=scaled_window_size,
+        before_onset_frames=before_onset_frames,
+        after_onset_frames=after_onset_frames,
+        dot_radius=dot_radius,
+        overlay_keypoints=overlay_keypoints,
+        edges=edges,
+        coordinates=coordinates,
+        plot_options=plot_options,
+        video_frame_indexes=video_frame_indexes,
+        use_dims=use_dims,
     )
-    frames = np.concatenate(np.concatenate(tiles, axis=2), axis=2)
+    with ThreadPoolExecutor(_num_workers()) as pool:
+        return _grid_movie_frames(pool, instances, rows, cols, tile_args)
+
+
+def _grid_movie_frames(pool, instances, rows, cols, tile_args):
+    """The frames of a grid movie, with each tile built on a thread of `pool`
+    and written into place. `tile_args` are `_grid_movie_tile`'s arguments
+    after the instance."""
+    size = tile_args["scaled_window_size"]
+    num_frames = tile_args["before_onset_frames"] + tile_args["after_onset_frames"]
+    # tiles of keypoints alone are drawn on a float background
+    dtype = np.uint8 if tile_args["video_paths"] is not None else float
+    frames = np.zeros((num_frames, rows * size, cols * size, 3), dtype)
+
+    def place(i, instance):
+        row, col = divmod(i, cols)
+        tile = _grid_movie_tile(*instance, **tile_args)
+        frames[:, row * size : (row + 1) * size, col * size : (col + 1) * size] = tile
+
+    list(pool.map(place, range(len(instances)), instances))
     return frames
 
 
@@ -1375,32 +1412,37 @@ def generate_grid_movies(
     plot_options.update({"keypoint_colormap": keypoint_colormap})
 
     # generate grid movies
-    for syllable, instances in tqdm.tqdm(
-        sampled_instances.items(), desc="Generating grid movies", ncols=72
-    ):
-        frames = grid_movie(
-            instances,
-            rows,
-            cols,
-            video_paths,
-            centroids,
-            headings,
-            window_size,
-            video_frame_indexes,
-            edges=edges,
-            scaled_window_size=scaled_window_size,
-            dot_color=dot_color,
-            before_onset_frames=before_onset_frames,
-            after_onset_frames=after_onset_frames,
-            dot_radius=dot_radius,
-            overlay_keypoints=overlay_keypoints,
-            coordinates=coordinates,
-            plot_options=plot_options,
-            use_dims=use_dims,
-        )
-
-        path = os.path.join(output_dir, f"syllable{syllable}.mp4")
-        write_video_clip(frames, path, fps=fps, quality=quality)
+    tile_args = dict(
+        video_paths=video_paths,
+        centroids=centroids,
+        headings=headings,
+        dot_color=dot_color,
+        window_size=window_size,
+        scaled_window_size=scaled_window_size,
+        before_onset_frames=before_onset_frames,
+        after_onset_frames=after_onset_frames,
+        dot_radius=dot_radius,
+        overlay_keypoints=overlay_keypoints,
+        edges=edges,
+        coordinates=coordinates,
+        plot_options=plot_options,
+        video_frame_indexes=video_frame_indexes,
+        use_dims=use_dims,
+    )
+    # Each movie is encoded on its own thread while the next one's tiles are
+    # built, with at most one movie waiting to be encoded.
+    with ThreadPoolExecutor(_num_workers()) as pool, ThreadPoolExecutor(1) as encoder:
+        encoding = None
+        for syllable, instances in tqdm.tqdm(
+            sampled_instances.items(), desc="Generating grid movies", ncols=72
+        ):
+            frames = _grid_movie_frames(pool, instances, rows, cols, tile_args)
+            path = os.path.join(output_dir, f"syllable{syllable}.mp4")
+            if encoding is not None:
+                encoding.result()
+            encoding = encoder.submit(write_video_clip, frames, path, fps=fps, quality=quality)
+        if encoding is not None:
+            encoding.result()
 
     return sampled_instances
 
