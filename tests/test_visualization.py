@@ -924,3 +924,62 @@ def test_typical_trajectories_are_the_median_instance_trajectories():
             headings={name: r["heading"] for name, r in results.items()},
         )
         np.testing.assert_array_equal(typical[syllable], np.nanmedian(trajectories, axis=0))
+
+
+def small_trajectories(n_trajectories=2, n_frames=20, n_keypoints=4, seed=0):
+    """Titles, trajectories, axis limits and edges for `plot_trajectories`."""
+    rng = np.random.default_rng(seed)
+    Xs = np.cumsum(rng.normal(size=(n_trajectories, n_frames, n_keypoints, 2)), axis=1)
+    lims = kpms.get_limits(Xs, pctl=0, left=0.1, right=0.1, top=0.2, bottom=0.2)
+    titles = [f"Syllable{i}" for i in range(n_trajectories)]
+    edges = [(i, i + 1) for i in range(n_keypoints - 1)]
+    return titles, Xs, lims, edges
+
+
+def test_trajectory_frames_show_each_step_over_the_earlier_ones():
+    """Frame i of the GIF shows the steps up to i with their fade layers and
+    the titles, as the finished figure does with the later steps hidden."""
+    titles, Xs, lims, edges = small_trajectories()
+
+    fig, ax, rasters = kpms.plot_trajectories(
+        titles, Xs, lims, edges=edges, plot_width=2, return_rasters=True
+    )
+
+    artists = [a for a in ax.get_children() if a.get_zorder() > 0 and not hasattr(a, "get_text")]
+    assert len(rasters) == 10
+    for i, raster in enumerate(rasters):
+        for artist in artists:
+            artist.set_visible(artist.get_zorder() <= i * 4 + 3)
+        fig.canvas.draw()
+        expected = np.asarray(fig.canvas.buffer_rgba())[..., :3]
+        np.testing.assert_array_equal(raster, expected, err_msg=f"frame {i}")
+    plt.close(fig)
+
+
+def test_trajectory_frames_render_the_figure_once(monkeypatch):
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    titles, Xs, lims, edges = small_trajectories()
+    draws = count_calls(monkeypatch, FigureCanvasAgg, "draw")
+
+    fig, _, rasters = kpms.plot_trajectories(
+        titles, Xs, lims, edges=edges, plot_width=2, return_rasters=True
+    )
+
+    assert len(rasters) == 10
+    assert len(draws) == 1
+    plt.close(fig)
+
+
+def test_trajectory_edges_are_drawn_as_one_line_collection_per_step_and_color():
+    from matplotlib.collections import LineCollection
+
+    titles, Xs, lims, edges = small_trajectories()
+
+    fig, ax, _ = kpms.plot_trajectories(titles, Xs, lims, edges=edges, plot_width=2)
+
+    collections = [c for c in ax.collections if isinstance(c, LineCollection)]
+    assert ax.lines == []
+    assert len(collections) == 2 * 10
+    assert all(len(c.get_segments()) == len(Xs) * len(edges) for c in collections)
+    plt.close(fig)

@@ -9,6 +9,7 @@ import h5py
 import numpy as np
 import plotly
 import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
 from scipy.ndimage import gaussian_filter1d
 from vidio.read import OpenCVReader
 from scipy.spatial.distance import squareform, pdist
@@ -1659,7 +1660,7 @@ def plot_trajectories(
     title_xy = (lims * np.array([[0.5, 0.1], [0.5, 0.9]])).sum(0)
     title_color = "w" if invert else "k"
 
-    for xy, text in zip(offsets + title_xy, titles):
+    title_artists = [
         ax.text(
             *xy,
             text,
@@ -1668,6 +1669,8 @@ def plot_trajectories(
             va="top",
             zorder=Xs.shape[1] * 4 + 4,
         )
+        for xy, text in zip(offsets + title_xy, titles)
+    ]
 
     # final extents in axis
     final_width = xmax - xmin
@@ -1685,49 +1688,75 @@ def plot_trajectories(
 
     rasters = []  # for making a gif
 
+    if return_rasters:
+        # Each frame is drawn by adding the new step's artists to the previous
+        # frame. The titles, which lie above every step, are drawn on a copy
+        # of the canvas for each frame.
+        for text in title_artists:
+            text.set_visible(False)
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+
+    edge_colors = [colors[ii] for X in Xs for ii, jj in edges]
+    node_colors = np.tile(np.asarray(colors), (len(Xs), 1))
+
     for i in range(Xs.shape[1]):
-        for X, offset in zip(Xs, offsets):
-            for ii, jj in edges:
-                ax.plot(
-                    *X[i, (ii, jj)].T,
-                    c="k",
-                    zorder=i * 4,
-                    linewidth=line_width,
+        step_artists = []
+        if len(edges) > 0:
+            segments = [X[i, (ii, jj)] for X in Xs for ii, jj in edges]
+            for edge_color, width, zorder in [
+                ("k", line_width, i * 4),
+                (edge_colors, line_width * 0.9, i * 4 + 1),
+            ]:
+                lines = LineCollection(
+                    segments,
+                    colors=edge_color,
+                    linewidths=width,
+                    zorder=zorder,
+                    capstyle="projecting",
                     clip_on=False,
                 )
+                step_artists.append(ax.add_collection(lines, autolim=False))
 
-            for ii, jj in edges:
-                ax.plot(
-                    *X[i, (ii, jj)].T,
-                    c=colors[ii],
-                    zorder=i * 4 + 1,
-                    linewidth=line_width * 0.9,
-                    clip_on=False,
-                )
-
+        step_artists.append(
             ax.scatter(
-                *X[i].T,
-                c=colors,
+                *Xs[:, i].reshape(-1, 2).T,
+                c=node_colors,
                 zorder=i * 4 + 2,
                 edgecolor="k",
                 linewidth=0.4,
                 s=node_size,
                 clip_on=False,
             )
+        )
 
         if i < Xs.shape[1] - 1:
-            ax.fill_between(
-                [xmin, xmax],
-                y1=[ymax, ymax],
-                y2=[ymin, ymin],
-                facecolor=fill_color,
-                alpha=alpha,
-                zorder=i * 4 + 3,
-                clip_on=False,
+            step_artists.append(
+                ax.fill_between(
+                    [xmin, xmax],
+                    y1=[ymax, ymax],
+                    y2=[ymin, ymin],
+                    facecolor=fill_color,
+                    alpha=alpha,
+                    zorder=i * 4 + 3,
+                    clip_on=False,
+                )
             )
 
         if return_rasters:
-            rasters.append(rasterize_figure(fig))
+            for artist in step_artists:
+                artist.draw(renderer)
+            step_pixels = fig.canvas.copy_from_bbox(fig.bbox)
+            for text in title_artists:
+                text.set_visible(True)
+                text.draw(renderer)
+            rasters.append(np.asarray(fig.canvas.buffer_rgba())[..., :3].copy())
+            fig.canvas.restore_region(step_pixels)
+            for text in title_artists:
+                text.set_visible(False)
+
+    for text in title_artists:
+        text.set_visible(True)
 
     return fig, ax, rasters
 
