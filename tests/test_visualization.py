@@ -864,3 +864,63 @@ def test_overlay_refuses_keypoints_past_the_end_of_the_video(tmp_path):
         kpms.overlay_keypoints_on_video(video, coordinates, output_path=str(output))
 
     assert not output.exists()
+
+
+def count_calls(monkeypatch, module, name):
+    """Replace `module.name` with a wrapper that records the arguments of each
+    call, and return the list it records into."""
+    calls = []
+    function = getattr(module, name)
+
+    def counted(*args, **kwargs):
+        calls.append((args, kwargs))
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(module, name, counted)
+    return calls
+
+
+@pytest.mark.parametrize("density_sample", [True, False], ids=["density_sampled", "all_instances"])
+def test_typical_trajectories_filter_centroids_and_headings_once(monkeypatch, density_sample):
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    calls = count_calls(monkeypatch, kpms.util, "filter_centroids_headings")
+
+    typical = kpms.util.get_typical_trajectories(
+        moving_keypoints(results),
+        results,
+        min_frequency=0.0,
+        density_sample=density_sample,
+        sampling_options={"n_neighbors": 10},
+    )
+
+    assert len(typical) > 1
+    assert len(calls) == 1
+
+
+def test_typical_trajectories_are_the_median_instance_trajectories():
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    coordinates = moving_keypoints(results)
+    instances = get_syllable_instances(
+        {name: r["syllable"] for name, r in results.items()},
+        before_onset_frames=5,
+        after_onset_frames=15,
+        min_instance_duration_frames=3,
+        min_frequency=0.0,
+        min_instances=1,
+    )
+
+    typical = kpms.util.get_typical_trajectories(
+        coordinates, results, min_frequency=0.0, density_sample=False
+    )
+
+    assert sorted(typical) == sorted(instances)
+    for syllable, syllable_instances in instances.items():
+        trajectories = kpms.util.get_instance_trajectories(
+            syllable_instances,
+            coordinates,
+            before_onset_frames=5,
+            after_onset_frames=15,
+            centroids={name: r["centroid"] for name, r in results.items()},
+            headings={name: r["heading"] for name, r in results.items()},
+        )
+        np.testing.assert_array_equal(typical[syllable], np.nanmedian(trajectories, axis=0))

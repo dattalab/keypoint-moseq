@@ -875,7 +875,26 @@ def get_instance_trajectories(
         centroids, headings = filter_centroids_headings(
             centroids, headings, smoothing_filter_frames=smoothing_filter_frames
         )
+    return _instance_trajectories(
+        syllable_instances,
+        coordinates,
+        before_onset_frames,
+        after_onset_frames,
+        centroids,
+        headings,
+    )
 
+
+def _instance_trajectories(
+    syllable_instances,
+    coordinates,
+    before_onset_frames,
+    after_onset_frames,
+    centroids,
+    headings,
+):
+    """Trajectories as returned by :py:func:`get_instance_trajectories`, from
+    `centroids` and `headings` that are already median-filtered."""
     if after_onset_frames is None:
         trajectories = [
             coordinates[key][s - before_onset_frames : e] for key, s, e in syllable_instances
@@ -957,6 +976,39 @@ def sample_instances(
         Dictionary in the same format as `syllable_instances` mapping each
         syllable to a list of sampled instances.
     """
+    return _sample_instances(
+        syllable_instances,
+        num_samples,
+        mode=mode,
+        pca_samples=pca_samples,
+        pca_dim=pca_dim,
+        n_neighbors=n_neighbors,
+        coordinates=coordinates,
+        before_onset_frames=before_onset_frames,
+        after_onset_frames=after_onset_frames,
+        centroids=centroids,
+        headings=headings,
+        smoothing_filter_frames=smoothing_filter_frames,
+    )
+
+
+def _sample_instances(
+    syllable_instances,
+    num_samples,
+    mode="random",
+    pca_samples=50000,
+    pca_dim=4,
+    n_neighbors=50,
+    coordinates=None,
+    before_onset_frames=5,
+    after_onset_frames=15,
+    centroids=None,
+    headings=None,
+    smoothing_filter_frames=9,
+    filtered=False,
+):
+    """:py:func:`sample_instances`, where `filtered=True` means `centroids`
+    and `headings` are already median-filtered."""
     assert mode in ["random", "density"]
     assert all([len(v) >= num_samples for v in syllable_instances.values()])
     assert n_neighbors >= num_samples
@@ -979,15 +1031,19 @@ def sample_instances(
             outliers = np.isnan(coordinates[key]).any(-1)
             coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
 
+        if not filtered:
+            centroids, headings = filter_centroids_headings(
+                centroids, headings, smoothing_filter_frames=smoothing_filter_frames
+            )
+
         trajectories = {
-            syllable: get_instance_trajectories(
+            syllable: _instance_trajectories(
                 instances,
                 coordinates,
-                before_onset_frames=before_onset_frames,
-                after_onset_frames=after_onset_frames,
-                centroids=centroids,
-                headings=headings,
-                smoothing_filter_frames=smoothing_filter_frames,
+                before_onset_frames,
+                after_onset_frames,
+                centroids,
+                headings,
             )
             for syllable, instances in syllable_instances.items()
         }
@@ -1657,29 +1713,35 @@ def get_typical_trajectories(
         )
         return
 
+    filtered_centroids, filtered_headings = filter_centroids_headings(centroids, headings)
+
     if density_sample:
         sampling_options["mode"] = "density"
-        sampled_instances = sample_instances(
+        # density sampling reuses the filtered centroids and headings when it
+        # filters with the same kernel size
+        filtered = sampling_options.get("smoothing_filter_frames", 9) == 9
+        sampled_instances = _sample_instances(
             syllable_instances,
             sampling_options["n_neighbors"],
             coordinates=coordinates,
-            centroids=centroids,
-            headings=headings,
+            centroids=filtered_centroids if filtered else centroids,
+            headings=filtered_headings if filtered else headings,
             before_onset_frames=before_onset_frames,
             after_onset_frames=after_onset_frames,
+            filtered=filtered,
             **sampling_options,
         )
     else:
         sampled_instances = syllable_instances
 
     trajectories = {
-        syllable: get_instance_trajectories(
+        syllable: _instance_trajectories(
             instances,
             coordinates,
-            before_onset_frames=before_onset_frames,
-            after_onset_frames=after_onset_frames,
-            centroids=centroids,
-            headings=headings,
+            before_onset_frames,
+            after_onset_frames,
+            filtered_centroids,
+            filtered_headings,
         )
         for syllable, instances in sampled_instances.items()
     }
