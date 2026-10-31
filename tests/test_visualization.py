@@ -1003,3 +1003,44 @@ def test_gif_frames_are_quantized_with_fast_octree(tmp_path, monkeypatch):
         expected = Image.fromarray(frame).quantize(256, method=Image.Quantize.FASTOCTREE)
         np.testing.assert_array_equal(decoded_frame, np.asarray(expected.convert("RGB")))
     assert methods == [Image.Quantize.FASTOCTREE] * 3
+
+
+def test_saving_trajectory_plots_without_animations_renders_nothing_with_agg(
+    tmp_path, monkeypatch
+):
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    draws = count_calls(monkeypatch, FigureCanvasAgg, "draw")
+
+    kpms.generate_trajectory_plots(
+        moving_keypoints(results),
+        results,
+        output_dir=str(tmp_path),
+        save_gifs=False,
+        fps=30,
+        min_frequency=0.0,
+    )
+    plt.close("all")
+
+    assert any(name.endswith(".pdf") for name in os.listdir(tmp_path))
+    assert draws == []
+
+
+def test_saving_the_dendrogram_renders_it_with_agg_once(tmp_path, monkeypatch):
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    draws = count_calls(monkeypatch, FigureCanvasAgg, "draw")
+
+    kpms.plot_similarity_dendrogram(
+        moving_keypoints(results),
+        results,
+        save_path=str(tmp_path / "dendrogram"),
+        fps=30,
+        min_frequency=0.0,
+    )
+    plt.close("all")
+
+    assert sorted(os.listdir(tmp_path)) == ["dendrogram.pdf", "dendrogram.png"]
+    assert len(draws) == 1  # for the PNG

@@ -1983,7 +1983,7 @@ def generate_trajectory_plots(
                     **plot_options,
                 )
 
-                plt.savefig(os.path.join(output_dir, f"{title}{suffix}.pdf"))
+                fig.savefig(os.path.join(output_dir, f"{title}{suffix}.pdf"))
                 plt.close(fig=fig)
 
                 n_frames = before_onset_frames + after_onset_frames
@@ -2006,7 +2006,7 @@ def generate_trajectory_plots(
             **plot_options,
         )
 
-        plt.savefig(os.path.join(output_dir, f"all_trajectories{suffix}.pdf"))
+        fig.savefig(os.path.join(output_dir, f"all_trajectories{suffix}.pdf"))
         plt.show()
 
         n_frames = before_onset_frames + after_onset_frames
@@ -2455,7 +2455,7 @@ def plot_similarity_dendrogram(
 
     print(f"Saving dendrogram plot to {save_path}")
     for ext in ["pdf", "png"]:
-        plt.savefig(save_path + "." + ext)
+        fig.savefig(save_path + "." + ext)
 
 
 def matplotlib_colormap_to_plotly(cmap):
