@@ -1066,3 +1066,21 @@ def test_instance_trajectories_apply_the_rigid_transform_with_one_shape(monkeypa
         assert trajectories.shape == (n_instances, 20, 4, 2)
 
     assert len({args[0].shape for args, _ in transforms}) == 1
+
+
+def test_centroids_are_median_filtered_one_coordinate_at_a_time(monkeypatch):
+    """scipy's 1D median filter, faster than its general rank filter, gives
+    the same result as filtering the (n_frames, d) centroid with a (9, 1)
+    kernel."""
+    from scipy.ndimage import median_filter
+
+    rng = np.random.default_rng(0)
+    centroids = {"a": rng.normal(size=(200, 2)), "b": rng.normal(size=(150, 3))}
+    headings = {"a": rng.uniform(-np.pi, np.pi, 200), "b": rng.uniform(-np.pi, np.pi, 150)}
+    filters = count_calls(monkeypatch, kpms.util, "median_filter")
+
+    filtered_centroids, _ = kpms.util.filter_centroids_headings(centroids, headings, 9)
+
+    for name, centroid in centroids.items():
+        np.testing.assert_array_equal(filtered_centroids[name], median_filter(centroid, (9, 1)))
+    assert {args[0].ndim for args, _ in filters} == {1}

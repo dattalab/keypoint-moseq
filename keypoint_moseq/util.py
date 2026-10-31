@@ -683,7 +683,12 @@ def filter_centroids_headings(centroids, headings, smoothing_filter_frames=9):
     filtered_centroids: dict
     filtered_headings: dict
     """
-    centroids = {k: median_filter(v, (smoothing_filter_frames, 1)) for k, v in centroids.items()}
+    # each coordinate is filtered as a 1D array, which scipy does faster than
+    # the (n_frames, d) array with a (smoothing_filter_frames, 1) kernel
+    centroids = {
+        k: np.stack([median_filter(x, smoothing_filter_frames) for x in v.T], axis=1)
+        for k, v in centroids.items()
+    }
     headings = {k: filter_angle(v, size=smoothing_filter_frames) for k, v in headings.items()}
     return centroids, headings
 
