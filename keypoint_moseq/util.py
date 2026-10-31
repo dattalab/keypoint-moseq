@@ -914,9 +914,23 @@ def _instance_trajectories(
         if centroids is not None and headings is not None:
             c = np.array([centroids[key][s] for key, s, e in syllable_instances])[:, None]
             h = np.array([headings[key][s] for key, s, e in syllable_instances])[:, None]
-            trajectories = np_io(inverse_rigid_transform)(trajectories, c, h)
+            trajectories = _inverse_rigid_transform_in_chunks(trajectories, c, h)
 
     return trajectories
+
+
+def _inverse_rigid_transform_in_chunks(Y, v, h, chunk_size=1024):
+    """Apply `inverse_rigid_transform` to arrays of instances in chunks of
+    `chunk_size` along the first axis, padding the last chunk, so that the
+    jitted transform compiles once for any number of instances."""
+    if len(Y) == 0:
+        return np_io(inverse_rigid_transform)(Y, v, h)
+    transformed = []
+    for start in range(0, len(Y), chunk_size):
+        n = min(chunk_size, len(Y) - start)
+        chunk = [pad_along_axis(x[start : start + n], (0, chunk_size - n)) for x in (Y, v, h)]
+        transformed.append(np_io(inverse_rigid_transform)(*chunk)[:n])
+    return np.concatenate(transformed)
 
 
 def sample_instances(

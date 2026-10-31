@@ -1044,3 +1044,25 @@ def test_saving_the_dendrogram_renders_it_with_agg_once(tmp_path, monkeypatch):
 
     assert sorted(os.listdir(tmp_path)) == ["dendrogram.pdf", "dendrogram.png"]
     assert len(draws) == 1  # for the PNG
+
+
+def test_instance_trajectories_apply_the_rigid_transform_with_one_shape(monkeypatch):
+    """The jitted transform sees the same array shape for any number of
+    instances, so it compiles once."""
+    results = synthetic_results(["rec_a"], n_frames=300)
+    coordinates = moving_keypoints(results)
+    transforms = count_calls(monkeypatch, kpms.util, "inverse_rigid_transform")
+
+    for n_instances in [3, 7]:
+        instances = [("rec_a", start, start + 5) for start in range(20, 20 + 10 * n_instances, 10)]
+        trajectories = kpms.util.get_instance_trajectories(
+            instances,
+            coordinates,
+            before_onset_frames=5,
+            after_onset_frames=15,
+            centroids={"rec_a": results["rec_a"]["centroid"]},
+            headings={"rec_a": results["rec_a"]["heading"]},
+        )
+        assert trajectories.shape == (n_instances, 20, 4, 2)
+
+    assert len({args[0].shape for args, _ in transforms}) == 1
