@@ -538,6 +538,53 @@ def _to_session_precision(tree):
     return jax.tree_util.tree_map(convert, tree)
 
 
+def _model_to_session_precision(model):
+    """Return `model` in the session's precision (see `_to_session_precision`)
+    and whether any of its arrays were converted."""
+    converted = _to_session_precision(model)
+    leaves = jax.tree_util.tree_leaves(model)
+    changed = any(
+        a is not b for a, b in zip(leaves, jax.tree_util.tree_leaves(converted))
+    )
+    return converted, changed
+
+
+def _print_conversion_notice():
+    """Tell the user a model was converted to the session's precision."""
+    if jax.config.read("jax_enable_x64"):
+        saved, session = 32, 64
+    else:
+        saved, session = 64, 32
+    print(
+        fill(
+            f"This model was saved in {saved}-bit precision and is converted to "
+            f"{session}-bit, the precision JAX is running in."
+        )
+    )
+
+
+def _load_checkpoint(path, iteration=None):
+    """`load_checkpoint` for a checkpoint path, also returning whether the
+    model was converted to the session's precision."""
+    with h5py.File(path, "r") as f:
+        saved_iterations = np.sort([int(i) for i in f["model_snapshots"]])
+
+    if iteration is None:
+        iteration = saved_iterations[-1]
+    else:
+        assert iteration in saved_iterations, fill(
+            f"No snapshot found for iteration {iteration}. "
+            f"Available iterations are {saved_iterations}"
+        )
+
+    model, converted = _model_to_session_precision(
+        load_hdf5(path, f"model_snapshots/{iteration}")
+    )
+    metadata = load_hdf5(path, "metadata")
+    data = _to_session_precision(load_hdf5(path, "data"))
+    return model, data, metadata, iteration, converted
+
+
 def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None):
     """Load data and model snapshot from a saved checkpoint.
 
@@ -584,21 +631,9 @@ def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None
         Iteration of model fitting corresponding to the loaded snapshot.
     """
     path = _get_path(project_dir, model_name, path, "checkpoint.h5")
-
-    with h5py.File(path, "r") as f:
-        saved_iterations = np.sort([int(i) for i in f["model_snapshots"]])
-
-    if iteration is None:
-        iteration = saved_iterations[-1]
-    else:
-        assert iteration in saved_iterations, fill(
-            f"No snapshot found for iteration {iteration}. "
-            f"Available iterations are {saved_iterations}"
-        )
-
-    model = _to_session_precision(load_hdf5(path, f"model_snapshots/{iteration}"))
-    metadata = load_hdf5(path, "metadata")
-    data = _to_session_precision(load_hdf5(path, "data"))
+    model, data, metadata, iteration, converted = _load_checkpoint(path, iteration)
+    if converted:
+        _print_conversion_notice()
     return model, data, metadata, iteration
 
 

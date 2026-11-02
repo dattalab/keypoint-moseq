@@ -161,3 +161,108 @@ def test_model_in_other_precision_runs_in_session_precision(
     (sampled,) = sampled_models
     assert wrong_dtypes(sampled, session_x64) == []
     assert type(sampled["hypparams"]["trans_hypparams"]["kappa"]) is float
+
+
+CONVERSION_NOTICE = "the precision JAX is running in"
+
+
+def conversion_notices(text):
+    """Number of conversion notices in printed output (wrapped by `fill`)."""
+    return " ".join(text.split()).count(CONVERSION_NOTICE)
+
+
+def save_checkpoint(path, model, data, metadata):
+    kpms.save_hdf5(
+        str(path), {"model_snapshots": {"0": model}, "metadata": metadata, "data": data}
+    )
+    return str(path)
+
+
+def test_conversion_notice_once_per_mismatched_model(
+    session_x64, one_recording, sampled_models, capsys, tmp_path
+):
+    """Loading a checkpoint in the other precision prints the notice once,
+    naming both precisions, and applying the loaded model prints nothing more."""
+    config, data, metadata, models = one_recording
+    path = save_checkpoint(
+        tmp_path / "checkpoint.h5",
+        in_precision(models[False], not session_x64),
+        in_precision(data, not session_x64),
+        metadata,
+    )
+    saved, session = ("32", "64") if session_x64 else ("64", "32")
+
+    model, loaded_data, loaded_metadata, _ = kpms.load_checkpoint(path=path)
+    printed = " ".join(capsys.readouterr().out.split())
+
+    assert conversion_notices(printed) == 1
+    assert (
+        f"This model was saved in {saved}-bit precision and is converted to "
+        f"{session}-bit, the precision JAX is running in." in printed
+    )
+
+    with pytest.raises(Sampled):
+        kpms.apply_model(
+            model, loaded_data, loaded_metadata, num_iters=1, save_results=False,
+            **in_precision(config, session_x64),
+        )
+    assert conversion_notices(capsys.readouterr().out) == 0
+
+
+def test_no_conversion_notice_for_a_matching_model(
+    session_x64, one_recording, sampled_models, capsys, tmp_path
+):
+    config, data, metadata, models = one_recording
+    path = save_checkpoint(
+        tmp_path / "checkpoint.h5",
+        in_precision(models[False], session_x64),
+        in_precision(data, session_x64),
+        metadata,
+    )
+
+    model, loaded_data, loaded_metadata, _ = kpms.load_checkpoint(path=path)
+    with pytest.raises(Sampled):
+        kpms.apply_model(
+            model, loaded_data, loaded_metadata, num_iters=1, save_results=False,
+            **in_precision(config, session_x64),
+        )
+
+    assert conversion_notices(capsys.readouterr().out) == 0
+
+
+def test_conversion_notice_once_when_applying_a_mismatched_model(
+    session_x64, one_recording, sampled_models, capsys
+):
+    """A model in the other precision handed straight to apply_model prints
+    the notice once; data from format_data is converted without one."""
+    config, data, metadata, models = one_recording
+
+    with pytest.raises(Sampled):
+        kpms.apply_model(
+            in_precision(models[False], not session_x64), data, metadata,
+            num_iters=1, save_results=False, **in_precision(config, session_x64),
+        )
+
+    assert conversion_notices(capsys.readouterr().out) == 1
+
+
+def test_init_model_on_format_data_output_in_a_float32_session(
+    one_recording, tutorial_pca, capsys
+):
+    """format_data returns float64 arrays, which init_model runs on in a
+    float32 session, without a conversion notice."""
+    config, data, metadata, _ = one_recording
+    pca, _ = tutorial_pca
+    assert {str(array.dtype) for array in data.values()} == {"float64"}
+
+    before = jax.config.x64_enabled
+    jax.config.update("jax_enable_x64", False)
+    try:
+        model = kpms.init_model(
+            data, metadata=metadata, pca=pca, **in_precision(config, False)
+        )
+    finally:
+        jax.config.update("jax_enable_x64", before)
+
+    assert wrong_dtypes(model, False) == []
+    assert conversion_notices(capsys.readouterr().out) == 0

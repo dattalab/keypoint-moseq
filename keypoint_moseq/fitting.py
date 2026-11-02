@@ -12,7 +12,12 @@ from itertools import zip_longest
 
 from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_hdf5, load_hdf5, extract_results, load_checkpoint
-from keypoint_moseq.io import _to_session_precision
+from keypoint_moseq.io import (
+    _load_checkpoint,
+    _model_to_session_precision,
+    _print_conversion_notice,
+    _to_session_precision,
+)
 from keypoint_moseq.util import get_recording_lengths
 from jax_moseq.models import allo_keypoint_slds, keypoint_slds
 from jax_moseq.models.arhmm import stateseq_marginals, marginal_log_likelihood
@@ -209,6 +214,15 @@ def _set_parallel_flag(parallel_message_passing):
     return parallel_message_passing
 
 
+def _model_in_session_precision(model):
+    """Return `model` in the session's precision, printing a notice if it was
+    converted."""
+    model, converted = _model_to_session_precision(model)
+    if converted:
+        _print_conversion_notice()
+    return model
+
+
 def init_model(
     *args,
     location_aware=False,
@@ -250,6 +264,12 @@ def init_model(
         If the device runs out of memory, with the data size, the settings in
         effect and ways to fit within memory.
     """
+    # format_data returns float64 arrays whatever the session's precision
+    if args:
+        args = (_to_session_precision(args[0]), *args[1:])
+    elif kwargs.get("data") is not None:
+        kwargs["data"] = _to_session_precision(kwargs["data"])
+
     try:
         if location_aware:
             num_states = trans_hypparams["num_states"]
@@ -521,7 +541,7 @@ def fit_model(
                         del f["model_snapshots"][k]
 
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
-    model = device_put_as_scalar(_to_session_precision(model))
+    model = device_put_as_scalar(_model_in_session_precision(model))
     data = _to_session_precision(data)
 
     if location_aware:
@@ -668,7 +688,7 @@ def apply_model(
     """
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
     data = jax.device_put(_to_session_precision(data))
-    model = _to_session_precision(model)
+    model = _model_in_session_precision(model)
 
     if save_results:
         if results_path is None:
@@ -812,7 +832,7 @@ def estimate_syllable_marginals(
     """
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
     data = jax.device_put(_to_session_precision(data))
-    model = _to_session_precision(model)
+    model = _model_in_session_precision(model)
 
     model = init_model(
         data=data,
@@ -1012,11 +1032,14 @@ def expected_marginal_likelihoods(
             for model_name in model_names
         ]
 
-    xs, params = [], []
+    xs, params, any_converted = [], [], False
     for checkpoint_path in checkpoint_paths:
-        model, data, _, _ = load_checkpoint(path=checkpoint_path)
+        model, data, _, _, converted = _load_checkpoint(checkpoint_path)
+        any_converted |= converted
         xs.append(model["states"]["x"])
         params.append(model["params"])
+    if any_converted:
+        _print_conversion_notice()
 
     num_models = len(xs)
     mlls = np.zeros((num_models, num_models))
