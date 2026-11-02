@@ -512,11 +512,41 @@ def load_pca(project_dir, pca_path=None):
     return joblib.load(pca_path)
 
 
+def _to_session_precision(tree):
+    """Return `tree` with its arrays in the precision JAX runs in.
+
+    Floating-point arrays become float64 when JAX's 64-bit mode is on and
+    float32 when it is off, and signed-integer arrays become int64 or int32
+    likewise, which is what jax-moseq's `check_precision` requires. Unsigned
+    arrays (the random seed, a uint32 PRNG key), strings and Python scalars
+    (such as the scalar hyperparameters, which `update_hypparams` edits) are
+    kept. Arrays already in the session's precision are not copied, and numpy
+    arrays stay numpy arrays.
+    """
+    x64 = jax.config.read("jax_enable_x64")
+    floating = np.float64 if x64 else np.float32
+    integer = np.int64 if x64 else np.int32
+
+    def convert(leaf):
+        if isinstance(leaf, (np.ndarray, jax.Array)):
+            if np.issubdtype(leaf.dtype, np.floating) and leaf.dtype != floating:
+                return leaf.astype(floating)
+            if np.issubdtype(leaf.dtype, np.signedinteger) and leaf.dtype != integer:
+                return leaf.astype(integer)
+        return leaf
+
+    return jax.tree_util.tree_map(convert, tree)
+
+
 def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None):
     """Load data and model snapshot from a saved checkpoint.
 
     The checkpoint path can be specified directly via `path` or else it is
     assumed to be `{project_dir}/{model_name}/checkpoint.h5`.
+
+    The model and data are returned in the precision JAX runs in (float32,
+    or float64 when `jax_enable_x64` is on), whichever precision the
+    checkpoint was saved in.
 
     Parameters
     ----------
@@ -566,9 +596,9 @@ def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None
             f"Available iterations are {saved_iterations}"
         )
 
-    model = load_hdf5(path, f"model_snapshots/{iteration}")
+    model = _to_session_precision(load_hdf5(path, f"model_snapshots/{iteration}"))
     metadata = load_hdf5(path, "metadata")
-    data = load_hdf5(path, "data")
+    data = _to_session_precision(load_hdf5(path, "data"))
     return model, data, metadata, iteration
 
 

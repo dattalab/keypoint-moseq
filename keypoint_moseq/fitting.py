@@ -12,6 +12,7 @@ from itertools import zip_longest
 
 from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_hdf5, load_hdf5, extract_results, load_checkpoint
+from keypoint_moseq.io import _to_session_precision
 from keypoint_moseq.util import get_recording_lengths
 from jax_moseq.models import allo_keypoint_slds, keypoint_slds
 from jax_moseq.models.arhmm import stateseq_marginals, marginal_log_likelihood
@@ -520,7 +521,8 @@ def fit_model(
                         del f["model_snapshots"][k]
 
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
-    model = device_put_as_scalar(model)
+    model = device_put_as_scalar(_to_session_precision(model))
+    data = _to_session_precision(data)
 
     if location_aware:
         resample_func = allo_keypoint_slds.resample_model
@@ -665,7 +667,8 @@ def apply_model(
         prior, and random seed. Only returned if `return_model=True`.
     """
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
-    data = jax.device_put(data)
+    data = jax.device_put(_to_session_precision(data))
+    model = _to_session_precision(model)
 
     if save_results:
         if results_path is None:
@@ -808,7 +811,8 @@ def estimate_syllable_marginals(
         Only returned if `return_samples=True`.
     """
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
-    data = jax.device_put(data)
+    data = jax.device_put(_to_session_precision(data))
+    model = _to_session_precision(model)
 
     model = init_model(
         data=data,
