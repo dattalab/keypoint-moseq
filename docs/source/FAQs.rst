@@ -595,7 +595,7 @@ Adjust the sampler
 
 If you're in 64-bit precision mode and your data looks clean but the NaNs persist, try these. Each is a keyword argument to the function that produced the NaNs (``fit_model``, ``apply_model`` or ``estimate_syllable_marginals``).
 
-- **Increase** ``jitter``. Jitter is a small variance added to each pose draw so the matrix math doesn't fail. It's measured in the model's latent pose space, where each dimension has variance 1 (with the default ``whiten: true``). The default 1e-3 is 0.1% of that; try 1e-2. Much larger values add noise on the scale of the animal's own frame-to-frame movement. Jitter only affects the serial Kalman sampler, which is the default on CPU or when ``parallel_message_passing=False``.
+- **Increase** ``jitter``. Jitter is a small variance added to each pose draw so the matrix math doesn't fail. It's measured in the model's latent pose space, where each dimension has variance 1 (with the default ``whiten: true``). The default 1e-3 is 0.1% of that; try raising it to at most 1e-2. Much larger values add noise on the scale of the animal's own frame-to-frame movement. Jitter only affects the serial Kalman sampler, which is the default on CPU or when ``parallel_message_passing=False``.
 - **Enable parallel Kalman sampling** with ``parallel_message_passing=True``. By default it is only enabled when fitting on a GPU.
 
 If the NaNs persist
