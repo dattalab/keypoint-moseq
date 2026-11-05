@@ -326,6 +326,8 @@ After this, the pipeline can be run as usual, except for steps that involve read
     kpms.overlay_keypoints_on_video(video_path, coordinates[name], ..., video_frame_indexes=video_frame_indexes[name])
 
 
+.. _trimming-inputs:
+
 Trimming inputs
 ---------------
 
