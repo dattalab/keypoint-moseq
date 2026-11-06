@@ -485,7 +485,7 @@ There are two main causes of GPU out of memory (OOM) errors:
 
 2. **Large datasets.** 
 
-  Required GPU memory scales roughly linearly with the size of the dataset. With 4 latent dimensions and 100 states, model fitting needs roughly 0.2–0.3 MB of GPU memory per 100 frames of data, and more with more states. Before fitting on a GPU, keypoint-MoSeq measures the memory its largest steps need and, if they would not fit, runs the pose step over fewer segments at a time, which is slower. If your GPU still isn't big enough, try one of the following:
+  Required GPU memory scales roughly linearly with the size of the dataset. With 4 latent dimensions and 100 states, model fitting needs about 0.5 GB plus roughly 0.05 MB of GPU memory per 100 frames of data, and more with more states. Before fitting on a GPU, keypoint-MoSeq measures the memory its largest steps need and, if they would not fit, runs the pose step over fewer segments at a time, which is slower. If your GPU still isn't big enough, try one of the following:
 
   - Use `Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/stable/docs/keypoint_moseq_colab.ipynb>`_. 
 
