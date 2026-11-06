@@ -9,6 +9,7 @@ import warnings
 from textwrap import fill
 from datetime import datetime
 from itertools import zip_longest
+from math import ceil
 
 from keypoint_moseq.viz import plot_progress
 from keypoint_moseq.io import save_hdf5, load_hdf5, extract_results, load_checkpoint
@@ -19,7 +20,8 @@ from keypoint_moseq.io import (
     _to_session_precision,
 )
 from keypoint_moseq.util import get_recording_lengths
-from jax_moseq.models import allo_keypoint_slds, keypoint_slds
+from jax_moseq.models import allo_keypoint_slds, arhmm, keypoint_slds
+from jax_moseq.models.keypoint_slds import gibbs as keypoint_slds_gibbs
 from jax_moseq.models.arhmm import stateseq_marginals, marginal_log_likelihood
 from jax_moseq.utils.autoregression import get_nlags
 from jax_moseq.utils import check_for_nans, device_put_as_scalar, unbatch
@@ -175,26 +177,187 @@ def _wrapped_resample(
     return model
 
 
-# jax-moseq's mixed_map splits the Kalman sampler's segments into this many
-# batches. The parallel sampler needs 6-9 times less memory in 32 batches at
-# the same speed; each batch of the sequential sampler costs time and saves
-# little memory.
-_MIXED_MAP_ITERS = {True: 32, False: 1}
+# jax-moseq's mixed_map runs the Kalman sampler, the syllable marginals and
+# Viterbi decoding over the segments in sequential passes. With the parallel
+# sampler, passes of 5 segments are the fastest and need far less memory than
+# one pass over every segment. The sequential sampler saves little memory in
+# passes and slows down with each one, so it runs every segment in 1 pass.
+_SEGMENTS_PER_PASS = 5
+# The share of JAX's GPU memory pool the largest step may use. The rest is
+# room for arrays the step doesn't take as arguments and for fragmentation.
+_MEMORY_FRACTION = 0.8
 _kpms_mixed_map_iters = None  # the value kpms last set
+_checked_passes = {}  # passes chosen by the memory check, by array shapes
 
 
-def _set_mixed_map_iters(parallel_message_passing):
-    """Set jax-moseq's mixed_map_iters for the Kalman sampler in use.
+def _gpu_memory_limit():
+    """Bytes in JAX's memory pool on the GPU, or None if there is no GPU
+    memory to check: on CPU, when the device doesn't report its memory, or
+    when mixed_map spreads the segments over several GPUs."""
+    device = jax.devices()[0]
+    if device.platform != "gpu" or get_mixed_map_gpus() != 1:
+        return None
+    stats = device.memory_stats() if hasattr(device, "memory_stats") else None
+    return (stats or {}).get("bytes_limit")
+
+
+def _compiled_bytes(lowered):
+    """Device memory a lowered program needs (arguments, outputs and
+    temporaries, less outputs that reuse argument buffers), or None if the
+    backend doesn't report it.
+
+    Compiling here puts the program in the persistent compilation cache, so
+    the step's first call loads it instead of compiling it again.
+    """
+    stats = lowered.compile().memory_analysis()
+    if stats is None:
+        return None
+    return (
+        stats.argument_size_in_bytes
+        + stats.output_size_in_bytes
+        + stats.temp_size_in_bytes
+        - stats.alias_size_in_bytes
+    )
+
+
+def _syllable_step_bytes(data, model, location_aware):
+    """Memory of the syllable step, the largest step after the pose step.
+
+    The program is lowered with the arguments `resample_model` passes, so
+    that it is the program fitting compiles.
+    """
+    gibbs = allo_keypoint_slds if location_aware else arhmm
+    lowered = gibbs.resample_discrete_stateseqs.lower(
+        model["seed"], **data, **model["states"], **model["params"]
+    )
+    return _compiled_bytes(lowered)
+
+
+def _pose_step_bytes(data, model, jitter):
+    """Memory of the pose step with the parallel Kalman sampler, at the
+    current mixed_map_iters, or None if jax-moseq doesn't expose the step's
+    program."""
+    step = getattr(keypoint_slds_gibbs, "_resample_continuous_stateseqs", None)
+    if step is None:
+        return None
+    states, params = model["states"], model["params"]
+    # the arguments keypoint_slds.resample_continuous_stateseqs passes
+    lowered = step.lower(
+        model["seed"], data["Y"], data["mask"], states["v"], states["h"],
+        states["s"], states["z"], params["Cd"], params["sigmasq"], params["Ab"],
+        params["Q"], jitter, True,
+    )
+    return _compiled_bytes(lowered)
+
+
+def _passes_within_memory(n_segments, pose_bytes, other_bytes, budget):
+    """Number of mixed_map passes whose pose step fits in `budget` bytes.
+
+    Passes hold 5 segments unless the pose step or `other_bytes`, the
+    largest other step, needs more than `budget`. Then passes shrink until
+    the pose step fits, down to 1 segment per pass, which is used whether or
+    not it fits. `pose_bytes(passes)` compiles the pose step at that many
+    passes and returns its memory; it is called as few times as possible.
+    """
+    first = ceil(n_segments / _SEGMENTS_PER_PASS)
+    if other_bytes > budget:
+        return n_segments
+    measured = {}
+
+    def fits(passes):
+        measured[passes] = pose_bytes(passes)
+        return measured[passes] <= budget
+
+    if fits(first):
+        return first
+    if first == n_segments or not fits(n_segments):
+        return n_segments
+    # The pose step's memory is close to linear in segments per pass, so try
+    # the sizes in between from the largest one predicted to fit.
+    largest = ceil(n_segments / first)
+    per_segment = (measured[first] - measured[n_segments]) / (largest - 1)
+    between = {ceil(n_segments / size) for size in range(2, largest)}
+    for passes in sorted(between - {first, n_segments}):
+        size = ceil(n_segments / passes)
+        predicted = measured[n_segments] + per_segment * (size - 1)
+        if predicted <= budget and fits(passes):
+            return passes
+    return n_segments
+
+
+def _check_passes(data, model, location_aware, jitter, limit):
+    """Passes of 5 segments, or fewer segments per pass if the pose step
+    or the syllable step would not fit in 80% of `limit` bytes. Checked once
+    per shape of data and model."""
+    n_segments = np.shape(data["mask"])[0]
+    leaves = jax.tree_util.tree_leaves((data, model["states"], model["params"]))
+    key = (
+        location_aware,
+        limit,
+        tuple(sorted(data)),
+        tuple(sorted(model["states"])),
+        tuple(sorted(model["params"])),
+        tuple((np.shape(x), str(getattr(x, "dtype", type(x)))) for x in leaves),
+    )
+    if key in _checked_passes:
+        return _checked_passes[key]
+
+    other_bytes = _syllable_step_bytes(data, model, location_aware)
+    if other_bytes is None:
+        return ceil(n_segments / _SEGMENTS_PER_PASS)
+    lowered_at = []
+
+    def pose_bytes(passes):
+        # mixed_map reads the setting while tracing, and JAX keeps traces
+        # by argument shapes, so a trace at another value must be dropped
+        if lowered_at:
+            jax.clear_caches()
+        set_mixed_map_iters(passes)
+        lowered_at.append(passes)
+        found = _pose_step_bytes(data, model, jitter)
+        return 0 if found is None else found
+
+    passes = _passes_within_memory(
+        n_segments, pose_bytes, other_bytes, _MEMORY_FRACTION * limit
+    )
+    if lowered_at and lowered_at[-1] != passes:
+        jax.clear_caches()
+    _checked_passes[key] = passes
+    return passes
+
+
+def _set_mixed_map_iters(
+    parallel_message_passing, data, model=None, location_aware=False, jitter=0.001
+):
+    """Set jax-moseq's mixed_map_iters for the Kalman sampler in use and the
+    number of segments in `data`.
+
+    The sequential sampler runs every segment in 1 pass. The parallel
+    sampler runs passes of 5 segments. On a GPU, given the `model` that will
+    resample `data`, kpms first compiles the pose step and the syllable step
+    and reads their memory; if either needs more than 80% of JAX's memory
+    pool, the passes get smaller, down to 1 segment each (see
+    `_passes_within_memory`). Without `model`, as in AR-HMM fitting, which
+    runs no pose step, there is no check.
 
     mixed_map reads the setting when a step is first compiled, so this runs
-    before any jax-moseq step. A value the user set with `set_mixed_map_iters`
-    is kept: kpms changes the value only while it is jax-moseq's default (1)
-    or the value kpms set last.
+    before any jax-moseq step that uses it. A value the user set with
+    `set_mixed_map_iters` is kept: kpms changes the value only while it is
+    jax-moseq's default (1) or the value kpms set last.
     """
     global _kpms_mixed_map_iters
-    if get_mixed_map_iters() in (1, _kpms_mixed_map_iters):
-        _kpms_mixed_map_iters = _MIXED_MAP_ITERS[bool(parallel_message_passing)]
-        set_mixed_map_iters(_kpms_mixed_map_iters)
+    if get_mixed_map_iters() not in (1, _kpms_mixed_map_iters):
+        return
+    n_segments = np.shape(data["mask"])[0]
+    if not parallel_message_passing:
+        passes = 1
+    else:
+        passes = ceil(n_segments / _SEGMENTS_PER_PASS)
+        limit = None if model is None else _gpu_memory_limit()
+        if limit is not None:
+            passes = _check_passes(data, model, location_aware, jitter, limit)
+    _kpms_mixed_map_iters = passes
+    set_mixed_map_iters(passes)
 
 
 def _set_parallel_flag(parallel_message_passing):
@@ -210,7 +373,6 @@ def _set_parallel_flag(parallel_message_passing):
                 '(To suppress this message, set parallel_message_passing="force")'
             )
         )
-    _set_mixed_map_iters(parallel_message_passing)
     return parallel_message_passing
 
 
@@ -543,6 +705,10 @@ def fit_model(
     parallel_message_passing = _set_parallel_flag(parallel_message_passing)
     model = device_put_as_scalar(_model_in_session_precision(model))
     data = _to_session_precision(data)
+    _set_mixed_map_iters(
+        parallel_message_passing, data, None if ar_only else model,
+        location_aware, jitter,
+    )
 
     if location_aware:
         resample_func = allo_keypoint_slds.resample_model
@@ -707,6 +873,10 @@ def apply_model(
         location_aware=location_aware,
         **kwargs,
     )
+    _set_mixed_map_iters(
+        parallel_message_passing, data, None if ar_only else model,
+        location_aware, jitter,
+    )
 
     if location_aware:
         resample_func = allo_keypoint_slds.resample_model
@@ -842,6 +1012,9 @@ def estimate_syllable_marginals(
         hypparams=model["hypparams"],
         location_aware=location_aware,
         **kwargs,
+    )
+    _set_mixed_map_iters(
+        parallel_message_passing, data, model, location_aware, jitter
     )
 
     num_syllables = model["hypparams"]["trans_hypparams"]["num_states"]
@@ -1022,7 +1195,6 @@ def expected_marginal_likelihoods(
     standard_errors : numpy array
         Standard error of the expected marginal likelihood score for each model.
     """
-    _set_mixed_map_iters(jax.default_backend() != "cpu")
     if checkpoint_paths is None:
         assert project_dir is not None and model_names is not None, fill(
             "Must provide either `checkpoint_paths` or `project_dir` and `model_names`"
@@ -1040,6 +1212,8 @@ def expected_marginal_likelihoods(
         params.append(model["params"])
     if any_converted:
         _print_conversion_notice()
+    if checkpoint_paths:
+        _set_mixed_map_iters(jax.default_backend() != "cpu", data)
 
     num_models = len(xs)
     mlls = np.zeros((num_models, num_models))
