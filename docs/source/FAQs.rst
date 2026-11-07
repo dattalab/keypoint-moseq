@@ -544,19 +544,50 @@ There are two main causes of GPU out of memory (OOM) errors:
 NaNs during fitting
 -------------------
 
-The following actions may help resolve NaNs during model fitting. If they don't, please open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and include the data, config file, and code used for fitting, as well as the most recent model checkpoint. 
+In our experience, NaNs during fitting most often come from the data, usually stretches of a recording where the keypoints aren't following a freely moving animal. Work through the steps below in order.
 
-- Make sure you are using double-precision computing. Check the precision using
+The data checks come before the sampler settings for a reason. Raising ``jitter`` can stop the NaNs without removing their cause, and the model still has to fit those frames. That can leave you with syllables that describe tracking problems rather than behavior.
+
+Confirm double precision
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+keypoint-MoSeq switches JAX to double precision when it is imported, and single precision makes NaNs much more likely. Check that nothing in your code has switched it back:
 
 .. code-block:: python
 
     import jax
-    jax.config.read('jax_enable_x64')
+    jax.config.read('jax_enable_x64')  # should return True
 
+If it returns ``False``, find the line in your code that sets ``jax_enable_x64`` and remove it.
 
-- Try increasing the `jitter` parameter, which controls the amount of regularization used to prevent singular matrices. The default value is 1e-3, but it may be necessary to increase this to 1e-2 or 1e-1 using the `jitter` keyword argument of the function that produced the NaNs (`fit_model`, `apply_model` or `estimate_syllable_marginals`). Jitter only affects the serial Kalman sampler, which is the default on CPU or when `parallel_message_passing=False`.
+Check your data
+~~~~~~~~~~~~~~~
 
-- Enable parallel Kalman sampling. By default, it is only enabled when fitting with a GPU. You can override this using the argument `parallel_message_passing=True` in the function that produced the NaNs (`fit_model`, `apply_model` or `estimate_syllable_marginals`).
+Three kinds of recording problems account for most of the NaNs we see. Each one gives the model frames that don't look like a freely moving animal.
+
+#. **Long periods without movement**, such as sleep or long bouts of freezing.
+#. **The animal entering or leaving the frame.** Some recordings start before the animal is placed in the arena or keep going after it is taken out. While the arena is empty, the tracker labels whatever it can find, and the keypoints jump when the animal appears.
+#. **Something else in the frame.** An experimenter's hand, a cable, or anything else that pulls the keypoints off the animal.
+
+To look for these, watch the first and last minute of a few videos, and check the plots the outlier removal step saves to ``{project_dir}/QA/plots/keypoint_distance_outliers/``. Long flat stretches in those plots mean the keypoints barely moved for that time.
+
+Once you've found a problem stretch:
+
+- **At the start or end of a recording**, trim those frames from ``coordinates`` and ``confidences`` before formatting the data. :ref:`Trimming inputs <trimming-inputs>` shows how to keep grid movies and other video steps lined up afterward using ``video_frame_indexes``.
+- **A long stretch in the middle of a recording**: the easiest thing to do is exclude that recording from modeling.
+
+Adjust the sampler
+~~~~~~~~~~~~~~~~~~
+
+If you're in 64-bit precision mode and your data looks clean but the NaNs persist, try these. Each is a keyword argument to the function that produced the NaNs (``fit_model``, ``apply_model`` or ``estimate_syllable_marginals``).
+
+- **Increase** ``jitter``. Jitter is a small variance added to each pose draw so the matrix math doesn't fail. It's measured in the model's latent pose space, where each dimension has variance 1 (with the default ``whiten: true``). The default 1e-3 is 0.1% of that; try raising it to at most 1e-2. Much larger values add noise on the scale of the animal's own frame-to-frame movement. Jitter only affects the serial Kalman sampler, which is the default on CPU or when ``parallel_message_passing=False``.
+- **Enable parallel Kalman sampling** with ``parallel_message_passing=True``. By default it is only enabled when fitting on a GPU.
+
+If the NaNs persist
+~~~~~~~~~~~~~~~~~~~
+
+Open an issue at https://github.com/dattalab/keypoint-moseq/issues. Include your config file, the code you ran, your keypoint-moseq version and the iteration where the NaNs appeared. We may ask for your data and most recent model checkpoint.
 
 
 Installation errors
