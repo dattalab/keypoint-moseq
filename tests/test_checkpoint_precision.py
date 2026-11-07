@@ -21,15 +21,6 @@ import pytest
 import keypoint_moseq as kpms
 
 
-@pytest.fixture(params=[False, True], ids=["session32", "session64"])
-def session_x64(request):
-    """Run the test with JAX's 64-bit mode set to the parameter."""
-    before = jax.config.x64_enabled
-    jax.config.update("jax_enable_x64", request.param)
-    yield request.param
-    jax.config.update("jax_enable_x64", before)
-
-
 def in_precision(tree, x64):
     """Numpy copy of `tree` with floating and signed-integer arrays in 64-bit
     (x64=True) or 32-bit precision. Other arrays and Python scalars are kept."""
@@ -246,23 +237,21 @@ def test_conversion_notice_once_when_applying_a_mismatched_model(
     assert conversion_notices(capsys.readouterr().out) == 1
 
 
-def test_init_model_on_format_data_output_in_a_float32_session(
-    one_recording, tutorial_pca, capsys
+def test_init_model_on_data_formatted_in_the_other_precision(
+    session_x64, one_recording, tutorial_pca, capsys
 ):
-    """format_data returns float64 arrays, which init_model runs on in a
-    float32 session, without a conversion notice."""
+    """format_data returns arrays in the session's precision. Data formatted
+    in a session of the other precision runs in init_model, without a
+    conversion notice, and the model is in the session's precision."""
     config, data, metadata, _ = one_recording
     pca, _ = tutorial_pca
-    assert {str(array.dtype) for array in data.values()} == {"float64"}
 
-    before = jax.config.x64_enabled
-    jax.config.update("jax_enable_x64", False)
-    try:
-        model = kpms.init_model(
-            data, metadata=metadata, pca=pca, **in_precision(config, False)
-        )
-    finally:
-        jax.config.update("jax_enable_x64", before)
+    model = kpms.init_model(
+        in_precision(data, not session_x64),
+        metadata=metadata,
+        pca=pca,
+        **in_precision(config, session_x64),
+    )
 
-    assert wrong_dtypes(model, False) == []
+    assert wrong_dtypes(model, session_x64) == []
     assert conversion_notices(capsys.readouterr().out) == 0

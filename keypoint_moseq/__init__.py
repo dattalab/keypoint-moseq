@@ -1,7 +1,4 @@
-# use double-precision by default
 from jax import config
-
-config.update("jax_enable_x64", True)
 
 
 # Keep compiled programs between sessions in the user's cache directory,

@@ -426,7 +426,7 @@ def init_model(
         If the device runs out of memory, with the data size, the settings in
         effect and ways to fit within memory.
     """
-    # format_data returns float64 arrays whatever the session's precision
+    # converts data formatted in a session of the other precision, or by hand
     if args:
         args = (_to_session_precision(args[0]), *args[1:])
     elif kwargs.get("data") is not None:

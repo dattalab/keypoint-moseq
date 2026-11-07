@@ -29,6 +29,15 @@ from analysis_utils import (
     syllable_label,
 )
 
+@pytest.fixture(params=[False, True], ids=["session32", "session64"])
+def session_x64(request):
+    """Run the test with JAX's 64-bit mode set to the parameter."""
+    before = jax.config.x64_enabled
+    jax.config.update("jax_enable_x64", request.param)
+    yield request.param
+    jax.config.update("jax_enable_x64", before)
+
+
 OPEN_FIELD_2D_URL = (
     "https://zenodo.org/api/records/10636983/files/open_field_2D.zip/content"
 )

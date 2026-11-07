@@ -12,15 +12,15 @@ columns:
 - onset
 dtypes:
   angular_velocity: float64
-  centroid_x: float64
-  centroid_y: float64
+  centroid_x: float32
+  centroid_y: float32
   fps: int64
   frame_index: int64
   group: object or str
-  heading: float64
+  heading: float32
   name: object or str
   onset: bool
-  syllable: int64
+  syllable: int32
   velocity_px_s: float64
 frames:
   21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000: 71524
