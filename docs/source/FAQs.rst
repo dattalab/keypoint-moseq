@@ -504,14 +504,6 @@ There are two main causes of GPU out of memory (OOM) errors:
    This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
 
 
-  - Switch to single-precision computing by running the code below immediately after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs.
-
-  .. code-block:: python
-   
-      import jax
-      jax.config.update('jax_enable_x64', False)
-
-    
   - Fit to a subset of the data, then apply the model to the rest of the data. 
 
     - To fit a subset of the data, specify the subset as a list of paths during data loading
@@ -548,18 +540,6 @@ In our experience, NaNs during fitting most often come from the data, usually st
 
 The data checks come before the sampler settings for a reason. Raising ``jitter`` can stop the NaNs without removing their cause, and the model still has to fit those frames. That can leave you with syllables that describe tracking problems rather than behavior.
 
-Confirm double precision
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-keypoint-MoSeq switches JAX to double precision when it is imported, and single precision makes NaNs much more likely. Check that nothing in your code has switched it back:
-
-.. code-block:: python
-
-    import jax
-    jax.config.read('jax_enable_x64')  # should return True
-
-If it returns ``False``, find the line in your code that sets ``jax_enable_x64`` and remove it.
-
 Check your data
 ~~~~~~~~~~~~~~~
 
@@ -579,7 +559,7 @@ Once you've found a problem stretch:
 Adjust the sampler
 ~~~~~~~~~~~~~~~~~~
 
-If you're in 64-bit precision mode and your data looks clean but the NaNs persist, try these. Each is a keyword argument to the function that produced the NaNs (``fit_model``, ``apply_model`` or ``estimate_syllable_marginals``).
+If your data looks clean but the NaNs persist, try these. Each is a keyword argument to the function that produced the NaNs (``fit_model``, ``apply_model`` or ``estimate_syllable_marginals``).
 
 - **Increase** ``jitter``. Jitter is a small variance added to each pose draw so the matrix math doesn't fail. It's measured in the model's latent pose space, where each dimension has variance 1 (with the default ``whiten: true``). The default 1e-3 is 0.1% of that; try raising it to at most 1e-2. Much larger values add noise on the scale of the animal's own frame-to-frame movement. Jitter only affects the serial Kalman sampler, which is the default on CPU or when ``parallel_message_passing=False``.
 - **Enable parallel Kalman sampling** with ``parallel_message_passing=True``. By default it is only enabled when fitting on a GPU.
