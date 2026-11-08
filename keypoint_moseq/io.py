@@ -591,9 +591,8 @@ def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None
     The checkpoint path can be specified directly via `path` or else it is
     assumed to be `{project_dir}/{model_name}/checkpoint.h5`.
 
-    The model and data are returned in the precision JAX runs in (float32,
-    or float64 when `jax_enable_x64` is on), whichever precision the
-    checkpoint was saved in.
+    The model and data are returned in the precision JAX runs in, whichever
+    precision the checkpoint was saved in.
 
     Parameters
     ----------
