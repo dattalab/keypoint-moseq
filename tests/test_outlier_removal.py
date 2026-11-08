@@ -1,3 +1,4 @@
+import os
 import warnings
 
 import h5py
@@ -5,8 +6,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+import keypoint_moseq as kpms
 import keypoint_moseq.io as io
 import keypoint_moseq.util as util
+
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def make_coordinates_with_missing_and_outlier():
@@ -244,3 +248,86 @@ def test_entirely_missing_keypoint_does_not_poison_other_thresholds(
     assert result["mask"][4, 4]
     np.testing.assert_array_equal(cleaned_coordinates["recording"][:, 2], 0)
     np.testing.assert_array_equal(cleaned_confidences["recording"][:, 2], 0)
+
+
+def one_recording(tutorial_keypoints, recording_name):
+    """Coordinates and confidences dicts holding a single recording."""
+    coordinates, confidences, _ = tutorial_keypoints
+    return (
+        {recording_name: coordinates[recording_name]},
+        {recording_name: confidences[recording_name]},
+    )
+
+
+def outlier_plot_path(project_dir, recording_name):
+    return os.path.join(
+        project_dir,
+        "QA",
+        "plots",
+        "keypoint_distance_outliers",
+        f"{recording_name}.png",
+    )
+
+
+@pytest.mark.parametrize("outlier_scale_factor", [6.0, 3.0], ids=["6", "3"])
+def test_tutorial_outlier_removal(
+    tutorial_project_dir,
+    tutorial_keypoints,
+    snapshot_recording,
+    outlier_scale_factor,
+    ndarrays_regression,
+):
+    project_dir = tutorial_project_dir
+    config = lambda: kpms.load_config(project_dir)
+    coordinates, confidences = one_recording(tutorial_keypoints, snapshot_recording)
+
+    kpms.update_config(project_dir, outlier_scale_factor=outlier_scale_factor)
+    assert config()["outlier_scale_factor"] == outlier_scale_factor
+
+    coordinates, confidences = kpms.outlier_removal(
+        coordinates, confidences, project_dir, overwrite=False, **config()
+    )
+
+    with open(outlier_plot_path(project_dir, snapshot_recording), "rb") as f:
+        assert f.read(len(PNG_SIGNATURE)) == PNG_SIGNATURE
+    ndarrays_regression.check(
+        {
+            "coordinates": coordinates[snapshot_recording],
+            "confidences": confidences[snapshot_recording],
+        }
+    )
+
+
+def test_tutorial_outlier_removal_overwrite_applies_only_to_plots(
+    tutorial_project_dir, tutorial_keypoints, snapshot_recording
+):
+    project_dir = tutorial_project_dir
+    config = lambda: kpms.load_config(project_dir)
+    plot_path = outlier_plot_path(project_dir, snapshot_recording)
+
+    def run_outlier_removal(overwrite):
+        coordinates, confidences = one_recording(
+            tutorial_keypoints, snapshot_recording
+        )
+        return kpms.outlier_removal(
+            coordinates, confidences, project_dir, overwrite=overwrite, **config()
+        )
+
+    run_outlier_removal(overwrite=False)
+    with open(plot_path, "wb") as f:
+        f.write(b"existing plot")
+
+    kept_coordinates, kept_confidences = run_outlier_removal(overwrite=False)
+    with open(plot_path, "rb") as f:
+        assert f.read() == b"existing plot"
+
+    new_coordinates, new_confidences = run_outlier_removal(overwrite=True)
+    with open(plot_path, "rb") as f:
+        assert f.read(len(PNG_SIGNATURE)) == PNG_SIGNATURE
+
+    np.testing.assert_array_equal(
+        kept_coordinates[snapshot_recording], new_coordinates[snapshot_recording]
+    )
+    np.testing.assert_array_equal(
+        kept_confidences[snapshot_recording], new_confidences[snapshot_recording]
+    )

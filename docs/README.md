@@ -1,8 +1,8 @@
 # Documentation
 
-To build the sphinx documentation, install requirements:
+To build the sphinx documentation, install the `dev` extra from the repository root:
 ```
-pip install sphinx sphinx-book-theme
+pip install -e ".[dev]"
 ```
 then run
 ```

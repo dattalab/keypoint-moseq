@@ -1,0 +1,202 @@
+"""Helpers for testing the analysis notebook's outputs."""
+
+import contextlib
+import io
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.collections import LineCollection, PathCollection
+from PIL import Image
+
+FPS = 30  # frame rate assumed by the analysis notebook's dataframe cells
+PDF_SIGNATURE = b"%PDF"
+PNG_SIGNATURE = b"\x89PNG"
+# significance threshold for the frozen `stats_df`, whose one syllable with
+# non-overlapping groups (6 and 4 recordings) has a corrected p-value of 0.19
+FROZEN_THRESH = 0.2
+
+
+def synthetic_results(names, n_frames=300, num_syllables=5, seed=0):
+    """Results with only the fields the analysis dataframes read: for each
+    recording, a syllable sequence made of runs of 3 to 11 frames, a
+    random-walk centroid and a heading. Quick to build, so tests of input
+    checks do not need a fitted model."""
+    rng = np.random.default_rng(seed)
+    results = {}
+    for name in names:
+        labels = rng.integers(0, num_syllables, n_frames)
+        run_lengths = rng.integers(3, 12, n_frames)
+        results[name] = {
+            "syllable": np.repeat(labels, run_lengths)[:n_frames],
+            "centroid": np.cumsum(rng.normal(size=(n_frames, 2)), axis=0),
+            "heading": rng.uniform(-np.pi, np.pi, n_frames),
+        }
+    return results
+
+
+def cohort_group(name):
+    """Group of a tutorial recording in the analysis tests: "a" for the
+    recordings from 2021 and "b" for those from 2022."""
+    return "a" if name.startswith("21_") else "b"
+
+
+def syllable_label(syllable):
+    return f"label {syllable}"
+
+
+def syllable_description(syllable):
+    return f"description of syllable {syllable}"
+
+
+def read_syll_info(path):
+    """`syll_info.csv` read the way kpms reads it."""
+    return pd.read_csv(path, index_col=False, keep_default_na=False)
+
+
+def syllable_names(syll_info, syllables):
+    """Tick labels of `syllables`: the index, followed by the label from
+    `syll_info` in parentheses when there is one."""
+    labels = dict(zip(syll_info["syllable"], syll_info["label"]))
+    return [f"{s} ({labels[s]})" if labels[s] else f"{s}" for s in syllables]
+
+
+def runs(labels):
+    """Label and length of each run of repeated labels."""
+    labels = np.asarray(labels)
+    starts = np.concatenate([[0], np.flatnonzero(np.diff(labels)) + 1])
+    lengths = np.diff(np.concatenate([starts, [len(labels)]]))
+    return labels[starts], lengths
+
+
+def mean_complete_run_lengths(labels, syllables):
+    """Mean length of each syllable's runs in `labels`, leaving out the first
+    and last run, which the edges of the recording cut short. NaN for a
+    syllable with no other run."""
+    run_labels, run_lengths = runs(labels)
+    run_labels, run_lengths = run_labels[1:-1], run_lengths[1:-1]
+    return np.array(
+        [run_lengths[run_labels == s].mean() if (run_labels == s).any() else np.nan for s in syllables]
+    )
+
+
+def bigram_counts(labels, num_labels=100):
+    """Counts of transitions between consecutive runs of `labels` below
+    `num_labels`."""
+    run_labels, _ = runs(labels)
+    pairs = np.stack([run_labels[:-1], run_labels[1:]], axis=1)
+    pairs = pairs[(pairs < num_labels).all(axis=1)]
+    counts = np.zeros((num_labels, num_labels))
+    np.add.at(counts, (pairs[:, 0], pairs[:, 1]), 1)
+    return counts
+
+
+def graph_edge_weights(matrix):
+    """Edge weights of the undirected graph `networkx.from_numpy_array`
+    builds from `matrix`. Nonzero entries are added in row-major order and a
+    later entry replaces an earlier one, so when both directions of a pair
+    are nonzero the edge keeps the entry below the diagonal."""
+    weights = {}
+    for u, v in zip(*np.nonzero(matrix)):
+        weights[(min(u, v), max(u, v))] = matrix[u, v]
+    return weights
+
+
+def check_figure_files(save_path, png_size):
+    """The png and pdf saved by `save_analysis_figure` at `save_path`
+    (without extension) have valid headers, and the png has `png_size`."""
+    for extension, signature in [("pdf", PDF_SIGNATURE), ("png", PNG_SIGNATURE)]:
+        with open(f"{save_path}.{extension}", "rb") as f:
+            assert f.read(len(signature)) == signature, extension
+    with Image.open(f"{save_path}.png") as image:
+        assert image.size == png_size
+
+
+def syll_stats_plot_summary(fig, legend):
+    """Tick labels, legend entries, significance stars and per-group points
+    of a figure from `plot_syll_stats_with_sem`."""
+    ax = fig.axes[0]
+    num_syllables = len(ax.get_xticks())
+    stars = [collection.get_offsets() for collection in ax.collections]
+    return {
+        "xlabel": ax.get_xlabel(),
+        "xticklabels": [label.get_text() for label in ax.get_xticklabels()],
+        "legend": [text.get_text() for text in legend.get_texts()],
+        "stars": np.concatenate(stars) if stars else np.empty((0, 2)),
+        # One line of markers per group; the error bars are separate
+        # two-point lines without markers.
+        "group_points": [
+            np.asarray(line.get_ydata(), dtype=float)
+            for line in ax.lines
+            if line.get_marker() not in (None, "", "None")
+            and len(line.get_ydata()) == num_syllables
+        ],
+    }
+
+
+def bigram_plot_summary(fig):
+    """Titles, images, color limits, tick labels and colorbar labels of a
+    figure from `visualize_transition_bigram`."""
+    image_axes = [ax for ax in fig.axes if ax.images]
+    colorbar_axes = [ax for ax in fig.axes if not ax.images]
+    return {
+        "titles": [ax.get_title() for ax in image_axes],
+        "images": [np.asarray(ax.images[0].get_array()) for ax in image_axes],
+        "clims": [ax.images[0].get_clim() for ax in image_axes],
+        "xticklabels": [
+            [label.get_text() for label in ax.get_xticklabels()] for ax in image_axes
+        ],
+        "yticklabels": [label.get_text() for label in image_axes[0].get_yticklabels()],
+        "colorbar_labels": [ax.get_ylabel() for ax in colorbar_axes],
+    }
+
+
+def graph_plot_summary(ax):
+    """Nodes, edges and node labels that networkx drew on `ax`. Edges are
+    identified by the indices of the nodes at their ends."""
+    (nodes,) = [c for c in ax.collections if isinstance(c, PathCollection)]
+    (edges,) = [c for c in ax.collections if isinstance(c, LineCollection)]
+    positions = np.asarray(nodes.get_offsets())
+    segments = edges.get_segments()
+    node_at = {tuple(xy): i for i, xy in enumerate(positions)}
+    # A single color given for all nodes or edges is stored once.
+    rgb = lambda colors, n: np.broadcast_to(np.asarray(colors)[:, :3], (n, 3))
+    return {
+        "title": ax.get_title(),
+        "labels": [text.get_text() for text in ax.texts],
+        "node_sizes": np.asarray(nodes.get_sizes()),
+        "node_edgecolors": rgb(nodes.get_edgecolor(), len(positions)),
+        "edges": [
+            tuple(sorted(node_at[tuple(end)] for end in segment)) for segment in segments
+        ],
+        "edge_widths": np.asarray(edges.get_linewidths()),
+        "edge_colors": rgb(edges.get_edgecolor(), len(segments)),
+    }
+
+
+def plot_syll_stats(stats_df, project_dir, model_name, thresh=0.05):
+    """Figure summary and printed output of the analysis notebook's group
+    comparison cell run on `stats_df`. The global NumPy random state is
+    seeded because the Kruskal-Wallis check inside `run_kruskal` draws from
+    it."""
+    import keypoint_moseq as kpms
+
+    np.random.seed(0)
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        fig, legend = kpms.plot_syll_stats_with_sem(
+            stats_df,
+            project_dir,
+            model_name,
+            plot_sig=True,
+            thresh=thresh,
+            stat="frequency",
+            order="stat",
+            ctrl_group="a",
+            exp_group="b",
+            figsize=(8, 4),
+            groups=stats_df["group"].unique(),
+        )
+    summary = syll_stats_plot_summary(fig, legend)
+    plt.close("all")
+    return {**summary, "printed": printed.getvalue()}

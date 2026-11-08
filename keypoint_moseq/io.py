@@ -17,8 +17,21 @@ from ndx_pose import PoseEstimation
 from itertools import islice
 
 from keypoint_moseq.util import list_files_with_exts, check_nan_proportions
+from keypoint_moseq.util import _no_files_found_message
 from jax_moseq.utils import get_frequencies, unbatch
 from scipy.io import loadmat
+
+
+def _plain(value):
+    """`value` with numpy scalars and arrays as Python numbers and lists, and
+    tuples as lists, so that `yaml.safe_load` can read it back."""
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    if isinstance(value, (np.generic, np.ndarray)):
+        return value.tolist()
+    return value
 
 
 def _build_yaml(sections, comments):
@@ -27,7 +40,7 @@ def _build_yaml(sections, comments):
         centered_title = f" {title} ".center(50, "=")
         text_blocks.append(f"\n\n{'#'}{centered_title}{'#'}")
         for key, value in data.items():
-            text = yaml.dump({key: value}).strip("\n")
+            text = yaml.dump({key: _plain(value)}).strip("\n")
             if key in comments:
                 text = f"\n{'#'} {comments[key]}\n{text}"
             text_blocks.append(text)
@@ -45,7 +58,7 @@ def _get_path(project_dir, model_name, path, filename, pathname_for_error_msg="p
 
 def generate_config(project_dir, **kwargs):
     """Generate a `config.yml` file with project settings. Default settings
-    will be used unless overriden by a keyword argument.
+    will be used unless overridden by a keyword argument.
 
     Parameters
     ----------
@@ -105,6 +118,7 @@ def generate_config(project_dir, **kwargs):
         kwargs,
         {
             "recording_name_suffix": "",
+            "shared_videos": False,
             "verbose": False,
             "conf_pseudocount": 1e-3,
             "video_dir": "",
@@ -132,13 +146,20 @@ def generate_config(project_dir, **kwargs):
         },
     )
 
+    # settings without a default (custom ones, or ones older versions wrote)
+    # go under OTHER; the index arrays load_config adds are not settings
+    known = {*anatomy, *fitting, *hypperams, *other, "anterior_idxs", "posterior_idxs"}
+    known.update(key for group in hypperams.values() for key in group)
+    other.update({k: v for k, v in kwargs.items() if k not in known})
+
     comments = {
         "verbose": "whether to print progress messages during fitting",
-        "keypoint_colormap": "colormap used for visualization; see `matplotlib.cm.get_cmap` for options",
-        "added_noise_level": "upper bound of uniform noise added to the data during initial AR-HMM fitting; this is used to regularize the model",
+        "keypoint_colormap": "colormap used for visualization; see `matplotlib.colormaps` for options",
+        "added_noise_level": "upper bound of uniform noise added to the keypoint coordinates by `format_data`; this is used to regularize the model",
         "PCA_fitting_num_frames": "number of frames used to fit the PCA model during initialization",
-        "video_dir": "directory with videos from which keypoints were derived (used for crowd movies)",
-        "recording_name_suffix": "suffix used to match videos to recording names; this can usually be left empty (see `util.find_matching_videos` for details)",
+        "video_dir": "directory with videos from which keypoints were derived (used for calibration, grid movies and `check_videos`)",
+        "recording_name_suffix": "text that follows the video's filename in each recording name, such as 'DLC' for DeepLabCut output; when set, a video only matches recordings whose names start with its filename followed by this text (see `util.find_matching_videos`)",
+        "shared_videos": "set to True if some videos hold more than one recording (e.g. several animals tracked in one video); silences the warning about videos matched to several recordings",
         "bodyparts": "used to access columns in the keypoint data",
         "skeleton": "used for visualization only",
         "use_bodyparts": "determines the subset of bodyparts to use for modeling and the order in which they are represented",
@@ -153,7 +174,8 @@ def generate_config(project_dir, **kwargs):
         "kappa_scan_target_duration": "target median syllable duration (in frames) for choosing kappa",
         "whiten": "whether to whiten principal components; used to initialize the latent pose trajectory `x`",
         "conf_threshold": "used to define outliers for interpolation when the model is initialized",
-        "conf_pseudocount": "pseudocount used regularize neural network confidences",
+        "conf_pseudocount": "pseudocount used to regularize neural network confidences",
+        "outlier_scale_factor": "multiplier for the distance-to-medoid threshold used by `outlier_removal`; higher values remove fewer keypoints",
         "fix_heading": "whether to keep the heading angle fixed; this should only be True if the pose is constrained to a narrow range of angles, e.g. a headfixed mouse.",
         "fps": "frames per second of the video recordings",
     }
@@ -177,7 +199,7 @@ def check_config_validity(config):
           `config["bodyparts"]`
         - All the elements of `config["anterior_bodyparts"]` are also in
           `config["use_bodyparts"]`
-        - All the elements of `config["anterior_bodyparts"]` are also in
+        - All the elements of `config["posterior_bodyparts"]` are also in
           `config["use_bodyparts"]`
         - For each pair in `config["skeleton"]`, both elements also in
           `config["bodyparts"]`
@@ -255,6 +277,9 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
     with open(config_path, "r") as stream:
         config = yaml.safe_load(stream)
 
+    if not "skeleton" in config or config["skeleton"] is None:
+        config["skeleton"] = []
+
     if check_if_valid:
         check_config_validity(config)
 
@@ -265,9 +290,6 @@ def load_config(project_dir, check_if_valid=True, build_indexes=True):
         config["posterior_idxs"] = jnp.array(
             [config["use_bodyparts"].index(bp) for bp in config["posterior_bodyparts"]]
         )
-
-    if not "skeleton" in config or config["skeleton"] is None:
-        config["skeleton"] = []
 
     return config
 
@@ -309,7 +331,7 @@ def setup_project(
     **options,
 ):
     """
-    Setup a project directory with the following structure::
+    Set up a project directory with the following structure::
 
         project_dir
         └── config.yml
@@ -322,26 +344,26 @@ def setup_project(
     deeplabcut_config: str, default=None
         Path to a deeplabcut config file. Will be used to initialize
         `bodyparts`, `skeleton`, `use_bodyparts` and `video_dir` in the
-        keypoint MoSeq config (overrided by kwargs).
+        keypoint MoSeq config (overridden by kwargs).
 
     sleap_file: str, default=None
         Path to a .hdf5 or .slp file containing predictions for one video. Will
         be used to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in
-        the keypoint MoSeq config (overrided by kwargs).
+        the keypoint MoSeq config (overridden by kwargs).
 
     nwb_file: str, default=None
         Path to a .nwb file containing predictions for one video. Will be used
         to initialize `bodyparts`, `skeleton`, and `use_bodyparts` in the
-        keypoint MoSeq config. (overrided by kwargs).
+        keypoint MoSeq config. (overridden by kwargs).
 
     freipose_config: str, default=None
         Path to a freipose skeleton config file. Will be used to initialize
         `bodyparts`, `skeleton`, and `use_bodyparts` in the keypoint MoSeq config
-        (overrided by kwargs).
+        (overridden by kwargs).
 
     dannce_config: str, default=None
         Path to a dannce config file. Will be used to initialize `bodyparts`,
-        `skeleton`, and `use_bodyparts` in the keypoint MoSeq config (overrided
+        `skeleton`, and `use_bodyparts` in the keypoint MoSeq config (overridden
         by kwargs).
 
     overwrite: bool, default=False
@@ -389,7 +411,7 @@ def setup_project(
             assert len(slp_file.skeletons) == 1, fill(
                 f"{sleap_file} contains more than one skeleton. "
                 "This is not currently supported. Please "
-                "open a github issue or email calebsw@gmail.com"
+                "open an issue at https://github.com/dattalab/keypoint-moseq/issues"
             )
             skeleton = slp_file.skeletons[0]
             node_names = skeleton.node_names
@@ -569,9 +591,9 @@ def reindex_syllables_in_checkpoint(
     path: str, default=None
 
     index: array of shape (num_states,), default=None
-        Permutation for syllable labels, where `index[i]` is relabled as `i`.
-        If None, syllables are relabled by frequency, with the most frequent
-        syllable relabled as 0, and so on.
+        Permutation for syllable labels, where `index[i]` is relabeled as `i`.
+        If None, syllables are relabeled by frequency, with the most frequent
+        syllable relabeled as 0, and so on.
 
     runlength: bool, default=True
         If True, frequencies are quantified using the number of non-consecutive
@@ -636,8 +658,8 @@ def extract_results(
 
     Model outputs are saved to disk as a .h5 file, either at `path`
     if it is specified, or at `{project_dir}/{model_name}/results.h5` if it is not.
-    If a .h5 file with the given path already exists, the outputs will be added
-    to it. The results have the following structure::
+    If a .h5 file with the given path already exists, the outputs are added to
+    it; recordings already in the file raise an error unless `overwrite=True`. The results have the following structure::
 
         results.h5
         ├──recording_name1
@@ -662,11 +684,11 @@ def extract_results(
 
     project_dir : str, default=None
         Path to the project directory. Required if `save_results=True` and
-        `results_path=None`.
+        `path=None`.
 
     model_name : str, default=None
         Name of the model. Required if `save_results=True` and
-        `results_path=None`.
+        `path=None`.
 
     path : str, default=None
         Optional path for saving model outputs.
@@ -698,16 +720,21 @@ def extract_results(
                     f"'{next(iter(overlap))}'. To overwrite existing "
                     f"results, set overwrite=True in apply_model. "
                     f"See https://keypoint-moseq.readthedocs.io/en/"
-                    f"latest/FAQs.html#detecting-existing-syllables"
+                    f"stable/FAQs.html#detecting-existing-syllables"
                     f"-in-new-data for more information."
                 ))
 
     states = jax.device_get(model["states"])
 
-    # extract syllables; repeat first syllable an extra `nlags` times
+    # extract syllables, which start `nlags` frames into each segment; the
+    # previous segment covers those frames, and at the start of a recording
+    # the first syllable is repeated
     nlags = states["x"].shape[1] - states["z"].shape[1]
-    z = np.pad(states["z"], ((0, 0), (nlags, 0)), mode="edge")
-    syllables = unbatch(z, *metadata)
+    keys, bounds = metadata
+    # a segment no longer than nlags has no syllables of its own
+    starts = np.minimum(bounds[:, 0] + nlags, bounds[:, 1])
+    syllables = unbatch(states["z"], keys, np.stack([starts, bounds[:, 1]], axis=1))
+    syllables = {k: np.pad(v[nlags:], (nlags, 0), mode="edge") for k, v in syllables.items()}
 
     # extract latent state, centroid, and heading
     latent_state = unbatch(states["x"], *metadata)
@@ -776,7 +803,7 @@ def save_results_as_csv(
         Optional path to the directory where the csv files will be saved.
 
     path_sep: str, default='-'
-        If a path separator ("/" or "\") is present in the recording name, it
+        If a path separator ("/" or "\\") is present in the recording name, it
         will be replaced with `path_sep` when saving the csv file.
     """
     save_dir = _get_path(project_dir, model_name, save_dir, "results", "save_dir")
@@ -840,7 +867,7 @@ def save_keypoints(
 
         "BODYPART1_x", "BODYPART1_y", "BODYPART1_conf", "BODYPART2_x", ...
 
-    Columns with confidence scores are ommitted if `confidences` is not provided.
+    Columns with confidence scores are omitted if `confidences` is not provided.
     Besides confidences, there can be 2 or 3 columns for each bodypart, depending
     on whether the keypoints are 2D or 3D.
 
@@ -865,10 +892,10 @@ def save_keypoints(
     bodyparts: list, default=None
         List of bodypart names, in the same order as the keypoints in the
         `coordinates` and `confidences` arrays. If None, the bodypart names
-        will be set to ["bodypart1", "bodypart2", ...].
+        will be set to ["bodypart0", "bodypart1", ...].
 
     path_sep: str, default='-'
-        If a path separator ("/" or "\") is present in the recording name, it
+        If a path separator ("/" or "\\") is present in the recording name, it
         will be replaced with `path_sep` when saving the csv file.
     """
     if not os.path.exists(save_dir):
@@ -887,7 +914,7 @@ def save_keypoints(
         bodyparts = [f"bodypart{i}" for i in range(num_keypoints)]
 
     # create column names
-    suffixes = ["x", "y", "z"][:num_keypoints]
+    suffixes = ["x", "y", "z"][:num_dims]
     if confidences is not None:
         suffixes += ["conf"]
     columns = [f"{bp}_{suffix}" for bp in bodyparts for suffix in suffixes]
@@ -923,17 +950,32 @@ def load_keypoints(
         .csv and .h5/.hdf5 files generated by deeplabcut. For single-animal
         tracking, each file yields a single key/value pair in the returned
         `coordinates` and `confidences` dictionaries. For multi-animal tracking,
-        a key/vaue pair will be generated for each tracked individual. For
+        a key/value pair will be generated for each tracked individual. For
         example the file `two_mice.h5` with individuals "mouseA" and "mouseB"
         will yield the pair of keys `'two_mice_mouseA', 'two_mice_mouseB'`.
+        Each individual is treated as one animal followed through the file,
+        so the file should come from tracking (e.g. `*_el.h5`), not from
+        per-frame detections such as SuperAnimal output. Lightning Pose and
+        its EKS smoother write the same layout; the metric .csv files that
+        Lightning Pose writes next to its predictions are skipped. 3D files
+        from deeplabcut's triangulation load with confidence 1. When both
+        `{stem}.h5` and the `{stem}_filtered.h5` written by deeplabcut's
+        filterpredictions are found, only the unfiltered file is loaded; a
+        pattern such as `'path/to/dir/*_filtered.h5'` loads the filtered
+        files.
 
     - sleap
         .slp and .h5/.hdf5 files generated by sleap. For single-animal tracking,
         each file yields a single key/value pair in the returned `coordinates`
-        and `confidences` dictionaries. For multi-animal tracking, a key/vaue
+        and `confidences` dictionaries. For multi-animal tracking, a key/value
         pair will be generated for each track. For example a single file called
         `two_mice.h5` will yield the pair of keys `'two_mice_track0',
-        'two_mice_track1'`.
+        'two_mice_track1'`. Each track is treated as one animal followed
+        through the file. A .slp file holding several videos yields keys named
+        after each video's file instead, e.g. `'top_track0', 'side_track0'`
+        for the videos `top.mp4` and `side.mp4`. A .slp file without tracks
+        is treated as one animal: each frame contributes its user instance if
+        it has one, otherwise its highest-scoring predicted instance.
 
     - anipose
         .csv files generated by anipose. Each file should contain five columns
@@ -981,8 +1023,8 @@ def load_keypoints(
     Parameters
     ----------
     filepath_pattern: str or list of str
-        Filepath pattern for a set of deeplabcut csv or hdf5 files, or a list
-        of such patterns. Filepath patterns can be:
+        Filepath pattern for a set of keypoint files, or a list of such
+        patterns. Filepath patterns can be:
 
         - single file (e.g. `/path/to/file.csv`)
         - single directory (e.g. `/path/to/dir/`)
@@ -991,7 +1033,8 @@ def load_keypoints(
 
     format: str
         Format of the files to load. Must be one of `deeplabcut`, `sleap`,
-        `anipose`, or `sleap-anipose`.
+        `anipose`, `sleap-anipose`, `nwb`, `facemap`, `freipose` or
+        `dannce`.
 
     extension: str, default=None
         File extension to use when searching for files. If None, then the
@@ -1007,7 +1050,7 @@ def load_keypoints(
         - dannce: 'mat'
 
     recursive: bool, default=True
-        Whether to search recursively for deeplabcut csv or hdf5 files.
+        Whether to search directories recursively for keypoint files.
 
     path_in_name: bool, default=False
         Whether to name the tracking results from each file by the path to the
@@ -1033,7 +1076,8 @@ def load_keypoints(
     -------
     coordinates: dict
         Dictionary mapping filenames to keypoint coordinates as ndarrays of
-        shape (n_frames, n_bodyparts, 2[or 3])
+        shape (n_frames, n_bodyparts, 2[or 3]). Recordings with no keypoints
+        in any frame are left out.
 
     confidences: dict
         Dictionary mapping filenames to `likelihood` scores as ndarrays of
@@ -1072,9 +1116,13 @@ def load_keypoints(
 
     # get list of filepaths
     filepaths = list_files_with_exts(filepath_pattern, extensions, recursive=recursive)
-    assert len(filepaths) > 0, fill(
-        f"No files with extensions {extensions} found for {filepath_pattern}"
-    )
+    if format == "deeplabcut":
+        filepaths = [f for f in filepaths if not _is_lightning_pose_metrics(f)]
+        filepaths = _without_filtered_copies(filepaths)
+    if len(filepaths) == 0:
+        raise ValueError(
+            _no_files_found_message("keypoint files", filepath_pattern, extensions, recursive)
+        )
 
     # load keypoints from each file
     coordinates, confidences, bodyparts = {}, {}, None
@@ -1095,13 +1143,21 @@ def load_keypoints(
                 f"{set(new_coordinates.keys()) & set(coordinates.keys())}"
                 f"\n\nThis may be caused by repeated filenames with "
                 "different extensions. If so, please set the extension "
-                "explicitly via the `extension` argument. Another possible"
-                " cause is commonly-named files in different directories. "
-                "if that is the case, then set `path_in_name=True`."
+                "explicitly via the `extension` argument. Another possible "
+                "cause is files with the same name in different directories. "
+                "Recording names must be unique, so rename the files, e.g. by "
+                "adding the directory name to each. Setting `path_in_name=True` "
+                "also loads them, but keypoint-MoSeq then can't find their "
+                "videos for check_videos, calibration or grid movies."
             )
 
         coordinates.update(new_coordinates)
         confidences.update(new_confidences)
+
+    # leave out recordings with no keypoints in any frame, such as an
+    # individual slot that the tracker never filled
+    for key in [k for k, v in coordinates.items() if np.isnan(v).all()]:
+        del coordinates[key], confidences[key]
 
     # check for valid results
     assert len(coordinates) > 0, fill(f"No valid results found for {filepath_pattern}")
@@ -1109,10 +1165,30 @@ def load_keypoints(
     return coordinates, confidences, bodyparts
 
 
+def _is_lightning_pose_metrics(filepath):
+    """Whether a file is one of the per-keypoint metric CSVs that Lightning
+    Pose writes next to each prediction file."""
+    stem, ext = os.path.splitext(os.path.basename(filepath))
+    metrics = ("_temporal_norm", "_pca_singleview_error", "_pca_multiview_error")
+    return ext == ".csv" and stem.endswith(metrics)
+
+
+def _without_filtered_copies(filepaths):
+    """Leave out each `{stem}_filtered{ext}` file, as written by deeplabcut's
+    filterpredictions, whose unfiltered `{stem}{ext}` is also listed."""
+    listed = set(filepaths)
+
+    def is_filtered_copy(filepath):
+        stem, ext = os.path.splitext(filepath)
+        return stem.endswith("_filtered") and stem[: -len("_filtered")] + ext in listed
+
+    return [f for f in filepaths if not is_filtered_copy(f)]
+
+
 def _deeplabcut_loader(filepath, name, exclude_individuals=["single"]):
     """Load tracking results from deeplabcut csv or hdf5 files."""
     ext = os.path.splitext(filepath)[1]
-    if ext == ".h5":
+    if ext in (".h5", ".hdf5"):
         df = pd.read_hdf(filepath)
     if ext == ".csv":
         with open(filepath) as f:
@@ -1133,56 +1209,144 @@ def _deeplabcut_loader(filepath, name, exclude_individuals=["single"]):
                 )
             else:
                 ind_df = df.xs(ind, axis=1, level="individuals")
-                bps = ind_df.columns.get_level_values("bodyparts").unique().tolist()
-                ind_bodyparts[ind] = bps
+                (
+                    coordinates[f"{name}_{ind}"],
+                    confidences[f"{name}_{ind}"],
+                    ind_bodyparts[ind],
+                ) = _deeplabcut_arrays(ind_df)
 
-                arr = ind_df.to_numpy().reshape(len(ind_df), -1, 3)
-                coordinates[f"{name}_{ind}"] = arr[:, :, :-1]
-                confidences[f"{name}_{ind}"] = arr[:, :, -1]
-
-        bodyparts = set(ind_bodyparts[list(ind_bodyparts.keys())[0]])
-        assert all([set(bps) == bodyparts for bps in ind_bodyparts.values()]), (
+        bodyparts = ind_bodyparts[list(ind_bodyparts.keys())[0]]
+        assert all([bps == bodyparts for bps in ind_bodyparts.values()]), (
             f"Bodyparts are not consistent across individuals. The following bodyparts "
             f"were found for each individual: {ind_bodyparts}. Use `exclude_individuals`"
             "to exclude specific individuals."
         )
     else:
-        bodyparts = df.columns.get_level_values("bodyparts").unique().tolist()
-        arr = df.to_numpy().reshape(len(df), -1, 3)
-        coordinates[name] = arr[:, :, :-1]
-        confidences[name] = arr[:, :, -1]
+        coordinates[name], confidences[name], bodyparts = _deeplabcut_arrays(df)
 
     return coordinates, confidences, bodyparts
 
 
+def _deeplabcut_arrays(df):
+    """Coordinates, confidences and bodyparts from a dataframe in deeplabcut's
+    column layout. The x, y, z and likelihood columns are selected by name
+    because some tools write others, such as the ensemble statistics that
+    Lightning Pose's EKS smoother adds after each likelihood. 3D files from
+    deeplabcut's triangulation have no likelihood, so their confidences are
+    1."""
+    levels = df.columns.get_level_values("coords")
+    axes = [df.xs(d, axis=1, level="coords") for d in ["x", "y", "z"] if d in levels]
+    bodyparts = axes[0].columns.get_level_values("bodyparts").tolist()
+    coordinates = np.stack([a.to_numpy() for a in axes], axis=-1)
+    if "likelihood" in levels:
+        confidences = df.xs("likelihood", axis=1, level="coords").to_numpy(copy=True)
+    else:
+        confidences = np.ones(coordinates.shape[:-1], dtype=coordinates.dtype)
+
+    # deeplabcut 3 fills x, y and likelihood with -1 for an animal it did not
+    # detect, e.g. the empty slots in SuperAnimal output
+    padded = (coordinates == -1).all(axis=-1) & (confidences == -1)
+    coordinates[padded] = np.nan
+    confidences[padded] = np.nan
+    return coordinates, confidences, bodyparts
+
+
 def _sleap_loader(filepath, name):
-    """Load keypoints from sleap hdf5 or slp files."""
+    """Load keypoints from sleap hdf5 or slp files. The recordings from a slp
+    file holding more than one video are named after each video's file."""
     if os.path.splitext(filepath)[1] == ".slp":
         slp_file = sleap_io.load_slp(filepath)
 
         assert len(slp_file.skeletons) == 1, fill(
             f"{filepath} contains more than one skeleton. "
             "This is not currently supported. Please "
-            "open a github issue or email calebsw@gmail.com"
+            "open an issue at https://github.com/dattalab/keypoint-moseq/issues"
         )
 
         bodyparts = slp_file.skeletons[0].node_names
-        arr = slp_file.numpy(return_confidence=True)
-        coords = arr[:, :, :, :-1].transpose((1, 0, 2, 3))
-        confs = arr[:, :, :, -1].transpose((1, 0, 2))
+        if len(slp_file.videos) == 1:
+            names = [name]
+        else:
+            names = [_sleap_video_name(video) for video in slp_file.videos]
+            repeated = sorted({n for n in names if names.count(n) > 1})
+            if repeated:
+                raise ValueError(fill(
+                    f"{filepath} holds more than one video named "
+                    f"{', '.join(repeated)}. Recordings from a .slp file with "
+                    "several videos are named after their video files, so "
+                    "each video's file name must be different."
+                ))
+
+        coordinates, confidences = {}, {}
+        for video, video_name in zip(slp_file.videos, names):
+            if slp_file.tracks:
+                arr = slp_file.numpy(video=video, return_confidence=True)
+            else:
+                arr = _sleap_best_instances(slp_file, video)
+            coords = arr[:, :, :, :-1].transpose((1, 0, 2, 3))
+            confs = arr[:, :, :, -1].transpose((1, 0, 2))
+            for key, value in _name_sleap_tracks(coords, video_name).items():
+                coordinates[key] = value
+            for key, value in _name_sleap_tracks(confs, video_name).items():
+                confidences[key] = value
     else:
         with h5py.File(filepath, "r") as f:
-            coords = f["tracks"][()].transpose((0, 3, 2, 1))
-            confs = f["point_scores"][()].transpose((0, 2, 1))
+            # sleap-io records each dataset's axis order in a `dims`
+            # attribute; files without one use SLEAP's default "matlab" order
+            coords = _read_sleap_dataset(
+                f["tracks"], ["track", "xy", "node", "frame"], ["track", "frame", "node", "xy"]
+            )
+            confs = _read_sleap_dataset(
+                f["point_scores"], ["track", "node", "frame"], ["track", "frame", "node"]
+            )
             bodyparts = [name.decode("utf-8") for name in f["node_names"]]
+        coordinates = _name_sleap_tracks(coords, name)
+        confidences = _name_sleap_tracks(confs, name)
 
-    if coords.shape[0] == 1:
-        coordinates = {name: coords[0]}
-        confidences = {name: confs[0]}
-    else:
-        coordinates = {f"{name}_track{i}": coords[i] for i in range(coords.shape[0])}
-        confidences = {f"{name}_track{i}": confs[i] for i in range(coords.shape[0])}
     return coordinates, confidences, bodyparts
+
+
+def _sleap_best_instances(slp_file, video):
+    """Points and confidences, shaped (n_frames, 1, n_nodes, 3), of the one
+    animal in a video of a slp file without tracks: in each frame, a user
+    instance if there is one, otherwise the predicted instance with the
+    highest score."""
+    untracked = slp_file.numpy(video=video, untracked=True, return_confidence=True)
+    best = np.full((len(untracked), 1, *untracked.shape[2:]), np.nan, untracked.dtype)
+    for frame in slp_file.find(video):
+        if frame.user_instances:
+            points = frame.user_instances[0].numpy()
+            best[frame.frame_idx, 0] = np.column_stack([points, np.ones(len(points))])
+        elif frame.predicted_instances:
+            instance = max(frame.predicted_instances, key=lambda i: i.score)
+            best[frame.frame_idx, 0] = instance.numpy(scores=True)
+    return best
+
+
+def _name_sleap_tracks(tracks, name):
+    """Map recording names to the per-track arrays in `tracks`: `name` for a
+    single track, otherwise `{name}_track{i}`."""
+    if tracks.shape[0] == 1:
+        return {name: tracks[0]}
+    return {f"{name}_track{i}": track for i, track in enumerate(tracks)}
+
+
+def _sleap_video_name(video):
+    """File name, without extension, of the video a sleap video was made
+    from. For an image sequence, the name of its folder."""
+    while video.source_video is not None:
+        video = video.source_video
+    filename = video.filename
+    if not isinstance(filename, str):
+        filename = os.path.dirname(filename[0])
+    return os.path.splitext(os.path.basename(filename))[0]
+
+
+def _read_sleap_dataset(dataset, default_dims, dims):
+    """Read a dataset from a sleap analysis file with its axes in `dims`
+    order."""
+    stored_dims = json.loads(dataset.attrs.get("dims", json.dumps(default_dims)))
+    return dataset[()].transpose([stored_dims.index(d) for d in dims])
 
 
 def _anipose_loader(filepath, name):
@@ -1417,7 +1581,12 @@ def _loadtree_hdf5(leaf):
         return data
     else:
         leaf_type = leaf.attrs["type"]
-        values = map(_loadtree_hdf5, leaf.values())
+        if leaf_type in ("list", "tuple"):
+            # elements are saved as arr0, arr1, ..., which h5py lists in name
+            # order (arr0, arr1, arr10, ...), so they are read by index
+            values = (_loadtree_hdf5(leaf[f"arr{k}"]) for k in range(len(leaf)))
+        else:
+            values = map(_loadtree_hdf5, leaf.values())
         if leaf_type == "dict":
             return dict(zip(leaf.keys(), values))
         elif leaf_type == "list":

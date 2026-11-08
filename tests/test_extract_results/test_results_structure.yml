@@ -1,0 +1,190 @@
+21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  centroid:
+    dtype: float64
+    shape:
+    - 71524
+    - 2
+  heading:
+    dtype: float64
+    shape:
+    - 71524
+  latent_state:
+    dtype: float64
+    shape:
+    - 71524
+    - 4
+  syllable:
+    dtype: int64
+    shape:
+    - 71524
+21_12_10_def6a_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  centroid:
+    dtype: float64
+    shape:
+    - 53512
+    - 2
+  heading:
+    dtype: float64
+    shape:
+    - 53512
+  latent_state:
+    dtype: float64
+    shape:
+    - 53512
+    - 4
+  syllable:
+    dtype: int64
+    shape:
+    - 53512
+21_12_10_def6a_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  centroid:
+    dtype: float64
+    shape:
+    - 35818
+    - 2
+  heading:
+    dtype: float64
+    shape:
+    - 35818
+  latent_state:
+    dtype: float64
+    shape:
+    - 35818
+    - 4
+  syllable:
+    dtype: int64
+    shape:
+    - 35818
+21_12_10_def6b_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  centroid:
+    dtype: float64
+    shape:
+    - 53527
+    - 2
+  heading:
+    dtype: float64
+    shape:
+    - 53527
+  latent_state:
+    dtype: float64
+    shape:
+    - 53527
+    - 4
+  syllable:
+    dtype: int64
+    shape:
+    - 53527
+21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  centroid:
+    dtype: float64
+    shape:
+    - 107507
+    - 2
+  heading:
+    dtype: float64
+    shape:
+    - 107507
+  latent_state:
+    dtype: float64
+    shape:
+    - 107507
+    - 4
+  syllable:
+    dtype: int64
+    shape:
+    - 107507
+21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  centroid:
+    dtype: float64
+    shape:
+    - 107520
+    - 2
+  heading:
+    dtype: float64
+    shape:
+    - 107520
+  latent_state:
+    dtype: float64
+    shape:
+    - 107520
+    - 4
+  syllable:
+    dtype: int64
+    shape:
+    - 107520
+22_04_26_cage4_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  centroid:
+    dtype: float64
+    shape:
+    - 53623
+    - 2
+  heading:
+    dtype: float64
+    shape:
+    - 53623
+  latent_state:
+    dtype: float64
+    shape:
+    - 53623
+    - 4
+  syllable:
+    dtype: int64
+    shape:
+    - 53623
+22_04_26_cage4_0_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  centroid:
+    dtype: float64
+    shape:
+    - 53625
+    - 2
+  heading:
+    dtype: float64
+    shape:
+    - 53625
+  latent_state:
+    dtype: float64
+    shape:
+    - 53625
+    - 4
+  syllable:
+    dtype: int64
+    shape:
+    - 53625
+22_04_26_cage4_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  centroid:
+    dtype: float64
+    shape:
+    - 53632
+    - 2
+  heading:
+    dtype: float64
+    shape:
+    - 53632
+  latent_state:
+    dtype: float64
+    shape:
+    - 53632
+    - 4
+  syllable:
+    dtype: int64
+    shape:
+    - 53632
+22_27_04_cage4_mouse2_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000:
+  centroid:
+    dtype: float64
+    shape:
+    - 53623
+    - 2
+  heading:
+    dtype: float64
+    shape:
+    - 53623
+  latent_state:
+    dtype: float64
+    shape:
+    - 53623
+    - 4
+  syllable:
+    dtype: int64
+    shape:
+    - 53623

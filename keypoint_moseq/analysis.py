@@ -1,10 +1,13 @@
 from keypoint_moseq.util import filter_angle
-from keypoint_moseq.io import load_results
+from keypoint_moseq.io import load_config, load_results
 from math import ceil
+from datetime import datetime
+import html
 from matplotlib.lines import Line2D
 from cytoolz import sliding_window
 import networkx as nx
 import os
+import warnings
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -12,6 +15,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from itertools import combinations
+from textwrap import fill
 from copy import deepcopy
 from glob import glob
 import panel as pn
@@ -19,6 +23,14 @@ from jax_moseq.utils import get_durations, get_frequencies
 
 pn.extension("plotly", "tabulator")
 na = np.newaxis
+
+
+def _read_syll_info(syll_info_path):
+    """Read `syll_info.csv`, keeping blank cells as empty strings and leaving
+    out rows without a syllable, such as a blank row left by a spreadsheet."""
+    syll_info_df = pd.read_csv(syll_info_path, index_col=False, keep_default_na=False)
+    has_syllable = syll_info_df["syllable"].astype(str).str.strip() != ""
+    return syll_info_df[has_syllable].astype({"syllable": int}).reset_index(drop=True)
 
 
 def get_syllable_names(project_dir, model_name, syllable_ixs):
@@ -42,19 +54,144 @@ def get_syllable_names(project_dir, model_name, syllable_ixs):
     labels = {ix: f"{ix}" for ix in syllable_ixs}
     syll_info_path = os.path.join(project_dir, model_name, "syll_info.csv")
     if os.path.exists(syll_info_path):
-        syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
+        syll_info_df = _read_syll_info(syll_info_path)
 
         for ix in syllable_ixs:
-            if len(syll_info_df[syll_info_df.syllable == ix].label.values[0]) > 0:
-                labels[ix] = (
-                    f"{ix} ({syll_info_df[syll_info_df.syllable == ix].label.values[0]})"
-                )
+            # a syllable without a row keeps its bare index
+            label = syll_info_df[syll_info_df.syllable == ix].label.values
+            if len(label) > 0 and len(label[0]) > 0:
+                labels[ix] = f"{ix} ({label[0]})"
     names = [labels[ix] for ix in syllable_ixs]
     return names
 
 
+MIN_RECORDINGS_PER_GROUP = 3
+
+
+def _read_index_csv(index_filepath):
+    """Read index.csv as text, with surrounding whitespace removed.
+
+    Every value stays a string: pandas would otherwise read recording names
+    like "0012" as numbers and groups like "NA" or "None" as missing. Blank
+    rows are dropped, and each remaining row keeps its position in the file
+    as its index, so the row with index i is on line i + 2.
+
+    Parameters
+    ----------
+    index_filepath : str
+        Path to index.csv.
+
+    Returns
+    -------
+    index_df : pandas.DataFrame
+        With at least the columns "name" and "group"; empty cells are "".
+    """
+    index_df = pd.read_csv(
+        index_filepath,
+        index_col=False,
+        dtype=str,
+        keep_default_na=False,
+        skip_blank_lines=False,
+    ).fillna("")
+    index_df.columns = [str(column).strip() for column in index_df.columns]
+    if not {"name", "group"} <= set(index_df.columns):
+        raise ValueError(
+            f"index.csv must have the columns 'name' and 'group', but "
+            f"{index_filepath} has: {', '.join(index_df.columns)}"
+        )
+    for column in index_df.columns:
+        index_df[column] = index_df[column].str.strip()
+    return index_df[(index_df != "").any(axis=1)]
+
+
+def _read_index_groups(project_dir, recordings):
+    """Look up the group of each recording in the project's index.csv.
+
+    Every analysis function that attaches groups to modeling results reads
+    them through here, so the rules are the same everywhere: rows for other
+    recordings and rows with neither a name nor a group are ignored, and
+    every recording asked for must have exactly one row with a group.
+
+    Parameters
+    ----------
+    project_dir : str
+        Project directory holding index.csv.
+    recordings : list of str
+        Recordings whose groups are needed.
+
+    Returns
+    -------
+    groups : dict or None
+        Group of each recording, or None if the project has no index.csv.
+
+    Raises
+    ------
+    ValueError
+        Listing every recording with no row, an empty group, or several
+        rows, with line numbers in index.csv.
+    """
+    index_filepath = os.path.join(project_dir, "index.csv")
+    if not os.path.exists(index_filepath):
+        return None
+    index_df = _read_index_csv(index_filepath)
+
+    lines_of = {}
+    for row, name in index_df["name"].items():
+        if name:
+            lines_of.setdefault(name, []).append(row + 2)
+    group_on_line = {row + 2: group for row, group in index_df["group"].items()}
+    unnamed = [
+        (row + 2, group)
+        for row, name, group in zip(index_df.index, index_df["name"], index_df["group"])
+        if group and not name
+    ]
+
+    missing = [r for r in recordings if r not in lines_of]
+    duplicated = [(r, lines_of[r]) for r in recordings if len(lines_of.get(r, [])) > 1]
+    no_group = [
+        (r, lines_of[r][0])
+        for r in recordings
+        if len(lines_of.get(r, [])) == 1 and not group_on_line[lines_of[r][0]]
+    ]
+    if missing or duplicated or no_group:
+        lines = [
+            f"index.csv does not give every recording being analyzed exactly one "
+            f"group ({index_filepath}):",
+            "",
+        ]
+        if missing:
+            lines.append(
+                f"  {len(missing)} of {len(recordings)} recordings have no row: "
+                f"{', '.join(missing)}"
+            )
+            if unnamed:
+                rows = ", ".join(f"line {line} (group '{group}')" for line, group in unnamed)
+                lines.append(f"  rows with a group but no name: {rows}")
+        for recording, line in no_group:
+            lines.append(f"  {recording} has no group (line {line})")
+        for recording, rows in duplicated:
+            lines.append(
+                f"  {recording} appears on lines {', '.join(map(str, rows))}"
+            )
+        lines += [
+            "",
+            fill(
+                "Give each recording one row with a group; recordings without a "
+                "group belong in 'default'. To add recordings that are missing "
+                "from index.csv, re-run `kpms.interactive_group_setting(project_dir, "
+                "model_name)`, which adds them to the group 'default'."
+            ),
+        ]
+        raise ValueError("\n".join(lines))
+    return {r: group_on_line[lines_of[r][0]] for r in recordings}
+
+
 def generate_index(project_dir, model_name, index_filepath):
-    """Generate index file as a csv.
+    """Write index.csv with a row for every recording in the model's results.
+
+    Recordings already in index.csv keep their rows and groups; recordings
+    that are not, such as ones added with `apply_model`, are appended in the
+    group "default". The file is only rewritten when rows are added.
 
     Parameters
     ----------
@@ -65,36 +202,29 @@ def generate_index(project_dir, model_name, index_filepath):
     index_filepath : str
         path to index file
     """
-
-    # load model results
     results_dict = load_results(project_dir, model_name)
 
-    # check if file exists
     if os.path.exists(index_filepath):
-        index_df = pd.read_csv(index_filepath, index_col=False)
-
-        # all files are created
-        if len(index_df) == len(results_dict.keys()):
+        index_df = _read_index_csv(index_filepath)
+        listed = set(index_df["name"])
+        missing = [name for name in results_dict if name not in listed]
+        if not missing:
             return
-        else:
-            # subset all the files
-            files = index_df.name.values
-            # find the missing file in results dict that's not in index
-            for i in results_dict.keys():
-                if i not in files:
-                    index_df.loc[len(index_df.index)] = [i, "default"]
-            # write index dataframe
-            index_df.to_csv(index_filepath, index=False)
+        index_df = pd.concat(
+            [index_df, pd.DataFrame({"name": missing, "group": "default"})],
+            ignore_index=True,
+        )
     else:
-        # generate a new index file
-        results_dict = load_results(project_dir, model_name)
         index_df = pd.DataFrame({"name": list(results_dict.keys()), "group": "default"})
-        # write index dataframe
-        index_df.to_csv(index_filepath, index=False)
+    index_df.to_csv(index_filepath, index=False)
 
 
 def interactive_group_setting(project_dir, model_name):
     """Start the interactive group setting widget.
+
+    Clicking "Save group info" writes the groups to
+    `{project_dir}/index.csv`. The message next to the button confirms the
+    save and shows how many recordings are in each group.
 
     Parameters
     ----------
@@ -106,14 +236,11 @@ def interactive_group_setting(project_dir, model_name):
 
     index_filepath = os.path.join(project_dir, "index.csv")
 
-    if not os.path.exists(index_filepath):
-        generate_index(project_dir, model_name, index_filepath)
-
-    # making the interactive dataframe
-    # open index dataframe
+    # add any recordings in the model's results that index.csv lacks
+    generate_index(project_dir, model_name, index_filepath)
 
     # make a tabulator dataframe
-    summary_data = pd.read_csv(index_filepath, index_col=False)
+    summary_data = _read_index_csv(index_filepath).reset_index(drop=True)
 
     titles = {"name": "recording name", "group": "group"}
 
@@ -145,6 +272,9 @@ def interactive_group_setting(project_dir, model_name):
         configuration=base_configuration,
     )
     button = pn.widgets.Button(name="Save group info", button_type="primary")
+    # The browser shows "Saving…" as soon as the button is clicked; Python
+    # replaces it once index.csv is saved and read back.
+    status = pn.pane.HTML("", width=300, styles={"overflow-wrap": "anywhere"})
 
     # call back function to save the index file
     def save_index(summary_data):
@@ -157,15 +287,46 @@ def interactive_group_setting(project_dir, model_name):
     # button click action
     def b(event, save=True):
         save_index(summary_data)
+        counts = _read_index_csv(index_filepath)["group"].value_counts().sort_index()
+        groups = ", ".join(
+            f"{group} ({n} recording{'s' if n != 1 else ''})"
+            for group, n in counts.items()
+        )
+        time = datetime.now().strftime("%H:%M:%S")
+        # cleared first, so that saving unchanged groups still sends a message
+        # that replaces "Saving…" in the browser
+        status.object = ""
+        status.object = html.escape(f"Saved at {time} to {index_filepath}: {groups}")
 
     button.on_click(b)
+    button.js_on_click(
+        args={"status": status},
+        code="""
+        const saving = "Saving…";
+        status.text = saving;
+        setTimeout(() => {
+          if (status.text === saving) {
+            status.text = "No reply from Python after 10 seconds, so the groups "
+              + "may not be saved. If another cell is still running, this will "
+              + "update when it finishes. Otherwise, the notebook front end may "
+              + "not be passing widget events to Python; JupyterLab is known "
+              + "to work.";
+          }
+        }, 10000);
+        """,
+    )
 
-    return pn.Row(summary_table, pn.Column(button))
+    return pn.Row(summary_table, pn.Column(button, status))
 
 
-def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smooth_heading=True):
+def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=None, smooth_heading=True):
     """Compute moseq dataframe from results dict that contains all kinematic
     values by frame.
+
+    Velocities are converted from per-frame to per-second with the frame
+    rate, which is also stored in the "fps" column so that
+    :py:func:`keypoint_moseq.analysis.compute_stats_df` converts syllable
+    durations with the same rate.
 
     Parameters
     ----------
@@ -174,26 +335,52 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smoo
     model_name : str
         the name of the model directory
     results_dict : dict
-        dictionary of results from model fitting
-    fps: int, optional
-        The fps of the recordings
+        dictionary of results from model fitting. If None, loaded from
+        `{project_dir}/{model_name}/results.h5`.
+    fps: float, optional
+        The frame rate of the recordings. By default, the `fps` in the
+        project's config.yml.
     smooth_heading : bool, optional
         boolean flag whether smooth the computed heading, by default True
 
     Returns
     -------
     moseq_df : pandas.DataFrame
-        the dataframe that contains kinematic data for each frame
+        the dataframe that contains kinematic data for each frame. `onset`
+        marks the first frame of each syllable instance. A recording's first
+        frame is never an onset, since its syllable may have started before
+        the recording did.
+
+    Raises
+    ------
+    ValueError
+        If `fps` is not given and the project has no config.yml with an
+        `fps` entry.
     """
 
     if results_dict is None:
         results_dict = load_results(project_dir, model_name)
 
-    # load index file
-    index_filepath = os.path.join(project_dir, "index.csv")
-    if os.path.exists(index_filepath):
-        index_data = pd.read_csv(index_filepath, index_col=False)
-    else:
+    if fps is None:
+        config_path = os.path.join(project_dir, "config.yml")
+        config_fps = (
+            load_config(project_dir, check_if_valid=False, build_indexes=False).get("fps")
+            if os.path.exists(config_path)
+            else None
+        )
+        if config_fps is None:
+            raise ValueError(
+                fill(
+                    "compute_moseq_df needs the frame rate of the recordings to "
+                    "convert velocities to per-second units. Pass `fps`, or set "
+                    f"`fps` in the project config ({config_path}) with "
+                    "`kpms.update_config(project_dir, fps=...)`."
+                )
+            )
+        fps = config_fps
+
+    groups = _read_index_groups(project_dir, list(results_dict))
+    if groups is None:
         print(
             "index.csv not found, if you want to include group information for each video, please run the Assign Groups widget first"
         )
@@ -222,14 +409,7 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smoo
             )
         )
 
-        if index_data is not None:
-            # find the group for each recording from index data
-            s_group.append(
-                [index_data[index_data["name"] == k]["group"].values[0]] * n_frame
-            )
-        else:
-            # no index data
-            s_group.append(["default"] * n_frame)
+        s_group.append([groups[k] if groups is not None else "default"] * n_frame)
         frame_index.append(np.arange(n_frame))
 
         if smooth_heading:
@@ -244,9 +424,9 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smoo
         gaussian_smoothed_heading = filter_angle(
             recording_heading, size=3, method="gaussian"
         )
-        angular_velocity.append(
-            np.concatenate(([0], np.diff(gaussian_smoothed_heading) * fps))
-        )
+        # wrap each change in heading to (-pi, pi], so crossing ±pi is a small turn
+        heading_change = np.angle(np.exp(1j * np.diff(gaussian_smoothed_heading)))
+        angular_velocity.append(np.concatenate(([0], heading_change * fps)))
 
         # add syllable data
         syllables.append(v["syllable"])
@@ -271,75 +451,127 @@ def compute_moseq_df(project_dir, model_name, results_dict=None, *, fps=30, smoo
     moseq_df["syllable"] = np.concatenate(syllables)
     moseq_df["frame_index"] = np.concatenate(frame_index)
     moseq_df["group"] = np.concatenate(s_group)
+    moseq_df["fps"] = fps
 
-    # compute syllable onset
-    change = np.diff(moseq_df["syllable"]) != 0
-    indices = np.where(change)[0]
-    indices += 1
-    indices = np.concatenate(([0], indices))
-
-    onset = np.full(moseq_df.shape[0], False)
-    onset[indices] = True
-    moseq_df["onset"] = onset
+    # compute syllable onset; a recording's first frame is not an onset, since
+    # its syllable may have started before the recording did
+    labels = moseq_df["syllable"].to_numpy()
+    names = moseq_df["name"].to_numpy()
+    moseq_df["onset"] = np.concatenate(
+        [[False], (labels[1:] != labels[:-1]) & (names[1:] == names[:-1])]
+    )
     return moseq_df
 
 
 def compute_stats_df(
-    project_dir,
-    model_name,
     moseq_df,
     min_frequency=0.005,
     groupby=["group", "name"],
-    fps=30,
 ):
     """Summary statistics for syllable frequencies and kinematic values.
+
+    Everything is computed from `moseq_df`, which already holds each frame's
+    syllable, kinematics and group, so the statistics always describe the
+    same recordings and groups as the dataframe they were computed from.
 
     Parameters
     ----------
     moseq_df : pandas.DataFrame
-        the dataframe that contains kinematic data for each frame
-    threshold : float, optional
-        usge threshold for the syllable to be included, by default 0.005
+        the dataframe that contains kinematic data for each frame (see
+        :py:func:`keypoint_moseq.analysis.compute_moseq_df`)
+    min_frequency : float, optional
+        syllables whose frequency across all recordings is at or below this
+        threshold are left out, by default 0.005
     groupby : list, optional
-        the list of column names to group by, by default ['group', 'name']
-    fps : int, optional
-        frame per second information of the recording, by default 30
+        columns that identify the rows of `stats_df`, by default ['group',
+        'name']. Statistics are meant to be per recording, so keep 'name' in
+        the list. Frequencies are always computed per recording: without
+        'name', `stats_df` still has a row for each recording and syllable,
+        with that recording's frequency, the duration and kinematic
+        statistics pooled over its group, and no 'name' column.
+        `run_kruskal` and the significance markers in
+        `plot_syll_stats_with_sem` need 'name'.
 
     Returns
     -------
     stats_df : pandas.DataFrame
-        the summary statistics dataframe for syllable frequencies and kinematic values
-    """
-    # compute runlength encoding for syllables
+        the summary statistics dataframe for syllable frequencies and kinematic
+        values. `duration` is the mean length in seconds of the syllable's
+        instances, leaving out each recording's first and last instance, which
+        the start and end of the recording cut short. It is NaN when those are
+        the syllable's only instances. `heading_mean` and `heading_std` are the
+        circular mean and standard deviation of the heading, and
+        `heading_min` and `heading_max` are its smallest and largest values in
+        (-pi, pi]. Each recording has a row for every syllable that passes
+        `min_frequency`. Where the recording never used the syllable,
+        `frequency` is 0, and with 'name' in `groupby`, `duration` and the
+        kinematic columns are NaN.
 
-    # load model results
-    results_dict = load_results(project_dir, model_name)
-    syllables = {k: res["syllable"] for k, res in results_dict.items()}
+    Raises
+    ------
+    ValueError
+        If any recording in `moseq_df` has more than one group (syllable
+        frequencies are computed per recording, so each recording must belong
+        to a single group), or if `moseq_df` has no "fps" column or more than
+        one frame rate.
+    """
+    if "fps" not in moseq_df.columns:
+        raise ValueError(
+            fill(
+                "moseq_df has no 'fps' column, so syllable durations cannot be "
+                "converted to seconds. Recompute it with compute_moseq_df."
+            )
+        )
+    frame_rates = pd.unique(moseq_df["fps"])
+    if len(frame_rates) > 1:
+        raise ValueError(
+            f"moseq_df mixes recordings at several frame rates "
+            f"({', '.join(map(str, frame_rates))} fps); compute statistics for each "
+            "frame rate separately."
+        )
+    fps = frame_rates[0]
+
+    groups_per_recording = moseq_df.groupby("name", sort=False)["group"].unique()
+    mixed = groups_per_recording[groups_per_recording.map(len) > 1]
+    if len(mixed) > 0:
+        lines = [
+            "Each recording must belong to a single group, but these recordings "
+            "have several in moseq_df:"
+        ]
+        lines += [f"  {name}: {', '.join(map(str, groups))}" for name, groups in mixed.items()]
+        lines.append(
+            fill(
+                "Groups are assigned per recording, in index.csv before "
+                "compute_moseq_df, because syllable frequencies are computed per "
+                "recording."
+            )
+        )
+        raise ValueError("\n".join(lines))
+    group_of = {name: groups[0] for name, groups in groups_per_recording.items()}
+
+    # each recording's syllables in frame order
+    syllables = {}
+    for name, rows in moseq_df.groupby("name", sort=False):
+        if "frame_index" in rows:
+            rows = rows.sort_values("frame_index", kind="stable")
+        syllables[name] = rows["syllable"].to_numpy()
+
     # frequencies is array of frequencies for sorted syllables [syll_0, syll_1...]
     frequencies = get_frequencies(syllables)
     syll_include = np.where(frequencies > min_frequency)[0]
 
-    # add group information
-    # load index file
-    index_filepath = os.path.join(project_dir, "index.csv")
-    if os.path.exists(index_filepath):
-        index_df = pd.read_csv(index_filepath, index_col=False)
-    else:
-        print(
-            "index.csv not found, if you want to include group information for each video, please run the Assign Groups widget first"
-        )
-
-    # construct frequency dataframe
-    # syllable frequencies within one session add up to 1
+    # construct frequency dataframe, with a row for every included syllable in
+    # every recording (0 where the recording never used it); syllable
+    # frequencies are computed within each recording
     frequency_df = []
-    for k, v in results_dict.items():
-        syll_freq = get_frequencies(v["syllable"])
+    for name, recording_syllables in syllables.items():
+        syll_freq = get_frequencies(recording_syllables, num_states=len(frequencies))
         df = pd.DataFrame(
             {
-                "name": k,
-                "group": index_df[index_df["name"] == k]["group"].values[0],
-                "syllable": np.arange(len(syll_freq)),
-                "frequency": syll_freq,
+                "name": name,
+                "group": group_of[name],
+                "syllable": syll_include,
+                "frequency": syll_freq[syll_include],
             }
         )
         frequency_df.append(df)
@@ -350,26 +582,58 @@ def compute_stats_df(
     # filter out syllables that are used less than threshold in all recordings
     filtered_df = moseq_df[moseq_df["syllable"].isin(syll_include)].copy()
 
-    # TODO: hard-coded heading for now, could add other scalars
-    features = filtered_df.groupby(groupby + ["syllable"])[
-        ["heading", "angular_velocity", "velocity_px_s"]
-    ].agg(["mean", "std", "min", "max"])
+    # heading is an angle in (-pi, pi], so its mean and std are circular; like
+    # the other std columns, its std is NaN for a single frame
+    def heading_mean(heading):
+        return stats.circmean(heading, high=np.pi, low=-np.pi)
 
-    features.columns = ["_".join(col).strip() for col in features.columns.values]
+    def heading_std(heading):
+        if len(heading) < 2:
+            return np.nan
+        return stats.circstd(heading, high=np.pi, low=-np.pi)
+
+    aggregations = {}
+    for kinematic in ["heading", "angular_velocity", "velocity_px_s"]:
+        if kinematic == "heading":
+            mean, std = heading_mean, heading_std
+        else:
+            mean, std = "mean", "std"
+        functions = {"mean": mean, "std": std, "min": "min", "max": "max"}
+        for statistic, function in functions.items():
+            aggregations[f"{kinematic}_{statistic}"] = (kinematic, function)
+    features = filtered_df.groupby(groupby + ["syllable"]).agg(**aggregations)
     features.reset_index(inplace=True)
 
-    # get durations
-    trials = filtered_df["onset"].cumsum()
-    trials.name = "trials"
-    durations = filtered_df.groupby(groupby + ["syllable"] + [trials])["onset"].count()
+    # get durations, leaving out each recording's first and last instance,
+    # which the start and end of the recording cut short
+    durations = []
+    for name, recording_syllables in syllables.items():
+        onsets = np.flatnonzero(np.diff(recording_syllables)) + 1
+        durations.append(
+            pd.DataFrame(
+                {
+                    "name": name,
+                    "group": group_of[name],
+                    "syllable": recording_syllables[onsets[:-1]],
+                    "frames": np.diff(onsets),
+                }
+            )
+        )
+    durations = pd.concat(durations)
+    durations = durations[durations["syllable"].isin(syll_include)]
     # average duration in seconds
-    durations = durations.groupby(groupby + ["syllable"]).mean() / fps
+    durations = durations.groupby(groupby + ["syllable"])["frames"].mean() / fps
     durations.name = "duration"
-    # only keep the columns we need
-    durations = durations.fillna(0).reset_index()[groupby + ["syllable", "duration"]]
+    durations = durations.reset_index()
 
-    stats_df = pd.merge(features, frequency_df, on=groupby + ["syllable"])
-    stats_df = pd.merge(stats_df, durations, on=groupby + ["syllable"])
+    # with 'name' in groupby, a syllable the recording never used gets NaN
+    # kinematics
+    stats_df = pd.merge(features, frequency_df, on=groupby + ["syllable"], how="right")
+    stats_df = stats_df.sort_values(
+        groupby + ["syllable"], kind="stable", ignore_index=True
+    )
+    # syllables with no complete instance get a NaN duration
+    stats_df = pd.merge(stats_df, durations, on=groupby + ["syllable"], how="left")
     return stats_df
 
 
@@ -392,7 +656,7 @@ def generate_syll_info(project_dir, model_name, syll_info_path):
     grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
     assert len(grid_movies) > 0, (
         "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
-        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
+        "https://keypoint-moseq.readthedocs.io/en/stable/modeling.html#visualization"
     )
     # make movie paths into a dataframe
     movie_df = pd.DataFrame(
@@ -419,6 +683,8 @@ def label_syllables(project_dir, model_name, moseq_df):
         the path to the project directory
     model_name : str
         the name of the model directory
+    moseq_df : pandas.DataFrame
+        the dataframe from `compute_moseq_df`
     """
 
     # construct the syllable info path
@@ -433,11 +699,11 @@ def label_syllables(project_dir, model_name, moseq_df):
     grid_movies = glob(os.path.join(project_dir, model_name, "grid_movies", "*.mp4"))
     assert len(grid_movies) > 0, (
         "No grid movies found. Please run `generate_grid_movies` as described in the docs: "
-        "https://keypoint-moseq.readthedocs.io/en/latest/modeling.html#visualization"
+        "https://keypoint-moseq.readthedocs.io/en/stable/modeling.html#visualization"
     )
 
     # load syll_info
-    syll_info_df = pd.read_csv(syll_info_path, index_col=False).fillna("")
+    syll_info_df = _read_syll_info(syll_info_path)
     # split into with movie and without movie
     syll_info_df_with_movie = syll_info_df[
         syll_info_df.movie_path.str.contains(".mp4")
@@ -740,8 +1006,6 @@ def compute_pvalues_for_group_pairs(
         Alpha threshold to consider syllable significant, by default 0.05
     mc_method : str, optional
         Multiple Corrections method to use, by default "fdr_bh"
-    verbose : bool, optional
-        indicates whether to print out the significant syllable results, by default False
 
     Returns
     -------
@@ -751,13 +1015,14 @@ def compute_pvalues_for_group_pairs(
         List of corrected KW significant syllables (syllables with p-values < thresh).
     """
 
-    # do empirical p-val calculation for all group permutation
+    # empirical p-values for each pair of groups: the share of shuffles at
+    # least as extreme as the real data, counting the real data as a shuffle
 
     p_vals_allperm = {}
     for pair in combinations(group_names, 2):
         p_vals_allperm[pair] = (
-            (null_zs[pair] > real_zs_within_group[pair]).sum(0) + 1
-        ) / n_perm
+            (null_zs[pair] >= real_zs_within_group[pair]).sum(0) + 1
+        ) / (n_perm + 1)
 
     # summarize into df
     df_pval = pd.DataFrame(p_vals_allperm)
@@ -770,6 +1035,60 @@ def compute_pvalues_for_group_pairs(
     return df_pval_corrected, ((df_pval_corrected[df_k_real.is_sig] < thresh).sum(0))
 
 
+def _kruskal_and_dunn(grouped_data, rnd, n_perm, seed):
+    """Kruskal-Wallis H statistics and Dunn's z statistics, real and permuted,
+    for each syllable column of `grouped_data`, whose rows are recordings
+    sorted by group with a value for every syllable.
+
+    Returns
+    -------
+    h_all : np.array
+        Permuted H statistics, shape = (n_perm, n_syllables).
+    df_k_real : pandas.DataFrame
+        Kruskal-Wallis statistic and p-value for each syllable.
+    null_zs_within_group, real_zs_within_group : dict
+        See :py:func:`dunns_z_test_permute_within_group_pairs`.
+    """
+    vc = grouped_data.group.value_counts().loc[grouped_data.group.unique()]
+    n_per_group = vc.values
+    group_names = vc.index
+    cum_group_idx = np.insert(np.cumsum(n_per_group), 0, 0)
+
+    df_only_stats = grouped_data.drop(["group", "name"], axis=1)
+    syllable_data = df_only_stats.values
+    N_m, N_s = syllable_data.shape
+
+    # Run KW and return H-stats
+    h_all, real_ranks, X_ties = run_manual_KW_test(
+        df_usage=df_only_stats,
+        merged_usages_all=syllable_data,
+        num_groups=len(group_names),
+        n_per_group=n_per_group,
+        cum_group_idx=cum_group_idx,
+        n_perm=n_perm,
+        seed=seed,
+    )
+
+    # find the real k_real
+    df_k_real = pd.DataFrame(
+        [
+            stats.kruskal(
+                *np.array_split(syllable_data[:, s_i], np.cumsum(n_per_group[:-1]))
+            )
+            for s_i in range(N_s)
+        ]
+    )
+
+    # Run Dunn's z-test statistics
+    (
+        null_zs_within_group,
+        real_zs_within_group,
+    ) = dunns_z_test_permute_within_group_pairs(
+        grouped_data, vc, real_ranks, X_ties, N_m, group_names, rnd, n_perm
+    )
+    return h_all, df_k_real, null_zs_within_group, real_zs_within_group
+
+
 def run_kruskal(
     stats_df,
     statistic="frequency",
@@ -779,6 +1098,13 @@ def run_kruskal(
     mc_method="fdr_bh",
 ):
     """Run Kruskal-Wallis test on syllable usage data.
+
+    A recording without a row for a syllable has a frequency of 0. Other
+    missing values are left out: each syllable is tested on the recordings
+    that have a value for `statistic`, and a syllable is not tested when a
+    group has no recordings with a value, or when every value is the same. A
+    warning gives the number of syllables where a group has fewer than 3
+    recordings with a value.
 
     Parameters
     ----------
@@ -798,72 +1124,112 @@ def run_kruskal(
     Returns
     -------
     df_k_real : pandas.DataFrame
-        DataFrame containing KW test results.
-    df_pval_corrected : pandas.DataFrame
-        DataFrame containing Dunn's test results with corrected p-values.
-    significant_syllables : list
-        List of corrected KW significant syllables (syllables with p-values < thresh).
+        DataFrame containing KW test results, indexed by syllable. A syllable
+        that wasn't tested has NaN `statistic`, `pvalue` and `p_adj`, and
+        `is_sig` False.
+    dunn_results_df : pandas.DataFrame
+        Dunn's z statistic for each syllable and pair of groups, in the
+        columns `("syllable", "")`, `group1`, `group2` and `value`. `value`
+        is NaN for a syllable that wasn't tested.
+    significant_syllables : dict
+        Maps each pair of groups to the syllables whose corrected KW p-value
+        is at most `thresh` and whose corrected Dunn p-value is below
+        `thresh`.
     """
     rnd = np.random.RandomState(seed=seed)
-    # get grouped mean data
-    grouped_data = (
-        stats_df.pivot_table(
-            index=["group", "name"], columns="syllable", values=statistic
-        )
-        .replace(np.nan, 0)
-        .reset_index()
+    # one row per recording, sorted by group; a recording without a value for
+    # a syllable, such as a duration for a syllable it never used, has NaN,
+    # except that a recording without a row for a syllable never used it, so
+    # its frequency is 0
+    grouped_data = stats_df.pivot_table(
+        index=["group", "name"], columns="syllable", values=statistic
     )
-    # compute KW constants
-    vc = grouped_data.group.value_counts().loc[grouped_data.group.unique()]
-    n_per_group = vc.values
-    group_names = vc.index
-
-    cum_group_idx = np.insert(np.cumsum(n_per_group), 0, 0)
-    num_groups = len(group_names)
-
-    # get all syllable usage data
-    df_only_stats = grouped_data.drop(["group", "name"], axis=1)
-    syllable_data = grouped_data.drop(["group", "name"], axis=1).values
-
-    N_m, N_s = syllable_data.shape
-    # Run KW and return H-stats
-    h_all, real_ranks, X_ties = run_manual_KW_test(
-        df_usage=df_only_stats,
-        merged_usages_all=syllable_data,
-        num_groups=num_groups,
-        n_per_group=n_per_group,
-        cum_group_idx=cum_group_idx,
-        n_perm=n_perm,
-        seed=seed,
+    if statistic == "frequency":
+        grouped_data = grouped_data.replace(np.nan, 0)
+    grouped_data = grouped_data.reset_index()
+    # every group, in the pivot's order (alphabetical, or the category order
+    # of a categorical column); a group is missing from the pivot when none
+    # of its recordings has a value
+    group_names = pd.Index(stats_df["group"].drop_duplicates().sort_values())
+    # syllable label of each column; the pivoted columns mixed names and
+    # syllables, so their Index has dtype object, and listing them recovers
+    # the syllables' own dtype
+    syllables = np.asarray(
+        grouped_data.drop(["group", "name"], axis=1).columns.tolist()
     )
 
-    # find the real k_real
-    df_k_real = pd.DataFrame(
-        [
-            stats.kruskal(
-                *np.array_split(syllable_data[:, s_i], np.cumsum(n_per_group[:-1]))
+    # recordings with a value for each syllable, in each group
+    counts = (
+        grouped_data.groupby("group", observed=True)[list(syllables)]
+        .count()
+        .reindex(group_names, fill_value=0)
+    )
+    small = (counts < MIN_RECORDINGS_PER_GROUP).any()
+    if small.any():
+        warnings.warn(
+            fill(
+                f"For `{statistic}`, {small.sum()} of {len(syllables)} syllables "
+                f"have a group with fewer than {MIN_RECORDINGS_PER_GROUP} "
+                "recordings that have a value, so their significance results "
+                "are unreliable. A syllable is not tested when a group has no "
+                "recordings with a value."
             )
-            for s_i in range(N_s)
-        ]
+        )
+
+    # syllables with a value in every recording are tested together; each
+    # other syllable is tested on the recordings that have a value, unless a
+    # group has none, or every value is the same, which leaves nothing to rank
+    testable = (counts > 0).all() & (grouped_data[list(syllables)].nunique() > 1)
+    complete = [
+        s for s in syllables if testable[s] and grouped_data[s].notna().all()
+    ]
+    blocks = []
+    if complete:
+        blocks.append(grouped_data[["group", "name", *complete]])
+    for syllable in syllables:
+        if syllable in complete or not testable[syllable]:
+            continue
+        rows = grouped_data[grouped_data[syllable].notna()]
+        blocks.append(rows[["group", "name", syllable]])
+    tested = np.asarray(
+        [s for block in blocks for s in block.columns.tolist()[2:]],
+        dtype=syllables.dtype,
     )
 
-    # multiple test correction
-    df_k_real["p_adj"] = multipletests(
-        ((h_all > df_k_real.statistic.values).sum(0) + 1) / n_perm,
-        alpha=thresh,
-        method=mc_method,
-    )[1]
+    pairs = list(combinations(group_names, 2))
+    results = [_kruskal_and_dunn(block, rnd, n_perm, seed) for block in blocks]
+    if results:
+        h_all = np.concatenate([r[0] for r in results], axis=1)
+        df_k_real = pd.concat([r[1] for r in results], ignore_index=True)
+        null_zs_within_group = {
+            pair: np.concatenate([r[2][pair] for r in results], axis=1)
+            for pair in pairs
+        }
+        real_zs_within_group = {
+            pair: np.concatenate([r[3][pair] for r in results]) for pair in pairs
+        }
+    else:
+        h_all = np.zeros((n_perm, 0))
+        df_k_real = pd.DataFrame({"statistic": [], "pvalue": []})
+        null_zs_within_group = {pair: np.zeros((n_perm, 0)) for pair in pairs}
+        real_zs_within_group = {pair: np.zeros(0) for pair in pairs}
+
+    # empirical p-values: the share of shuffles at least as extreme as the
+    # real data, counting the real data as a shuffle; with small groups, many
+    # shuffles reproduce the real split and tie it exactly
+    empirical_pvalues = ((h_all >= df_k_real.statistic.values).sum(0) + 1) / (
+        n_perm + 1
+    )
+
+    # multiple test correction over the tested syllables
+    df_k_real["p_adj"] = (
+        multipletests(empirical_pvalues, alpha=thresh, method=mc_method)[1]
+        if len(empirical_pvalues) > 0
+        else []
+    )
 
     # return significant syllables based on the threshold
     df_k_real["is_sig"] = df_k_real["p_adj"] <= thresh
-
-    # Run Dunn's z-test statistics
-    (
-        null_zs_within_group,
-        real_zs_within_group,
-    ) = dunns_z_test_permute_within_group_pairs(
-        grouped_data, vc, real_ranks, X_ties, N_m, group_names, rnd, n_perm
-    )
 
     # Compute p-values from Dunn's z-score statistics
     df_pair_corrected_pvalues, _ = compute_pvalues_for_group_pairs(
@@ -877,7 +1243,7 @@ def run_kruskal(
     )
 
     # combine Dunn's test results into single DataFrame
-    df_z = pd.DataFrame(real_zs_within_group)
+    df_z = pd.DataFrame(real_zs_within_group, index=tested).reindex(syllables)
     df_z.index = df_z.index.set_names("syllable")
     dunn_results_df = df_z.reset_index().melt(id_vars=[("syllable", "")])
     dunn_results_df.rename(
@@ -887,10 +1253,14 @@ def run_kruskal(
     # Get intersecting significant syllables between
     intersect_sig_syllables = {}
     for pair in df_pair_corrected_pvalues.columns.tolist():
-        intersect_sig_syllables[pair] = np.where(
-            (df_pair_corrected_pvalues[pair] < thresh) & (df_k_real.is_sig)
-        )[0]
+        is_sig = (df_pair_corrected_pvalues[pair] < thresh) & df_k_real.is_sig
+        significant = tested[is_sig.to_numpy()]
+        intersect_sig_syllables[pair] = syllables[np.isin(syllables, significant)]
 
+    # syllables that weren't tested have NaN statistics and are not significant
+    df_k_real.index = tested
+    df_k_real = df_k_real.reindex(syllables)
+    df_k_real["is_sig"] = df_k_real["is_sig"].eq(True)
     return df_k_real, dunn_results_df, intersect_sig_syllables
 
 
@@ -918,19 +1288,8 @@ def sort_syllables_by_stat_difference(
         ordering list of syllables based on the difference in the stat between the control and experimental group
     """
 
-    # Prepare DataFrame
-    mutation_df = (
-        stats_df.drop(
-            [
-                col
-                for col, dtype in stats_df.dtypes.items()
-                if (dtype == "object" and col not in ["group", "syllable"])
-            ],
-            axis=1,
-        )
-        .groupby(["group", "syllable"])
-        .mean()
-    )
+    # mean of the stat for each group and syllable
+    mutation_df = stats_df.groupby(["group", "syllable"])[[stat]].mean()
 
     # Get groups to measure mutation by
     control_df = mutation_df.loc[ctrl_group]
@@ -943,7 +1302,7 @@ def sort_syllables_by_stat_difference(
 
 
 def sort_syllables_by_stat(stats_df, stat="frequency"):
-    """Sort sylllabes by the stat and return the ordering and label mapping.
+    """Sort syllables by the stat and return the ordering and label mapping.
 
     Parameters
     ----------
@@ -967,13 +1326,9 @@ def sort_syllables_by_stat(stats_df, stat="frequency"):
         ordering = sorted(stats_df.syllable.unique())
     else:
         ordering = (
-            stats_df.drop(
-                [col for col, dtype in stats_df.dtypes.items() if dtype == "object"],
-                axis=1,
-            )
-            .groupby("syllable")
+            stats_df.groupby("syllable")[stat]
             .mean()
-            .sort_values(by=stat, ascending=False)
+            .sort_values(ascending=False)
             .index
         )
 
@@ -1056,6 +1411,50 @@ def save_analysis_figure(fig, plot_name, project_dir, model_name, save_dir):
     print(f"Saved figure to {save_path}.png")
 
 
+def _warn_if_groups_cannot_be_compared(stats_df, groups=None):
+    """Warn when significance tests between groups would be meaningless.
+
+    Every recording in "default" means no groups were assigned, so there is
+    nothing to compare. A group with fewer than MIN_RECORDINGS_PER_GROUP
+    recordings makes the Kruskal-Wallis and Dunn tests unreliable.
+
+    Parameters
+    ----------
+    stats_df : pandas.DataFrame
+        Output of :py:func:`keypoint_moseq.analysis.compute_stats_df`.
+    groups : list, optional
+        Groups being compared; all groups in `stats_df` by default.
+    """
+    present = list(pd.unique(stats_df["group"]))
+    if present == ["default"]:
+        warnings.warn(
+            fill(
+                "Every recording is in the group 'default', so there are no "
+                "groups to compare and no significance is tested. To compare "
+                "groups, assign them with `kpms.interactive_group_setting`, then "
+                "re-run compute_moseq_df and compute_stats_df."
+            )
+        )
+        return
+    if len(present) < 2 or "name" not in stats_df.columns:
+        return
+    compared = [g for g in (present if groups is None else groups) if g in present]
+    small = {}
+    for group in compared:
+        names = sorted(stats_df.loc[stats_df["group"] == group, "name"].unique())
+        if len(names) < MIN_RECORDINGS_PER_GROUP:
+            small[group] = names
+    if small:
+        lines = [
+            f"Significance tests need at least {MIN_RECORDINGS_PER_GROUP} recordings "
+            "per group, but:"
+        ]
+        for group, names in small.items():
+            lines.append(f"  group '{group}' has {len(names)}: {', '.join(names)}")
+        lines.append("Significance results involving these groups are unreliable.")
+        warnings.warn("\n".join(lines))
+
+
 def plot_syll_stats_with_sem(
     stats_df,
     project_dir,
@@ -1072,7 +1471,7 @@ def plot_syll_stats_with_sem(
     join=False,
     figsize=(8, 4),
 ):
-    """Plot syllable statistics with standard error of the mean.
+    """Plot syllable statistics with 68% bootstrap confidence intervals.
 
     Parameters
     ----------
@@ -1082,8 +1481,9 @@ def plot_syll_stats_with_sem(
         the project directory
     model_name : str
         the model directory name
-    save_dir : str
-        the path to save the analysis plots
+    save_dir : str, optional
+        directory to save the figure to, by default
+        `{project_dir}/{model_name}/figures`
     plot_sig : bool, optional
         whether to plot the significant syllables, by default True
     thresh : float, optional
@@ -1118,6 +1518,9 @@ def plot_syll_stats_with_sem(
     if groups is None:
         groups = stats_df["group"].unique()
 
+    if plot_sig:
+        _warn_if_groups_cannot_be_compared(stats_df, groups)
+
     if plot_sig and len(stats_df["group"].unique()) > 1:
         # run kruskal wallis and dunn's test
         _, _, sig_pairs = run_kruskal(stats_df, statistic=stat, thresh=thresh)
@@ -1149,7 +1552,7 @@ def plot_syll_stats_with_sem(
 
     fig, ax = plt.subplots(1, 1, figsize=figsize)
 
-    # plot each group's stat data separately, computes groupwise SEM, and orders data based on the stat/ordering parameters
+    # plot each group's stat data separately, computes groupwise 68% confidence intervals, and orders data based on the stat/ordering parameters
     hue = "group" if groups is not None else None
     ax = sns.pointplot(
         data=stats_df,
@@ -1291,7 +1694,7 @@ def normalize_transition_matrix(init_matrix, normalize):
     Returns
     -------
     init_matrix : numpy.ndarray
-        the trnasition matrix normalized by the method specified
+        the transition matrix normalized by the method specified
     """
     if normalize is None or normalize not in ("bigram", "rows", "columns"):
         return init_matrix
@@ -1343,12 +1746,11 @@ def get_transition_matrix(
         init_matrix = []
 
         for v in labels:
-            # Get syllable transitions
-            transitions = get_transitions(v)[0]
+            v = np.asarray(v)
+            # the syllable of each run, starting with the first
+            runs = np.concatenate([v[:1], get_transitions(v)[0]])
 
-            trans_mat = n_gram_transition_matrix(
-                transitions, n=2, max_label=max_syllable
-            )
+            trans_mat = n_gram_transition_matrix(runs, n=2, max_label=max_syllable)
             init_matrix.append(trans_mat)
 
         init_matrix = np.sum(init_matrix, axis=0) + smoothing
@@ -1357,12 +1759,12 @@ def get_transition_matrix(
         # Compute a transition matrix for each recording label list
         all_mats = []
         for v in labels:
-            # Get syllable transitions
-            transitions = get_transitions(v)[0]
+            v = np.asarray(v)
+            # the syllable of each run, starting with the first
+            runs = np.concatenate([v[:1], get_transitions(v)[0]])
 
             trans_mat = (
-                n_gram_transition_matrix(transitions, n=2, max_label=max_syllable)
-                + smoothing
+                n_gram_transition_matrix(runs, n=2, max_label=max_syllable) + smoothing
             )
 
             # Normalize matrix
@@ -1383,8 +1785,8 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize="bi
         the group labels for each recording
     group : list or np.ndarray
         the groups in the project
-    max_sylls : int
-        the maximum number of syllables to include
+    syll_include : array
+        the syllables to include
     normalize : str, optional
         the method to normalize the transition matrix, by default 'bigram'
 
@@ -1398,6 +1800,10 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize="bi
     trans_mats = []
     frequencies = []
 
+    # Matrices span syllables 0-99, or up to the highest included syllable if
+    # that is higher. Bigram normalization counts every syllable in the span.
+    max_syllable = max(100, max(syll_include, default=-1) + 1)
+
     # Computing transition matrices for each given group
     for plt_group in group:
         # list of syll labels in recordings in the group
@@ -1408,13 +1814,19 @@ def get_group_trans_mats(labels, label_group, group, syll_include, normalize="bi
         # Get recordings to include in trans_mat
         # subset only syllable included
         trans_mats.append(
-            get_transition_matrix(use_labels, normalize=normalize, combine=True)[
+            get_transition_matrix(
+                use_labels, max_syllable=max_syllable, normalize=normalize, combine=True
+            )[
                 syll_include, :
             ][:, syll_include]
         )
 
-        # Getting frequency information for node scaling
-        group_frequencies = get_frequencies(use_labels)[syll_include]
+        # Getting frequency information for node scaling. A group need not
+        # use every included syllable, so count up to the largest one.
+        num_states = max(syll_include, default=-1) + 1
+        group_frequencies = get_frequencies(use_labels, num_states=num_states)[
+            syll_include
+        ]
 
         frequencies.append(group_frequencies)
     return trans_mats, frequencies
@@ -1435,12 +1847,23 @@ def visualize_transition_bigram(
 
     Parameters
     ----------
+    project_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
     group : list or np.ndarray
         the groups in the project
     trans_mats : list
         the list of transition matrices for each group
+    syll_include : array
+        the syllables included in `trans_mats` (from
+        `generate_transition_matrices`)
+    save_dir : str, optional
+        directory to save the figure to, by default
+        `{project_dir}/{model_name}/figures`
     normalize : str, optional
-        the method to normalize the transition matrix, by default 'bigram'
+        the normalization used by `generate_transition_matrices`; only sets
+        the colorbar label, by default 'bigram'
     figsize : tuple, optional
         the figure size, by default (12,6)
     show_syllable_names : bool, optional
@@ -1490,19 +1913,31 @@ def visualize_transition_bigram(
 def generate_transition_matrices(
     project_dir, model_name, normalize="bigram", min_frequency=0.005
 ):
-    """Generate the transition matrices for each recording.
+    """Generate a transition matrix for each group.
 
     Parameters
     ----------
-    progress_paths : dict
-        the dictionary of paths to the files in the analysis progress
+    project_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
     normalize : str, optional
-        the method to normalize the transition matrix, by default 'bigram'
+        the method to normalize the transition matrix ("bigram", "rows" or
+        "columns"), by default 'bigram'
+    min_frequency : float, optional
+        syllables whose frequency is at or below this threshold are left out,
+        by default 0.005
 
     Returns
     -------
     trans_mats : list
-        the list of transition matrices for each group
+        the transition matrix of each group
+    usages : list
+        the syllable frequencies of each group
+    groups : list
+        the group names, in the same order
+    syll_include : ndarray
+        the syllables included in the matrices
     """
     trans_mats, usages = None, None
     # index file
@@ -1510,15 +1945,14 @@ def generate_transition_matrices(
     if not os.path.exists(index_file):
         generate_index(project_dir, model_name, index_file)
 
-    index_data = pd.read_csv(index_file, index_col=False)
-
-    label_group = list(index_data.group.values)
-    recordings = list(index_data.name.values)
-    group = sorted(list(index_data.group.unique()))
-    print("Group(s):", ", ".join(group))
-
-    # load model reuslts
+    # load model results
     results_dict = load_results(project_dir, model_name)
+    recordings = list(results_dict)
+    groups = _read_index_groups(project_dir, recordings)
+
+    label_group = [groups[recording] for recording in recordings]
+    group = sorted(set(label_group))
+    print("Group(s):", ", ".join(group))
 
     # filter out syllables by freqency
     model_labels = [results_dict[recording]["syllable"] for recording in recordings]
@@ -1551,16 +1985,26 @@ def plot_transition_graph_group(
 
     Parameters
     ----------
+    project_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
     groups : list
         the list of groups to plot
     trans_mats : list
         the list of transition matrices for each group
     usages : list
         the list of syllable usage for each group
+    syll_include : array
+        the syllables included in `trans_mats` (from
+        `generate_transition_matrices`)
+    save_dir : str, optional
+        directory to save the figure to, by default
+        `{project_dir}/{model_name}/figures`
     layout : str, optional
         the layout of the graph, by default 'circular'
     node_scaling : int, optional
-        the scaling factor for the node size, by default 2000,
+        the scaling factor for the node size, by default 2000
     show_syllable_names : bool, optional
         whether to show just syllable indexes (False) or syllable indexes and
         names (True)
@@ -1637,14 +2081,28 @@ def plot_transition_graph_difference(
 ):
     """Plot the difference of transition graph between groups.
 
+    Each pair of groups gets its own panel, so at least two groups are
+    needed. With fewer, the function prints a message and returns without
+    plotting.
+
     Parameters
     ----------
+    project_dir : str
+        the path to the project directory
+    model_name : str
+        the name of the model directory
     groups : list
         the list of groups to plot
     trans_mats : list
         the list of transition matrices for each group
     usages : list
         the list of syllable usage for each group
+    syll_include : array
+        the syllables included in `trans_mats` (from
+        `generate_transition_matrices`)
+    save_dir : str, optional
+        directory to save the figure to, by default
+        `{project_dir}/{model_name}/figures`
     layout : str, optional
         the layout of the graph, by default 'circular'
     node_scaling : int, optional
@@ -1653,6 +2111,19 @@ def plot_transition_graph_difference(
         whether to show just syllable indexes (False) or syllable indexes and
         names (True)
     """
+    if len(groups) < 2:
+        print(
+            fill(
+                "Skipping the transition graph difference plot, which compares "
+                "pairs of groups: it needs at least two groups and got "
+                f"{len(groups)} ({', '.join(groups) or 'none'}). To compare "
+                "groups, assign recordings to them with "
+                "`kpms.interactive_group_setting`, then rerun "
+                "`kpms.generate_transition_matrices`."
+            )
+        )
+        return
+
     if show_syllable_names:
         syll_names = get_syllable_names(project_dir, model_name, syll_include)
     else:
@@ -1724,16 +2195,16 @@ def plot_transition_graph_difference(
         sub_ax.axis("off")
     # add legend
     legend_elements = [
-        Line2D([0], [0], color="r", lw=2, label=f"Up-regulated transistion"),
-        Line2D([0], [0], color="b", lw=2, label=f"Down-regulated transistion"),
+        Line2D([0], [0], color="b", lw=2, label="Transition higher in first group"),
+        Line2D([0], [0], color="r", lw=2, label="Transition higher in second group"),
         Line2D(
             [0],
             [0],
             marker="o",
             color="w",
-            label=f"Up-regulated usage",
+            label="Usage higher in first group",
             markerfacecolor="w",
-            markeredgecolor="r",
+            markeredgecolor="b",
             markersize=10,
         ),
         Line2D(
@@ -1741,9 +2212,9 @@ def plot_transition_graph_difference(
             [0],
             marker="o",
             color="w",
-            label=f"Down-regulated usage",
+            label="Usage higher in second group",
             markerfacecolor="w",
-            markeredgecolor="b",
+            markeredgecolor="r",
             markersize=10,
         ),
     ]

@@ -1,0 +1,231 @@
+arrays:
+  Y:
+    dtype: float64
+    shape:
+    - 70
+    - 10030
+    - 8
+    - 2
+  conf:
+    dtype: float64
+    shape:
+    - 70
+    - 10030
+    - 8
+  mask:
+    dtype: float64
+    shape:
+    - 70
+    - 10030
+bounds:
+- - 0
+  - 10030
+- - 10000
+  - 20030
+- - 20000
+  - 30030
+- - 30000
+  - 40030
+- - 40000
+  - 50030
+- - 50000
+  - 60030
+- - 60000
+  - 70030
+- - 70000
+  - 71524
+- - 0
+  - 10030
+- - 10000
+  - 20030
+- - 20000
+  - 30030
+- - 30000
+  - 40030
+- - 40000
+  - 50030
+- - 50000
+  - 53512
+- - 0
+  - 10030
+- - 10000
+  - 20030
+- - 20000
+  - 30030
+- - 30000
+  - 35818
+- - 0
+  - 10030
+- - 10000
+  - 20030
+- - 20000
+  - 30030
+- - 30000
+  - 40030
+- - 40000
+  - 50030
+- - 50000
+  - 53527
+- - 0
+  - 10030
+- - 10000
+  - 20030
+- - 20000
+  - 30030
+- - 30000
+  - 40030
+- - 40000
+  - 50030
+- - 50000
+  - 60030
+- - 60000
+  - 70030
+- - 70000
+  - 80030
+- - 80000
+  - 90030
+- - 90000
+  - 100030
+- - 100000
+  - 107507
+- - 0
+  - 10030
+- - 10000
+  - 20030
+- - 20000
+  - 30030
+- - 30000
+  - 40030
+- - 40000
+  - 50030
+- - 50000
+  - 60030
+- - 60000
+  - 70030
+- - 70000
+  - 80030
+- - 80000
+  - 90030
+- - 90000
+  - 100030
+- - 100000
+  - 107520
+- - 0
+  - 10030
+- - 10000
+  - 20030
+- - 20000
+  - 30030
+- - 30000
+  - 40030
+- - 40000
+  - 50030
+- - 50000
+  - 53623
+- - 0
+  - 10030
+- - 10000
+  - 20030
+- - 20000
+  - 30030
+- - 30000
+  - 40030
+- - 40000
+  - 50030
+- - 50000
+  - 53625
+- - 0
+  - 10030
+- - 10000
+  - 20030
+- - 20000
+  - 30030
+- - 30000
+  - 40030
+- - 40000
+  - 50030
+- - 50000
+  - 53632
+- - 0
+  - 10030
+- - 10000
+  - 20030
+- - 20000
+  - 30030
+- - 30000
+  - 40030
+- - 40000
+  - 50030
+- - 50000
+  - 53623
+keys:
+- 21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_11_8_one_mouse.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6a_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6b_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6b_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6b_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6b_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6b_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_10_def6b_3.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6a_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 21_12_2_def6b_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_0_2.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_04_26_cage4_1_1.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_27_04_cage4_mouse2_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_27_04_cage4_mouse2_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_27_04_cage4_mouse2_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_27_04_cage4_mouse2_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_27_04_cage4_mouse2_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000
+- 22_27_04_cage4_mouse2_0.top.irDLC_resnet50_moseq_exampleAug21shuffle1_500000

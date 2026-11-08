@@ -27,7 +27,7 @@ A fine starting point is 5-10 keypoints. For rodents, we recommend omitting the 
 
 Multiple animals
 ----------------
-- **For multi-animal experiments where the animals are comparable in size and shape** (e.g. same sex and strain), it is best to fit a single model to all the data from both animals, which will result in two or more syllable sequences for each video. To load multi-animal data from SLEAP or DeepLabCut, the same functions can be used as for single-animal data, and each tracked animal will be added as a separate key/value pair in the ``coordinates`` and ``confidences`` dictionaries. In SLEAP, for example, a single file called ``two_mice.h5`` will generate a pair of keys ``'two_mice_track0', 'two_mice_track1'``. In DeepLabCut, the name of each individual will be used as a suffix, e.g. ``'two_mice_mouseA', 'two_mice_mouseB'``. These keys can then be used at the end of modeling to access syllables for each animal.
+- **For multi-animal experiments where the animals are comparable in size and shape** (e.g. same sex and strain), it is best to fit a single model to all the data from both animals, which will result in two or more syllable sequences for each video. To load multi-animal data from SLEAP or DeepLabCut, the same functions can be used as for single-animal data, and each tracked animal will be added as a separate key/value pair in the ``coordinates`` and ``confidences`` dictionaries. In SLEAP, for example, a single file called ``two_mice.h5`` will generate a pair of keys ``'two_mice_track0', 'two_mice_track1'``. In DeepLabCut, the name of each individual will be used as a suffix, e.g. ``'two_mice_mouseA', 'two_mice_mouseB'``. These keys can then be used at the end of modeling to access syllables for each animal. Since these recordings share one video, set ``shared_videos`` to True in the config (``kpms.update_config(project_dir, shared_videos=True)``). Otherwise checking videos, calibration and grid movies warn that a video is matched to more than one recording.
 
 - **For multi-animal experiments where the animals differ in size** (e.g. adults and pups), it is best to fit separate models. If the tracking data is contained in a single file, the ``use_bodyparts`` config option can be used to limit modeling to the subset of keypoints belonging to each animal respectively. If the tracking data for each type of animal is in separate files, then simply restrict to the appropriate files when loading the data. 
 
@@ -71,7 +71,7 @@ We have only tested keypoint-MoSeq on freely moving animals, using either 2D key
 
 Non-rodents
 -----------
-Keypoint-MoSeq has only been validated on rodents (mice, rats, and anecdotal success with naked mole rats), but there is no reason in principle that it wouldn't work on other species such as insects. If you try it on another species, please let us know how it goes! A key consideration for non-rodents is setting the target syllable duration, which may differ from the 400ms, which we recommend for rodents. For additional information, see :ref:`Choosing the target syllable duration <target duration>`.
+Keypoint-MoSeq has only been validated on rodents (mice, rats, and anecdotal success with naked mole rats), but there is no reason in principle that it wouldn't work on other species such as insects. If you try it on another species, please let us know how it goes! A key consideration for non-rodents is setting the target syllable duration, which may differ from the 400 ms we recommend for rodents. For additional information, see :ref:`Choosing the target syllable duration <target duration>`.
 
 .. _loading data:
 
@@ -79,16 +79,18 @@ Loading keypoint tracking data
 ------------------------------
 Keypoint-MoSeq can be used with any method that produces 2D or 3D keypoint detections. Currently we support SLEAP, DeepLabCut, anipose, SLEAP-anipose, Neurodata Without Borders (NWB), Facemap, FreiPose and DANNCE. For methods not on this list, you can write a custom loading function or get in touch and request it as a new feature. 
 
-- If using one of the supported formats, data can be loaded as follows, optionally replacing ``'deeplabcut'`` with one of the following: ``'sleap', 'anipose', 'sleap-anipose', 'nwb', 'facemap', 'freipose', 'DANNCE'``. The file formats expected in each case are described in the docstring for :py:func:`keypoint_moseq.io.load_keypoints`.
+- If using one of the supported formats, data can be loaded as follows, optionally replacing ``'deeplabcut'`` with one of the following: ``'sleap', 'anipose', 'sleap-anipose', 'nwb', 'facemap', 'freipose', 'dannce'``. The file formats expected in each case are described in the docstring for :py:func:`keypoint_moseq.io.load_keypoints`.
 
 .. code-block:: python
 
    coordinates, confidences, bodyparts = kpms.load_keypoints(keypoint_data_path, 'deeplabcut')
 
 
+- For multi-animal data, each DeepLabCut individual or SLEAP track becomes its own recording and is treated as one animal followed through the whole file, so load tracked output, such as DeepLabCut's ``_el.h5``. Per-frame detections that were never tracked, such as DeepLabCut's SuperAnimal output, don't follow one animal.
+
 - If writing your own data loader, the output should be a ``coordinates`` dictionary that maps recording names to arrays of shape ``(num_frames, num_keypoints, num_dimensions)``, where ``num_dimensions`` is 2 or 3. The keypoint axis should correspond to the `bodyparts` list in the config. You can also include a ``confidences`` dictionary that maps recording names to arrays of shape ``(num_frames, num_keypoints)``. If your loader applies to a commonly used keypoint inference method, please let us know! We'd love to add it for others to use.
 
-- We are also happy to help write a loader for your data. Just open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and describe the method you used for keypoint tracking and the format of the data, including the file format, how it is organized into directories, and how the output files are typically named (especially in relation to the corresponding videos). If possible, also send one or more example files to calebsw@gmail.com. 
+- We are also happy to help write a loader for your data. Just open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_ and describe the method you used for keypoint tracking and the format of the data, including the file format, how it is organized into directories, and how the output files are typically named (especially in relation to the corresponding videos). If possible, also attach one or more example files to the issue, or link to them if they are too large. 
 
 
 Size variation between animals
@@ -99,7 +101,7 @@ Substantial size variation between animals may cause syllables to become over-fr
 ----------------
 Keypoint-MoSeq can be used with 3D keypoint data.
 
-- For data loading, we support Anipose and SLEAP-anipose (see :ref:`Loading keypoint tracking data <loading data>`). 
+- For data loading, we support Anipose, SLEAP-anipose, NWB, FreiPose and DANNCE (see :ref:`Loading keypoint tracking data <loading data>`). 
 
 - For visualization, :py:func:`keypoint_moseq.viz.plot_pcs` and :py:func:`keypoint_moseq.viz.generate_trajectory_plots` can be run exactly as described in the tutorial. Both functions will render 2D projections in the x/y and x/z planes and also generate 3D interactive plots. The 3D plots are rendered in the notebook and can also be viewed offline in a browser using the saved .html file. For grid movies, see :ref:`Making grid movies for 3D data <3d grid movies>`.
 
@@ -137,22 +139,23 @@ For rodents we recommend a target duration of ~400ms (i.e. 12 frames at 30fps), 
 
 Number of model fitting iterations
 ----------------------------------
-It may be necessary to re-run the fitting process a few times to choose a good value for the `kappa` hyperparameter. During these initial runs, fitting need only be run until the syllable durations stabilize. This typically takes <10 for the initial (AR only) stage of fitting, and 10-50 iterations for the second (full model) stage. After setting ``kappa``, continue fitting until the syllable sequence stabilizes, e.g. 200-500 iterations. In our experience, the model fit improves somewhat from 200 to 500 iterations, but not after that.
+It may be necessary to re-run the fitting process a few times to choose a good value for the `kappa` hyperparameter. During these initial runs, fitting need only be run until the syllable durations stabilize. This typically takes fewer than 10 iterations for the initial (AR only) stage of fitting, and 10-50 iterations for the second (full model) stage. After setting ``kappa``, continue fitting until the syllable sequence stabilizes, e.g. 200-500 iterations. In our experience, the model fit improves somewhat from 200 to 500 iterations, but not after that.
 
 
 Detecting existing syllables in new data
 ----------------------------------------
-If you already have a trained a MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function.
+If you already have a trained MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function.
 
 .. code-block:: python
 
-   # load the most recent model checkpoint and pca object
+   # load the most recent model checkpoint
    model = kpms.load_checkpoint(project_dir, model_name)[0]
-   pca = kpms.load_pca(project_dir)
 
    # load new data (e.g. from deeplabcut)
    new_data = 'path/to/new/data/' # can be a file, a directory, or a list of files
    coordinates, confidences, bodyparts = kpms.load_keypoints(new_data, 'deeplabcut')
+   coordinates, confidences = kpms.outlier_removal(
+       coordinates, confidences, project_dir, overwrite=False, **config())
    data, metadata = kpms.format_data(coordinates, confidences, **config())
 
    # apply saved model to new data
@@ -178,7 +181,7 @@ If you already have a trained a MoSeq model and would like to apply it to new da
 
 Continue model fitting but with new data
 ----------------------------------------
-If you already trained keypoint MoSeq model, but would like to improve it using newly collected data (without starting from scratch), then follow the recipe below. Briefly, the code shows how to load model parameters from a saved checkpoint and then use them as the starting point for a new round of model fitting.
+If you already trained a keypoint-MoSeq model, but would like to improve it using newly collected data (without starting from scratch), then follow the recipe below. Briefly, the code shows how to load model parameters from a saved checkpoint and then use them as the starting point for a new round of model fitting.
 
 .. code-block:: python
 
@@ -190,21 +193,23 @@ If you already trained keypoint MoSeq model, but would like to improve it using 
    
    # load and format new data (e.g. from DeepLabCut)
    new_data = 'path/to/new/data/' # can be a file, a directory, or a list of files
-   coordinates, confidences,bodyparts = kpms.load_keypoints(new_data, 'deeplabcut')
+   coordinates, confidences, bodyparts = kpms.load_keypoints(new_data, 'deeplabcut')
+   coordinates, confidences = kpms.outlier_removal(
+       coordinates, confidences, project_dir, overwrite=False, **config())
    data, metadata = kpms.format_data(coordinates, confidences, **config())
 
-   # load previously saved PCA and model checkpoint
-   pca = kpms.load_pca(project_dir)
+   # load the model checkpoint
    model = kpms.load_checkpoint(project_dir, model_name)[0]
 
    # initialize a new model using saved parameters
    model = kpms.init_model(
-      data, pca=pca, params=model['params'], 
+      data, metadata=metadata, params=model['params'],
       hypparams=model['hypparams'], **config())
    
    # continue fitting, now with the new data
    model, model_name = kpms.fit_model(
-      model, data, metadata, project_dir, ar_only=False, num_iters=200)
+      model, data, metadata, project_dir, ar_only=False, num_iters=200,
+      **config())
       
 
 Interpreting model outputs
@@ -218,7 +223,7 @@ The final output of keypoint MoSeq is a results .h5 file (and optionally a direc
    The centroid and heading of the animal in each frame, as estimated by the model. 
 
 - Latent state
-   Low-dimensional representation of the animal's pose in each frame. These are similar to PCA scores, are modified to reflect the pose dynamics and noise estimates inferred by the model. 
+   Low-dimensional representation of the animal's pose in each frame. These are similar to PCA scores, but are modified to reflect the pose dynamics and noise estimates inferred by the model. 
 
 
 Validating results when applying a model to new data
@@ -229,12 +234,14 @@ When applying a model to new data, it may be useful to generate new grid movies 
 
       # load new data (e.g. from deeplabcut)
       coordinates, confidences, bodyparts = kpms.load_keypoints(new_data_path, 'deeplabcut')
+      coordinates, confidences = kpms.outlier_removal(
+          coordinates, confidences, project_dir, overwrite=False, **config())
       data, metadata = kpms.format_data(coordinates, confidences, **config())
 
       # apply saved model to new data
       results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
 
-By default, the `results` dictionary above contains results for both the new and old data. To generate grid movies and trajectory plots for the new data only, we can subset the `results` dictionary to include only the new data. We will also need to specify alternative paths for saving the new movies and plots so the original ones aren't overwritten.
+The ``results`` dictionary returned by ``apply_model`` contains only the recordings in ``data``, while ``results.h5`` also holds the original recordings. If you load results from ``results.h5`` with ``kpms.load_results``, subset them to the new data as shown below. In either case, specify alternative paths for saving the new movies and plots so the original ones aren't overwritten.
 
    .. code-block:: python
       
@@ -338,7 +345,7 @@ Why are there only trajectory plots for a subset of syllables?
 
 There are two reasons why a syllable might be excluded from the trajectory plots:
 
-1) It's frequency is below ``min_frequency``. By default ``min_frequency=0.005``, meaning that the syllable must make up at least 0.5% of all syllable instances. Lowering ``min_frequency`` may result in more syllables being included in the trajectory plots.
+1) Its frequency is below ``min_frequency``. By default ``min_frequency=0.005``, meaning that the syllable must make up at least 0.5% of all syllable instances. Lowering ``min_frequency`` may result in more syllables being included in the trajectory plots.
 
 2) There aren't enough usable instances of the syllable. The number of required instances (50 by default) is set by the ``n_neighbors`` key of the ``sampling_options`` parameter. If you want to lower this number, (e.g. to 20) then you could call ``generate_trajectory_plots`` as follows.
 
@@ -348,11 +355,11 @@ There are two reasons why a syllable might be excluded from the trajectory plots
 
    Note that the number of *usable* syllable instances may be less than the total number of instances. Three criteria determine whether an instance is usable:
 
-   - ``pre``: the time (in seconds) prior to syllable onset that is included in the trajectory. By default, ``pre=0.167`` (5 frames at 30 fps). If a particular syllable instance starts within that interval at the beginning of the video, then it is excluded.
+   - ``before_onset_sec``: the time, in seconds, before syllable onset that is included in the trajectory. By default, ``before_onset_sec=0.167`` (5 frames at 30 fps). If a particular syllable instance starts within the first ``before_onset_sec`` seconds of the video, then it is excluded.
 
-   - ``post``: the time (in seconds) after syllable onset that is included in the trajectory. By default, ``post=0.5`` (15 frames at 30 fps). If a particular syllable instance starts within that interval at the end of the video, then it is excluded.
+   - ``after_onset_sec``: the time, in seconds, after syllable onset that is included in the trajectory. By default, ``after_onset_sec=0.5`` (15 frames at 30 fps). If a particular syllable instance starts within the last ``after_onset_sec`` seconds of the video, then it is excluded.
 
-   - ``min_duration``: the minimum duration of a syllable instance. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
+   - ``min_instance_duration_sec``: the minimum duration of a syllable instance, in seconds. By default, ``min_instance_duration_sec=0.1`` (3 frames at 30 fps), meaning that shorter syllable instances are excluded.
 
 In summary, the following parameter changes will tend to increase the number of syllables included in the trajectory plots: 
 
@@ -360,11 +367,11 @@ In summary, the following parameter changes will tend to increase the number of 
 
 - Lowering ``n_neighbors`` (e.g. to 20)
 
-- Lowering ``pre`` (at this point you're scraping the bottom of the barrel)
+- Lowering ``before_onset_sec`` (at this point you're scraping the bottom of the barrel)
 
-- Lowering ``post`` (again, scraping the bottom of the barrel here)
+- Lowering ``after_onset_sec`` (again, scraping the bottom of the barrel here)
 
-- Lowering ``min_duration`` (this should be avoided; why are your syllables so short?)
+- Lowering ``min_instance_duration_sec`` (this should be avoided; why are your syllables so short?)
 
 
 Why are there only grid movies for a subset of syllables?
@@ -372,25 +379,25 @@ Why are there only grid movies for a subset of syllables?
 
 There are two reasons why a syllable might not have a grid movie:
 
-1) It's frequency is below ``min_frequency``. By default ``min_frequency=0.005``, meaning that the syllable must make up at least 0.5% of all syllable instances. Lowering ``min_frequency`` may result in more syllables being included among the grid movies.
+1) Its frequency is below ``min_frequency``. By default ``min_frequency=0.005``, meaning that the syllable must make up at least 0.5% of all syllable instances. Lowering ``min_frequency`` may result in more syllables being included among the grid movies.
 
 2) There aren't enough usable instances of the syllable. There have to be at least enough instances to fill up every cell of the grid. The number of grid cells is determined by the ``rows`` and ``cols`` parameters. Note that the number of *usable* syllable instances may be less than the total number of instances. Three criteria determine whether an instance is usable:
 
-   - ``pre``: the time (in seconds) prior to syllable onset that is included in the grid movie. By default, ``pre=1.0``, meaning that the movie in each grid cell starts 1 second (30 frames at 30 fps) prior to syllable onset. So if a particular syllable instance starts within the first second of the experiment, then it is excluded.
+   - ``before_onset_sec``: the time, in seconds, before syllable onset that is included in the grid movie. By default, ``before_onset_sec=1.0``, meaning that the movie in each grid cell starts 1 second before syllable onset. So if a particular syllable instance starts within the first second of the experiment, then it is excluded.
 
-   - ``post``: the time (in seconds) after syllable onset that is included in the grid movie. By default, ``post=2.0``, meaning that the movie in each grid cell ends 2 seconds (60 frames at 30 fps) after syllable onset. If a particular syllable instance starts within the last 2 seconds of the experiment, then it is excluded.
+   - ``after_onset_sec``: the time, in seconds, after syllable onset that is included in the grid movie. By default, ``after_onset_sec=2.0``, meaning that the movie in each grid cell ends 2 seconds after syllable onset. If a particular syllable instance starts within the last 2 seconds of the experiment, then it is excluded.
 
-   - ``min_duration``: the minimum duration of a syllable instance. By default, ``min_duration=3``, meaning that syllable instances lasting less than 3 frames are excluded.
+   - ``min_instance_duration_sec``: the minimum duration of a syllable instance, in seconds. By default, ``min_instance_duration_sec=0.1`` (3 frames at 30 fps), meaning that shorter syllable instances are excluded.
 
 In summary, the following parameter changes will tend to increase the number of syllables included in the grid movies:
 
 - Lowering ``min_frequency`` (e.g. to 0.001)
 
-- Lowering ``pre`` (at this point you're scraping the bottom of the barrel)
+- Lowering ``before_onset_sec`` (at this point you're scraping the bottom of the barrel)
 
-- Lowering ``post`` (again, scraping the bottom of the barrel here)
+- Lowering ``after_onset_sec`` (again, scraping the bottom of the barrel here)
 
-- Lowering ``min_duration`` (this should be avoided; why are your syllables so short?)
+- Lowering ``min_instance_duration_sec`` (this should be avoided; why are your syllables so short?)
 
 
 Why do my trajectory plots and grid movies disagree?
@@ -402,7 +409,7 @@ Users occasionally find that the trajectory plot and grid movie for a given syll
 
    kpms.generate_trajectory_plots(..., density_sample=False)
 
-Density sampling is a way of selecting syllable instances that are most representative relative to the full dataset. Specifically, for each syllable, a syllable-specific density function is computed in trajectory space and compared to the overall density across all syllables. An exemplar instance that maximizes the ratio between these densities is chosen for each syllable, and its nearest neighbors are randomly sampled. When the distribution of trajectories for a syllable is multimodal (i.e., it represents a mixture of distinct behaviors), the exemplar syllable may not capture the full range of behaviors, or it may jump from one mode to another when an existing model is applied to new data. In these cases, it may be better to sample syllable instances uniformly by setting turning off density sampling as shown above.
+Density sampling is a way of selecting syllable instances that are most representative relative to the full dataset. Specifically, for each syllable, a syllable-specific density function is computed in trajectory space and compared to the overall density across all syllables. An exemplar instance that maximizes the ratio between these densities is chosen for each syllable, and its nearest neighbors are randomly sampled. When the distribution of trajectories for a syllable is multimodal (i.e., it represents a mixture of distinct behaviors), the exemplar syllable may not capture the full range of behaviors, or it may jump from one mode to another when an existing model is applied to new data. In these cases, it may be better to sample syllable instances uniformly by turning off density sampling as shown above.
 
 
 Two different syllables look very similar. Is there a way to consider them as one syllable?
@@ -414,19 +421,23 @@ Yes, see the :ref:`Merging similar syllables <merging-syllables>` section in the
 What statistical test is used to flag significant syllables in the syllable statistics plot?
 --------------------------------------------------------------------------------------------
 
-The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syll_stats_with_sem` come from a permutation-based Kruskal–Wallis test followed by a Dunn's z-test post-hoc, with Benjamini–Hochberg (FDR) correction applied at two levels. The same procedure is used regardless of which statistic is plotted (``frequency``, ``duration``, ``velocity_2d_mm``, etc.).
+The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syll_stats_with_sem` come from a permutation-based Kruskal–Wallis test followed by a Dunn's z-test post-hoc, with Benjamini–Hochberg (FDR) correction applied at two levels. The same procedure is used regardless of which statistic is plotted (``frequency``, ``duration``, ``velocity_px_s_mean``, etc.).
 
-**Omnibus test.** For each syllable, a Kruskal–Wallis H statistic compares the groups. Significance is established empirically by shuffling group labels 10,000 times and recomputing H. The resulting per-syllable p-values are BH-adjusted across syllables — one correction family of size *N_syllables*.
+**Omnibus test.** For each syllable, a Kruskal–Wallis H statistic compares the groups. Significance is established empirically by shuffling group labels 10,000 times and recomputing H. The resulting per-syllable p-values are BH-adjusted across the syllables that were tested, as one correction family.
 
 **Post-hoc.** For each syllable, a Dunn's z-test is run on every pair of groups, again with empirical p-values from the same permutations. These are BH-adjusted within each syllable, across pairs — one correction family of size *N_pairs*, applied independently for each syllable. There is no joint correction across the full (syllable × pair) grid. For two-group experiments this post-hoc correction is a no-op (only one pair).
 
-**What the red stars mean.** A syllable is starred for a given pair of groups only if **both** its omnibus FDR-adjusted p-value (corrected across syllables) and its FDR-adjusted Dunn's pairwise p-value (corrected across pairs within that syllable) are below the significance threshold (default ``0.05``).
+**What the red stars mean.** A syllable is starred for a given pair of groups only if its omnibus FDR-adjusted p-value (corrected across syllables) is at or below the significance threshold (default ``0.05``) **and** its FDR-adjusted Dunn's pairwise p-value (corrected across pairs within that syllable) is below it.
 
-**Error bars are not from this test.** The shaded error bars are 68% bootstrap confidence intervals on each group's mean across recordings. They reflect uncertainty in the group mean, not the significance test.
+**Error bars are not from this test.** The error bars are 68% bootstrap confidence intervals on each group's mean across recordings. They reflect uncertainty in the group mean, not the significance test.
 
 **Notes.**
 
 - The tests are nonparametric and rank-based, so they do not assume normality.
+
+- For ``duration`` and the kinematic statistics, a recording that never used a syllable has no value for it and is left out of that syllable's test. A syllable is not tested, and never starred, when a group has no recordings with a value.
+
+- The p-values come from shuffling recordings between groups, so small groups limit how low they can go. With two groups of 3 recordings there are only 20 ways to split them, so no p-value is below 0.1 and nothing is starred. ``run_kruskal`` warns when a group has fewer than 3 recordings with a value.
 
 - To change the threshold, number of permutations, or multiple-comparisons method, call :py:func:`keypoint_moseq.analysis.run_kruskal` directly:
 
@@ -441,13 +452,14 @@ The red stars in the plot produced by :py:func:`keypoint_moseq.analysis.plot_syl
 Troubleshooting
 ===============
 
-We are continually updating the keypoint MoSeq code in response to user feedback and issues, so please make sure you are using the latest version. You can check the version by running ``kpms.__version__`` (note that for versions ≤0.0.5, the latter command will cause an error). To update to the latest version, run the following in a command terminal in an environment with keypoint-moseq installed (not inside a jupyter notebook!).
-   
+Many problems are fixed in newer versions of keypoint-MoSeq, so first make sure you are using the latest one. Running ``kpms.check_installation()`` in a notebook prints the installed versions of keypoint-MoSeq and JAX and the devices JAX can use, and explains any installation problem it finds. To update to the latest version, run the following in a terminal, in the environment where keypoint-moseq is installed (not inside a Jupyter notebook):
+
 .. code-block:: bash
 
-    pip install -U keypoint-moseq
+    pip install -U keypoint-moseq            # CPU
+    pip install -U "keypoint-moseq[cuda]"    # GPU with CUDA 12
 
-Note that for any already open notebooks, you will need to restart the kernel to use the updated version. If your problem remains after troubleshooting, please open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_. 
+Restart the kernel of any open notebook to use the updated version. If your problem remains after troubleshooting, please open a `github issue <https://github.com/dattalab/keypoint-moseq/issues>`_.
 
 
 Dead kernel
@@ -463,21 +475,21 @@ There are two main causes of GPU out of memory (OOM) errors:
 
 1. **Multiple instances of keypoint MoSeq are running on the same GPU.** 
 
-  This can happen if you're running multiple notebooks or scripts at the same time. Since JAX preallocates 75% of the GPU when it is first initialized (i.e. after running ``import keypoint_moseq``), there is very little memory left for the second notebook/script. To fix this, you can either shutdown the kernels of the other notebooks/scripts or use a different GPU.
+  This can happen if you're running multiple notebooks or scripts at the same time. Since JAX preallocates 75% of the GPU when it is first initialized (i.e. after running ``import keypoint_moseq``), there is very little memory left for the second notebook/script. To fix this, you can either shut down the kernels of the other notebooks/scripts or use a different GPU.
 
 
 2. **Large datasets.** 
 
-  Required GPU memory scales roughly linearly with the size of the dataset and the number of latent dimensions used. For example, a dataset with 4 latent dimensions will require roughly ~3MB GPU memory for each 100 frames of data during model fitting. If your GPU isn't big enough, try one of the following:
+  Required GPU memory scales roughly linearly with the size of the dataset and the number of latent dimensions used. For example, a dataset with 4 latent dimensions will require roughly 3 MB of GPU memory for each 100 frames of data during model fitting. If your GPU isn't big enough, try one of the following:
 
-  - Use `Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/main/docs/keypoint_moseq_colab.ipynb>`_. 
+  - Use `Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/stable/docs/keypoint_moseq_colab.ipynb>`_. 
 
     - Colab provides free access to GPUs with 16GB of VRAM.
     
     - Larger GPUs can be accessed using colab pro. 
 
 
-  - Disable parallel message passing. This results in a large (4-6 fold) reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fit_model` or :py:func:`keypoint_moseq.apply_model`. For example
+  - Disable parallel message passing. This results in a large (4-6 fold) reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fitting.fit_model`, :py:func:`keypoint_moseq.fitting.apply_model` or :py:func:`keypoint_moseq.fitting.estimate_syllable_marginals`. For example
 
    .. code-block:: python
 
@@ -496,7 +508,7 @@ There are two main causes of GPU out of memory (OOM) errors:
    This will split the data into 4 batches, which should reduce the memory requirements about 4-fold but also result in a 4-fold slow-down. The number of batches can be adjusted as needed.
 
 
-  - Use multiple GPUs if they are available. To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
+  - Use multiple GPUs if they are available (Linux only, including WSL2). To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
 
    .. code-block:: python
 
@@ -528,7 +540,6 @@ There are two main causes of GPU out of memory (OOM) errors:
       .. code-block:: python
 
         model = kpms.load_checkpoint(project_dir, model_name)[0]
-        pca = kpms.load_pca(project_dir)
 
         new_data_batch1 = ['path/to/file3.h5', 'path/to/second/file4.h5']
         new_data_batch2 = ['path/to/file5.h5', 'path/to/second/file6.h5']
@@ -536,26 +547,61 @@ There are two main causes of GPU out of memory (OOM) errors:
         for batch in [initial_data, new_data_batch1, new_data_batch2]:
 
             coordinates, confidences, bodyparts = kpms.load_keypoints(batch, 'deeplabcut')
+            coordinates, confidences = kpms.outlier_removal(
+                coordinates, confidences, project_dir, overwrite=False, **config())
             data, metadata = kpms.format_data(coordinates, confidences, **config())
-            results = kpms.apply_model(model, data, metadata, project_dir, model_name, **config())
+            # overwrite=True replaces the results saved for the initial recordings
+            results = kpms.apply_model(
+                model, data, metadata, project_dir, model_name, overwrite=True, **config())
 
 
 NaNs during fitting
 -------------------
 
-The following actions may help resolve NaNs during model fitting. If they don't, please contact calebsw@gmail.com and include the data, config file, and code used for fitting, as well as the most recent model checkpoint. 
+In our experience, NaNs during fitting most often come from the data, usually stretches of a recording where the keypoints aren't following a freely moving animal. Work through the steps below in order.
 
-- Make sure you are using double-precision computing. Check the precision using
+The data checks come before the sampler settings for a reason. Raising ``jitter`` can stop the NaNs without removing their cause, and the model still has to fit those frames. That can leave you with syllables that describe tracking problems rather than behavior.
+
+Confirm double precision
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+keypoint-MoSeq switches JAX to double precision when it is imported, and single precision makes NaNs much more likely. Check that nothing in your code has switched it back:
 
 .. code-block:: python
 
     import jax
-    jax.config.read('jax_enable_x64')
+    jax.config.read('jax_enable_x64')  # should return True
 
+If it returns ``False``, find the line in your code that sets ``jax_enable_x64`` and remove it.
 
-- Try increasing adjusting the `jitter` parameter, which controls the amount of regularization used to prevent singular matrices. The default value is 1e-3, but it may be necessary to increase this to 1e-2 or 1e-1 using the `jitter` keyword argument in `fit_model`.
+Check your data
+~~~~~~~~~~~~~~~
 
-- Enable parallel Kalman sampling. By default, it is only enabled when fitting with a GPU. You can override this, however, using the argument `parallel_message_passing=True` when running `fit_model`.
+Three kinds of recording problems account for most of the NaNs we see. Each one gives the model frames that don't look like a freely moving animal.
+
+#. **Long periods without movement**, such as sleep or long bouts of freezing.
+#. **The animal entering or leaving the frame.** Some recordings start before the animal is placed in the arena or keep going after it is taken out. While the arena is empty, the tracker labels whatever it can find, and the keypoints jump when the animal appears.
+#. **Something else in the frame.** An experimenter's hand, a cable, or anything else that pulls the keypoints off the animal.
+
+To look for these, watch the first and last minute of a few videos, and check the plots the outlier removal step saves to ``{project_dir}/QA/plots/keypoint_distance_outliers/``. Long flat stretches in those plots mean the keypoints barely moved for that time.
+
+Once you've found a problem stretch:
+
+- **At the start or end of a recording**, trim those frames from ``coordinates`` and ``confidences`` before formatting the data. :ref:`Trimming inputs <trimming-inputs>` shows how to keep grid movies and other video steps lined up afterward using ``video_frame_indexes``.
+- **A long stretch in the middle of a recording**: the easiest thing to do is exclude that recording from modeling.
+
+Adjust the sampler
+~~~~~~~~~~~~~~~~~~
+
+If you're in 64-bit precision mode and your data looks clean but the NaNs persist, try these. Each is a keyword argument to the function that produced the NaNs (``fit_model``, ``apply_model`` or ``estimate_syllable_marginals``).
+
+- **Increase** ``jitter``. Jitter is a small variance added to each pose draw so the matrix math doesn't fail. It's measured in the model's latent pose space, where each dimension has variance 1 (with the default ``whiten: true``). The default 1e-3 is 0.1% of that; try raising it to at most 1e-2. Much larger values add noise on the scale of the animal's own frame-to-frame movement. Jitter only affects the serial Kalman sampler, which is the default on CPU or when ``parallel_message_passing=False``.
+- **Enable parallel Kalman sampling** with ``parallel_message_passing=True``. By default it is only enabled when fitting on a GPU.
+
+If the NaNs persist
+~~~~~~~~~~~~~~~~~~~
+
+Open an issue at https://github.com/dattalab/keypoint-moseq/issues. Include your config file, the code you ran, your keypoint-moseq version and the iteration where the NaNs appeared. We may ask for your data and most recent model checkpoint.
 
 
 Installation errors
@@ -567,8 +613,4 @@ Installation errors
 
      jaxlib.xla_extension.XlaRuntimeError: UNKNOWN: no kernel image is available for execution on the device
 
-  First, check if jax can detect your GPU::
-
-     python -c "import jax; print(jax.default_backend())"
-
-  The result should be "gpu". If it isn't, then you might not be using the right version of ``cudatoolkit`` or ``cudnn``. If you installed these via ``conda``, you can check by doing a ``conda list | grep cud``. If you are on the right versions, try `updating your GPU driver to the latest version <https://nvidia.com/drivers>`_.
+  Run ``kpms.check_installation()`` in a notebook. It runs a small computation on the GPU and, if it fails with this error, explains the likely cause: the installed jaxlib has no code for this GPU, because the GPU or its NVIDIA driver is too old. ``nvidia-smi`` shows the driver version; if the driver is old, `update it <https://nvidia.com/drivers>`_.
