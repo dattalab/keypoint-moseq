@@ -289,13 +289,15 @@ def test_stats_df_kinematics(tutorial_stats_df, tutorial_moseq_df, tutorial_anal
             expected["mean"][0] = stats.circmean(heading, high=np.pi, low=-np.pi)
             if len(values) > 1:
                 expected["std"][0] = stats.circstd(heading, high=np.pi, low=-np.pi)
+            # the heading statistics are computed from float32 headings, the
+            # expected values in float64
             for statistic, expected_values in expected.items():
                 columns = [f"{kinematic}_{statistic}" for kinematic in KINEMATICS]
                 np.testing.assert_allclose(
                     row[columns].to_numpy(dtype=float),
                     expected_values,
-                    rtol=1e-10,
-                    atol=1e-10,
+                    rtol=1e-6,
+                    atol=1e-6,
                     err_msg=f"{name} syllable {row['syllable']} {statistic}",
                 )
 

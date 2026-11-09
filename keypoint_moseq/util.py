@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import tabulate
+import threading
 import tqdm
 import warnings
 # Private names, so that `from .util import *` does not add them to the
@@ -14,6 +15,8 @@ from packaging.version import InvalidVersion as _InvalidVersion, Version as _Ver
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.collections import PolyCollection
+from matplotlib.figure import Figure as _Figure
 import jax, jax.numpy as jnp
 from textwrap import fill
 from scipy.ndimage import median_filter, convolve1d, gaussian_filter1d
@@ -680,7 +683,12 @@ def filter_centroids_headings(centroids, headings, smoothing_filter_frames=9):
     filtered_centroids: dict
     filtered_headings: dict
     """
-    centroids = {k: median_filter(v, (smoothing_filter_frames, 1)) for k, v in centroids.items()}
+    # each coordinate is filtered as a 1D array, which scipy does faster than
+    # the (n_frames, d) array with a (smoothing_filter_frames, 1) kernel
+    centroids = {
+        k: np.stack([median_filter(x, smoothing_filter_frames) for x in v.T], axis=1)
+        for k, v in centroids.items()
+    }
     headings = {k: filter_angle(v, size=smoothing_filter_frames) for k, v in headings.items()}
     return centroids, headings
 
@@ -872,7 +880,26 @@ def get_instance_trajectories(
         centroids, headings = filter_centroids_headings(
             centroids, headings, smoothing_filter_frames=smoothing_filter_frames
         )
+    return _instance_trajectories(
+        syllable_instances,
+        coordinates,
+        before_onset_frames,
+        after_onset_frames,
+        centroids,
+        headings,
+    )
 
+
+def _instance_trajectories(
+    syllable_instances,
+    coordinates,
+    before_onset_frames,
+    after_onset_frames,
+    centroids,
+    headings,
+):
+    """Trajectories as returned by :py:func:`get_instance_trajectories`, from
+    `centroids` and `headings` that are already median-filtered."""
     if after_onset_frames is None:
         trajectories = [
             coordinates[key][s - before_onset_frames : e] for key, s, e in syllable_instances
@@ -892,9 +919,23 @@ def get_instance_trajectories(
         if centroids is not None and headings is not None:
             c = np.array([centroids[key][s] for key, s, e in syllable_instances])[:, None]
             h = np.array([headings[key][s] for key, s, e in syllable_instances])[:, None]
-            trajectories = np_io(inverse_rigid_transform)(trajectories, c, h)
+            trajectories = _inverse_rigid_transform_in_chunks(trajectories, c, h)
 
     return trajectories
+
+
+def _inverse_rigid_transform_in_chunks(Y, v, h, chunk_size=1024):
+    """Apply `inverse_rigid_transform` to arrays of instances in chunks of
+    `chunk_size` along the first axis, padding the last chunk, so that the
+    jitted transform compiles once for any number of instances."""
+    if len(Y) == 0:
+        return np_io(inverse_rigid_transform)(Y, v, h)
+    transformed = []
+    for start in range(0, len(Y), chunk_size):
+        n = min(chunk_size, len(Y) - start)
+        chunk = [pad_along_axis(x[start : start + n], (0, chunk_size - n)) for x in (Y, v, h)]
+        transformed.append(np_io(inverse_rigid_transform)(*chunk)[:n])
+    return np.concatenate(transformed)
 
 
 def sample_instances(
@@ -954,6 +995,39 @@ def sample_instances(
         Dictionary in the same format as `syllable_instances` mapping each
         syllable to a list of sampled instances.
     """
+    return _sample_instances(
+        syllable_instances,
+        num_samples,
+        mode=mode,
+        pca_samples=pca_samples,
+        pca_dim=pca_dim,
+        n_neighbors=n_neighbors,
+        coordinates=coordinates,
+        before_onset_frames=before_onset_frames,
+        after_onset_frames=after_onset_frames,
+        centroids=centroids,
+        headings=headings,
+        smoothing_filter_frames=smoothing_filter_frames,
+    )
+
+
+def _sample_instances(
+    syllable_instances,
+    num_samples,
+    mode="random",
+    pca_samples=50000,
+    pca_dim=4,
+    n_neighbors=50,
+    coordinates=None,
+    before_onset_frames=5,
+    after_onset_frames=15,
+    centroids=None,
+    headings=None,
+    smoothing_filter_frames=9,
+    filtered=False,
+):
+    """:py:func:`sample_instances`, where `filtered=True` means `centroids`
+    and `headings` are already median-filtered."""
     assert mode in ["random", "density"]
     assert all([len(v) >= num_samples for v in syllable_instances.values()])
     assert n_neighbors >= num_samples
@@ -976,15 +1050,19 @@ def sample_instances(
             outliers = np.isnan(coordinates[key]).any(-1)
             coordinates[key] = interpolate_keypoints(coordinates[key], outliers)
 
+        if not filtered:
+            centroids, headings = filter_centroids_headings(
+                centroids, headings, smoothing_filter_frames=smoothing_filter_frames
+            )
+
         trajectories = {
-            syllable: get_instance_trajectories(
+            syllable: _instance_trajectories(
                 instances,
                 coordinates,
-                before_onset_frames=before_onset_frames,
-                after_onset_frames=after_onset_frames,
-                centroids=centroids,
-                headings=headings,
-                smoothing_filter_frames=smoothing_filter_frames,
+                before_onset_frames,
+                after_onset_frames,
+                centroids,
+                headings,
             )
             for syllable, instances in syllable_instances.items()
         }
@@ -1654,34 +1732,44 @@ def get_typical_trajectories(
         )
         return
 
+    filtered_centroids, filtered_headings = filter_centroids_headings(centroids, headings)
+
     if density_sample:
         sampling_options["mode"] = "density"
-        sampled_instances = sample_instances(
+        # density sampling reuses the filtered centroids and headings when it
+        # filters with the same kernel size
+        filtered = sampling_options.get("smoothing_filter_frames", 9) == 9
+        sampled_instances = _sample_instances(
             syllable_instances,
             sampling_options["n_neighbors"],
             coordinates=coordinates,
-            centroids=centroids,
-            headings=headings,
+            centroids=filtered_centroids if filtered else centroids,
+            headings=filtered_headings if filtered else headings,
             before_onset_frames=before_onset_frames,
             after_onset_frames=after_onset_frames,
+            filtered=filtered,
             **sampling_options,
         )
     else:
         sampled_instances = syllable_instances
 
     trajectories = {
-        syllable: get_instance_trajectories(
+        syllable: _instance_trajectories(
             instances,
             coordinates,
-            before_onset_frames=before_onset_frames,
-            after_onset_frames=after_onset_frames,
-            centroids=centroids,
-            headings=headings,
+            before_onset_frames,
+            after_onset_frames,
+            filtered_centroids,
+            filtered_headings,
         )
         for syllable, instances in sampled_instances.items()
     }
 
-    return {s: np.nanmedian(ts, axis=0) for s, ts in trajectories.items()}
+    # np.median gives the same result as np.nanmedian without NaNs, and faster
+    return {
+        s: np.nanmedian(ts, axis=0) if np.isnan(ts).any() else np.median(ts, axis=0)
+        for s, ts in trajectories.items()
+    }
 
 
 def syllable_similarity(
@@ -2262,6 +2350,44 @@ def find_medoid_distance_outliers(
     return {"mask": outlier_mask, "thresholds": outlier_thresholds}
 
 
+def _minmax_indexes(trace, n_points=2000):
+    """Indexes of at most `n_points` frames of `trace` that draw the same line
+    at plot resolution: the lowest and highest value in each of `n_points // 2`
+    bins of consecutive frames, so every spike is kept."""
+    n = len(trace)
+    if n <= n_points:
+        return np.arange(n)
+    size = -(-n // (n_points // 2))
+    n_bins = -(-n // size)
+    bins = np.full(n_bins * size, np.nan)
+    bins[:n] = trace
+    bins = bins.reshape(n_bins, size)
+    lowest = np.where(np.isnan(bins), np.inf, bins).argmin(axis=1)
+    highest = np.where(np.isnan(bins), -np.inf, bins).argmax(axis=1)
+    indexes = np.sort(np.stack([lowest, highest], axis=1), axis=1)
+    indexes += np.arange(n_bins)[:, None] * size
+    return np.unique(np.minimum(indexes.ravel(), n - 1))
+
+
+def _shade_runs(ax, mask):
+    """Shade each run of consecutive True frames in `mask` as one band of
+    `ax`, all in one collection, since a patch per frame is slow to draw."""
+    edges = np.diff(np.concatenate([[0], mask.astype(int), [0]]))
+    starts = np.nonzero(edges == 1)[0] - 0.5
+    ends = np.nonzero(edges == -1)[0] - 0.5
+    bands = [[(s, 0), (s, 1), (e, 1), (e, 0)] for s, e in zip(starts, ends)]
+    ax.add_collection(
+        PolyCollection(
+            bands,
+            transform=ax.get_xaxis_transform(),
+            facecolor="grey",
+            edgecolor="none",
+            alpha=0.1,
+        ),
+        autolim=False,
+    )
+
+
 def plot_keypoint_traces(
     traces: list[np.ndarray],
     plot_title: Optional[str] = None,
@@ -2275,6 +2401,10 @@ def plot_keypoint_traces(
     Creates a figure with one subplot per keypoint, where each subplot shows multiple
     trace lines over time. Optional features include threshold lines, shaded regions,
     and custom labels.
+
+    Traces longer than 2,000 frames are drawn through the lowest and highest value
+    in each of 1,000 bins of consecutive frames, which looks the same at the plot's
+    resolution and keeps every spike.
 
     Parameters
     -------
@@ -2306,7 +2436,28 @@ def plot_keypoint_traces(
     fig: matplotlib.figure.Figure
         The created figure with subplots for each keypoint.
     """
+    return _draw_keypoint_traces(
+        plt.figure,
+        traces,
+        plot_title,
+        bodyparts,
+        line_labels,
+        thresholds,
+        shading_mask,
+    )
 
+
+def _draw_keypoint_traces(
+    make_figure,
+    traces,
+    plot_title=None,
+    bodyparts=None,
+    line_labels=None,
+    thresholds=None,
+    shading_mask=None,
+):
+    """`plot_keypoint_traces` on a figure made by `make_figure`: `plt.figure`,
+    or `Figure` for a figure that pyplot never sees."""
     if not traces:
         raise ValueError("traces cannot be empty")
 
@@ -2331,7 +2482,8 @@ def plot_keypoint_traces(
                 f"Shading mask shape {shading_mask.shape} must match traces shape {traces[0].shape}"
             )
 
-    fig, axes = plt.subplots(n_keypoints, 1, figsize=(16, 3 * n_keypoints), constrained_layout=True)
+    fig = make_figure(figsize=(16, 3 * n_keypoints), constrained_layout=True)
+    axes = fig.subplots(n_keypoints, 1)
     if n_keypoints == 1:
         axes = [axes]  # Ensure axes is always a list
 
@@ -2339,14 +2491,12 @@ def plot_keypoint_traces(
         ax = axes[keypoint_idx]
 
         if shading_mask is not None:
-            shaded_frames = np.where(shading_mask[:, keypoint_idx])[0]
-            if len(shaded_frames) > 0:
-                for frame in shaded_frames:
-                    ax.axvspan(frame - 0.5, frame + 0.5, alpha=0.1, color="grey")
+            _shade_runs(ax, shading_mask[:, keypoint_idx])
 
         for line_idx, trace_array in enumerate(traces):
             label = line_labels[line_idx] if line_labels else f"Line {line_idx}"
-            ax.plot(trace_array[:, keypoint_idx], label=label)
+            frames = _minmax_indexes(trace_array[:, keypoint_idx])
+            ax.plot(frames, trace_array[frames, keypoint_idx], label=label)
 
         if thresholds is not None:
             threshold_value = thresholds[keypoint_idx]
@@ -2372,6 +2522,14 @@ def plot_keypoint_traces(
     if plot_title is not None:
         fig.suptitle(plot_title, fontsize=16)
     return fig
+
+
+def _outlier_plot_dir(project_dir):
+    return os.path.join(project_dir, "QA", "plots", "keypoint_distance_outliers")
+
+
+def _outlier_plot_path(project_dir, recording_name):
+    return os.path.join(_outlier_plot_dir(project_dir), f"{recording_name}.png")
 
 
 def plot_medoid_distance_outliers(
@@ -2430,13 +2588,7 @@ def plot_medoid_distance_outliers(
         The plot is saved to 'QA/plots/keypoint_distance_outliers/{recording_name}.png'.
     """
 
-    plot_path = os.path.join(
-        project_dir,
-        "QA",
-        "plots",
-        "keypoint_distance_outliers",
-        f"{recording_name}.png",
-    )
+    plot_path = _outlier_plot_path(project_dir, recording_name)
     os.makedirs(os.path.dirname(plot_path), exist_ok=True)
 
     if os.path.exists(plot_path) and not overwrite:
@@ -2447,7 +2599,8 @@ def plot_medoid_distance_outliers(
         interpolated_coordinates
     )  # (n_frames, n_keypoints)
 
-    fig = plot_keypoint_traces(
+    fig = _draw_keypoint_traces(
+        _Figure,
         traces=[original_distances, interpolated_distances],
         plot_title=recording_name,
         bodyparts=bodyparts,
@@ -2456,8 +2609,78 @@ def plot_medoid_distance_outliers(
         shading_mask=outlier_mask,
     )
 
-    fig.savefig(plot_path, dpi=300)
-    plt.close()
+    # Saved under another name and then renamed, so a save that fails or is
+    # interrupted (e.g. by a kernel restart) never leaves a partial plot
+    partial_path = plot_path + ".partial"
+    try:
+        with open(partial_path, "wb") as f:
+            fig.savefig(f, format="png", dpi=120)
+        os.replace(partial_path, plot_path)
+    finally:
+        if os.path.exists(partial_path):
+            os.remove(partial_path)
+
+
+def _recordings_to_plot(recording_names, plot_recordings):
+    """The recordings `outlier_removal` saves QA plots for (see its
+    `plot_recordings`)."""
+    if plot_recordings is None:
+        return set(recording_names)
+    if isinstance(plot_recordings, str):
+        plot_recordings = [plot_recordings]
+    if isinstance(plot_recordings, (int, np.integer)):
+        names = sorted(recording_names)
+        if plot_recordings >= len(names):
+            return set(names)
+        rng = np.random.default_rng(0)
+        return set(rng.choice(names, plot_recordings, replace=False).tolist())
+    unknown = [name for name in plot_recordings if name not in recording_names]
+    if unknown:
+        raise ValueError(
+            f"plot_recordings names recordings that are not in coordinates: {unknown}"
+        )
+    return set(plot_recordings)
+
+
+# The thread saving the QA plots of the last `outlier_removal` call in a notebook
+_outlier_plot_thread = None
+
+
+def _in_notebook():
+    """Whether this is running in a Jupyter kernel (Jupyter, VS Code, Colab)."""
+    try:
+        from IPython import get_ipython
+    except ImportError:
+        return False
+    shell = get_ipython()
+    return shell is not None and "IPKernelApp" in shell.config
+
+
+def _save_outlier_plots(plots, project_dir, bodyparts, overwrite, progress_bar, raise_errors):
+    """Save a QA plot for each item of `plots`, the arguments of
+    `plot_medoid_distance_outliers` after `project_dir`. Unless `raise_errors`,
+    a plot that fails is reported on `progress_bar` and the rest are saved."""
+    failed = []
+    try:
+        for recording_name, *plot_args in plots:
+            try:
+                plot_medoid_distance_outliers(
+                    project_dir,
+                    recording_name,
+                    *plot_args,
+                    bodyparts=bodyparts,
+                    overwrite=overwrite,
+                )
+            except Exception as error:
+                if raise_errors:
+                    raise
+                failed.append(recording_name)
+                progress_bar.set_postfix_str(f"failed for {', '.join(failed)}: {error}")
+                continue
+            progress_bar.update()
+    finally:
+        # A notebook bar left short of its total turns red
+        progress_bar.close()
 
 
 def outlier_removal(
@@ -2467,6 +2690,7 @@ def outlier_removal(
     overwrite=False,
     outlier_scale_factor=6.0,
     bodyparts=None,
+    plot_recordings=10,
     **kwargs,
 ):
     """Remove outlier keypoints for all recordings in a dataset.
@@ -2476,11 +2700,15 @@ def outlier_removal(
     and missing keypoints, sets their confidences to 0, and generates
     diagnostic plots.
 
+    In a Jupyter notebook the plots are saved in a background thread, so the
+    function returns as soon as the outliers are interpolated, and a progress
+    bar under the cell shows the plots being saved.
+
     Parameters
     ----------
     coordinates: dict
         Dictionary mapping recording names to keypoint coordinates
-    confidences: dict  
+    confidences: dict
         Dictionary mapping recording names to keypoint confidences
     project_dir: str
         Path to project directory for saving plots
@@ -2491,6 +2719,11 @@ def outlier_removal(
         produce a higher threshold, so fewer points are removed.
     bodyparts: list of str, default=None
         Names of bodyparts for plot labels
+    plot_recordings: int, list of str or None, default=10
+        Recordings to save QA plots for: this many chosen at random (every
+        recording if there are fewer), the recordings named in a list, or every
+        recording if None. The random choice is the same each time for the same
+        recordings.
     **kwargs
         Additional configuration parameters (ignored)
 
@@ -2501,7 +2734,14 @@ def outlier_removal(
     confidences: dict
         Updated confidences with outlier and missing values set to 0
     """
+    global _outlier_plot_thread
+    if _outlier_plot_thread is not None:
+        # The previous call's plots may still be saving to the same files
+        _outlier_plot_thread.join()
+
     _check_keypoint_dicts(coordinates, confidences)
+    recordings_to_plot = _recordings_to_plot(coordinates, plot_recordings)
+    plots = []
     for recording_name in coordinates:
         raw_coords = coordinates[recording_name].copy()
         outliers = find_medoid_distance_outliers(
@@ -2518,17 +2758,40 @@ def outlier_removal(
         confidences[recording_name] = np.where(
             interpolation_mask, 0, confidences[recording_name]
         )
-        plot_medoid_distance_outliers(
-            project_dir,
-            recording_name,
-            raw_coords,
-            coordinates[recording_name],
-            interpolation_mask,
-            outliers["thresholds"],
-            bodyparts=bodyparts,
-            overwrite=overwrite,
-            **kwargs,
+        if recording_name not in recordings_to_plot:
+            continue
+        if overwrite or not os.path.exists(_outlier_plot_path(project_dir, recording_name)):
+            plots.append(
+                (
+                    recording_name,
+                    raw_coords,
+                    coordinates[recording_name],
+                    interpolation_mask,
+                    outliers["thresholds"],
+                )
+            )
+
+    if plots:
+        print(
+            f"Saving outlier QA plots for {len(plots)} of {len(coordinates)} "
+            f"recordings to {_outlier_plot_dir(project_dir)}"
         )
+        description = "Saving outlier QA plots"
+        if _in_notebook():
+            from tqdm.notebook import tqdm as notebook_tqdm
+
+            progress_bar = notebook_tqdm(total=len(plots), desc=description)
+            _outlier_plot_thread = threading.Thread(
+                target=_save_outlier_plots,
+                args=(plots, project_dir, bodyparts, overwrite, progress_bar, False),
+                daemon=True,
+            )
+            _outlier_plot_thread.start()
+        else:
+            progress_bar = tqdm.tqdm(total=len(plots), desc=description, ncols=72)
+            _save_outlier_plots(
+                plots, project_dir, bodyparts, overwrite, progress_bar, True
+            )
 
     return coordinates, confidences
 

@@ -1,10 +1,13 @@
 import os
+import threading
 import warnings
 
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.figure import Figure
 import pytest
+from PIL import Image
 
 import keypoint_moseq as kpms
 import keypoint_moseq.io as io
@@ -75,6 +78,256 @@ def test_outlier_plot_labels_upper_distance_threshold():
         text.get_text() for text in ax.get_legend().get_texts()
     ]
     plt.close(fig)
+
+
+def shaded_regions(ax):
+    """The (start, end) frames of each shaded region in an outlier plot panel."""
+    regions = [(p.get_x(), p.get_x() + p.get_width()) for p in ax.patches]
+    for collection in ax.collections:
+        regions += [
+            (path.vertices[:, 0].min(), path.vertices[:, 0].max())
+            for path in collection.get_paths()
+        ]
+    return sorted(regions)
+
+
+def test_outlier_plot_shades_each_run_of_interpolated_frames_once():
+    traces = [np.ones((10, 1))]
+    mask = np.zeros((10, 1), dtype=bool)
+    mask[2:5] = True
+    mask[7] = True
+
+    fig = util.plot_keypoint_traces(traces, bodyparts=["tail"], shading_mask=mask)
+
+    assert shaded_regions(fig.axes[0]) == [(1.5, 4.5), (6.5, 7.5)]
+    plt.close(fig)
+
+
+def test_outlier_plot_draws_long_traces_from_2000_points_keeping_spikes():
+    trace = np.zeros((100_000, 1))
+    trace[54_321] = 10.0
+
+    fig = util.plot_keypoint_traces([trace], bodyparts=["tail"])
+
+    line = fig.axes[0].get_lines()[0]
+    assert len(line.get_xdata()) <= 2000
+    assert 54_321 in line.get_xdata()
+    assert line.get_ydata().max() == 10.0
+    plt.close(fig)
+
+
+def test_outlier_plot_is_saved_1920_pixels_wide(tmp_path):
+    coordinates = make_coordinates_with_missing_and_outlier()
+    mask = np.isnan(coordinates).any(axis=-1)
+
+    util.plot_medoid_distance_outliers(
+        tmp_path,
+        "recording",
+        coordinates,
+        coordinates,
+        mask,
+        np.ones(coordinates.shape[1]),
+        bodyparts=[f"keypoint{i}" for i in range(coordinates.shape[1])],
+    )
+
+    with Image.open(outlier_plot_path(tmp_path, "recording")) as image:
+        assert image.size == (1920, 5 * 3 * 120)
+
+
+def save_outlier_plot(project_dir):
+    coordinates = make_coordinates_with_missing_and_outlier()
+    util.plot_medoid_distance_outliers(
+        project_dir,
+        "recording",
+        coordinates,
+        coordinates,
+        np.isnan(coordinates).any(axis=-1),
+        np.ones(coordinates.shape[1]),
+        bodyparts=[f"keypoint{i}" for i in range(coordinates.shape[1])],
+    )
+
+
+def test_outlier_plot_is_drawn_outside_pyplot(monkeypatch, tmp_path):
+    # Plots saved in a background thread must not close, or show under another
+    # cell, a pyplot figure the user is working on.
+    open_figures_at_save = []
+    savefig = Figure.savefig
+
+    def recording_savefig(fig, *args, **kwargs):
+        open_figures_at_save.append(plt.get_fignums())
+        return savefig(fig, *args, **kwargs)
+
+    monkeypatch.setattr(Figure, "savefig", recording_savefig)
+    # figures other tests in the session left open stay open too
+    user_figures = plt.get_fignums() + [plt.figure().number]
+
+    save_outlier_plot(tmp_path)
+
+    assert open_figures_at_save == [user_figures]
+    assert plt.get_fignums() == user_figures
+    plt.close(user_figures[-1])
+
+
+def test_outlier_plot_that_fails_to_save_leaves_no_file(monkeypatch, tmp_path):
+    def failing_savefig(fig, fname, *args, **kwargs):
+        if hasattr(fname, "write"):
+            fname.write(PNG_SIGNATURE)
+        else:
+            with open(fname, "wb") as f:
+                f.write(PNG_SIGNATURE)
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(Figure, "savefig", failing_savefig)
+
+    with pytest.raises(OSError, match="No space left"):
+        save_outlier_plot(tmp_path)
+
+    plot_dir = os.path.dirname(outlier_plot_path(tmp_path, "recording"))
+    assert os.listdir(plot_dir) == []
+
+
+def recordings(num_recordings):
+    """Coordinates and confidences for recordings named rec0, rec1, ..."""
+    coordinates = {
+        f"rec{i}": make_coordinates_with_missing_and_outlier()
+        for i in range(num_recordings)
+    }
+    confidences = {name: np.full(c.shape[:2], 0.9) for name, c in coordinates.items()}
+    return coordinates, confidences
+
+
+BODYPARTS = [f"keypoint{i}" for i in range(5)]
+
+
+def plotted_recordings(project_dir):
+    plot_dir = os.path.dirname(outlier_plot_path(project_dir, "recording"))
+    if not os.path.exists(plot_dir):
+        return []
+    return sorted(
+        name.removesuffix(".png") for name in os.listdir(plot_dir) if name.endswith(".png")
+    )
+
+
+def test_outlier_removal_plots_10_recordings_by_default_the_same_each_time(tmp_path):
+    coordinates, confidences = recordings(12)
+    _, cleaned_confidences = util.outlier_removal(
+        coordinates, confidences, tmp_path / "a", bodyparts=BODYPARTS
+    )
+    coordinates, confidences = recordings(12)
+    reordered = lambda d: dict(reversed(list(d.items())))
+    util.outlier_removal(
+        reordered(coordinates), reordered(confidences), tmp_path / "b", bodyparts=BODYPARTS
+    )
+
+    assert len(plotted_recordings(tmp_path / "a")) == 10
+    assert plotted_recordings(tmp_path / "a") == plotted_recordings(tmp_path / "b")
+    # Outliers are still removed from the recordings that are not plotted
+    for name, conf in cleaned_confidences.items():
+        assert conf[4, 4] == 0, name
+
+
+def test_outlier_removal_plots_every_recording_when_plot_recordings_is_None(tmp_path):
+    coordinates, confidences = recordings(12)
+    util.outlier_removal(
+        coordinates, confidences, tmp_path, bodyparts=BODYPARTS, plot_recordings=None
+    )
+    assert plotted_recordings(tmp_path) == sorted(coordinates)
+
+
+def test_outlier_removal_plots_the_recordings_named(tmp_path):
+    coordinates, confidences = recordings(12)
+    util.outlier_removal(
+        coordinates, confidences, tmp_path, bodyparts=BODYPARTS, plot_recordings=["rec7"]
+    )
+    assert plotted_recordings(tmp_path) == ["rec7"]
+
+
+def test_outlier_removal_rejects_plot_recordings_not_in_the_data(tmp_path):
+    coordinates, confidences = recordings(2)
+    with pytest.raises(ValueError, match="rec7"):
+        util.outlier_removal(
+            coordinates, confidences, tmp_path, bodyparts=BODYPARTS, plot_recordings=["rec7"]
+        )
+
+
+def in_a_notebook(monkeypatch):
+    monkeypatch.setattr(util, "_in_notebook", lambda: True, raising=False)
+
+
+def blocking_plots(monkeypatch):
+    """Make each outlier QA plot wait to be saved until the returned event is set."""
+    release = threading.Event()
+    save = util.plot_medoid_distance_outliers
+
+    def blocked_save(*args, **kwargs):
+        release.wait(timeout=5)
+        save(*args, **kwargs)
+
+    monkeypatch.setattr(util, "plot_medoid_distance_outliers", blocked_save)
+    return release
+
+
+def wait_for_outlier_plots():
+    thread = getattr(util, "_outlier_plot_thread", None)
+    if thread is not None:
+        thread.join()
+
+
+def test_outlier_removal_in_a_notebook_returns_before_the_plots_are_saved(
+    monkeypatch, tmp_path
+):
+    in_a_notebook(monkeypatch)
+    release = blocking_plots(monkeypatch)
+    coordinates, confidences = recordings(3)
+
+    util.outlier_removal(coordinates, confidences, tmp_path, bodyparts=BODYPARTS)
+    assert plotted_recordings(tmp_path) == []
+
+    release.set()
+    wait_for_outlier_plots()
+    assert plotted_recordings(tmp_path) == ["rec0", "rec1", "rec2"]
+
+
+def test_outlier_removal_in_a_notebook_waits_for_the_previous_calls_plots(
+    monkeypatch, tmp_path
+):
+    # Otherwise both calls would save the same plot at once
+    in_a_notebook(monkeypatch)
+    release = blocking_plots(monkeypatch)
+    util.outlier_removal(*recordings(1), tmp_path, bodyparts=BODYPARTS)
+
+    second_call = threading.Thread(
+        target=util.outlier_removal,
+        args=(*recordings(1), tmp_path),
+        kwargs={"bodyparts": BODYPARTS},
+    )
+    second_call.start()
+    second_call.join(timeout=1)
+    assert second_call.is_alive()
+
+    release.set()
+    second_call.join()
+    wait_for_outlier_plots()
+    assert plotted_recordings(tmp_path) == ["rec0"]
+
+
+def test_outlier_plot_that_fails_in_the_background_does_not_stop_the_others(
+    monkeypatch, tmp_path
+):
+    in_a_notebook(monkeypatch)
+    save = util.plot_medoid_distance_outliers
+
+    def failing_for_rec1(project_dir, recording_name, *args, **kwargs):
+        if recording_name == "rec1":
+            raise OSError("No space left on device")
+        save(project_dir, recording_name, *args, **kwargs)
+
+    monkeypatch.setattr(util, "plot_medoid_distance_outliers", failing_for_rec1)
+
+    util.outlier_removal(*recordings(3), tmp_path, bodyparts=BODYPARTS)
+    wait_for_outlier_plots()
+
+    assert plotted_recordings(tmp_path) == ["rec0", "rec2"]
 
 
 def test_outlier_removal_interpolates_missing_and_outlier_points(

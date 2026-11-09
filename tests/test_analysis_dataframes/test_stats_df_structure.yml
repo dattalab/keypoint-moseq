@@ -24,12 +24,12 @@ dtypes:
   duration: float64
   frequency: float64
   group: object or str
-  heading_max: float64
-  heading_mean: float64
-  heading_min: float64
-  heading_std: float64
+  heading_max: float32
+  heading_mean: float32
+  heading_min: float32
+  heading_std: float32
   name: object or str
-  syllable: int64
+  syllable: int32
   velocity_px_s_max: float64
   velocity_px_s_mean: float64
   velocity_px_s_min: float64

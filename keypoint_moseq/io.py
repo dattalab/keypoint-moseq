@@ -9,6 +9,7 @@ import joblib
 import tqdm
 import yaml
 import os
+import orjson
 import pandas as pd
 from textwrap import fill
 import sleap_io
@@ -511,11 +512,87 @@ def load_pca(project_dir, pca_path=None):
     return joblib.load(pca_path)
 
 
+def _to_session_precision(tree):
+    """Return `tree` with its arrays in the precision JAX runs in.
+
+    Floating-point arrays become float64 when JAX's 64-bit mode is on and
+    float32 when it is off, and signed-integer arrays become int64 or int32
+    likewise, which is what jax-moseq's `check_precision` requires. Unsigned
+    arrays (the random seed, a uint32 PRNG key), strings and Python scalars
+    (such as the scalar hyperparameters, which `update_hypparams` edits) are
+    kept. Arrays already in the session's precision are not copied, and numpy
+    arrays stay numpy arrays.
+    """
+    x64 = jax.config.read("jax_enable_x64")
+    floating = np.float64 if x64 else np.float32
+    integer = np.int64 if x64 else np.int32
+
+    def convert(leaf):
+        if isinstance(leaf, (np.ndarray, jax.Array)):
+            if np.issubdtype(leaf.dtype, np.floating) and leaf.dtype != floating:
+                return leaf.astype(floating)
+            if np.issubdtype(leaf.dtype, np.signedinteger) and leaf.dtype != integer:
+                return leaf.astype(integer)
+        return leaf
+
+    return jax.tree_util.tree_map(convert, tree)
+
+
+def _model_to_session_precision(model):
+    """Return `model` in the session's precision (see `_to_session_precision`)
+    and whether any of its arrays were converted."""
+    converted = _to_session_precision(model)
+    leaves = jax.tree_util.tree_leaves(model)
+    changed = any(
+        a is not b for a, b in zip(leaves, jax.tree_util.tree_leaves(converted))
+    )
+    return converted, changed
+
+
+def _print_conversion_notice():
+    """Tell the user a model was converted to the session's precision."""
+    if jax.config.read("jax_enable_x64"):
+        saved, session = 32, 64
+    else:
+        saved, session = 64, 32
+    print(
+        fill(
+            f"This model was saved in {saved}-bit precision and is converted to "
+            f"{session}-bit, the precision JAX is running in."
+        )
+    )
+
+
+def _load_checkpoint(path, iteration=None):
+    """`load_checkpoint` for a checkpoint path, also returning whether the
+    model was converted to the session's precision."""
+    with h5py.File(path, "r") as f:
+        saved_iterations = np.sort([int(i) for i in f["model_snapshots"]])
+
+    if iteration is None:
+        iteration = saved_iterations[-1]
+    else:
+        assert iteration in saved_iterations, fill(
+            f"No snapshot found for iteration {iteration}. "
+            f"Available iterations are {saved_iterations}"
+        )
+
+    model, converted = _model_to_session_precision(
+        load_hdf5(path, f"model_snapshots/{iteration}")
+    )
+    metadata = load_hdf5(path, "metadata")
+    data = _to_session_precision(load_hdf5(path, "data"))
+    return model, data, metadata, iteration, converted
+
+
 def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None):
     """Load data and model snapshot from a saved checkpoint.
 
     The checkpoint path can be specified directly via `path` or else it is
     assumed to be `{project_dir}/{model_name}/checkpoint.h5`.
+
+    The model and data are returned in the precision JAX runs in, whichever
+    precision the checkpoint was saved in.
 
     Parameters
     ----------
@@ -553,21 +630,9 @@ def load_checkpoint(project_dir=None, model_name=None, path=None, iteration=None
         Iteration of model fitting corresponding to the loaded snapshot.
     """
     path = _get_path(project_dir, model_name, path, "checkpoint.h5")
-
-    with h5py.File(path, "r") as f:
-        saved_iterations = np.sort([int(i) for i in f["model_snapshots"]])
-
-    if iteration is None:
-        iteration = saved_iterations[-1]
-    else:
-        assert iteration in saved_iterations, fill(
-            f"No snapshot found for iteration {iteration}. "
-            f"Available iterations are {saved_iterations}"
-        )
-
-    model = load_hdf5(path, f"model_snapshots/{iteration}")
-    metadata = load_hdf5(path, "metadata")
-    data = load_hdf5(path, "data")
+    model, data, metadata, iteration, converted = _load_checkpoint(path, iteration)
+    if converted:
+        _print_conversion_notice()
     return model, data, metadata, iteration
 
 
@@ -577,9 +642,8 @@ def reindex_syllables_in_checkpoint(
     """Reindex syllable labels by their frequency in the most recent model
     snapshot in a checkpoint file.
 
-    This is an in-place operation: the checkpoint is loaded from disk, modified
-    and saved to disk again. The label permutation is applied to all model
-    snapshots in the checkpoint.
+    This is an in-place operation: the syllable labels and per-state parameters
+    of every snapshot are overwritten in the checkpoint.
 
     The checkpoint path can be specified directly via `path` or else it is
     assumed to be `{project_dir}/{model_name}/checkpoint.h5`.
@@ -593,7 +657,8 @@ def reindex_syllables_in_checkpoint(
     index: array of shape (num_states,), default=None
         Permutation for syllable labels, where `index[i]` is relabeled as `i`.
         If None, syllables are relabeled by frequency, with the most frequent
-        syllable relabeled as 0, and so on.
+        syllable relabeled as 0, and so on. Syllables with equal frequency keep
+        their order.
 
     runlength: bool, default=True
         If True, frequencies are quantified using the number of non-consecutive
@@ -608,40 +673,33 @@ def reindex_syllables_in_checkpoint(
     """
     path = _get_path(project_dir, model_name, path, "checkpoint.h5")
 
-    with h5py.File(path, "r") as f:
-        saved_iterations = [int(i) for i in f["model_snapshots"]]
+    with h5py.File(path, "r+") as f:
+        snapshots = f["model_snapshots"]
+        saved_iterations = sorted(int(i) for i in snapshots)
 
-    if index is None:
-        with h5py.File(path, "r") as f:
-            last_iter = np.max(saved_iterations)
-            num_states = f[f"model_snapshots/{last_iter}/params/pi"].shape[0]
-            z = f[f"model_snapshots/{last_iter}/states/z"][()]
-            mask = f["data/mask"][()]
-        index = np.argsort(get_frequencies(z, mask, num_states, runlength))[::-1]
+        if index is None:
+            last = snapshots[str(saved_iterations[-1])]
+            num_states = last["params/pi"].shape[0]
+            frequencies = get_frequencies(
+                last["states/z"][()], f["data/mask"][()], num_states, runlength
+            )
+            # most frequent first; syllables seen equally often keep their order
+            index = np.argsort(-np.asarray(frequencies), kind="stable")
 
-    def _reindex(model):
-        model["params"]["betas"] = model["params"]["betas"][index]
-        model["params"]["pi"] = model["params"]["pi"][index, :][:, index]
-        model["params"]["Ab"] = model["params"]["Ab"][index]
-        model["params"]["Q"] = model["params"]["Q"][index]
-        # allocentric dynamics params (location-aware model) are also per-state
-        for key in ["delta_h", "sigmasq_h", "delta_v", "sigmasq_v"]:
-            if key in model["params"]:
-                model["params"][key] = model["params"][key][index]
-        model["states"]["z"] = np.argsort(index)[model["states"]["z"]]
-        return model
-
-    for iteration in tqdm.tqdm(
-        saved_iterations, desc="Reindexing", unit="model snapshot", ncols=72
-    ):
-        model = load_hdf5(path, f"model_snapshots/{iteration}")
-        save_hdf5(
-            path,
-            _reindex(model),
-            f"model_snapshots/{iteration}",
-            exist_ok=True,
-            overwrite=True,
-        )
+        # Only the labels and the per-state parameters change, so they are
+        # overwritten in place, which keeps the file from growing.
+        relabel = np.argsort(index)
+        for iteration in tqdm.tqdm(
+            saved_iterations, desc="Reindexing", unit="model snapshot", ncols=72
+        ):
+            params = snapshots[f"{iteration}/params"]
+            params["pi"][...] = params["pi"][()][index][:, index]
+            # the per-state parameters, with the location-aware model's allocentric ones
+            for key in ["betas", "Ab", "Q", "delta_h", "sigmasq_h", "delta_v", "sigmasq_v"]:
+                if key in params:
+                    params[key][...] = params[key][()][index]
+            z = snapshots[f"{iteration}/states/z"]
+            z[...] = relabel[z[()]]
     return index
 
 
@@ -832,15 +890,58 @@ def save_results_as_csv(
             column_names.append([f"latent_state {i}" for i in range(latent_dim)])
             data.append(results[key]["latent_state"])
 
-        dfs = [pd.DataFrame(arr, columns=cols) for arr, cols in zip(data, column_names)]
-        df = pd.concat(dfs, axis=1)
-
-        for col in df.select_dtypes(include=[np.floating]).columns:
-            df[col] = df[col].astype(float).round(4)
-
         save_name = key.replace(os.path.sep, path_sep)
         save_path = os.path.join(save_dir, save_name)
-        df.to_csv(f"{save_path}.csv", index=False)
+        _write_csv(f"{save_path}.csv", column_names, data)
+
+
+def _write_csv(path, column_names, data):
+    """Write 2D arrays of numbers side by side as a csv file, with floats
+    rounded to 4 decimals, as text identical to `pandas.DataFrame.to_csv`.
+
+    orjson formats the numbers, many times faster than pandas. It writes NaN
+    and infinity as `null` and values of 1e16 or more in another notation, so
+    a table with any of those is written with pandas.
+    """
+    rounded = [
+        np.round(arr.astype(float), 4) if np.issubdtype(arr.dtype, np.floating) else arr
+        for arr in data
+    ]
+    in_orjson_range = all(
+        np.all(np.abs(arr) < 1e16) for arr in rounded if arr.dtype.kind == "f"
+    ) and all(arr.dtype.kind in "iuf" for arr in rounded)
+
+    if not in_orjson_range:
+        dfs = [pd.DataFrame(arr, columns=cols) for arr, cols in zip(data, column_names)]
+        df = pd.concat(dfs, axis=1)
+        for col in df.select_dtypes(include=[np.floating]).columns:
+            df[col] = df[col].astype(float).round(4)
+        df.to_csv(path, index=False)
+        return
+
+    # neighboring arrays of one kind (int or float) are formatted together, so
+    # each row is joined from as few pieces as possible
+    blocks = []
+    for arr in rounded:
+        if blocks and blocks[-1][-1].dtype.kind == arr.dtype.kind:
+            blocks[-1].append(arr)
+        else:
+            blocks.append([arr])
+
+    newline = os.linesep.encode()
+    header = ",".join(name for cols in column_names for name in cols).encode()
+    num_rows = rounded[0].shape[0]
+    rows = None
+    for block in blocks:
+        arr = np.concatenate(block, axis=1)
+        # [[a,b],[c,d],...] split into the text of each row
+        text = orjson.dumps(np.ascontiguousarray(arr), option=orjson.OPT_SERIALIZE_NUMPY)
+        arr_rows = text[2:-2].split(b"],[") if num_rows > 0 else []
+        rows = arr_rows if rows is None else [a + b"," + b for a, b in zip(rows, arr_rows)]
+    with open(path, "wb") as f:
+        f.write(header + newline)
+        if rows:
+            f.write(newline.join(rows) + newline)
 
 
 def _name_from_path(filepath, path_in_name, path_sep, remove_extension):

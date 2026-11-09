@@ -2,6 +2,8 @@
 `notebook_version` does not match the release tag, and moves the stable
 branch only for final releases."""
 
+import ast
+import configparser
 import json
 import os
 import subprocess
@@ -36,6 +38,29 @@ def run(tag, repo=REPO):
     return subprocess.run(
         [sys.executable, SCRIPT, tag, repo], capture_output=True, text=True
     )
+
+
+def tested_python_versions():
+    """PYTHON_VERSIONS in noxfile.py: the Python versions CI tests."""
+    with open(os.path.join(REPO, "noxfile.py")) as f:
+        tree = ast.parse(f.read())
+    for node in tree.body:
+        targets = [t.id for t in getattr(node, "targets", []) if isinstance(t, ast.Name)]
+        if targets == ["PYTHON_VERSIONS"]:
+            return ast.literal_eval(node.value)
+
+
+def test_classifiers_list_the_tested_python_versions():
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(os.path.join(REPO, "setup.cfg"))
+    prefix = "Programming Language :: Python :: "
+    listed = [
+        c.removeprefix(prefix)
+        for c in config["metadata"]["classifiers"].strip().splitlines()
+        if c.startswith(prefix + "3.")
+    ]
+
+    assert listed == tested_python_versions()
 
 
 def test_every_notebook_states_the_same_version():

@@ -113,8 +113,8 @@ def test_dlc_keypoints_for_one_recording(
 
 
 def test_float32_deeplabcut_file_reaches_init_model(tmp_path):
-    # DeepLabCut 3 writes its predictions as float32. keypoint-MoSeq runs JAX
-    # in 64-bit mode, and jax-moseq's init_model rejects 32-bit data.
+    # DeepLabCut 3 writes its predictions as float32, and jax-moseq's
+    # init_model rejects data in a precision other than the session's.
     bodyparts = ["nose", "head", "spine", "tail"]
     n_frames = 500
     rng = np.random.default_rng(0)

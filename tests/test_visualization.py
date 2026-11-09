@@ -1,5 +1,6 @@
 import os
 import struct
+import subprocess
 
 import imageio
 import imageio_ffmpeg
@@ -655,6 +656,156 @@ def test_density_sampling_with_a_short_grid_window(tmp_path, before_onset_sec, a
     assert len(sampled) > 0
 
 
+def drifting_blocks_video(path, n_frames, seed):
+    """A 96 x 128 color video of random blocks drifting one pixel a frame,
+    so every frame differs, with a keyframe every 50 frames."""
+    rng = np.random.default_rng(seed)
+    blocks = np.kron(rng.integers(0, 256, (12, 32, 3)), np.ones((8, 8, 1))).astype(np.uint8)
+    with imageio.get_writer(path, fps=30, ffmpeg_params=["-g", "50"]) as writer:
+        for k in range(n_frames):
+            writer.append_data(np.ascontiguousarray(blocks[:, k % 128 : k % 128 + 128]))
+
+
+def reference_grid_movie(
+    instances, rows, cols, video_paths, centroids, headings, window_size, video_frame_indexes,
+    dot_color, dot_radius, before_onset_frames, after_onset_frames, scaled_window_size,
+    edges, overlay_keypoints, coordinates, plot_options,
+):
+    """grid_movie for 2-D keypoints as written before it read the tiles on
+    threads: each tile opens its video with vidio, converts every frame to
+    RGB and warps it, and the tiles are stacked and concatenated."""
+    from vidio.read import OpenCVReader
+    import cv2
+
+    tiles = []
+    for key, start, end in instances:
+        scale_factor = scaled_window_size / window_size
+        clip_frames = slice(start - before_onset_frames, start + after_onset_frames)
+        cs = centroids[key][clip_frames]
+        h, c = headings[key][start], cs[before_onset_frames]
+        r = np.float32([[np.cos(h), np.sin(h)], [-np.sin(h), np.cos(h)]])
+        if overlay_keypoints:
+            syllable_coordinates = coordinates[key][clip_frames].copy()
+        tile = []
+        if video_paths is not None:
+            reader = OpenCVReader(video_paths[key])
+            frames = [reader[ix] for ix in video_frame_indexes[key][clip_frames]]
+            reader.close()
+            c = r @ c - window_size // 2
+            M = [[np.cos(h), np.sin(h), -c[0]], [-np.sin(h), np.cos(h), -c[1]]]
+            for ii, (frame, c) in enumerate(zip(frames, cs)):
+                if overlay_keypoints:
+                    frame = kpms.overlay_keypoints_on_image(
+                        frame, syllable_coordinates[ii], edges=edges, **plot_options
+                    )
+                frame = cv2.warpAffine(frame, np.float32(M), (window_size, window_size))
+                frame = cv2.resize(frame, (scaled_window_size, scaled_window_size))
+                if 0 <= ii - before_onset_frames < end - start and dot_radius > 0:
+                    pos = tuple([int(x) for x in M @ np.append(c, 1) * scale_factor])
+                    cv2.circle(frame, pos, dot_radius, dot_color, -1, cv2.LINE_AA)
+                tile.append(frame)
+        else:
+            syllable_coordinates = (
+                syllable_coordinates - c
+            ) @ r.T * scale_factor + scaled_window_size // 2
+            cs = (cs - c) @ r.T * scale_factor + scaled_window_size // 2
+            background = np.zeros((scaled_window_size, scaled_window_size, 3))
+            for ii, (uvs, c) in enumerate(zip(syllable_coordinates, cs)):
+                frame = kpms.overlay_keypoints_on_image(
+                    background.copy(), uvs, edges=edges, **plot_options
+                )
+                if 0 <= ii - before_onset_frames < end - start and dot_radius > 0:
+                    cv2.circle(frame, (int(c[0]), int(c[1])), dot_radius, dot_color, -1, cv2.LINE_AA)
+                tile.append(frame)
+        tiles.append(np.stack(tile))
+    tiles = np.stack(tiles).reshape(
+        rows, cols, after_onset_frames + before_onset_frames, scaled_window_size, scaled_window_size, 3
+    )
+    return np.concatenate(np.concatenate(tiles, axis=2), axis=2)
+
+
+@pytest.mark.parametrize(
+    "case", ["video", "video_with_keypoints", "skipping_frame_indexes", "keypoints_only"]
+)
+def test_grid_movie_frames_are_unchanged(tmp_path, case):
+    """grid_movie draws the same frames as the implementation it replaced:
+    tiles from two videos, one starting at the first frame, two from the same
+    video one after the other and overlapping, scaled down, with the onset dot,
+    optionally with the keypoint overlay or without video."""
+    n_frames = 220
+    rng = np.random.default_rng(1)
+    names = ["a", "b"]
+    video_paths = {name: str(tmp_path / f"{name}.mp4") for name in names}
+    for seed, name in enumerate(names):
+        drifting_blocks_video(video_paths[name], n_frames, seed)
+    video_frame_indexes = {name: np.arange(n_frames) for name in names}
+    clip_frames = n_frames
+    if case == "skipping_frame_indexes":
+        clip_frames = n_frames // 2
+        video_frame_indexes["a"] = np.arange(0, n_frames, 2)
+        video_frame_indexes["b"] = np.arange(clip_frames)
+    centroids = {name: 48 + rng.uniform(-6, 6, (clip_frames, 2)) * [1, 2] + [0, 16] for name in names}
+    headings = {name: rng.uniform(-np.pi, np.pi, clip_frames) for name in names}
+    coordinates = {
+        name: centroids[name][:, None, :] + rng.normal(scale=6, size=(clip_frames, 3, 2)) for name in names
+    }
+    instances = [("a", 4, 8), ("b", 40, 52), ("a", 60, 66), ("a", 62, 70), ("b", 90, 96), ("a", 30, 34)]
+    options = dict(
+        dot_color=(0, 255, 0), dot_radius=3, before_onset_frames=4, after_onset_frames=12,
+        scaled_window_size=32, edges=[(0, 1), (1, 2)],
+        overlay_keypoints=case in ("video_with_keypoints", "keypoints_only"),
+        coordinates=coordinates, plot_options={"node_size": 2, "keypoint_colormap": "autumn"},
+    )
+    if case == "keypoints_only":
+        video_paths = video_frame_indexes = None
+
+    frames = kpms.grid_movie(
+        instances, 2, 3, video_paths, centroids, headings, 48, video_frame_indexes, **options
+    )
+    expected = reference_grid_movie(
+        instances, 2, 3, video_paths, centroids, headings, 48, video_frame_indexes, **options
+    )
+
+    assert frames.shape == expected.shape == (16, 64, 96, 3)
+    np.testing.assert_array_equal(frames, expected)
+
+
+def test_write_video_clip_encodes_with_the_fastest_preset(tmp_path):
+    """The clip is H.264 in the Constrained Baseline profile, which x264
+    writes with its ultrafast preset."""
+    path = str(tmp_path / "clip.mp4")
+    frames = np.random.default_rng(0).integers(0, 256, (10, 64, 96, 3), dtype=np.uint8)
+
+    kpms.write_video_clip(frames, path)
+
+    info = subprocess.run(
+        [imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-i", path], capture_output=True, text=True
+    ).stderr
+    assert "h264 (Constrained Baseline)" in info
+
+
+def test_grid_movies_raise_an_error_from_writing_a_movie(tmp_path, monkeypatch):
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("the encoder failed")
+
+    monkeypatch.setattr(kpms.viz, "write_video_clip", fail)
+    with pytest.raises(RuntimeError, match="the encoder failed"):
+        kpms.generate_grid_movies(
+            results,
+            output_dir=str(tmp_path),
+            coordinates=moving_keypoints(results),
+            keypoints_only=True,
+            fps=100,
+            before_onset_sec=0.05,
+            after_onset_sec=0.1,
+            min_frequency=0.0,
+            rows=1,
+            cols=2,
+        )
+
+
 def gray_ramp_video(path, n_frames=20, size=64):
     """A video whose frame k is uniformly gray at level 10 * k."""
     with imageio.get_writer(path, fps=30) as writer:
@@ -713,3 +864,266 @@ def test_overlay_refuses_keypoints_past_the_end_of_the_video(tmp_path):
         kpms.overlay_keypoints_on_video(video, coordinates, output_path=str(output))
 
     assert not output.exists()
+
+
+def count_calls(monkeypatch, module, name):
+    """Replace `module.name` with a wrapper that records the arguments of each
+    call, and return the list it records into."""
+    calls = []
+    function = getattr(module, name)
+
+    def counted(*args, **kwargs):
+        calls.append((args, kwargs))
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(module, name, counted)
+    return calls
+
+
+@pytest.mark.parametrize("density_sample", [True, False], ids=["density_sampled", "all_instances"])
+def test_typical_trajectories_filter_centroids_and_headings_once(monkeypatch, density_sample):
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    calls = count_calls(monkeypatch, kpms.util, "filter_centroids_headings")
+
+    typical = kpms.util.get_typical_trajectories(
+        moving_keypoints(results),
+        results,
+        min_frequency=0.0,
+        density_sample=density_sample,
+        sampling_options={"n_neighbors": 10},
+    )
+
+    assert len(typical) > 1
+    assert len(calls) == 1
+
+
+def test_typical_trajectories_are_the_median_instance_trajectories():
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    coordinates = moving_keypoints(results)
+    instances = get_syllable_instances(
+        {name: r["syllable"] for name, r in results.items()},
+        before_onset_frames=5,
+        after_onset_frames=15,
+        min_instance_duration_frames=3,
+        min_frequency=0.0,
+        min_instances=1,
+    )
+
+    typical = kpms.util.get_typical_trajectories(
+        coordinates, results, min_frequency=0.0, density_sample=False
+    )
+
+    assert sorted(typical) == sorted(instances)
+    for syllable, syllable_instances in instances.items():
+        trajectories = kpms.util.get_instance_trajectories(
+            syllable_instances,
+            coordinates,
+            before_onset_frames=5,
+            after_onset_frames=15,
+            centroids={name: r["centroid"] for name, r in results.items()},
+            headings={name: r["heading"] for name, r in results.items()},
+        )
+        np.testing.assert_array_equal(typical[syllable], np.nanmedian(trajectories, axis=0))
+
+
+def small_trajectories(n_trajectories=2, n_frames=20, n_keypoints=4, seed=0):
+    """Titles, trajectories, axis limits and edges for `plot_trajectories`."""
+    rng = np.random.default_rng(seed)
+    Xs = np.cumsum(rng.normal(size=(n_trajectories, n_frames, n_keypoints, 2)), axis=1)
+    lims = kpms.get_limits(Xs, pctl=0, left=0.1, right=0.1, top=0.2, bottom=0.2)
+    titles = [f"Syllable{i}" for i in range(n_trajectories)]
+    edges = [(i, i + 1) for i in range(n_keypoints - 1)]
+    return titles, Xs, lims, edges
+
+
+def test_trajectory_frames_show_each_step_over_the_earlier_ones():
+    """Frame i of the GIF shows the steps up to i with their fade layers and
+    the titles, as the finished figure does with the later steps hidden."""
+    titles, Xs, lims, edges = small_trajectories()
+
+    fig, ax, rasters = kpms.plot_trajectories(
+        titles, Xs, lims, edges=edges, plot_width=2, return_rasters=True
+    )
+
+    artists = [a for a in ax.get_children() if a.get_zorder() > 0 and not hasattr(a, "get_text")]
+    assert len(rasters) == 10
+    for i, raster in enumerate(rasters):
+        for artist in artists:
+            artist.set_visible(artist.get_zorder() <= i * 4 + 3)
+        fig.canvas.draw()
+        expected = np.asarray(fig.canvas.buffer_rgba())[..., :3]
+        np.testing.assert_array_equal(raster, expected, err_msg=f"frame {i}")
+    plt.close(fig)
+
+
+def test_trajectory_frames_render_the_figure_once(monkeypatch):
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    titles, Xs, lims, edges = small_trajectories()
+    draws = count_calls(monkeypatch, FigureCanvasAgg, "draw")
+
+    fig, _, rasters = kpms.plot_trajectories(
+        titles, Xs, lims, edges=edges, plot_width=2, return_rasters=True
+    )
+
+    assert len(rasters) == 10
+    assert len(draws) == 1
+    plt.close(fig)
+
+
+def test_trajectory_edges_are_drawn_as_one_line_collection_per_step_and_color():
+    from matplotlib.collections import LineCollection
+
+    titles, Xs, lims, edges = small_trajectories()
+
+    fig, ax, _ = kpms.plot_trajectories(titles, Xs, lims, edges=edges, plot_width=2)
+
+    collections = [c for c in ax.collections if isinstance(c, LineCollection)]
+    assert len(ax.lines) == 0
+    assert len(collections) == 2 * 10
+    assert all(len(c.get_segments()) == len(Xs) * len(edges) for c in collections)
+    plt.close(fig)
+
+
+def test_gif_frames_are_quantized_with_fast_octree(tmp_path, monkeypatch):
+    # more than 256 colors per frame, so each frame needs an adaptive palette
+    frames = np.random.default_rng(0).integers(0, 256, (3, 32, 48, 3), dtype=np.uint8)
+    path = str(tmp_path / "frames.gif")
+    quantized = count_calls(monkeypatch, Image.Image, "quantize")
+
+    kpms.viz.save_gif(frames, path)
+    methods = [kwargs.get("method") for _, kwargs in quantized]
+
+    with Image.open(path) as gif:
+        decoded = []
+        for i in range(gif.n_frames):
+            gif.seek(i)
+            decoded.append(np.asarray(gif.convert("RGB")))
+    for frame, decoded_frame in zip(frames, decoded):
+        expected = Image.fromarray(frame).quantize(256, method=Image.Quantize.FASTOCTREE)
+        np.testing.assert_array_equal(decoded_frame, np.asarray(expected.convert("RGB")))
+    assert methods == [Image.Quantize.FASTOCTREE] * 3
+
+
+def test_saving_trajectory_plots_without_animations_renders_nothing_with_agg(
+    tmp_path, monkeypatch
+):
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    draws = count_calls(monkeypatch, FigureCanvasAgg, "draw")
+
+    kpms.generate_trajectory_plots(
+        moving_keypoints(results),
+        results,
+        output_dir=str(tmp_path),
+        save_gifs=False,
+        fps=30,
+        min_frequency=0.0,
+    )
+    plt.close("all")
+
+    assert any(name.endswith(".pdf") for name in os.listdir(tmp_path))
+    assert draws == []
+
+
+def test_saving_the_dendrogram_renders_it_with_agg_once(tmp_path, monkeypatch):
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    draws = count_calls(monkeypatch, FigureCanvasAgg, "draw")
+
+    kpms.plot_similarity_dendrogram(
+        moving_keypoints(results),
+        results,
+        save_path=str(tmp_path / "dendrogram"),
+        fps=30,
+        min_frequency=0.0,
+    )
+    plt.close("all")
+
+    assert sorted(os.listdir(tmp_path)) == ["dendrogram.pdf", "dendrogram.png"]
+    assert len(draws) == 1  # for the PNG
+
+
+def test_instance_trajectories_apply_the_rigid_transform_with_one_shape(monkeypatch):
+    """The jitted transform sees the same array shape for any number of
+    instances, so it compiles once."""
+    results = synthetic_results(["rec_a"], n_frames=300)
+    coordinates = moving_keypoints(results)
+    transforms = count_calls(monkeypatch, kpms.util, "inverse_rigid_transform")
+
+    for n_instances in [3, 7]:
+        instances = [("rec_a", start, start + 5) for start in range(20, 20 + 10 * n_instances, 10)]
+        trajectories = kpms.util.get_instance_trajectories(
+            instances,
+            coordinates,
+            before_onset_frames=5,
+            after_onset_frames=15,
+            centroids={"rec_a": results["rec_a"]["centroid"]},
+            headings={"rec_a": results["rec_a"]["heading"]},
+        )
+        assert trajectories.shape == (n_instances, 20, 4, 2)
+
+    assert len({args[0].shape for args, _ in transforms}) == 1
+
+
+def test_centroids_are_median_filtered_one_coordinate_at_a_time(monkeypatch):
+    """scipy's 1D median filter, faster than its general rank filter, gives
+    the same result as filtering the (n_frames, d) centroid with a (9, 1)
+    kernel."""
+    from scipy.ndimage import median_filter
+
+    rng = np.random.default_rng(0)
+    centroids = {"a": rng.normal(size=(200, 2)), "b": rng.normal(size=(150, 3))}
+    headings = {"a": rng.uniform(-np.pi, np.pi, 200), "b": rng.uniform(-np.pi, np.pi, 150)}
+    filters = count_calls(monkeypatch, kpms.util, "median_filter")
+
+    filtered_centroids, _ = kpms.util.filter_centroids_headings(centroids, headings, 9)
+
+    for name, centroid in centroids.items():
+        np.testing.assert_array_equal(filtered_centroids[name], median_filter(centroid, (9, 1)))
+    assert {args[0].ndim for args, _ in filters} == {1}
+
+
+def test_typical_trajectories_without_nans_use_the_plain_median(monkeypatch):
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    nanmedians = count_calls(monkeypatch, np, "nanmedian")
+
+    typical = kpms.util.get_typical_trajectories(
+        moving_keypoints(results), results, min_frequency=0.0, density_sample=False
+    )
+
+    assert len(typical) > 1
+    assert nanmedians == []
+
+
+def test_typical_trajectories_skip_missing_keypoints():
+    results = synthetic_results(["rec_a", "rec_b"], n_frames=3000)
+    coordinates = moving_keypoints(results)
+    coordinates["rec_a"][100:400, 1] = np.nan
+    instances = get_syllable_instances(
+        {name: r["syllable"] for name, r in results.items()},
+        before_onset_frames=5,
+        after_onset_frames=15,
+        min_instance_duration_frames=3,
+        min_frequency=0.0,
+        min_instances=1,
+    )
+
+    typical = kpms.util.get_typical_trajectories(
+        coordinates, results, min_frequency=0.0, density_sample=False
+    )
+
+    for syllable, syllable_instances in instances.items():
+        trajectories = kpms.util.get_instance_trajectories(
+            syllable_instances,
+            coordinates,
+            before_onset_frames=5,
+            after_onset_frames=15,
+            centroids={name: r["centroid"] for name, r in results.items()},
+            headings={name: r["heading"] for name, r in results.items()},
+        )
+        assert np.isnan(trajectories).any(), syllable
+        assert not np.isnan(typical[syllable]).any(), syllable
+        np.testing.assert_array_equal(typical[syllable], np.nanmedian(trajectories, axis=0))

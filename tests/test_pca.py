@@ -16,8 +16,14 @@ def test_tutorial_pca_variances_and_mean(tutorial_pca, ndarrays_regression):
             "explained_variance_ratio": pca.explained_variance_ratio_,
             "mean": pca.mean_,
         },
-        default_tolerance=dict(rtol=1e-6),
-        tolerances={"mean": dict(rtol=1e-6, atol=1e-6)},
+        # The snapshot is from a float64 session. In float32, the variances
+        # differ from it by up to about 0.1% and the smallest component,
+        # which is 0 in float64, is about 2e-5.
+        tolerances={
+            "explained_variance": dict(rtol=5e-3, atol=1e-4),
+            "explained_variance_ratio": dict(rtol=5e-3, atol=1e-6),
+            "mean": dict(rtol=2e-4, atol=1e-3),
+        },
     )
 
 

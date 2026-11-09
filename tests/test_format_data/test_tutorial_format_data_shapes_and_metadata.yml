@@ -1,19 +1,19 @@
 arrays:
   Y:
-    dtype: float64
+    dtype: float32
     shape:
     - 70
     - 10030
     - 8
     - 2
   conf:
-    dtype: float64
+    dtype: float32
     shape:
     - 70
     - 10030
     - 8
   mask:
-    dtype: float64
+    dtype: float32
     shape:
     - 70
     - 10030

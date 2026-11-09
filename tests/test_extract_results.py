@@ -181,10 +181,85 @@ def test_results_csv_values_match_results(
         latent_columns = [f"latent_state {i}" for i in range(recording["latent_state"].shape[1])]
 
         np.testing.assert_array_equal(table["syllable"], recording["syllable"])
-        np.testing.assert_array_equal(
-            table[["centroid x", "centroid y"]], np.round(recording["centroid"], 4)
-        )
-        np.testing.assert_array_equal(table["heading"], np.round(recording["heading"], 4))
-        np.testing.assert_array_equal(
-            table[latent_columns], np.round(recording["latent_state"], 4)
-        )
+        # the CSV rounds each value to 4 decimals in float64, whatever the
+        # results' precision
+        rounded = lambda key: np.round(np.asarray(recording[key], np.float64), 4)  # noqa: E731
+        np.testing.assert_array_equal(table[["centroid x", "centroid y"]], rounded("centroid"))
+        np.testing.assert_array_equal(table["heading"], rounded("heading"))
+        np.testing.assert_array_equal(table[latent_columns], rounded("latent_state"))
+
+
+def reference_save_results_as_csv(results, save_dir, path_sep="-"):
+    """save_results_as_csv as written before it formatted floats with orjson:
+    one pandas table per recording, floats rounded to 4 decimals."""
+    os.makedirs(save_dir, exist_ok=True)
+    for key, recording in results.items():
+        column_names, data = [], []
+        if "syllable" in recording:
+            column_names.append(["syllable"])
+            data.append(recording["syllable"].reshape(-1, 1))
+        if "centroid" in recording:
+            d = recording["centroid"].shape[1]
+            column_names.append(["centroid x", "centroid y", "centroid z"][:d])
+            data.append(recording["centroid"])
+        if "heading" in recording:
+            column_names.append(["heading"])
+            data.append(recording["heading"].reshape(-1, 1))
+        if "latent_state" in recording:
+            latent_dim = recording["latent_state"].shape[1]
+            column_names.append([f"latent_state {i}" for i in range(latent_dim)])
+            data.append(recording["latent_state"])
+        df = pd.concat([pd.DataFrame(arr, columns=cols) for arr, cols in zip(data, column_names)], axis=1)
+        for col in df.select_dtypes(include=[np.floating]).columns:
+            df[col] = df[col].astype(float).round(4)
+        df.to_csv(os.path.join(save_dir, key.replace(os.path.sep, path_sep)) + ".csv", index=False)
+
+
+def synthetic_values(rng, shape, dtype=np.float64):
+    """Values of both signs from 1e-6 to 1e15, so that some round to 0 or
+    -0 at 4 decimals, mixed with whole numbers and other edge cases."""
+    values = rng.choice([-1, 1], shape) * 10 ** rng.uniform(-6, 15, shape)
+    edges = [0.0, -0.0, 1.0, -2.0, 0.0001, -0.00005, 0.1 + 0.2, 2.5, 1e15, 9.99999e14]
+    flat = values.reshape(-1)
+    flat[rng.choice(flat.size, len(edges), replace=False)] = edges
+    return values.astype(dtype)
+
+
+def test_results_csv_text_is_unchanged(tmp_path):
+    """save_results_as_csv writes the same bytes as the pandas implementation
+    for recordings with every combination it meets: a 2-D and a 3-D
+    centroid, float32 values, some results missing, NaN and infinite values,
+    values of 1e16 and more, no frames, and a name with a path separator."""
+    rng = np.random.default_rng(0)
+    frames = 3000
+
+    def recording(centroid_dim=2, latent_dim=4, dtype=np.float64):
+        return {
+            "syllable": rng.integers(0, 100, frames),
+            "centroid": synthetic_values(rng, (frames, centroid_dim), dtype),
+            "heading": synthetic_values(rng, frames, dtype),
+            "latent_state": synthetic_values(rng, (frames, latent_dim), dtype),
+        }
+
+    results = {
+        "plain": recording(),
+        "three_d": recording(centroid_dim=3, latent_dim=6),
+        "float32": recording(dtype=np.float32),
+        "partial": {k: v for k, v in recording().items() if k in ("syllable", "centroid")},
+        "missing_values": recording(),
+        "large_values": recording(),
+        "no_frames": {k: v[:0] for k, v in recording().items()},
+        os.path.join("session", "mouse"): recording(),
+    }
+    results["missing_values"]["heading"][[3, 50]] = [np.nan, np.inf]
+    results["missing_values"]["centroid"][7, 1] = -np.inf
+    results["large_values"]["latent_state"][11, 2] = 3.5e16
+
+    kpms.save_results_as_csv(results, save_dir=str(tmp_path / "written"))
+    reference_save_results_as_csv(results, str(tmp_path / "reference"))
+
+    names = sorted(os.listdir(tmp_path / "reference"))
+    assert sorted(os.listdir(tmp_path / "written")) == names
+    for name in names:
+        written = (tmp_path / "written" / name).read_bytes()
+        assert written == (tmp_path / "reference" / name).read_bytes(), name

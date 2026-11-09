@@ -142,6 +142,11 @@ Number of model fitting iterations
 It may be necessary to re-run the fitting process a few times to choose a good value for the `kappa` hyperparameter. During these initial runs, fitting need only be run until the syllable durations stabilize. This typically takes fewer than 10 iterations for the initial (AR only) stage of fitting, and 10-50 iterations for the second (full model) stage. After setting ``kappa``, continue fitting until the syllable sequence stabilizes, e.g. 200-500 iterations. In our experience, the model fit improves somewhat from 200 to 500 iterations, but not after that.
 
 
+Why is the first iteration slow, and where is compiled code stored?
+-------------------------------------------------------------------
+In each session, JAX compiles every fitting step for your data's shapes the first time it runs, which takes up to a minute on a GPU. keypoint-moseq keeps the compiled programs in a cache, so later sessions with the same data shapes and the same versions of keypoint-moseq, jax-moseq and JAX load them in seconds. The cache is in ``~/.cache/keypoint_moseq/jax`` on Linux, ``~/Library/Caches/keypoint_moseq/jax`` on macOS and ``%LOCALAPPDATA%\keypoint_moseq\keypoint_moseq\Cache\jax`` on Windows. It grows by a few megabytes for each new data size and each new version of keypoint-moseq, jax-moseq or JAX, and keypoint-moseq never removes old entries, so you may want to delete it now and then. Deleting it is always safe; the next session just compiles again. To keep it elsewhere, set the environment variable ``JAX_COMPILATION_CACHE_DIR`` before starting Python; keypoint-moseq then leaves JAX's cache settings as you set them.
+
+
 Detecting existing syllables in new data
 ----------------------------------------
 If you already have a trained MoSeq model and would like to apply it to new data, you can do so using the ``apply_model`` function.
@@ -480,32 +485,13 @@ There are two main causes of GPU out of memory (OOM) errors:
 
 2. **Large datasets.** 
 
-  Required GPU memory scales roughly linearly with the size of the dataset and the number of latent dimensions used. For example, a dataset with 4 latent dimensions will require roughly 3 MB of GPU memory for each 100 frames of data during model fitting. If your GPU isn't big enough, try one of the following:
+  Required GPU memory scales roughly linearly with the size of the dataset. With 4 latent dimensions and 100 states, model fitting needs about 0.5 GB plus roughly 0.05 MB of GPU memory per 100 frames of data, and more with more states. Before fitting on a GPU, keypoint-MoSeq measures the memory its largest steps need and, if they would not fit, runs the pose step over fewer segments at a time, which is slower. If your GPU still isn't big enough, try one of the following:
 
   - Use `Google colab <https://colab.research.google.com/github/dattalab/keypoint-moseq/blob/stable/docs/keypoint_moseq_colab.ipynb>`_. 
 
     - Colab provides free access to GPUs with 16GB of VRAM.
     
     - Larger GPUs can be accessed using colab pro. 
-
-
-  - Disable parallel message passing. This results in a large (4-6 fold) reduction in memory usage, but will also slow down model fitting by a similar factor. To disable parallel message passing, pass ``parallel_message_passing=False`` to :py:func:`keypoint_moseq.fitting.fit_model`, :py:func:`keypoint_moseq.fitting.apply_model` or :py:func:`keypoint_moseq.fitting.estimate_syllable_marginals`. For example
-
-   .. code-block:: python
-
-      kpms.fit_model(
-         model, data, metadata, project_dir, 
-         model_name, parallel_message_passing=False)
-
-
-  - Partially serialize the computations. By default, modeling is parallelized across the full dataset. We also created an option for mixed parallel/serial computation where the data is split into batches that are processed serially. To enable this option, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
-
-   .. code-block:: python
-
-      from jax_moseq.utils import set_mixed_map_iters
-      set_mixed_map_iters(4)
-
-   This will split the data into 4 batches, which should reduce the memory requirements about 4-fold but also result in a 4-fold slow-down. The number of batches can be adjusted as needed.
 
 
   - Use multiple GPUs if they are available (Linux only, including WSL2). To split the computation across GPUs, run the following code *before fitting the model* (if you have already initiated model fitting the kernel must be restarted).
@@ -518,14 +504,6 @@ There are two main causes of GPU out of memory (OOM) errors:
    This will split the computation across two GPUs. The number should be adjusted according to your hardware setup. 
 
 
-  - Switch to single-precision computing by running the code below immediately after importing keypoint MoSeq. Note that this may result in numerical instability which will cause NaN values to appear during fitting. Keypoint MoSeq will abort fitting if this occurs.
-
-  .. code-block:: python
-   
-      import jax
-      jax.config.update('jax_enable_x64', False)
-
-    
   - Fit to a subset of the data, then apply the model to the rest of the data. 
 
     - To fit a subset of the data, specify the subset as a list of paths during data loading
@@ -562,18 +540,6 @@ In our experience, NaNs during fitting most often come from the data, usually st
 
 The data checks come before the sampler settings for a reason. Raising ``jitter`` can stop the NaNs without removing their cause, and the model still has to fit those frames. That can leave you with syllables that describe tracking problems rather than behavior.
 
-Confirm double precision
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-keypoint-MoSeq switches JAX to double precision when it is imported, and single precision makes NaNs much more likely. Check that nothing in your code has switched it back:
-
-.. code-block:: python
-
-    import jax
-    jax.config.read('jax_enable_x64')  # should return True
-
-If it returns ``False``, find the line in your code that sets ``jax_enable_x64`` and remove it.
-
 Check your data
 ~~~~~~~~~~~~~~~
 
@@ -593,7 +559,7 @@ Once you've found a problem stretch:
 Adjust the sampler
 ~~~~~~~~~~~~~~~~~~
 
-If you're in 64-bit precision mode and your data looks clean but the NaNs persist, try these. Each is a keyword argument to the function that produced the NaNs (``fit_model``, ``apply_model`` or ``estimate_syllable_marginals``).
+If your data looks clean but the NaNs persist, try these. Each is a keyword argument to the function that produced the NaNs (``fit_model``, ``apply_model`` or ``estimate_syllable_marginals``).
 
 - **Increase** ``jitter``. Jitter is a small variance added to each pose draw so the matrix math doesn't fail. It's measured in the model's latent pose space, where each dimension has variance 1 (with the default ``whiten: true``). The default 1e-3 is 0.1% of that; try raising it to at most 1e-2. Much larger values add noise on the scale of the animal's own frame-to-frame movement. Jitter only affects the serial Kalman sampler, which is the default on CPU or when ``parallel_message_passing=False``.
 - **Enable parallel Kalman sampling** with ``parallel_message_passing=True``. By default it is only enabled when fitting on a GPU.
