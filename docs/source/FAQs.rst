@@ -54,7 +54,7 @@ If your keypoint tracking data contains a high proportion of NaNs, you may get t
 
    kpms.check_nan_proportions(coordinates, bodyparts, breakdown=True)
 
-- Rerun keypoint detection with a lower threshold for missing data. In general, keypoint tracking algorithms such as SLEAP and DeepLabCut will mark a keypoint as NaN in a given frame if its confidence is below a certain level. In SLEAP, this level can be adjusted using the argument ``--peak_threshold`` when `running inference from the command line <https://sleap.ai/notebooks/Training_and_inference_on_an_example_dataset.html#inference>`_, e.g.
+- Rerun keypoint detection with a lower threshold for missing data. In general, keypoint tracking algorithms such as SLEAP and DeepLabCut will mark a keypoint as NaN in a given frame if its confidence is below a certain level. In SLEAP, this level can be adjusted using the argument ``--peak_threshold`` when `running inference from the command line <https://legacy.sleap.ai/notebooks/Training_and_inference_on_an_example_dataset.html#inference>`_, e.g.
 
 .. code-block:: python
 
