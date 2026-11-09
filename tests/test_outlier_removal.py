@@ -158,13 +158,14 @@ def test_outlier_plot_is_drawn_outside_pyplot(monkeypatch, tmp_path):
         return savefig(fig, *args, **kwargs)
 
     monkeypatch.setattr(Figure, "savefig", recording_savefig)
-    user_figure = plt.figure()
+    # figures other tests in the session left open stay open too
+    user_figures = plt.get_fignums() + [plt.figure().number]
 
     save_outlier_plot(tmp_path)
 
-    assert open_figures_at_save == [[user_figure.number]]
-    assert plt.get_fignums() == [user_figure.number]
-    plt.close(user_figure)
+    assert open_figures_at_save == [user_figures]
+    assert plt.get_fignums() == user_figures
+    plt.close(user_figures[-1])
 
 
 def test_outlier_plot_that_fails_to_save_leaves_no_file(monkeypatch, tmp_path):

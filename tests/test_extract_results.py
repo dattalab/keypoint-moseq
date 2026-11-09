@@ -181,13 +181,12 @@ def test_results_csv_values_match_results(
         latent_columns = [f"latent_state {i}" for i in range(recording["latent_state"].shape[1])]
 
         np.testing.assert_array_equal(table["syllable"], recording["syllable"])
-        np.testing.assert_array_equal(
-            table[["centroid x", "centroid y"]], np.round(recording["centroid"], 4)
-        )
-        np.testing.assert_array_equal(table["heading"], np.round(recording["heading"], 4))
-        np.testing.assert_array_equal(
-            table[latent_columns], np.round(recording["latent_state"], 4)
-        )
+        # the CSV rounds each value to 4 decimals in float64, whatever the
+        # results' precision
+        rounded = lambda key: np.round(np.asarray(recording[key], np.float64), 4)  # noqa: E731
+        np.testing.assert_array_equal(table[["centroid x", "centroid y"]], rounded("centroid"))
+        np.testing.assert_array_equal(table["heading"], rounded("heading"))
+        np.testing.assert_array_equal(table[latent_columns], rounded("latent_state"))
 
 
 def reference_save_results_as_csv(results, save_dir, path_sep="-"):

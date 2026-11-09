@@ -979,7 +979,7 @@ def test_trajectory_edges_are_drawn_as_one_line_collection_per_step_and_color():
     fig, ax, _ = kpms.plot_trajectories(titles, Xs, lims, edges=edges, plot_width=2)
 
     collections = [c for c in ax.collections if isinstance(c, LineCollection)]
-    assert ax.lines == []
+    assert len(ax.lines) == 0
     assert len(collections) == 2 * 10
     assert all(len(c.get_segments()) == len(Xs) * len(edges) for c in collections)
     plt.close(fig)
